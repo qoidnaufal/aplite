@@ -52,6 +52,24 @@ struct Vec3<T> {
     z: T
 }
 
+impl From<Vec3<f32>> for Vec3<u32> {
+    fn from(value: Vec3<f32>) -> Self {
+        Self {
+            x: value.x as _,
+            y: value.y as _,
+            z: value.x as _,
+        }
+    }
+}
+
+impl PartialEq for Vec3<u32> {
+    fn eq(&self, other: &Self) -> bool {
+        self.x == other.x
+            && self.y == other.y
+            && self.z == other.z
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 struct Rgb<T> {
     r: T,
@@ -66,6 +84,14 @@ impl From<Rgb<u8>> for Rgb<f32> {
             g: val.g as f32 / u8::MAX as f32,
             b: val.b as f32 / u8::MAX as f32,
         }
+    }
+}
+
+impl PartialEq for Rgb<u8> {
+    fn eq(&self, other: &Self) -> bool {
+        self.r == other.r
+            && self.g == other.g
+            && self.b == other.b
     }
 }
 
@@ -97,73 +123,86 @@ impl Vertex {
     }
 }
 
+fn tan(x: f32, y: f32) -> f32 {
+    (y / x).abs()
+}
+
+fn _cos(x: f32, y: f32) -> f32 {
+    let hyp = (x*x + y*y).sqrt();
+    (x / hyp).abs()
+}
+
 struct Triangle {
-    x: u32,
-    y: u32,
+    pos: Vec3<u32>,
     width: u32,
     height: u32,
     color: Rgb<u8>,
 }
 
 impl Triangle {
-    fn new(x: u32, y: u32, width: u32, height: u32, color: Rgb<u8>) -> Self {
-        Self { x, y, width, height, color }
+    const INDICES: [u16; 3] = [0, 1, 2];
+
+    fn new(pos: Vec3<u32>, width: u32, height: u32, color: Rgb<u8>) -> Self {
+        Self { pos, width, height, color }
+    }
+
+    fn vertices(&self, window_size: winit::dpi::PhysicalSize<u32>) -> Vec<Vertex> {
+        let x_pos = -1.0 + (self.pos.x as f32 / window_size.width as f32);
+        let y_pos = 1.0 - (self.pos.y as f32 / window_size.height as f32);
+        
+        let width = self.width as f32 / window_size.width as f32;
+        let height = -(self.height as f32 / window_size.height as f32);
+        let x_center = width / 2.0;
+
+        let t = Vec3 { x: x_pos + x_center, y: y_pos, z: self.pos.z as _ };
+        let l = Vec3 { x: x_pos, y: y_pos + height, z: self.pos.z as _ };
+        let r = Vec3 { x: x_pos + width, y: y_pos + height, z: self.pos.z as _ };
+
+        [
+            Vertex { position: t, color: self.color.into() },
+            Vertex { position: l, color: self.color.into() },
+            Vertex { position: r, color: self.color.into() },
+        ].to_vec()
     }
 
     fn is_hovered(&self,
-        mouse_pos: winit::dpi::PhysicalPosition<f32>,
+        mouse: &Mouse,
         window_size: winit::dpi::PhysicalSize<u32>
     ) -> bool {
         let width = self.width as f32 / window_size.width as f32;
         let height = -(self.height as f32 / window_size.height as f32);
         let x_center = width / 2.0;
 
-        let x_pos = -1.0 + (self.x as f32 / window_size.width as f32);
-        let y_pos = 1.0 - (self.y as f32 / window_size.height as f32);
+        let x_pos = -1.0 + (self.pos.x as f32 / window_size.width as f32);
+        let y_pos = 1.0 - (self.pos.y as f32 / window_size.height as f32);
 
-        let t = Vec3 { x: x_pos + x_center, y: y_pos, z: 0.0 };
-        let l = Vec3 { x: x_pos, y: y_pos + height, z: 0.0 };
-        let r = Vec3 { x: x_pos + width, y: y_pos + height, z: 0.0 };
+        let x_mouse = ((mouse.position.x / window_size.width as f32) - 0.5) * 2.0;
+        let y_mouse = (0.5 - (mouse.position.y / window_size.height as f32)) * 2.0;
 
-        let x_mouse = ((mouse_pos.x / window_size.width as f32) - 0.5) * 2.0;
-        let y_mouse = (0.5 - (mouse_pos.y / window_size.height as f32)) * 2.0;
+        let mouse_tan = tan(x_pos + x_center - x_mouse, y_pos - y_mouse);
+        let triangle_tan = tan(x_center, height);
 
-        // println!("mouse: {}, {} => {:?}, {:?}, {:?} => {}, {}", x_mouse, y_mouse, t, l, r, width, height);
-        if (l.y..t.y).contains(&y_mouse) && (l.x..r.x).contains(&x_mouse) {
+        if (y_pos + height..y_pos).contains(&y_mouse)
+            && (x_pos..x_pos + width).contains(&x_mouse)
+            && mouse_tan >= triangle_tan {
             true
         } else { false }
     }
 
-    fn set_color(&mut self, color: Rgb<u8>) {
-        self.color = color;
+    fn set_color<F: FnMut(&mut Rgb<u8>)>(&mut self, mut f: F) {
+        f(&mut self.color);
     }
 
-    fn contents(&self, window_size: winit::dpi::PhysicalSize<u32>) -> BufferContents {
-        let x_pos = -1.0 + (self.x as f32 / window_size.width as f32);
-        let y_pos = 1.0 - (self.y as f32 / window_size.height as f32);
-        
-        let width = self.width as f32 / window_size.width as f32;
-        let height = -(self.height as f32 / window_size.height as f32);
-        let x_center = width / 2.0;
+    fn set_position(
+        &mut self,
+        mouse: &Mouse,
+    ) {
+        let delta_x = mouse.position.x - mouse.captured.cur.x;
+        let delta_y = mouse.position.y - mouse.captured.cur.y;
 
-        let t = Vec3 { x: x_pos + x_center, y: y_pos, z: 0.0 };
-        let l = Vec3 { x: x_pos, y: y_pos + height, z: 0.0 };
-        let r = Vec3 { x: x_pos + width, y: y_pos + height, z: 0.0 };
-
-        let vertices = [
-            Vertex { position: t, color: self.color.into() },
-            Vertex { position: l, color: self.color.into() },
-            Vertex { position: r, color: self.color.into() },
-        ].to_vec();
-        let indices = vec![0, 1, 2];
-
-        BufferContents { vertices, indices }
+        self.pos.x = (mouse.captured.obj.x as f32 + delta_x * 2.) as u32;
+        self.pos.y = (mouse.captured.obj.y as f32 + delta_y * 2.) as u32;
     }
-}
-
-struct BufferContents {
-    vertices: Vec<Vertex>,
-    indices: Vec<u16>
 }
 
 struct Pipeline {
@@ -171,11 +210,10 @@ struct Pipeline {
     pipeline: wgpu::RenderPipeline,
     v_buffer: wgpu::Buffer,
     i_buffer: wgpu::Buffer,
-    i_len: usize,
 }
 
 impl Pipeline {
-    fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, contents: BufferContents) -> Result<Self, Error> {
+    fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, vertices: Vec<Vertex>) -> Result<Self, Error> {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("shader"), source: wgpu::ShaderSource::Wgsl(SHADER.into())
         });
@@ -223,12 +261,12 @@ impl Pipeline {
         });
         let v_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("vertex buffer"),
-            contents: cast_slice(&contents.vertices)?,
+            contents: cast_slice(&vertices)?,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         });
         let i_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("index buffer"),
-            contents: cast_slice(&contents.indices)?,
+            contents: cast_slice(&Triangle::INDICES)?,
             usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
         });
 
@@ -238,12 +276,11 @@ impl Pipeline {
             pipeline,
             v_buffer,
             i_buffer,
-            i_len: contents.indices.len(),
         })
     }
 }
 
-struct State<'a> {
+struct GfxRenderer<'a> {
     surface: wgpu::Surface<'a>,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -254,7 +291,7 @@ struct State<'a> {
     pipeline: Pipeline,
 }
 
-impl<'a> State<'a> {
+impl<'a> GfxRenderer<'a> {
     fn new(window: &'a Window, layouts: &Triangle) -> Result<Self, Error> {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -299,7 +336,7 @@ impl<'a> State<'a> {
 
         surface.configure(&device, &config);
 
-        let contents = layouts.contents(size);
+        let contents = layouts.vertices(size);
         let pipeline = Pipeline::new(&device, &config, contents)?;
 
         Ok(Self {
@@ -326,7 +363,7 @@ impl<'a> State<'a> {
         self.queue.write_buffer(
             &self.pipeline.v_buffer,
             0,
-            cast_slice(&layouts.contents(self.size).vertices)?
+            cast_slice(&layouts.vertices(self.size))?
         );
 
         Ok(())
@@ -375,22 +412,62 @@ fn clear_screen(
     pass.set_pipeline(&pipeline.pipeline);
     pass.set_vertex_buffer(0, pipeline.v_buffer.slice(..));
     pass.set_index_buffer(pipeline.i_buffer.slice(..), wgpu::IndexFormat::Uint16);
-    pass.draw_indexed(0..pipeline.i_len as u32, 0, 0..1);
+    pass.draw_indexed(0..Triangle::INDICES.len() as u32, 0, 0..1);
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct MouseState {
+    action: winit::event::ElementState,
+    button: winit::event::MouseButton,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct MouseCapture {
+    cur: Vec3<f32>,
+    obj: Vec3<u32>,
+}
+
+#[derive(Debug)]
+struct Mouse {
+    position: winit::dpi::PhysicalPosition<f32>,
+    state: MouseState,
+    captured: MouseCapture,
+}
+
+impl Mouse {
+    fn set_state(&mut self,
+        action: winit::event::ElementState,
+        button: winit::event::MouseButton
+    ) {
+        self.state = MouseState { action, button };
+    }
 }
 
 struct App<'a> {
-    state: Option<State<'a>>,
+    gfx: Option<GfxRenderer<'a>>,
     window: Option<Window>,
     // later change this into Vec<Widget>
     layouts: Triangle,
+    mouse: Mouse,
 }
 
 impl<'a> App<'a> {
     fn new(layouts: Triangle) -> Self {
         Self {
-            state: None,
+            gfx: None,
             window: None,
             layouts,
+            mouse: Mouse {
+                position: winit::dpi::PhysicalPosition::new(0., 0.),
+                state: MouseState {
+                    action: winit::event::ElementState::Released,
+                    button: winit::event::MouseButton::Left,
+                },
+                captured: MouseCapture {
+                    cur: Vec3 { x: 0., y: 0., z: 0. },
+                    obj: Vec3 { x: 0, y: 0, z: 0 },
+                }
+            },
         }
     }
 }
@@ -400,9 +477,9 @@ impl<'a> ApplicationHandler for App<'a> {
         let window = event_loop.create_window(Window::default_attributes()).unwrap();
         self.window = Some(window);
 
-        let state = State::new(self.window.as_ref().unwrap(), &self.layouts).unwrap();
-        let state: State<'a> = unsafe { std::mem::transmute(state) };
-        self.state = Some(state);
+        let gfx = GfxRenderer::new(self.window.as_ref().unwrap(), &self.layouts).unwrap();
+        let gfx: GfxRenderer<'a> = unsafe { std::mem::transmute(gfx) };
+        self.gfx = Some(gfx);
     }
 
     fn window_event(
@@ -412,24 +489,22 @@ impl<'a> ApplicationHandler for App<'a> {
             event: WindowEvent,
         ) {
         let Some(ref window) = self.window else { return };
-        let Some(ref mut state) = self.state else { return };
+        let Some(ref mut gfx) = self.gfx else { return };
 
-        if state.window_id == window_id {
+        if gfx.window_id == window_id {
             match event {
                 WindowEvent::CloseRequested => {
                     event_loop.exit();
                 }
                 WindowEvent::RedrawRequested => {
-                    match state.update(&self.layouts) {
-                        Ok(_) => {},
-                        Err(_) => event_loop.exit(),
-                    }
-                    match state.render() {
+                    // println!("redraw");
+                    gfx.update(&self.layouts).unwrap_or_else(|_| event_loop.exit());
+                    match gfx.render() {
                         Ok(_) => {},
                         Err(Error::SurfaceError(surface_err)) => {
                             match surface_err {
                                 wgpu::SurfaceError::Outdated
-                                | wgpu::SurfaceError::Lost => state.resize(state.size),
+                                | wgpu::SurfaceError::Lost => gfx.resize(gfx.size),
                                 wgpu::SurfaceError::OutOfMemory => {
                                     log::error!("Out of Memory");
                                     event_loop.exit();
@@ -443,15 +518,62 @@ impl<'a> ApplicationHandler for App<'a> {
                     }
                 }
                 WindowEvent::Resized(new_size) => {
-                    state.resize(new_size);
+                    gfx.resize(new_size);
+                }
+                WindowEvent::MouseInput { state: action, button, .. } => {
+                    self.mouse.set_state(action, button);
+
+                    let cur_color = self.layouts.color;
+                    if self.layouts.is_hovered(&self.mouse, gfx.size) {
+                        match self.mouse.state.action {
+                            winit::event::ElementState::Pressed => {
+                                self.layouts.set_color(|c| {
+                                    *c = Rgb { r: 0, g: 255, b: 0 };
+                                });
+                                self.mouse.captured.cur.x = self.mouse.position.x;
+                                self.mouse.captured.cur.y = self.mouse.position.y;
+                                self.mouse.captured.obj.x = self.layouts.pos.x;
+                                self.mouse.captured.obj.y = self.layouts.pos.y;
+                            },
+                            winit::event::ElementState::Released => {
+                                self.layouts.set_color(|c| {
+                                    *c = Rgb { r: 0, g: 0, b: 255 };
+                                });
+                            },
+                        }
+                    }
+                    if cur_color != self.layouts.color {
+                        window.request_redraw();
+                    }
                 }
                 WindowEvent::CursorMoved { position, .. } => {
-                    if self.layouts.is_hovered(position.cast(), state.size) {
-                        self.layouts.set_color(Rgb { r: 0, g: 255, b: 0});
+                    self.mouse.position = position.cast();
+
+                    let cur_color = self.layouts.color;
+                    let cur_pos = self.layouts.pos;
+
+                    if self.layouts.is_hovered(&self.mouse, gfx.size) {
+                        match self.mouse.state.action {
+                            winit::event::ElementState::Pressed => {
+                                self.layouts.set_color(|c| {
+                                    *c = Rgb { r: 0, g: 255, b: 0 };
+                                });
+                                self.layouts.set_position(&self.mouse);
+                            },
+                            winit::event::ElementState::Released => {
+                                self.layouts.set_color(|c| {
+                                    *c = Rgb { r: 0, g: 0, b: 255 };
+                                });
+                            },
+                        }
                     } else {
-                        self.layouts.set_color(Rgb { r: 255, g: 0, b: 0});
+                        self.layouts.set_color(|c| {
+                            *c = Rgb { r: 255, g: 0, b: 0 };
+                        });
                     }
-                    window.request_redraw();
+                    if cur_color != self.layouts.color || cur_pos != self.layouts.pos {
+                        window.request_redraw();
+                    }
                 }
                 _ => {}
             }
@@ -464,7 +586,7 @@ fn main() -> Result<(), Error> {
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
 
-    let triangle = Triangle::new(0, 0, 1500, 1500, Rgb { r: 255, g: 0, b: 0 });
+    let triangle = Triangle::new(Vec3 { x: 0, y: 0, z: 0 }, 1500, 1000, Rgb { r: 255, g: 0, b: 0 });
     let mut app = App::new(triangle);
     event_loop.run_app(&mut app)?;
 
