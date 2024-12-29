@@ -11,7 +11,8 @@ use winit::{
 use error::Error;
 
 fn cast_slice<A: Sized, B: Sized>(p: &[A]) -> Result<&[B], Error> {
-    if align_of::<B>() > align_of::<A>() && (p.as_ptr() as *const () as usize) % align_of::<B>() != 0 {
+    if align_of::<B>() > align_of::<A>()
+        && (p.as_ptr() as *const () as usize) % align_of::<B>() != 0 {
         return Err(Error::PointersHaveDifferentAlignmnet);
     }
     unsafe {
@@ -46,23 +47,13 @@ const SHADER: &str = r"
 ";
 
 #[derive(Debug, Clone, Copy)]
-struct Vec3<T> {
+struct Vector3<T> {
     x: T,
     y: T,
     z: T
 }
 
-impl From<Vec3<f32>> for Vec3<u32> {
-    fn from(value: Vec3<f32>) -> Self {
-        Self {
-            x: value.x as _,
-            y: value.y as _,
-            z: value.x as _,
-        }
-    }
-}
-
-impl PartialEq for Vec3<u32> {
+impl PartialEq for Vector3<u32> {
     fn eq(&self, other: &Self) -> bool {
         self.x == other.x
             && self.y == other.y
@@ -98,7 +89,7 @@ impl PartialEq for Rgb<u8> {
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct Vertex {
-    position: Vec3<f32>,
+    position: Vector3<f32>,
     color: Rgb<f32>,
 }
 
@@ -115,7 +106,7 @@ impl Vertex {
                 },
                 wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float32x3,
-                    offset: std::mem::size_of::<Vec3<f32>>() as wgpu::BufferAddress,
+                    offset: std::mem::size_of::<Vector3<f32>>() as wgpu::BufferAddress,
                     shader_location: 1,
                 },
             ],
@@ -133,7 +124,7 @@ fn _cos(x: f32, y: f32) -> f32 {
 }
 
 struct Triangle {
-    pos: Vec3<u32>,
+    pos: Vector3<u32>,
     width: u32,
     height: u32,
     color: Rgb<u8>,
@@ -142,11 +133,11 @@ struct Triangle {
 impl Triangle {
     const INDICES: [u16; 3] = [0, 1, 2];
 
-    fn new(pos: Vec3<u32>, width: u32, height: u32, color: Rgb<u8>) -> Self {
+    fn new(pos: Vector3<u32>, width: u32, height: u32, color: Rgb<u8>) -> Self {
         Self { pos, width, height, color }
     }
 
-    fn vertices(&self, window_size: winit::dpi::PhysicalSize<u32>) -> Vec<Vertex> {
+    fn data(&self, window_size: winit::dpi::PhysicalSize<u32>) -> Vec<Vertex> {
         let x_pos = -1.0 + (self.pos.x as f32 / window_size.width as f32);
         let y_pos = 1.0 - (self.pos.y as f32 / window_size.height as f32);
         
@@ -154,9 +145,9 @@ impl Triangle {
         let height = -(self.height as f32 / window_size.height as f32);
         let x_center = width / 2.0;
 
-        let t = Vec3 { x: x_pos + x_center, y: y_pos, z: self.pos.z as _ };
-        let l = Vec3 { x: x_pos, y: y_pos + height, z: self.pos.z as _ };
-        let r = Vec3 { x: x_pos + width, y: y_pos + height, z: self.pos.z as _ };
+        let t = Vector3 { x: x_pos + x_center, y: y_pos, z: self.pos.z as _ };
+        let l = Vector3 { x: x_pos, y: y_pos + height, z: self.pos.z as _ };
+        let r = Vector3 { x: x_pos + width, y: y_pos + height, z: self.pos.z as _ };
 
         [
             Vertex { position: t, color: self.color.into() },
@@ -166,7 +157,7 @@ impl Triangle {
     }
 
     fn is_hovered(&self,
-        mouse: &Mouse,
+        mouse: &Cursor,
         window_size: winit::dpi::PhysicalSize<u32>
     ) -> bool {
         let width = self.width as f32 / window_size.width as f32;
@@ -182,11 +173,9 @@ impl Triangle {
         let mouse_tan = tan(x_pos + x_center - x_mouse, y_pos - y_mouse);
         let triangle_tan = tan(x_center, height);
 
-        if (y_pos + height..y_pos).contains(&y_mouse)
+        (y_pos + height..y_pos).contains(&y_mouse)
             && (x_pos..x_pos + width).contains(&x_mouse)
-            && mouse_tan >= triangle_tan {
-            true
-        } else { false }
+            && mouse_tan >= triangle_tan
     }
 
     fn set_color<F: FnMut(&mut Rgb<u8>)>(&mut self, mut f: F) {
@@ -195,25 +184,44 @@ impl Triangle {
 
     fn set_position(
         &mut self,
-        mouse: &Mouse,
+        mouse: &Cursor,
     ) {
-        let delta_x = mouse.position.x - mouse.captured.cur.x;
-        let delta_y = mouse.position.y - mouse.captured.cur.y;
+        let delta_x = mouse.position.x - mouse.click.cur.x;
+        let delta_y = mouse.position.y - mouse.click.cur.y;
 
-        self.pos.x = (mouse.captured.obj.x as f32 + delta_x * 2.) as u32;
-        self.pos.y = (mouse.captured.obj.y as f32 + delta_y * 2.) as u32;
+        self.pos.x = (mouse.click.obj.x as f32 + delta_x * 2.) as u32;
+        self.pos.y = (mouse.click.obj.y as f32 + delta_y * 2.) as u32;
+    }
+}
+
+struct Buffer {
+    v: wgpu::Buffer,
+    i: wgpu::Buffer,
+}
+
+impl Buffer {
+    fn new(device: &wgpu::Device, vertices: Vec<Vertex>, indices: Vec<u16>) -> Result<Self, Error> {
+        let v = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("vertex buffer"),
+            contents: cast_slice(&vertices)?,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        });
+        let i = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("index buffer"),
+            contents: cast_slice(&indices)?,
+            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+        });
+        Ok(Self { v, i })
     }
 }
 
 struct Pipeline {
     _shader: wgpu::ShaderModule,
     pipeline: wgpu::RenderPipeline,
-    v_buffer: wgpu::Buffer,
-    i_buffer: wgpu::Buffer,
 }
 
 impl Pipeline {
-    fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, vertices: Vec<Vertex>) -> Result<Self, Error> {
+    fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("shader"), source: wgpu::ShaderSource::Wgsl(SHADER.into())
         });
@@ -251,7 +259,7 @@ impl Pipeline {
                 entry_point: Some("fs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
+                    format,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -259,40 +267,109 @@ impl Pipeline {
             multiview: None,
             cache: None,
         });
-        let v_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vertex buffer"),
-            contents: cast_slice(&vertices)?,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        });
-        let i_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("index buffer"),
-            contents: cast_slice(&Triangle::INDICES)?,
-            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-        });
 
 
-        Ok(Self {
+        Self {
             _shader: shader,
             pipeline,
-            v_buffer,
-            i_buffer,
-        })
+        }
     }
 }
 
 struct GfxRenderer<'a> {
+    gpu: GpuResources<'a>,
+    pipeline: Pipeline,
+    buffer: Buffer,
+}
+
+impl<'a> GfxRenderer<'a> {
+    fn new(gpu: GpuResources<'a>, layouts: &Triangle) -> Result<Self, Error> {
+        let pipeline = Pipeline::new(&gpu.device, gpu.config.format);
+        let vtx = layouts.data(gpu.size());
+        let idx = Triangle::INDICES.to_vec();
+        let buffer = Buffer::new(&gpu.device, vtx, idx)?;
+
+        Ok(Self {
+            gpu,
+            pipeline,
+            buffer,
+        })
+    }
+
+    fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+        if new_size.width > 0 && new_size.height > 0 {
+            self.gpu.config.width = new_size.width;
+            self.gpu.config.height = new_size.height;
+            self.gpu.configure();
+        }
+    }
+
+    fn update(&mut self, data: &[u8]) {
+        self.gpu.queue.write_buffer(
+            &self.buffer.v,
+            0,
+            data,
+        );
+    }
+
+    fn render(&mut self) -> Result<(), Error> {
+        let output = self.gpu.surface.get_current_texture()?;
+        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self
+            .gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("render encoder") });
+
+        draw(&mut encoder, &view, &self.pipeline, &self.buffer);
+
+        self.gpu.queue.submit(std::iter::once(encoder.finish()));
+        output.present();
+
+        Ok(())
+    }
+}
+
+fn draw(
+    encoder: &mut wgpu::CommandEncoder,
+    view: &wgpu::TextureView,
+    pipeline: &Pipeline,
+    buffer: &Buffer,
+) {
+    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("render pass"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(wgpu::Color {
+                    r: 0.1,
+                    g: 0.2,
+                    b: 0.3,
+                    a: 1.,
+                }),
+                store: wgpu::StoreOp::Store,
+            }
+        })],
+        depth_stencil_attachment: None,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+    });
+    pass.set_pipeline(&pipeline.pipeline);
+    pass.set_vertex_buffer(0, buffer.v.slice(..));
+    pass.set_index_buffer(buffer.i.slice(..), wgpu::IndexFormat::Uint16);
+    pass.draw_indexed(0..Triangle::INDICES.len() as u32, 0, 0..1);
+}
+
+struct GpuResources<'a> {
     surface: wgpu::Surface<'a>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
-    size: winit::dpi::PhysicalSize<u32>,
-    window_id: winit::window::WindowId,
-    // window: &'a Window,
-    pipeline: Pipeline,
+    id: winit::window::WindowId,
 }
 
-impl<'a> GfxRenderer<'a> {
-    fn new(window: &'a Window, layouts: &Triangle) -> Result<Self, Error> {
+impl<'a> GpuResources<'a> {
+    fn request(window: &'a Window) -> Result<Self, Error> {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
@@ -317,7 +394,7 @@ impl<'a> GfxRenderer<'a> {
         })?;
 
         let surface_capabilites = surface.get_capabilities(&adapter);
-        let surface_format = surface_capabilites
+        let format = surface_capabilites
             .formats
             .iter()
             .find(|f| f.is_srgb())
@@ -325,7 +402,7 @@ impl<'a> GfxRenderer<'a> {
             .unwrap_or(surface_capabilites.formats[0]);
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
+            format,
             width: size.width,
             height: size.height,
             present_mode: surface_capabilites.present_modes[0],
@@ -334,85 +411,24 @@ impl<'a> GfxRenderer<'a> {
             view_formats: vec![],
         };
 
-        surface.configure(&device, &config);
-
-        let contents = layouts.vertices(size);
-        let pipeline = Pipeline::new(&device, &config, contents)?;
-
         Ok(Self {
             surface,
             device,
             queue,
             config,
-            size,
-            window_id: window.id(),
-            pipeline,
+            id: window.id(),
         })
     }
 
-    fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        if new_size.width > 0 && new_size.height > 0 {
-            self.size = new_size;
-            self.config.width = new_size.width;
-            self.config.height = new_size.height;
-            self.surface.configure(&self.device, &self.config);
-        }
+    fn configure(&self) {
+        self.surface.configure(&self.device, &self.config);
     }
 
-    fn update(&mut self, layouts: &Triangle) -> Result<(), Error> {
-        self.queue.write_buffer(
-            &self.pipeline.v_buffer,
-            0,
-            cast_slice(&layouts.vertices(self.size))?
-        );
-
-        Ok(())
+    fn size(&self) -> winit::dpi::PhysicalSize<u32> {
+        let width = self.config.width;
+        let height = self.config.height;
+        winit::dpi::PhysicalSize::new(width, height)
     }
-
-    fn render(&mut self) -> Result<(), Error> {
-        let output = self.surface.get_current_texture()?;
-        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("render encoder") });
-
-        clear_screen(&mut encoder, &view, &self.pipeline);
-
-        self.queue.submit(std::iter::once(encoder.finish()));
-        output.present();
-
-        Ok(())
-    }
-}
-
-fn clear_screen(
-    encoder: &mut wgpu::CommandEncoder,
-    view: &wgpu::TextureView,
-    pipeline: &Pipeline,
-) {
-    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("render pass"),
-        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view,
-            resolve_target: None,
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color {
-                    r: 0.1,
-                    g: 0.2,
-                    b: 0.3,
-                    a: 1.,
-                }),
-                store: wgpu::StoreOp::Store,
-            }
-        })],
-        depth_stencil_attachment: None,
-        timestamp_writes: None,
-        occlusion_query_set: None,
-    });
-    pass.set_pipeline(&pipeline.pipeline);
-    pass.set_vertex_buffer(0, pipeline.v_buffer.slice(..));
-    pass.set_index_buffer(pipeline.i_buffer.slice(..), wgpu::IndexFormat::Uint16);
-    pass.draw_indexed(0..Triangle::INDICES.len() as u32, 0, 0..1);
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -422,19 +438,19 @@ struct MouseState {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct MouseCapture {
-    cur: Vec3<f32>,
-    obj: Vec3<u32>,
+struct MouseClick {
+    cur: Vector3<f32>,
+    obj: Vector3<u32>,
 }
 
 #[derive(Debug)]
-struct Mouse {
+struct Cursor {
     position: winit::dpi::PhysicalPosition<f32>,
     state: MouseState,
-    captured: MouseCapture,
+    click: MouseClick,
 }
 
-impl Mouse {
+impl Cursor {
     fn set_state(&mut self,
         action: winit::event::ElementState,
         button: winit::event::MouseButton
@@ -448,27 +464,33 @@ struct App<'a> {
     window: Option<Window>,
     // later change this into Vec<Widget>
     layouts: Triangle,
-    mouse: Mouse,
+    cursor: Cursor,
 }
 
-impl<'a> App<'a> {
+impl App<'_> {
     fn new(layouts: Triangle) -> Self {
         Self {
             gfx: None,
             window: None,
             layouts,
-            mouse: Mouse {
+            cursor: Cursor {
                 position: winit::dpi::PhysicalPosition::new(0., 0.),
                 state: MouseState {
                     action: winit::event::ElementState::Released,
                     button: winit::event::MouseButton::Left,
                 },
-                captured: MouseCapture {
-                    cur: Vec3 { x: 0., y: 0., z: 0. },
-                    obj: Vec3 { x: 0, y: 0, z: 0 },
+                click: MouseClick {
+                    cur: Vector3 { x: 0., y: 0., z: 0. },
+                    obj: Vector3 { x: 0, y: 0, z: 0 },
                 }
             },
         }
+    }
+
+    fn request_gpu(&self) -> Result<GpuResources, Error> {
+        let gpu = GpuResources::request(self.window.as_ref().unwrap())?;
+        gpu.configure();
+        Ok(gpu)
     }
 }
 
@@ -477,7 +499,8 @@ impl<'a> ApplicationHandler for App<'a> {
         let window = event_loop.create_window(Window::default_attributes()).unwrap();
         self.window = Some(window);
 
-        let gfx = GfxRenderer::new(self.window.as_ref().unwrap(), &self.layouts).unwrap();
+        let gpu = self.request_gpu().unwrap();
+        let gfx = GfxRenderer::new(gpu, &self.layouts).unwrap();
         let gfx: GfxRenderer<'a> = unsafe { std::mem::transmute(gfx) };
         self.gfx = Some(gfx);
     }
@@ -491,20 +514,23 @@ impl<'a> ApplicationHandler for App<'a> {
         let Some(ref window) = self.window else { return };
         let Some(ref mut gfx) = self.gfx else { return };
 
-        if gfx.window_id == window_id {
+        if gfx.gpu.id == window_id {
             match event {
                 WindowEvent::CloseRequested => {
                     event_loop.exit();
                 }
                 WindowEvent::RedrawRequested => {
                     // println!("redraw");
-                    gfx.update(&self.layouts).unwrap_or_else(|_| event_loop.exit());
+                    let vtx = self.layouts.data(window.inner_size());
+                    let data = cast_slice(&vtx).unwrap();
+                    gfx.update(data);
+
                     match gfx.render() {
                         Ok(_) => {},
-                        Err(Error::SurfaceError(surface_err)) => {
+                        Err(Error::SurfaceRendering(surface_err)) => {
                             match surface_err {
                                 wgpu::SurfaceError::Outdated
-                                | wgpu::SurfaceError::Lost => gfx.resize(gfx.size),
+                                | wgpu::SurfaceError::Lost => gfx.resize(window.inner_size()),
                                 wgpu::SurfaceError::OutOfMemory => {
                                     log::error!("Out of Memory");
                                     event_loop.exit();
@@ -521,19 +547,19 @@ impl<'a> ApplicationHandler for App<'a> {
                     gfx.resize(new_size);
                 }
                 WindowEvent::MouseInput { state: action, button, .. } => {
-                    self.mouse.set_state(action, button);
+                    self.cursor.set_state(action, button);
 
                     let cur_color = self.layouts.color;
-                    if self.layouts.is_hovered(&self.mouse, gfx.size) {
-                        match self.mouse.state.action {
+                    if self.layouts.is_hovered(&self.cursor, window.inner_size()) {
+                        match self.cursor.state.action {
                             winit::event::ElementState::Pressed => {
                                 self.layouts.set_color(|c| {
                                     *c = Rgb { r: 0, g: 255, b: 0 };
                                 });
-                                self.mouse.captured.cur.x = self.mouse.position.x;
-                                self.mouse.captured.cur.y = self.mouse.position.y;
-                                self.mouse.captured.obj.x = self.layouts.pos.x;
-                                self.mouse.captured.obj.y = self.layouts.pos.y;
+                                self.cursor.click.cur.x = self.cursor.position.x;
+                                self.cursor.click.cur.y = self.cursor.position.y;
+                                self.cursor.click.obj.x = self.layouts.pos.x;
+                                self.cursor.click.obj.y = self.layouts.pos.y;
                             },
                             winit::event::ElementState::Released => {
                                 self.layouts.set_color(|c| {
@@ -547,18 +573,18 @@ impl<'a> ApplicationHandler for App<'a> {
                     }
                 }
                 WindowEvent::CursorMoved { position, .. } => {
-                    self.mouse.position = position.cast();
+                    self.cursor.position = position.cast();
 
                     let cur_color = self.layouts.color;
                     let cur_pos = self.layouts.pos;
 
-                    if self.layouts.is_hovered(&self.mouse, gfx.size) {
-                        match self.mouse.state.action {
+                    if self.layouts.is_hovered(&self.cursor, window.inner_size()) {
+                        match self.cursor.state.action {
                             winit::event::ElementState::Pressed => {
                                 self.layouts.set_color(|c| {
                                     *c = Rgb { r: 0, g: 255, b: 0 };
                                 });
-                                self.layouts.set_position(&self.mouse);
+                                self.layouts.set_position(&self.cursor);
                             },
                             winit::event::ElementState::Released => {
                                 self.layouts.set_color(|c| {
@@ -586,7 +612,7 @@ fn main() -> Result<(), Error> {
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
 
-    let triangle = Triangle::new(Vec3 { x: 0, y: 0, z: 0 }, 1500, 1000, Rgb { r: 255, g: 0, b: 0 });
+    let triangle = Triangle::new(Vector3 { x: 0, y: 0, z: 0 }, 1500, 1000, Rgb { r: 255, g: 0, b: 0 });
     let mut app = App::new(triangle);
     event_loop.run_app(&mut app)?;
 

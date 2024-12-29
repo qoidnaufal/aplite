@@ -1,9 +1,9 @@
 #[derive(Debug)]
 pub enum Error {
-    EventLoopError(winit::error::EventLoopError),
-    CreateSurfaceError(wgpu::CreateSurfaceError),
-    SurfaceError(wgpu::SurfaceError),
-    RequestDeviceError(wgpu::RequestDeviceError),
+    EventLoopCreation(winit::error::EventLoopError),
+    SurfaceCreation(wgpu::CreateSurfaceError),
+    SurfaceRendering(wgpu::SurfaceError),
+    DeviceRequest(wgpu::RequestDeviceError),
     NoAdapterFound,
     PointersHaveDifferentAlignmnet,
 }
@@ -11,10 +11,10 @@ pub enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let err_kind = match self {
-            Self::EventLoopError(err) => err.to_string(),
-            Self::CreateSurfaceError(err) => err.to_string(),
-            Self::SurfaceError(err) => err.to_string(),
-            Self::RequestDeviceError(err) => err.to_string(),
+            Self::EventLoopCreation(err) => err.to_string(),
+            Self::SurfaceCreation(err) => err.to_string(),
+            Self::SurfaceRendering(err) => err.to_string(),
+            Self::DeviceRequest(err) => err.to_string(),
             Self::NoAdapterFound => "No adapter found".to_string(),
             Self::PointersHaveDifferentAlignmnet => "Alignment doesn't match".to_string(),
         };
@@ -23,28 +23,39 @@ impl std::fmt::Display for Error {
     }
 }
 
-impl std::error::Error for Error {}
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Error::EventLoopCreation(err) => err.source(),
+            Error::SurfaceCreation(err) => err.source(),
+            Error::SurfaceRendering(err) => err.source(),
+            Error::DeviceRequest(err) => err.source(),
+            Error::NoAdapterFound => None,
+            Error::PointersHaveDifferentAlignmnet => None,
+        }
+    }
+}
 
 impl From<winit::error::EventLoopError> for Error {
     fn from(value: winit::error::EventLoopError) -> Self {
-        Self::EventLoopError(value)
+        Self::EventLoopCreation(value)
     }
 }
 
 impl From<wgpu::CreateSurfaceError> for Error {
     fn from(value: wgpu::CreateSurfaceError) -> Self {
-        Self::CreateSurfaceError(value)
+        Self::SurfaceCreation(value)
     }
 }
 
 impl From<wgpu::RequestDeviceError> for Error {
     fn from(value: wgpu::RequestDeviceError) -> Self {
-        Self::RequestDeviceError(value)
+        Self::DeviceRequest(value)
     }
 }
 
 impl From<wgpu::SurfaceError> for Error {
     fn from(value: wgpu::SurfaceError) -> Self {
-        Self::SurfaceError(value)
+        Self::SurfaceRendering(value)
     }
 }
