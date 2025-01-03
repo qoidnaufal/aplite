@@ -3,7 +3,7 @@ use crate::{
     buffer::Buffer,
     error::Error,
     gpu::GpuResources,
-    layout::Triangle,
+    layout::Layout,
     pipeline::Pipeline,
 };
 
@@ -14,17 +14,17 @@ pub struct GfxRenderer<'a> {
 }
 
 impl<'a> GfxRenderer<'a> {
-    pub fn new(gpu: GpuResources<'a>, layouts: &Triangle) -> Result<Self, Error> {
+    pub fn new(gpu: GpuResources<'a>, layouts: &Layout) -> Self {
         let pipeline = Pipeline::new(&gpu.device, gpu.config.format);
-        let vtx = layouts.data();
-        let idx = Triangle::INDICES.to_vec();
-        let buffer = Buffer::new(&gpu.device, vtx, idx)?;
+        let vertices = layouts.vertices();
+        let indices = layouts.indices();
+        let buffer = Buffer::new(&gpu.device, &vertices, indices);
 
-        Ok(Self {
+        Self {
             gpu,
             pipeline,
             buffer,
-        })
+        }
     }
 
     pub fn resize(&mut self) {
@@ -44,7 +44,7 @@ impl<'a> GfxRenderer<'a> {
         );
     }
 
-    pub fn render(&mut self) -> Result<(), Error> {
+    pub fn render(&mut self, indices_len: usize) -> Result<(), Error> {
         let output = self.gpu.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
@@ -52,7 +52,7 @@ impl<'a> GfxRenderer<'a> {
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("render encoder") });
 
-        draw(&mut encoder, &view, &self.pipeline, &self.buffer);
+        draw(&mut encoder, &view, &self.pipeline, &self.buffer, indices_len);
 
         self.gpu.queue.submit(std::iter::once(encoder.finish()));
         output.present();
@@ -66,6 +66,7 @@ fn draw(
     view: &wgpu::TextureView,
     pipeline: &Pipeline,
     buffer: &Buffer,
+    indices_len: usize,
 ) {
     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("render pass"),
@@ -88,6 +89,6 @@ fn draw(
     });
     pass.set_pipeline(&pipeline.pipeline);
     pass.set_vertex_buffer(0, buffer.v.slice(..));
-    pass.set_index_buffer(buffer.i.slice(..), wgpu::IndexFormat::Uint16);
-    pass.draw_indexed(0..Triangle::INDICES.len() as u32, 0, 0..1);
+    pass.set_index_buffer(buffer.i.slice(..), wgpu::IndexFormat::Uint32);
+    pass.draw_indexed(0..indices_len as u32, 0, 0..1);
 }

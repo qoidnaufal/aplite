@@ -36,9 +36,24 @@ pub struct Vector3<T> {
     pub z: T
 }
 
-impl<T> Vector3<T> {
-    pub fn new(x: T, y: T, z: T) -> Self {
-        Self { x, y, z }
+impl<T: Default + std::ops::Add + std::ops::AddAssign> Vector3<T> {
+    pub fn new() -> Self {
+        Self { x: T::default(), y: T::default(), z: T::default() }
+    }
+
+    pub fn translation(&mut self, t: Vector2<T>) {
+        self.x += t.x;
+        self.y += t.y;
+    }
+}
+
+impl<T: Default> From<Vector2<T>> for Vector3<T> {
+    fn from(val: Vector2<T>) -> Self {
+        Self {
+            x: val.x,
+            y: val.y,
+            z: T::default()
+        }
     }
 }
 
@@ -68,9 +83,18 @@ pub struct Vector2<T> {
     pub y: T,
 }
 
-impl<T> Vector2<T> {
-    pub fn new(x: T, y: T) -> Self {
-        Self { x, y }
+impl<T: Default> Vector2<T> {
+    pub fn new() -> Self {
+        Self { x: T::default(), y: T::default() }
+    }
+}
+
+impl<T> From<Vector3<T>> for Vector2<T> {
+    fn from(val: Vector3<T>) -> Self {
+        Self {
+            x: val.x,
+            y: val.y
+        }
     }
 }
 

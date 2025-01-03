@@ -1,94 +1,149 @@
-use crate::{
-    app::CONTEXT,
-    color::Rgb,
-    shapes::Vertex,
-    types::{cast_slice, tan, Vector3}
+use std::{
+    collections::{HashMap, HashSet},
+    sync::atomic::{AtomicU64, Ordering},
+    cell::RefCell,
 };
 
+use crate::{
+    color::Rgb,
+    shapes::Shape,
+    types::{cast_slice, Size, Vector3},
+};
+
+thread_local! {
+    pub static NODE_ID: AtomicU64 = AtomicU64::new(0);
+    pub static NODE_TREE: RefCell<NodeTree> = RefCell::new(NodeTree::new());
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NodeId(u64);
+
+impl NodeId {
+    fn new() -> Self {
+        Self(NODE_ID.with(|i| i.fetch_add(1, Ordering::Relaxed)))
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct NodeTree {
+    root: NodeId,
+    nodes: HashSet<NodeId>,
+    children: HashMap<NodeId, Vec<NodeId>>,
+}
+
+impl NodeTree {
+    fn new() -> Self {
+        Self {
+            root: NodeId::new(),
+            nodes: HashSet::new(),
+            children: HashMap::new()
+        }
+    }
+
+    fn push(&mut self, id: NodeId) {
+        self.nodes.insert(id);
+    }
+}
+
+#[derive(Debug)]
+pub struct Button {
+    id: NodeId,
+}
+
+impl Button {
+    pub fn new() -> Self {
+        let id = NodeId::new();
+        Self { id }
+    }
+
+    fn id(&self) -> &NodeId {
+        &self.id
+    }
+
+    fn shape(&self) -> Shape {
+        if self.id().0 % 2 == 0 {
+            Shape::triangle(Vector3::new(), Size::new(1000, 1000), Rgb::RED)
+        } else {
+            Shape::rectangle(Vector3::new(), Size::new(1000, 1000), Rgb::RED)
+        }
+    }
+
+    fn data(&self) -> Vec<u8> {
+        let vertices = self.shape().vertices;
+        let data = cast_slice(&vertices).unwrap();
+        data.to_vec()
+    }
+}
+
+#[derive(Debug)]
 pub struct Layout {
-    pub data: Vec<u8>,
+    pub nodes: Vec<Button>,
+    pub shapes: HashMap<NodeId, Shape>,
+    pub indices: Vec<u32>,
 }
 
 impl Layout {
     pub fn new() -> Self {
-        Self { data: Default::default() }
+        Self {
+            nodes: Vec::new(),
+            shapes: HashMap::new(),
+            indices: Vec::new(),
+        }
     }
 
-    fn and(&mut self, triangle: Triangle) -> &mut Self {
-        let new_data = triangle.data();
-        self.data.extend_from_slice(cast_slice(&new_data).unwrap());
+    pub fn insert(&mut self, node: Button) -> &mut Self {
+        self.nodes.push(node);
         self
     }
-}
 
-pub struct Triangle {
-    pub pos: Vector3<u32>,
-    pub width: u32,
-    pub height: u32,
-    pub color: Rgb<u8>,
-}
-
-impl Triangle {
-    pub const INDICES: [u16; 3] = [0, 1, 2];
-
-    pub fn new(pos: Vector3<u32>, width: u32, height: u32, color: Rgb<u8>) -> Self {
-        Self { pos, width, height, color }
+    pub fn vertices(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        self.nodes.iter().for_each(|node| {
+            let id = node.id();
+            let shape = self.shapes.get(id).unwrap();
+            let data: &[u8] = cast_slice(&shape.vertices).unwrap();
+            buf.extend_from_slice(data);
+        });
+        buf
     }
 
-    pub fn data(&self) -> Vec<Vertex> {
-        let window_size = CONTEXT.with_borrow(|ctx| ctx.window_size);
-
-        let x_pos = -1.0 + (self.pos.x as f32 / window_size.width as f32);
-        let y_pos = 1.0 - (self.pos.y as f32 / window_size.height as f32);
-        
-        let width = self.width as f32 / window_size.width as f32;
-        let height = -(self.height as f32 / window_size.height as f32);
-        let x_center = width / 2.0;
-
-        let t = Vector3 { x: x_pos + x_center, y: y_pos, z: self.pos.z as _ };
-        let l = Vector3 { x: x_pos, y: y_pos + height, z: self.pos.z as _ };
-        let r = Vector3 { x: x_pos + width, y: y_pos + height, z: self.pos.z as _ };
-
-        [
-            Vertex { position: t, color: self.color.into() },
-            Vertex { position: l, color: self.color.into() },
-            Vertex { position: r, color: self.color.into() },
-        ].to_vec()
+    pub fn indices(&self) -> &[u8] {
+        cast_slice(&self.indices).unwrap()
     }
 
-    pub fn is_hovered(&self) -> bool {
-        let (window_size, cursor) = CONTEXT.with_borrow(|ctx| (ctx.window_size, ctx.cursor));
-
-        let width = self.width as f32 / window_size.width as f32;
-        let height = -(self.height as f32 / window_size.height as f32);
-        let x_center = width / 2.0;
-
-        let x_pos = -1.0 + (self.pos.x as f32 / window_size.width as f32);
-        let y_pos = 1.0 - (self.pos.y as f32 / window_size.height as f32);
-
-        let x_cursor = ((cursor.position.x / window_size.width as f32) - 0.5) * 2.0;
-        let y_cursor = (0.5 - (cursor.position.y / window_size.height as f32)) * 2.0;
-
-        let cursor_tan = tan(x_pos + x_center - x_cursor, y_pos - y_cursor);
-        let triangle_tan = tan(x_center, height);
-
-        (y_pos + height..y_pos).contains(&y_cursor)
-            && (x_pos..x_pos + width).contains(&x_cursor)
-            && cursor_tan >= triangle_tan
-    }
-
-    pub fn set_color<F: FnMut(&mut Rgb<u8>)>(&mut self, mut f: F) {
-        f(&mut self.color);
+    pub fn handle_click(&mut self) {
+        self.shapes.iter_mut().for_each(|(_, shape)| {
+            shape.handle_click();
+        });
     }
 
     pub fn set_position(&mut self) {
-        let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
+        self.shapes.iter_mut().for_each(|(_, shape)| {
+            shape.set_position();
+        });
+    }
 
-        let delta_x = cursor.position.x - cursor.click.cur.x;
-        let delta_y = cursor.position.y - cursor.click.cur.y;
+    pub fn calculate(&mut self) {
+        let mut height_offset = 0.0;
+        let mut indices_offset = 0;
+        let mut margin = 0.0;
 
-        self.pos.x = (cursor.click.obj.x as f32 + delta_x * 2.) as u32;
-        self.pos.y = (cursor.click.obj.y as f32 + delta_y * 2.) as u32;
+        self.nodes.iter_mut().for_each(|node| {
+            let mut shape = node.shape();
+            shape.vertices.iter_mut().for_each(|vert| {
+                vert.position.y += height_offset + margin;
+            });
+            height_offset += shape.dimension().height;
+        
+            shape.indices.iter_mut().for_each(|idx| *idx += indices_offset as u32);
+            indices_offset += shape.indices.len();
+            println!("{:?}", shape);
+
+            self.indices.extend_from_slice(&shape.indices);
+            self.shapes.insert(node.id, shape);
+
+            margin -= 0.03;
+        });
     }
 }
 
