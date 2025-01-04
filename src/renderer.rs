@@ -18,7 +18,7 @@ impl<'a> GfxRenderer<'a> {
         let pipeline = Pipeline::new(&gpu.device, gpu.config.format);
         let vertices = layouts.vertices();
         let indices = layouts.indices();
-        let buffer = Buffer::new(&gpu.device, &vertices, indices);
+        let buffer = Buffer::new(&gpu.device, &vertices, &indices);
 
         Self {
             gpu,
@@ -37,11 +37,7 @@ impl<'a> GfxRenderer<'a> {
     }
 
     pub fn update(&mut self, data: &[u8]) {
-        self.gpu.queue.write_buffer(
-            &self.buffer.v,
-            0,
-            data,
-        );
+        self.buffer.update(&self.gpu.queue, data);
     }
 
     pub fn render(&mut self, indices_len: usize) -> Result<(), Error> {

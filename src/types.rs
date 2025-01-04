@@ -36,16 +36,16 @@ pub struct Vector3<T> {
     pub z: T
 }
 
-impl<T: Default + std::ops::Add + std::ops::AddAssign> Vector3<T> {
-    pub fn new() -> Self {
-        Self { x: T::default(), y: T::default(), z: T::default() }
-    }
+// impl<T: Default + std::ops::Add + std::ops::AddAssign> Vector3<T> {
+//     pub fn new() -> Self {
+//         Self { x: T::default(), y: T::default(), z: T::default() }
+//     }
 
-    pub fn translation(&mut self, t: Vector2<T>) {
-        self.x += t.x;
-        self.y += t.y;
-    }
-}
+//     pub fn translation(&mut self, t: Vector2<T>) {
+//         self.x += t.x;
+//         self.y += t.y;
+//     }
+// }
 
 impl<T: Default> From<Vector2<T>> for Vector3<T> {
     fn from(val: Vector2<T>) -> Self {
@@ -83,9 +83,32 @@ pub struct Vector2<T> {
     pub y: T,
 }
 
-impl<T: Default> Vector2<T> {
+impl<T: Default + std::ops::AddAssign> Vector2<T> {
     pub fn new() -> Self {
         Self { x: T::default(), y: T::default() }
+    }
+
+    pub fn translation(&mut self, t: Self) {
+        self.x += t.x;
+        self.y += t.y;
+    }
+}
+
+impl From<Vector2<u32>> for Vector2<f32> {
+    fn from(val: Vector2<u32>) -> Self {
+        Self {
+            x: val.x as _,
+            y: val.y as _,
+        }
+    }
+}
+
+impl From<Vector2<f32>> for Vector2<u32> {
+    fn from(val: Vector2<f32>) -> Self {
+        Self {
+            x: val.x as _,
+            y: val.y as _,
+        }
     }
 }
 

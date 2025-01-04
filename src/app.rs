@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use crate::{
     error::Error,
     gpu::GpuResources,
-    layout::{Button, Layout},
+    layout::{Button, Layout, NodeId},
     renderer::GfxRenderer,
     types::{Size, Vector2},
 };
@@ -33,33 +33,89 @@ impl Context {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MouseAction {
+    Pressed,
+    Released,
+}
+
+impl From<winit::event::ElementState> for MouseAction {
+    fn from(value: winit::event::ElementState) -> Self {
+        match value {
+            winit::event::ElementState::Pressed => Self::Pressed,
+            winit::event::ElementState::Released => Self::Released,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MouseButton {
+    Left,
+    Right,
+    Middle,
+    Back,
+    Forward,
+    Other(u16),
+}
+
+impl From<winit::event::MouseButton> for MouseButton {
+    fn from(value: winit::event::MouseButton) -> Self {
+        match value {
+            winit::event::MouseButton::Left => Self::Left,
+            winit::event::MouseButton::Right => Self::Right,
+            winit::event::MouseButton::Middle => Self::Middle,
+            winit::event::MouseButton::Back => Self::Back,
+            winit::event::MouseButton::Forward => Self::Forward,
+            winit::event::MouseButton::Other(n) => Self::Other(n),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MouseState {
-    pub action: winit::event::ElementState,
-    pub button: winit::event::MouseButton,
+    pub action: MouseAction,
+    pub button: MouseButton,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MouseClick {
+    pub pos: Vector2<f32>,
+    pub obj: Option<NodeId>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MouseHover {
+    pub pos: Vector2<f32>,
+    pub obj: Option<NodeId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cursor {
-    pub position: Vector2<f32>,
+    pub hover: MouseHover,
     pub state: MouseState,
-    pub click: Vector2<f32>,
+    pub click: MouseClick,
 }
 
 impl Cursor {
     fn new() -> Self {
         Self {
-            position: Vector2::new(),
-            state: MouseState {
-                action: winit::event::ElementState::Released,
-                button: winit::event::MouseButton::Left,
+            hover: MouseHover {
+                pos: Vector2::new(),
+                obj: None,
             },
-            click: Vector2::new(),
+            state: MouseState {
+                action: MouseAction::Released,
+                button: MouseButton::Left,
+            },
+            click: MouseClick {
+                pos: Vector2::new(),
+                obj: None,
+            },
         }
     }
 
     pub fn set_state(&mut self,
-        action: winit::event::ElementState,
-        button: winit::event::MouseButton
+        action: MouseAction,
+        button: MouseButton
     ) {
         self.state = MouseState { action, button };
     }
@@ -105,7 +161,7 @@ impl App<'_> {
     }
 
     fn render(&mut self) -> Result<(), Error> {
-        self.gfx.as_mut().unwrap().render(self.layout.indices.len())
+        self.gfx.as_mut().unwrap().render(self.layout.indices_len())
     }
 
     pub fn add_widget(&mut self, node: Button) -> &mut Self {
@@ -167,7 +223,8 @@ impl<'a> ApplicationHandler for App<'a> {
                     self.resize();
                 }
                 WindowEvent::MouseInput { state: action, button, .. } => {
-                    CONTEXT.with_borrow_mut(|ctx| ctx.cursor.set_state(action, button));
+                    CONTEXT.with_borrow_mut(|ctx| ctx.cursor.set_state(action.into(), button.into()));
+                    self.layout.detect_click();
 
                     let initial = self.layout.vertices();
                     self.layout.handle_click();
@@ -176,10 +233,14 @@ impl<'a> ApplicationHandler for App<'a> {
                     }
                 }
                 WindowEvent::CursorMoved { position, .. } => {
-                    CONTEXT.with_borrow_mut(|ctx| ctx.cursor.position = Vector2::from(position.cast()));
+                    CONTEXT.with_borrow_mut(|ctx| ctx.cursor.hover.pos = Vector2::from(position.cast()));
+                    self.layout.detect_hover();
+
+                    // println!("{:?}", CONTEXT.with_borrow(|ctx| (ctx.cursor.hover.obj, ctx.cursor.click.obj)));
 
                     let initial = self.layout.vertices();
-                    self.layout.set_position();
+                    self.layout.handle_hover();
+                    self.layout.handle_drag();
                     if initial != self.layout.vertices() {
                         self.request_redraw();
                     }

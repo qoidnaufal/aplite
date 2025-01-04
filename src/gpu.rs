@@ -65,10 +65,4 @@ impl<'a> GpuResources<'a> {
     pub fn configure(&self) {
         self.surface.configure(&self.device, &self.config);
     }
-
-    pub fn size(&self) -> winit::dpi::PhysicalSize<u32> {
-        let width = self.config.width;
-        let height = self.config.height;
-        winit::dpi::PhysicalSize::new(width, height)
-    }
 }

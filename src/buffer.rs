@@ -19,5 +19,13 @@ impl Buffer {
         });
         Self { v, i }
     }
+
+    pub fn update(&self, queue: &wgpu::Queue, data: &[u8]) {
+        queue.write_buffer(
+            &self.v,
+            0,
+            data,
+        );
+    }
 }
 

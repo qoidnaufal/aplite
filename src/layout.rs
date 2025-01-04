@@ -1,18 +1,14 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::atomic::{AtomicU64, Ordering},
-    cell::RefCell,
 };
 
 use crate::{
-    color::Rgb,
-    shapes::Shape,
-    types::{cast_slice, Size, Vector3},
+    app::{MouseAction, MouseButton, CONTEXT}, color::Rgb, shapes::{Shape, Vertex}, types::{cast_slice, Size, Vector2}
 };
 
 thread_local! {
-    pub static NODE_ID: AtomicU64 = AtomicU64::new(0);
-    pub static NODE_TREE: RefCell<NodeTree> = RefCell::new(NodeTree::new());
+    pub static NODE_ID: AtomicU64 = const { AtomicU64::new(0) };
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -24,28 +20,22 @@ impl NodeId {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct NodeTree {
-    root: NodeId,
-    nodes: HashSet<NodeId>,
-    children: HashMap<NodeId, Vec<NodeId>>,
+pub trait Widget: std::fmt::Debug {
+    fn id(&self) -> NodeId;
+    fn shape(&self) -> Shape;
 }
 
-impl NodeTree {
-    fn new() -> Self {
-        Self {
-            root: NodeId::new(),
-            nodes: HashSet::new(),
-            children: HashMap::new()
-        }
+impl Widget for Button {
+    fn id(&self) -> NodeId {
+        self.id()
     }
 
-    fn push(&mut self, id: NodeId) {
-        self.nodes.insert(id);
+    fn shape(&self) -> Shape {
+        self.shape()
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct Button {
     id: NodeId,
 }
@@ -56,30 +46,22 @@ impl Button {
         Self { id }
     }
 
-    fn id(&self) -> &NodeId {
-        &self.id
+    fn id(&self) -> NodeId {
+        self.id
     }
 
     fn shape(&self) -> Shape {
-        if self.id().0 % 2 == 0 {
-            Shape::triangle(Vector3::new(), Size::new(1000, 1000), Rgb::RED)
-        } else {
-            Shape::rectangle(Vector3::new(), Size::new(1000, 1000), Rgb::RED)
-        }
-    }
-
-    fn data(&self) -> Vec<u8> {
-        let vertices = self.shape().vertices;
-        let data = cast_slice(&vertices).unwrap();
-        data.to_vec()
+        Shape::new(Vector2::new(), Size::new(1000, 1000), Rgb::RED)
     }
 }
 
 #[derive(Debug)]
 pub struct Layout {
-    pub nodes: Vec<Button>,
+    pub nodes: Vec<NodeId>,
     pub shapes: HashMap<NodeId, Shape>,
-    pub indices: Vec<u32>,
+    pub vertices: HashMap<NodeId, Vec<Vertex>>,
+    pub indices: HashMap<NodeId, Vec<u32>>,
+    used_space: Size<u32>,
 }
 
 impl Layout {
@@ -87,62 +69,142 @@ impl Layout {
         Self {
             nodes: Vec::new(),
             shapes: HashMap::new(),
-            indices: Vec::new(),
+            vertices: HashMap::new(),
+            indices: HashMap::new(),
+            used_space: Size::new(0, 0),
         }
     }
 
-    pub fn insert(&mut self, node: Button) -> &mut Self {
-        self.nodes.push(node);
+    pub fn insert(&mut self, node: impl Widget) -> &mut Self {
+        let id = node.id();
+        let shape = node.shape();
+        self.nodes.push(id);
+        self.shapes.insert(id, shape);
         self
     }
 
     pub fn vertices(&self) -> Vec<u8> {
-        let mut buf = Vec::new();
-        self.nodes.iter().for_each(|node| {
-            let id = node.id();
-            let shape = self.shapes.get(id).unwrap();
-            let data: &[u8] = cast_slice(&shape.vertices).unwrap();
-            buf.extend_from_slice(data);
+        let mut vertices = Vec::new();
+        self.nodes.iter().for_each(|id| {
+            let vert = self.vertices.get(id).unwrap();
+            vertices.extend_from_slice(cast_slice(vert).unwrap());
         });
-        buf
+        vertices
     }
 
-    pub fn indices(&self) -> &[u8] {
-        cast_slice(&self.indices).unwrap()
+    pub fn indices(&self) -> Vec<u8> {
+        let mut indices = Vec::new();
+        self.nodes.iter().for_each(|id| {
+            let idx = self.indices.get(id).unwrap();
+            indices.extend_from_slice(cast_slice(idx).unwrap());
+        });
+        indices
+    }
+
+    pub fn indices_len(&self) -> usize {
+        self.nodes.iter().map(|id| {
+            let idx = self.indices.get(id).unwrap();
+            idx.len()
+        }).sum()
+    }
+
+    pub fn detect_hover(&self) {
+        let hovered = self.shapes.iter().find(|(id, shape)| {
+            if let Some(indices) = self.indices.get(id) {
+                let len = indices.len();
+                shape.is_hovered(len)
+            } else { false }
+        });
+        if let Some((id, _)) = hovered {
+            CONTEXT.with_borrow_mut(|ctx| {
+                if let Some(click_id) = ctx.cursor.click.obj {
+                    ctx.cursor.hover.obj = Some(click_id);
+                } else {
+                    ctx.cursor.hover.obj = Some(*id);
+                }
+            })
+        } else {
+            CONTEXT.with_borrow_mut(|ctx| ctx.cursor.hover.obj = None)
+        }
+    }
+
+    pub fn detect_click(&self) {
+        CONTEXT.with_borrow_mut(|ctx| {
+            match (ctx.cursor.state.action, ctx.cursor.state.button) {
+                (MouseAction::Pressed, MouseButton::Left) => {
+                    ctx.cursor.click.obj = ctx.cursor.hover.obj;
+                    ctx.cursor.click.pos = ctx.cursor.hover.pos;
+                },
+                (MouseAction::Released, MouseButton::Left) => ctx.cursor.click.obj = None,
+                _ => {}
+            }
+        })
+    }
+
+    pub fn handle_hover(&mut self) {
+        let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
+        self.shapes.iter_mut().zip(&mut self.vertices).for_each(|((id, shape), (_, vert))| {
+            if cursor.hover.obj.is_some_and(|hover_id| hover_id == *id) {
+                shape.set_color(|color| *color = Rgb::BLUE);
+            } else {
+                shape.set_color(|color| *color = Rgb::RED);
+            }
+            let data = if id.0 % 2 == 0 {
+                shape.triangle()
+            } else { shape.rectangle() };
+            *vert = data.vertices;
+        });
     }
 
     pub fn handle_click(&mut self) {
-        self.shapes.iter_mut().for_each(|(_, shape)| {
-            shape.handle_click();
+        let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
+        self.shapes.iter_mut().zip(&mut self.vertices).for_each(|((id, shape), (_, vert))| {
+            if cursor.hover.obj.is_some_and(|hover_id| hover_id == *id)
+                && cursor.click.obj.is_some_and(|click_id| click_id == *id) {
+                shape.set_color(|color| *color = Rgb::GREEN);
+            } else {
+                shape.set_color(|color| *color = Rgb::RED);
+            }
+            let data = if id.0 % 2 == 0 {
+                shape.triangle()
+            } else { shape.rectangle() };
+            *vert = data.vertices;
         });
     }
 
-    pub fn set_position(&mut self) {
-        self.shapes.iter_mut().for_each(|(_, shape)| {
-            shape.set_position();
+    pub fn handle_drag(&mut self) {
+        let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
+        self.shapes.iter_mut().zip(&mut self.vertices).for_each(|((id, shape), (_, vert))| {
+            if cursor.hover.obj.is_some_and(|hover_id| hover_id == *id)
+                && cursor.click.obj.is_some_and(|click_id| click_id == *id) {
+                shape.set_color(|color| *color = Rgb::GREEN);
+                shape.set_position();
+            }
+            let data = if id.0 % 2 == 0 {
+                shape.triangle()
+            } else { shape.rectangle() };
+            *vert = data.vertices;
         });
     }
 
     pub fn calculate(&mut self) {
-        let mut height_offset = 0.0;
         let mut indices_offset = 0;
-        let mut margin = 0.0;
 
-        self.nodes.iter_mut().for_each(|node| {
-            let mut shape = node.shape();
-            shape.vertices.iter_mut().for_each(|vert| {
-                vert.position.y += height_offset + margin;
-            });
-            height_offset += shape.dimension().height;
-        
-            shape.indices.iter_mut().for_each(|idx| *idx += indices_offset as u32);
-            indices_offset += shape.indices.len();
-            println!("{:?}", shape);
+        self.nodes.iter().for_each(|id| {
+            if let Some(shape) = self.shapes.get_mut(id) {
+                shape.pos.y += self.used_space.height;
+                let mut data = if id.0 % 2 == 0 {
+                    shape.triangle()
+                } else { shape.rectangle() };
 
-            self.indices.extend_from_slice(&shape.indices);
-            self.shapes.insert(node.id, shape);
+                data.indices.iter_mut().for_each(|idx| *idx += indices_offset as u32);
 
-            margin -= 0.03;
+                self.used_space.height += shape.size.height;
+                indices_offset += data.indices.len();
+
+                self.indices.insert(*id, data.indices.clone());
+                self.vertices.insert(*id, data.vertices);
+            }
         });
     }
 }
