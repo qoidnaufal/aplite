@@ -4,7 +4,10 @@ use std::{
 };
 
 use crate::{
-    app::{MouseAction, MouseButton, CONTEXT}, color::Rgb, shapes::{Shape, Vertex}, types::{cast_slice, Size, Vector2}
+    app::CONTEXT,
+    color::Rgb,
+    shapes::{Shape, Vertex},
+    types::{cast_slice, Size, Vector2},
 };
 
 thread_local! {
@@ -59,8 +62,12 @@ impl Button {
 pub struct Layout {
     pub nodes: Vec<NodeId>,
     pub shapes: HashMap<NodeId, Shape>,
-    pub vertices: HashMap<NodeId, Vec<Vertex>>,
-    pub indices: HashMap<NodeId, Vec<u32>>,
+    pub v_offset: HashMap<NodeId, usize>,
+    pub i_offset: HashMap<NodeId, usize>,
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
+    pub has_changed: bool,
+    last_changed_id: Option<NodeId>,
     used_space: Size<u32>,
 }
 
@@ -69,9 +76,13 @@ impl Layout {
         Self {
             nodes: Vec::new(),
             shapes: HashMap::new(),
-            vertices: HashMap::new(),
-            indices: HashMap::new(),
+            v_offset: HashMap::new(),
+            i_offset: HashMap::new(),
+            vertices: Vec::new(),
+            indices: Vec::new(),
             used_space: Size::new(0, 0),
+            has_changed: false,
+            last_changed_id: None,
         }
     }
 
@@ -83,37 +94,26 @@ impl Layout {
         self
     }
 
-    pub fn vertices(&self) -> Vec<u8> {
-        let mut vertices = Vec::new();
-        self.nodes.iter().for_each(|id| {
-            let vert = self.vertices.get(id).unwrap();
-            vertices.extend_from_slice(cast_slice(vert).unwrap());
-        });
-        vertices
+    pub fn vertices(&self) -> &[u8] {
+        cast_slice(&self.vertices).unwrap()
     }
 
-    pub fn indices(&self) -> Vec<u8> {
-        let mut indices = Vec::new();
-        self.nodes.iter().for_each(|id| {
-            let idx = self.indices.get(id).unwrap();
-            indices.extend_from_slice(cast_slice(idx).unwrap());
-        });
-        indices
+    pub fn indices(&self) -> &[u8] {
+        cast_slice(&self.indices).unwrap()
     }
 
     pub fn indices_len(&self) -> usize {
-        self.nodes.iter().map(|id| {
-            let idx = self.indices.get(id).unwrap();
-            idx.len()
-        }).sum()
+        self.indices.len()
     }
 
     pub fn detect_hover(&self) {
         let hovered = self.shapes.iter().find(|(id, shape)| {
-            if let Some(indices) = self.indices.get(id) {
-                let len = indices.len();
-                shape.is_hovered(len)
-            } else { false }
+            let len = if id.0 < 1 {
+                self.i_offset[&NodeId(id.0 + 1)] - self.i_offset[*id]
+            } else {
+                self.i_offset[*id] - self.i_offset[&NodeId(id.0 - 1)]
+            };
+            shape.is_hovered(len)
         });
         if let Some((id, _)) = hovered {
             CONTEXT.with_borrow_mut(|ctx| {
@@ -128,67 +128,86 @@ impl Layout {
         }
     }
 
-    pub fn detect_click(&self) {
-        CONTEXT.with_borrow_mut(|ctx| {
-            match (ctx.cursor.state.action, ctx.cursor.state.button) {
-                (MouseAction::Pressed, MouseButton::Left) => {
-                    ctx.cursor.click.obj = ctx.cursor.hover.obj;
-                    ctx.cursor.click.pos = ctx.cursor.hover.pos;
-                },
-                (MouseAction::Released, MouseButton::Left) => ctx.cursor.click.obj = None,
-                _ => {}
-            }
-        })
-    }
-
     pub fn handle_hover(&mut self) {
         let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
-        self.shapes.iter_mut().zip(&mut self.vertices).for_each(|((id, shape), (_, vert))| {
-            if cursor.hover.obj.is_some_and(|hover_id| hover_id == *id) {
-                shape.set_color(|color| *color = Rgb::BLUE);
-            } else {
+        if let Some(ref change_id) = self.last_changed_id.take() {
+            if cursor.hover.obj.is_some_and(|hover_id| hover_id != *change_id) || cursor.hover.obj.is_none() {
+                let shape = self.shapes.get_mut(change_id).unwrap();
                 shape.set_color(|color| *color = Rgb::RED);
+                let data = if change_id.0 % 2 == 0 {
+                    shape.triangle()
+                } else { shape.rectangle() };
+                let v_offset = self.v_offset.get(change_id).unwrap();
+                self.vertices[*v_offset..v_offset + data.vertices.len()].copy_from_slice(&data.vertices);
+                self.has_changed = true;
             }
-            let data = if id.0 % 2 == 0 {
+        }
+        if let Some(ref hover_id) = cursor.hover.obj {
+            let shape = self.shapes.get_mut(hover_id).unwrap();
+
+            shape.set_color(|color| *color = Rgb::BLUE);
+            if cursor.is_dragging(*hover_id) {
+                shape.set_color(|color| *color = Rgb::GREEN);
+                shape.set_position();
+            }
+            
+            let data = if hover_id.0 % 2 == 0 {
                 shape.triangle()
             } else { shape.rectangle() };
-            *vert = data.vertices;
-        });
+            let v_offset = self.v_offset.get(hover_id).unwrap();
+            self.vertices[*v_offset..v_offset + data.vertices.len()].copy_from_slice(&data.vertices);
+            self.has_changed = true;
+            self.last_changed_id = Some(*hover_id);
+        }
+        
+        // self.shapes.iter_mut().for_each(|(id, shape)| {
+        //     if cursor.hover.obj.is_some_and(|hover_id| hover_id == *id) {
+        //         shape.set_color(|color| *color = Rgb::BLUE);
+        //     } else {
+        //         shape.set_color(|color| *color = Rgb::RED);
+        //     }
+        //     let data = if id.0 % 2 == 0 {
+        //         shape.triangle()
+        //     } else { shape.rectangle() };
+        //     let v_offset = self.v_offset.get(id).unwrap();
+        //     self.vertices[*v_offset..v_offset + data.vertices.len()].copy_from_slice(&data.vertices);
+        //     self.has_changed = true;
+        // });
     }
 
     pub fn handle_click(&mut self) {
         let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
-        self.shapes.iter_mut().zip(&mut self.vertices).for_each(|((id, shape), (_, vert))| {
-            if cursor.hover.obj.is_some_and(|hover_id| hover_id == *id)
-                && cursor.click.obj.is_some_and(|click_id| click_id == *id) {
-                shape.set_color(|color| *color = Rgb::GREEN);
-            } else {
-                shape.set_color(|color| *color = Rgb::RED);
-            }
-            let data = if id.0 % 2 == 0 {
+        if let Some(ref click_id) = cursor.click.obj {
+            let shape = self.shapes.get_mut(click_id).unwrap();
+            shape.set_color(|color| *color = Rgb::GREEN);
+            let data = if click_id.0 % 2 == 0 {
                 shape.triangle()
             } else { shape.rectangle() };
-            *vert = data.vertices;
-        });
-    }
-
-    pub fn handle_drag(&mut self) {
-        let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
-        self.shapes.iter_mut().zip(&mut self.vertices).for_each(|((id, shape), (_, vert))| {
-            if cursor.hover.obj.is_some_and(|hover_id| hover_id == *id)
-                && cursor.click.obj.is_some_and(|click_id| click_id == *id) {
-                shape.set_color(|color| *color = Rgb::GREEN);
-                shape.set_position();
-            }
-            let data = if id.0 % 2 == 0 {
-                shape.triangle()
-            } else { shape.rectangle() };
-            *vert = data.vertices;
-        });
+            let v_offset = self.v_offset.get(click_id).unwrap();
+            self.vertices[*v_offset..v_offset + data.vertices.len()].copy_from_slice(&data.vertices);
+            self.has_changed = true;
+            self.last_changed_id = Some(*click_id)
+        }
+        
+        // self.shapes.iter_mut().for_each(|(id, shape)| {
+        //     if cursor.hover.obj.is_some_and(|hover_id| hover_id == *id)
+        //         && cursor.click.obj.is_some_and(|click_id| click_id == *id) {
+        //         shape.set_color(|color| *color = Rgb::GREEN);
+        //     } else {
+        //         shape.set_color(|color| *color = Rgb::RED);
+        //     }
+        //     let data = if id.0 % 2 == 0 {
+        //         shape.triangle()
+        //     } else { shape.rectangle() };
+        //     let v_offset = self.v_offset.get(id).unwrap();
+        //     self.vertices[*v_offset..v_offset + data.vertices.len()].copy_from_slice(&data.vertices);
+        //     self.has_changed = true;
+        // });
     }
 
     pub fn calculate(&mut self) {
         let mut indices_offset = 0;
+        let mut vertices_offset = 0;
 
         self.nodes.iter().for_each(|id| {
             if let Some(shape) = self.shapes.get_mut(id) {
@@ -199,11 +218,16 @@ impl Layout {
 
                 data.indices.iter_mut().for_each(|idx| *idx += indices_offset as u32);
 
-                self.used_space.height += shape.size.height;
+                self.v_offset.insert(*id, vertices_offset);
+                vertices_offset += data.vertices.len();
+
+                self.i_offset.insert(*id, indices_offset);
                 indices_offset += data.indices.len();
 
-                self.indices.insert(*id, data.indices.clone());
-                self.vertices.insert(*id, data.vertices);
+                self.vertices.extend_from_slice(&data.vertices);
+                self.indices.extend_from_slice(&data.indices);
+
+                self.used_space.height += shape.size.height;
             }
         });
     }

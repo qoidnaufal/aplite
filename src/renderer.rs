@@ -18,7 +18,7 @@ impl<'a> GfxRenderer<'a> {
         let pipeline = Pipeline::new(&gpu.device, gpu.config.format);
         let vertices = layouts.vertices();
         let indices = layouts.indices();
-        let buffer = Buffer::new(&gpu.device, &vertices, &indices);
+        let buffer = Buffer::new(&gpu.device, vertices, indices);
 
         Self {
             gpu,

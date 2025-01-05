@@ -103,14 +103,14 @@ impl Shape {
         }
     }
 
-    pub fn dimension(&self) -> Size<f32> {
+    fn dimension(&self) -> Size<f32> {
         let window_size = CONTEXT.with_borrow(|ctx| ctx.window_size);
         let width = self.size.width as f32 / window_size.width as f32;
         let height = -(self.size.height as f32 / window_size.height as f32);
         Size { width, height }
     }
 
-    pub fn pos(&self) -> Vector2<f32> {
+    fn pos(&self) -> Vector2<f32> {
         let window_size = CONTEXT.with_borrow(|ctx| ctx.window_size);
         let x = -1.0 + (self.pos.x as f32 / window_size.width as f32);
         let y = 1.0 - (self.pos.y as f32 / window_size.height as f32);

@@ -30,6 +30,19 @@ impl Context {
             window_size: Size::new(0, 0)
         }
     }
+
+    fn set_click_state(&mut self, action: MouseAction, button: MouseButton) {
+        self.cursor.set_state(action, button);
+
+        match (self.cursor.state.action, self.cursor.state.button) {
+            (MouseAction::Pressed, MouseButton::Left) => {
+                self.cursor.click.obj = self.cursor.hover.obj;
+                self.cursor.click.pos = self.cursor.hover.pos;
+            },
+            (MouseAction::Released, MouseButton::Left) => self.cursor.click.obj = None,
+            _ => {}
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -119,6 +132,11 @@ impl Cursor {
     ) {
         self.state = MouseState { action, button };
     }
+
+    pub fn is_dragging(&self, hover_id: NodeId) -> bool {
+        self.click.obj.is_some_and(|click_id| click_id == hover_id)
+            && self.hover.pos != self.click.pos
+    }
 }
 
 pub struct App<'a> {
@@ -153,6 +171,10 @@ impl App<'_> {
     fn id(&self) -> winit::window::WindowId {
         let gfx = self.gfx.as_ref().unwrap();
         gfx.gpu.id
+    }
+
+    fn detect_hover(&self) {
+        self.layout.detect_hover();
     }
 
     fn update(&mut self) {
@@ -223,26 +245,22 @@ impl<'a> ApplicationHandler for App<'a> {
                     self.resize();
                 }
                 WindowEvent::MouseInput { state: action, button, .. } => {
-                    CONTEXT.with_borrow_mut(|ctx| ctx.cursor.set_state(action.into(), button.into()));
-                    self.layout.detect_click();
+                    CONTEXT.with_borrow_mut(|ctx| ctx.set_click_state(action.into(), button.into()));
 
-                    let initial = self.layout.vertices();
                     self.layout.handle_click();
-                    if initial != self.layout.vertices() {
+                    if self.layout.has_changed {
                         self.request_redraw();
+                        self.layout.has_changed = false;
                     }
                 }
                 WindowEvent::CursorMoved { position, .. } => {
                     CONTEXT.with_borrow_mut(|ctx| ctx.cursor.hover.pos = Vector2::from(position.cast()));
-                    self.layout.detect_hover();
+                    self.detect_hover();
 
-                    // println!("{:?}", CONTEXT.with_borrow(|ctx| (ctx.cursor.hover.obj, ctx.cursor.click.obj)));
-
-                    let initial = self.layout.vertices();
                     self.layout.handle_hover();
-                    self.layout.handle_drag();
-                    if initial != self.layout.vertices() {
+                    if self.layout.has_changed {
                         self.request_redraw();
+                        self.layout.has_changed = false;
                     }
                 }
                 _ => {}
