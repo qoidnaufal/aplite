@@ -2,10 +2,11 @@ use std::collections::HashMap;
 
 use crate::{
     app::CONTEXT,
+    callback::CALLBACKS,
     color::Rgb,
     shapes::{Shape, Vertex},
     types::{cast_slice, Size},
-    widget::{NodeId, Widget, CALLBACKS},
+    widget::{NodeId, Widget},
 };
 
 #[derive(Debug)]

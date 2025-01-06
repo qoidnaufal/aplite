@@ -180,7 +180,7 @@ impl App<'_> {
 
     fn update(&mut self) {
         let data = self.layout.vertices();
-        self.gfx.as_mut().unwrap().update(&data);
+        self.gfx.as_mut().unwrap().update(data);
     }
 
     fn render(&mut self) -> Result<(), Error> {

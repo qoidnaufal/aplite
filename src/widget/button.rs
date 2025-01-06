@@ -1,6 +1,10 @@
-use crate::{color::Rgb, shapes::{Shape, ShapeType}, types::{Size, Vector2}};
+use crate::{
+    color::Rgb,
+    shapes::{Shape, ShapeType},
+    types::{Size, Vector2},
+};
 
-use super::{Callback, NodeId, Widget, CALLBACKS};
+use super::{NodeId, Widget, CALLBACKS};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Button {
@@ -22,13 +26,12 @@ impl Button {
     }
 
     pub fn on_click<F: FnMut(&mut Shape) + 'static>(&self, f: F) -> Self {
-        let callback = Callback::from(f);
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), callback));
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
         *self
     }
 
     pub fn on_drag<F: FnMut(&mut Shape) + 'static>(&self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), Callback::from(f)));
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
         *self
     }
 }

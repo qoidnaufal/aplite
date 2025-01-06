@@ -3,56 +3,24 @@ mod shapes;
 mod renderer;
 mod pipeline;
 mod app;
+mod callback;
 mod types;
 mod shader;
+mod signal;
 mod color;
 mod buffer;
 mod layout;
 mod gpu;
 mod widget;
 
-use std::{cell::RefCell, ops::DerefMut, rc::Rc};
-
 use app::App;
 use color::Rgb;
 use shapes::Shape;
+use signal::Signal;
 use widget::*;
 use winit::event_loop::EventLoop;
 
 use error::Error;
-
-#[derive(Clone)]
-struct Signal<T> {
-    read: SignalRead<T>,
-    write: SignalWrite<T>,
-}
-
-impl<T: Clone> Signal<T> {
-    fn new(value: T) -> Self {
-        let v = Rc::new(RefCell::new(value));
-        Self {
-            read: SignalRead(v.clone()),
-            write: SignalWrite(v),
-        }
-    }
-
-    fn get(&self) -> T {
-        let val = self.read.0.as_ref().borrow();
-        val.clone()
-    }
-
-    fn set<F: FnMut(&mut T) + 'static>(&self, mut f: F) {
-        let mut val = self.write.0.borrow_mut();
-        let v = val.deref_mut();
-        f(v)
-    }
-}
-
-#[derive(Clone)]
-struct SignalRead<T>(Rc<RefCell<T>>);
-
-#[derive(Clone)]
-struct SignalWrite<T>(Rc<RefCell<T>>);
 
 fn add_widget(app: &mut App) {
     let counter = Signal::new(0i32);
@@ -92,11 +60,12 @@ fn add_widget(app: &mut App) {
         shape.set_color(|color| *color = Rgb::GREEN);
         shape.set_position();
     };
+
     app
         .add_widget(Button::new().on_click(inc).on_drag(drag))
         .add_widget(TestWidget::new().on_click(dec).on_drag(drag))
         .add_widget(Image::new().on_click(shift_left).on_drag(drag))
-        .add_widget(TestWidget::new().on_click(right_shift).on_drag(drag));
+        .add_widget(TestCircleWidget::new().on_click(right_shift).on_drag(drag));
 }
 
 fn main() -> Result<(), Error> {
