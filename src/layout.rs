@@ -78,7 +78,7 @@ impl Layout {
         }
     }
 
-    pub fn handle_hover(&mut self) {
+    pub unsafe fn handle_hover(&mut self) {
         let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
         if let Some(ref change_id) = self.last_changed_id.take() {
             if cursor.hover.obj.is_some_and(|hover_id| hover_id != *change_id) || cursor.hover.obj.is_none() {
@@ -95,8 +95,11 @@ impl Layout {
 
             shape.set_color(|color| *color = Rgb::BLUE);
             if cursor.is_dragging(*hover_id) {
-                shape.set_color(|color| *color = Rgb::GREEN);
-                shape.set_position();
+                CALLBACKS.with_borrow_mut(|callbacks| {
+                    if let Some(on_drag) = callbacks.on_drag.get_mut(hover_id) {
+                        on_drag(shape);
+                    }
+                });
             }
             
             let data = shape.data();
@@ -107,20 +110,15 @@ impl Layout {
         }
     }
 
-    pub fn handle_click(&mut self) {
+    pub unsafe fn handle_click(&mut self) {
         let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
         if let Some(ref click_id) = cursor.click.obj {
             let shape = self.shapes.get_mut(click_id).unwrap();
-            CALLBACKS.with_borrow_mut(|cbs| {
-                if let Some(cb) = cbs.get_mut(click_id) {
-                    unsafe {
-                        if let Some(cb) = cb.as_mut() {
-                            cb();
-                        }
-                    }
+            CALLBACKS.with_borrow_mut(|callbacks| {
+                if let Some(on_click) = callbacks.on_click.get_mut(click_id) {
+                    on_click(shape);
                 }
             });
-            shape.set_color(|color| *color = Rgb::GREEN);
             let data = shape.data();
             let v_offset = self.v_offset.get(click_id).unwrap();
             self.vertices[*v_offset..v_offset + data.vertices.len()].copy_from_slice(&data.vertices);

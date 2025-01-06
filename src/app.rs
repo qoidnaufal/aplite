@@ -248,7 +248,7 @@ impl<'a> ApplicationHandler for App<'a> {
                 WindowEvent::MouseInput { state: action, button, .. } => {
                     CONTEXT.with_borrow_mut(|ctx| ctx.set_click_state(action.into(), button.into()));
 
-                    self.layout.handle_click();
+                    unsafe { self.layout.handle_click() };
                     if self.layout.has_changed {
                         self.request_redraw();
                         self.layout.has_changed = false;
@@ -258,7 +258,7 @@ impl<'a> ApplicationHandler for App<'a> {
                     CONTEXT.with_borrow_mut(|ctx| ctx.cursor.hover.pos = Vector2::from(position.cast()));
                     self.detect_hover();
 
-                    self.layout.handle_hover();
+                    unsafe { self.layout.handle_hover() };
                     if self.layout.has_changed {
                         self.request_redraw();
                         self.layout.has_changed = false;

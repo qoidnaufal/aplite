@@ -16,25 +16,39 @@ use crate::{
 
 thread_local! {
     pub static NODE_ID: AtomicU64 = const { AtomicU64::new(0) };
-    pub static CALLBACKS: RefCell<HashMap<NodeId, CallBack>> = RefCell::new(HashMap::new());
+    pub static CALLBACKS: RefCell<Callbacks> = RefCell::new(Callbacks::default());
 }
 
-pub struct CallBack(*mut dyn FnMut());
+#[derive(Default)]
+pub struct Callbacks {
+    pub on_click: HashMap<NodeId, Callback>,
+    pub on_drag: HashMap<NodeId, Callback>,
+}
 
-impl<F: FnMut() + 'static> From<F> for CallBack {
-    fn from(mut callback: F) -> Self {
-        Self(&mut callback as *mut dyn FnMut())
+// pub struct Callback(*mut dyn FnMut(&mut Shape));
+pub struct Callback(Box<dyn FnMut(&mut Shape) + 'static>);
+
+impl std::fmt::Debug for Callback {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let ptr = &self.0 as *const dyn FnMut(&mut Shape);
+        write!(f, "{:?}", ptr)
     }
 }
 
-impl std::ops::Deref for CallBack {
-    type Target = *mut dyn FnMut();
+impl<F: FnMut(&mut Shape) + 'static> From<F> for Callback {
+    fn from(callback: F) -> Self {
+        Self(Box::new(callback))
+    }
+}
+
+impl std::ops::Deref for Callback {
+    type Target = Box<dyn FnMut(&mut Shape) + 'static>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl std::ops::DerefMut for CallBack {
+impl std::ops::DerefMut for Callback {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
@@ -73,9 +87,14 @@ impl TestWidget {
         Shape::new(Vector2::new(), Size::new(500, 500), Rgb::RED, ShapeType::Triangle)
     }
 
-    pub fn on_click<F: FnMut() + 'static>(&self, mut f: F) -> Self {
-        let a = &mut f as *mut dyn FnMut();
-        CALLBACKS.with_borrow_mut(|cbs| cbs.insert(self.id(), CallBack(a)));
+    pub fn on_click<F: FnMut(&mut Shape) + 'static>(&self, f: F) -> Self {
+        let callback = Callback::from(f);
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), callback));
+        *self
+    }
+
+    pub fn on_drag<F: FnMut(&mut Shape) + 'static>(&self, f: F) -> Self {
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), Callback::from(f)));
         *self
     }
 }
