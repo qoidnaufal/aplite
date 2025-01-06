@@ -1,5 +1,7 @@
 use crate::{
-    app::CONTEXT, color::Rgb, types::{tan, Size, Vector2, Vector3}
+    app::CONTEXT,
+    color::Rgb,
+    types::{tan, Size, Vector2, Vector3}
 };
 
 #[repr(C)]
@@ -36,6 +38,13 @@ impl PartialEq for Vertex {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum ShapeType {
+    Triangle,
+    Rectangle,
+    Circle
+}
+
 #[derive(Debug, Clone)]
 pub struct ShapeData {
     pub vertices: Vec<Vertex>,
@@ -47,14 +56,23 @@ pub struct Shape {
     pub pos: Vector2<u32>,
     pub size: Size<u32>,
     pub color: Rgb<u8>,
+    pub typ_ : ShapeType,
 }
 
 impl Shape {
-    pub fn new(pos: Vector2<u32>, size: Size<u32>, color: Rgb<u8>) -> Self {
-        Self { pos, size, color }
+    pub fn new(pos: Vector2<u32>, size: Size<u32>, color: Rgb<u8>, typ_ : ShapeType) -> Self {
+        Self { pos, size, color, typ_ }
     }
 
-    pub fn triangle(&self) -> ShapeData {
+    pub fn data(&self) -> ShapeData {
+        match self.typ_ {
+            ShapeType::Triangle => self.triangle(),
+            ShapeType::Rectangle => self.rectangle(),
+            ShapeType::Circle => self.rectangle(),
+        }
+    }
+
+    fn triangle(&self) -> ShapeData {
         let window_size = CONTEXT.with_borrow(|ctx| ctx.window_size);
 
         let x_pos = -1.0 + (self.pos.x as f32 / window_size.width as f32);
@@ -78,7 +96,7 @@ impl Shape {
         }
     }
 
-    pub fn rectangle(&self) -> ShapeData {
+    fn rectangle(&self) -> ShapeData {
         let window_size = CONTEXT.with_borrow(|ctx| ctx.window_size);
 
         let x_pos = -1.0 + (self.pos.x as f32 / window_size.width as f32);
@@ -132,8 +150,6 @@ impl Shape {
             cursor_tan >= triangle_tan
         } else { true };
 
-        // if cursor.click.obj.is_some_and(|click_id| click_id != id) { return false; }
-
         (y_pos + height..y_pos).contains(&y_cursor)
             && (x_pos..x_pos + width).contains(&x_cursor)
             && angled
@@ -145,13 +161,9 @@ impl Shape {
 
     pub fn set_position(&mut self) {
         let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
-        // println!("hovered");
-        let delta_x = cursor.hover.pos.x - cursor.click.pos.x;
-        let delta_y = cursor.hover.pos.y - cursor.click.pos.y;
-        let transform = Vector2 { x: delta_x * 2.0, y: delta_y * 2.0 };
-
         let mut conv: Vector2<f32> = self.pos.into();
-        conv.translation(transform);
+        let transform = (cursor.hover.pos - cursor.click.pos).scalar_mul(2.0);
+        conv += transform;
         self.pos = conv.into();
 
         CONTEXT.with_borrow_mut(|ctx| {

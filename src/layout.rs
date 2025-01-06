@@ -1,62 +1,12 @@
-use std::{
-    collections::HashMap,
-    sync::atomic::{AtomicU64, Ordering},
-};
+use std::collections::HashMap;
 
 use crate::{
     app::CONTEXT,
     color::Rgb,
     shapes::{Shape, Vertex},
-    types::{cast_slice, Size, Vector2},
+    types::{cast_slice, Size},
+    widget::{NodeId, Widget, CALLBACKS},
 };
-
-thread_local! {
-    pub static NODE_ID: AtomicU64 = const { AtomicU64::new(0) };
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct NodeId(u64);
-
-impl NodeId {
-    fn new() -> Self {
-        Self(NODE_ID.with(|i| i.fetch_add(1, Ordering::Relaxed)))
-    }
-}
-
-pub trait Widget: std::fmt::Debug {
-    fn id(&self) -> NodeId;
-    fn shape(&self) -> Shape;
-}
-
-impl Widget for Button {
-    fn id(&self) -> NodeId {
-        self.id()
-    }
-
-    fn shape(&self) -> Shape {
-        self.shape()
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct Button {
-    id: NodeId,
-}
-
-impl Button {
-    pub fn new() -> Self {
-        let id = NodeId::new();
-        Self { id }
-    }
-
-    fn id(&self) -> NodeId {
-        self.id
-    }
-
-    fn shape(&self) -> Shape {
-        Shape::new(Vector2::new(), Size::new(1000, 1000), Rgb::RED)
-    }
-}
 
 #[derive(Debug)]
 pub struct Layout {
@@ -134,9 +84,7 @@ impl Layout {
             if cursor.hover.obj.is_some_and(|hover_id| hover_id != *change_id) || cursor.hover.obj.is_none() {
                 let shape = self.shapes.get_mut(change_id).unwrap();
                 shape.set_color(|color| *color = Rgb::RED);
-                let data = if change_id.0 % 2 == 0 {
-                    shape.triangle()
-                } else { shape.rectangle() };
+                let data = shape.data();
                 let v_offset = self.v_offset.get(change_id).unwrap();
                 self.vertices[*v_offset..v_offset + data.vertices.len()].copy_from_slice(&data.vertices);
                 self.has_changed = true;
@@ -151,78 +99,49 @@ impl Layout {
                 shape.set_position();
             }
             
-            let data = if hover_id.0 % 2 == 0 {
-                shape.triangle()
-            } else { shape.rectangle() };
+            let data = shape.data();
             let v_offset = self.v_offset.get(hover_id).unwrap();
             self.vertices[*v_offset..v_offset + data.vertices.len()].copy_from_slice(&data.vertices);
             self.has_changed = true;
             self.last_changed_id = Some(*hover_id);
         }
-        
-        // self.shapes.iter_mut().for_each(|(id, shape)| {
-        //     if cursor.hover.obj.is_some_and(|hover_id| hover_id == *id) {
-        //         shape.set_color(|color| *color = Rgb::BLUE);
-        //     } else {
-        //         shape.set_color(|color| *color = Rgb::RED);
-        //     }
-        //     let data = if id.0 % 2 == 0 {
-        //         shape.triangle()
-        //     } else { shape.rectangle() };
-        //     let v_offset = self.v_offset.get(id).unwrap();
-        //     self.vertices[*v_offset..v_offset + data.vertices.len()].copy_from_slice(&data.vertices);
-        //     self.has_changed = true;
-        // });
     }
 
     pub fn handle_click(&mut self) {
         let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
         if let Some(ref click_id) = cursor.click.obj {
             let shape = self.shapes.get_mut(click_id).unwrap();
+            CALLBACKS.with_borrow_mut(|cbs| {
+                if let Some(cb) = cbs.get_mut(click_id) {
+                    unsafe {
+                        if let Some(cb) = cb.as_mut() {
+                            cb();
+                        }
+                    }
+                }
+            });
             shape.set_color(|color| *color = Rgb::GREEN);
-            let data = if click_id.0 % 2 == 0 {
-                shape.triangle()
-            } else { shape.rectangle() };
+            let data = shape.data();
             let v_offset = self.v_offset.get(click_id).unwrap();
             self.vertices[*v_offset..v_offset + data.vertices.len()].copy_from_slice(&data.vertices);
             self.has_changed = true;
             self.last_changed_id = Some(*click_id)
         }
-        
-        // self.shapes.iter_mut().for_each(|(id, shape)| {
-        //     if cursor.hover.obj.is_some_and(|hover_id| hover_id == *id)
-        //         && cursor.click.obj.is_some_and(|click_id| click_id == *id) {
-        //         shape.set_color(|color| *color = Rgb::GREEN);
-        //     } else {
-        //         shape.set_color(|color| *color = Rgb::RED);
-        //     }
-        //     let data = if id.0 % 2 == 0 {
-        //         shape.triangle()
-        //     } else { shape.rectangle() };
-        //     let v_offset = self.v_offset.get(id).unwrap();
-        //     self.vertices[*v_offset..v_offset + data.vertices.len()].copy_from_slice(&data.vertices);
-        //     self.has_changed = true;
-        // });
     }
 
     pub fn calculate(&mut self) {
-        let mut indices_offset = 0;
-        let mut vertices_offset = 0;
+        let mut offset = 0;
 
         self.nodes.iter().for_each(|id| {
             if let Some(shape) = self.shapes.get_mut(id) {
                 shape.pos.y += self.used_space.height;
-                let mut data = if id.0 % 2 == 0 {
-                    shape.triangle()
-                } else { shape.rectangle() };
+                let mut data = shape.data();
 
-                data.indices.iter_mut().for_each(|idx| *idx += indices_offset as u32);
+                data.indices.iter_mut().for_each(|idx| *idx += offset as u32);
 
-                self.v_offset.insert(*id, vertices_offset);
-                vertices_offset += data.vertices.len();
-
-                self.i_offset.insert(*id, indices_offset);
-                indices_offset += data.indices.len();
+                self.v_offset.insert(*id, offset);
+                self.i_offset.insert(*id, offset);
+                offset += data.vertices.len();
 
                 self.vertices.extend_from_slice(&data.vertices);
                 self.indices.extend_from_slice(&data.indices);

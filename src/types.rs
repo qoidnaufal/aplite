@@ -83,14 +83,44 @@ pub struct Vector2<T> {
     pub y: T,
 }
 
-impl<T: Default + std::ops::AddAssign> Vector2<T> {
+impl<T: Default> Vector2<T> {
     pub fn new() -> Self {
         Self { x: T::default(), y: T::default() }
     }
+}
 
-    pub fn translation(&mut self, t: Self) {
-        self.x += t.x;
-        self.y += t.y;
+impl Vector2<f32> {
+    pub fn scalar_mul(&self, n: f32) -> Self {
+        Self {
+            x: self.x * n,
+            y: self.y * n
+        }
+    }
+}
+
+impl std::ops::Add for Vector2<f32> {
+    type Output = Vector2<f32>;
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y
+        }
+    }
+}
+
+impl std::ops::AddAssign for Vector2<f32> {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs
+    }
+}
+
+impl std::ops::Sub for Vector2<f32> {
+    type Output = Vector2<f32>;
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y
+        }
     }
 }
 

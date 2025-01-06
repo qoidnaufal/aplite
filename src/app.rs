@@ -8,9 +8,10 @@ use std::cell::RefCell;
 use crate::{
     error::Error,
     gpu::GpuResources,
-    layout::{Button, Layout, NodeId},
+    layout::Layout,
     renderer::GfxRenderer,
     types::{Size, Vector2},
+    widget::{NodeId, Widget},
 };
 
 thread_local! {
@@ -186,7 +187,7 @@ impl App<'_> {
         self.gfx.as_mut().unwrap().render(self.layout.indices_len())
     }
 
-    pub fn add_widget(&mut self, node: Button) -> &mut Self {
+    pub fn add_widget(&mut self, node: impl Widget) -> &mut Self {
         self.layout.insert(node);
         self
     }

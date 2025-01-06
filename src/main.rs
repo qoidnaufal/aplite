@@ -9,9 +9,10 @@ mod color;
 mod buffer;
 mod layout;
 mod gpu;
+mod widget;
 
 use app::App;
-use layout::Button;
+use widget::*;
 use winit::event_loop::EventLoop;
 
 use error::Error;
@@ -22,10 +23,23 @@ fn main() -> Result<(), Error> {
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
 
+    let mut count = 0i32;
+    println!("init: {count}");
+    let inc = move || {
+        count += 1;
+        eprintln!("inc {count}");
+    };
+    let dec = move || {
+        count -= 1;
+        eprintln!("dec {count}");
+    };
+
     let mut app = App::new();
     app
-        .add_widget(Button::new())
-        .add_widget(Button::new());
+        .add_widget(Button::new().on_click(inc))
+        .add_widget(TestWidget::new().on_click(dec))
+        .add_widget(Image::new().on_click(inc))
+        .add_widget(TestWidget::new().on_click(dec));
     event_loop.run_app(&mut app)?;
     Ok(())
 }
