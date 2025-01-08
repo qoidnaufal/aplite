@@ -13,8 +13,7 @@ use crate::{
 pub struct Layout {
     pub nodes: Vec<NodeId>,
     pub shapes: HashMap<NodeId, Shape>,
-    pub v_offset: HashMap<NodeId, usize>,
-    pub i_offset: HashMap<NodeId, usize>,
+    pub offset: HashMap<NodeId, usize>,
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     pub has_changed: bool,
@@ -27,8 +26,7 @@ impl Layout {
         Self {
             nodes: Vec::new(),
             shapes: HashMap::new(),
-            v_offset: HashMap::new(),
-            i_offset: HashMap::new(),
+            offset: HashMap::new(),
             vertices: Vec::new(),
             indices: Vec::new(),
             used_space: Size::new(0, 0),
@@ -58,13 +56,8 @@ impl Layout {
     }
 
     pub fn detect_hover(&self) {
-        let hovered = self.shapes.iter().find(|(id, shape)| {
-            let len = if id.0 < 1 {
-                self.i_offset[&NodeId(id.0 + 1)] - self.i_offset[*id]
-            } else {
-                self.i_offset[*id] - self.i_offset[&NodeId(id.0 - 1)]
-            };
-            shape.is_hovered(len)
+        let hovered = self.shapes.iter().find(|(_, shape)| {
+            shape.is_hovered()
         });
         if let Some((id, _)) = hovered {
             CONTEXT.with_borrow_mut(|ctx| {
@@ -81,12 +74,17 @@ impl Layout {
 
     pub unsafe fn handle_hover(&mut self) {
         let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
+        if let (Some(ref hover_id), Some(ref change_id), None) = (cursor.hover.obj, self.last_changed_id, cursor.click.obj) {
+            if hover_id == change_id {
+                return;
+            }
+        }
         if let Some(ref change_id) = self.last_changed_id.take() {
             if cursor.hover.obj.is_some_and(|hover_id| hover_id != *change_id) || cursor.hover.obj.is_none() {
                 let shape = self.shapes.get_mut(change_id).unwrap();
-                shape.set_color(|color| *color = Rgb::RED);
-                let data = shape.data();
-                let v_offset = self.v_offset.get(change_id).unwrap();
+                shape.revert_color();
+                let data = shape.filled();
+                let v_offset = self.offset.get(change_id).unwrap();
                 self.vertices[*v_offset..v_offset + data.vertices.len()].copy_from_slice(&data.vertices);
                 self.has_changed = true;
             }
@@ -103,8 +101,8 @@ impl Layout {
                 });
             }
             
-            let data = shape.data();
-            let v_offset = self.v_offset.get(hover_id).unwrap();
+            let data = shape.filled();
+            let v_offset = self.offset.get(hover_id).unwrap();
             self.vertices[*v_offset..v_offset + data.vertices.len()].copy_from_slice(&data.vertices);
             self.has_changed = true;
             self.last_changed_id = Some(*hover_id);
@@ -120,32 +118,43 @@ impl Layout {
                     on_click(shape);
                 }
             });
-            let data = shape.data();
-            let v_offset = self.v_offset.get(click_id).unwrap();
+            let data = shape.filled();
+            let v_offset = self.offset.get(click_id).unwrap();
             self.vertices[*v_offset..v_offset + data.vertices.len()].copy_from_slice(&data.vertices);
             self.has_changed = true;
             self.last_changed_id = Some(*click_id)
         }
     }
 
+    // (-1,  1)--------------------------(1,  1)
+    //        |
+    //        |
+    //        |          (0, 0)
+    //        |
+    //        |
+    // (-1, -1)--------------------------(1, -1)
+
     pub fn calculate(&mut self) {
+        // let window_size = CONTEXT.with_borrow(|ctx| ctx.window_size);
+        // let mut translation = Vector3 { x: -1.0, y: 1.0, z: 0.0 };
         let mut offset = 0;
 
         self.nodes.iter().for_each(|id| {
             if let Some(shape) = self.shapes.get_mut(id) {
+                // shape.transform.set_translate(translation);
                 shape.pos.y += self.used_space.height;
-                let mut data = shape.data();
 
+                self.used_space.height += shape.size.height;
+                // translation.y -= self.used_space.height as f32 / window_size.height as f32;
+
+                let mut data = shape.filled();
                 data.indices.iter_mut().for_each(|idx| *idx += offset as u32);
 
-                self.v_offset.insert(*id, offset);
-                self.i_offset.insert(*id, offset);
+                self.offset.insert(*id, offset);
                 offset += data.vertices.len();
 
                 self.vertices.extend_from_slice(&data.vertices);
                 self.indices.extend_from_slice(&data.indices);
-
-                self.used_space.height += shape.size.height;
             }
         });
     }

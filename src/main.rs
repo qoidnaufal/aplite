@@ -64,8 +64,8 @@ fn add_widget(app: &mut App) {
     app
         .add_widget(Button::new().on_click(inc).on_drag(drag))
         .add_widget(TestWidget::new().on_click(dec).on_drag(drag))
-        .add_widget(Image::new().on_click(shift_left).on_drag(drag))
-        .add_widget(TestCircleWidget::new().on_click(right_shift).on_drag(drag));
+        .add_widget(TestCircleWidget::new().on_click(right_shift).on_drag(drag))
+        .add_widget(Image::new("assets/image.jpg").on_click(shift_left).on_drag(drag));
 }
 
 fn main() -> Result<(), Error> {

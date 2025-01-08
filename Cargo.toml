@@ -12,3 +12,4 @@ log = "0.4.22"
 wgpu = "23.0.1"
 winit = "0.30.7"
 pollster = { path = "./pollster" }
+image = { version = "0.25.5", features = ["png", "jpeg"] }

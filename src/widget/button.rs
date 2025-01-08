@@ -1,6 +1,6 @@
 use crate::{
     color::Rgb,
-    shapes::{Shape, ShapeType},
+    shapes::{Shape, FilledShape},
     types::{Size, Vector2},
 };
 
@@ -22,17 +22,17 @@ impl Button {
     }
 
     fn shape(&self) -> Shape {
-        Shape::new(Vector2::new(), Size::new(500, 500), Rgb::RED, ShapeType::Rectangle)
+        Shape::new(Vector2::new(), Size::new(500, 500), Rgb::RED, FilledShape::FilledRectangle)
     }
 
-    pub fn on_click<F: FnMut(&mut Shape) + 'static>(&self, f: F) -> Self {
+    pub fn on_click<F: FnMut(&mut Shape) + 'static>(&self, f: F) -> &Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
-        *self
+        self
     }
 
-    pub fn on_drag<F: FnMut(&mut Shape) + 'static>(&self, f: F) -> Self {
+    pub fn on_drag<F: FnMut(&mut Shape) + 'static>(&self, f: F) -> &Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
-        *self
+        self
     }
 }
 
@@ -43,5 +43,15 @@ impl Widget for Button {
 
     fn shape(&self) -> Shape {
         self.shape()
+    }
+}
+
+impl Widget for &Button {
+    fn id(&self) -> NodeId {
+        (*self).id()
+    }
+
+    fn shape(&self) -> Shape {
+        (*self).shape()
     }
 }

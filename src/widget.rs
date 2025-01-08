@@ -1,6 +1,8 @@
 mod button;
 mod image;
 
+use image::TextureData;
+
 pub use {
     button::Button,
     image::Image,
@@ -11,7 +13,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::{
     callback::CALLBACKS,
     color::Rgb,
-    shapes::{Shape, ShapeType},
+    shapes::{Shape, FilledShape},
     types::{Size, Vector2},
 };
 
@@ -50,7 +52,7 @@ impl TestWidget {
     }
 
     fn shape(&self) -> Shape {
-        Shape::new(Vector2::new(), Size::new(500, 500), Rgb::RED, ShapeType::Triangle)
+        Shape::new(Vector2::new(), Size::new(500, 500), Rgb::RED, FilledShape::FilledTriangle)
     }
 
     pub fn on_click<F: FnMut(&mut Shape) + 'static>(&self, f: F) -> Self {
@@ -90,7 +92,7 @@ impl TestCircleWidget {
     }
 
     fn shape(&self) -> Shape {
-        Shape::new(Vector2::new(), Size::new(500, 500), Rgb::RED, ShapeType::Circle)
+        Shape::new(Vector2::new(), Size::new(500, 500), Rgb::BLACK, FilledShape::FilledCircle)
     }
 
     pub fn on_click<F: FnMut(&mut Shape) + 'static>(&self, f: F) -> Self {
