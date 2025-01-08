@@ -1,16 +1,15 @@
+use std::cell::RefCell;
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
     window::Window,
 };
-use std::cell::RefCell;
-
+use math::{Size, Vector2};
 use crate::{
     error::Error,
     gpu::GpuResources,
     layout::Layout,
     renderer::GfxRenderer,
-    types::{Size, Vector2},
     widget::{NodeId, Widget},
 };
 
@@ -197,7 +196,8 @@ impl<'a> ApplicationHandler for App<'a> {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         let window = event_loop.create_window(Window::default_attributes()).unwrap();
         window.set_title("My App");
-        CONTEXT.with_borrow_mut(|ctx| ctx.window_size = Size::from(window.inner_size()));
+        let size = window.inner_size();
+        CONTEXT.with_borrow_mut(|ctx| ctx.window_size = Size::from((size.width, size.height)));
         self.window = Some(window);
 
         self.layout.calculate();
@@ -244,7 +244,7 @@ impl<'a> ApplicationHandler for App<'a> {
                     eprintln!("{:?}", start.elapsed());
                 }
                 WindowEvent::Resized(new_size) => {
-                    CONTEXT.with_borrow_mut(|ctx| ctx.window_size = Size::from(new_size));
+                    CONTEXT.with_borrow_mut(|ctx| ctx.window_size = Size::from((new_size.width, new_size.height)));
                     self.resize();
                 }
                 WindowEvent::MouseInput { state: action, button, .. } => {
@@ -257,7 +257,7 @@ impl<'a> ApplicationHandler for App<'a> {
                     }
                 }
                 WindowEvent::CursorMoved { position, .. } => {
-                    CONTEXT.with_borrow_mut(|ctx| ctx.cursor.hover.pos = Vector2::from(position.cast()));
+                    CONTEXT.with_borrow_mut(|ctx| ctx.cursor.hover.pos = Vector2::from((position.cast().x, position.cast().y)));
                     self.detect_hover();
 
                     unsafe { self.layout.handle_hover() };

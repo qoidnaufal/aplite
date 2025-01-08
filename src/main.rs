@@ -4,7 +4,6 @@ mod renderer;
 mod pipeline;
 mod app;
 mod callback;
-mod types;
 mod shader;
 mod signal;
 mod color;
@@ -56,16 +55,18 @@ fn add_widget(app: &mut App) {
         c4.set(|num| *num >>= 1);
         eprintln!("right shift {}", c4.get());
     };
+
+    let hover = move |shape: &mut Shape| { shape.set_color(|color| *color = Rgb::BLUE) };
     let drag = move |shape: &mut Shape| {
         shape.set_color(|color| *color = Rgb::GREEN);
         shape.set_position();
     };
 
     app
-        .add_widget(Button::new().on_click(inc).on_drag(drag))
-        .add_widget(TestWidget::new().on_click(dec).on_drag(drag))
-        .add_widget(TestCircleWidget::new().on_click(right_shift).on_drag(drag))
-        .add_widget(Image::new("assets/image.jpg").on_click(shift_left).on_drag(drag));
+        .add_widget(Button::new().on_click(inc).on_drag(drag).on_hover(hover))
+        .add_widget(TestWidget::new().on_click(dec).on_drag(drag).on_hover(hover))
+        .add_widget(TestCircleWidget::new().on_click(right_shift).on_drag(drag).on_hover(hover))
+        .add_widget(Image::new("assets/image.jpg").on_click(shift_left).on_drag(drag).on_hover(hover));
 }
 
 fn main() -> Result<(), Error> {

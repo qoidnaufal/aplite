@@ -1,13 +1,23 @@
 use std::collections::HashMap;
-
 use crate::{
     app::CONTEXT,
     callback::CALLBACKS,
-    color::Rgb,
+    error::Error,
     shapes::{Shape, Vertex},
-    types::{cast_slice, Size},
     widget::{NodeId, Widget},
 };
+use math::Size;
+
+pub fn cast_slice<A: Sized, B: Sized>(p: &[A]) -> Result<&[B], Error> {
+    if align_of::<B>() > align_of::<A>()
+        && (p.as_ptr() as *const () as usize) % align_of::<B>() != 0 {
+        return Err(Error::PointersHaveDifferentAlignmnet);
+    }
+    unsafe {
+        let len = size_of_val::<[A]>(p) / size_of::<B>();
+        Ok(core::slice::from_raw_parts(p.as_ptr() as *const B, len))
+    }
+}
 
 #[derive(Debug)]
 pub struct Layout {
@@ -92,18 +102,21 @@ impl Layout {
         if let Some(ref hover_id) = cursor.hover.obj {
             let shape = self.shapes.get_mut(hover_id).unwrap();
 
-            shape.set_color(|color| *color = Rgb::BLUE);
-            if cursor.is_dragging(*hover_id) {
-                CALLBACKS.with_borrow_mut(|callbacks| {
+            CALLBACKS.with_borrow_mut(|callbacks| {
+                if let Some(on_hover) = callbacks.on_hover.get_mut(hover_id) {
+                    on_hover(shape);
+                }
+                if cursor.is_dragging(*hover_id) {
                     if let Some(on_drag) = callbacks.on_drag.get_mut(hover_id) {
                         on_drag(shape);
                     }
-                });
-            }
+                }
+            });
             
             let data = shape.filled();
-            let v_offset = self.offset.get(hover_id).unwrap();
-            self.vertices[*v_offset..v_offset + data.vertices.len()].copy_from_slice(&data.vertices);
+            let offset = self.offset.get(hover_id).unwrap();
+            // this is much faster than using `splice()`
+            self.vertices[*offset..offset + data.vertices.len()].copy_from_slice(&data.vertices);
             self.has_changed = true;
             self.last_changed_id = Some(*hover_id);
         }
@@ -119,8 +132,8 @@ impl Layout {
                 }
             });
             let data = shape.filled();
-            let v_offset = self.offset.get(click_id).unwrap();
-            self.vertices[*v_offset..v_offset + data.vertices.len()].copy_from_slice(&data.vertices);
+            let offset = self.offset.get(click_id).unwrap();
+            self.vertices[*offset..offset + data.vertices.len()].copy_from_slice(&data.vertices);
             self.has_changed = true;
             self.last_changed_id = Some(*click_id)
         }
@@ -135,17 +148,12 @@ impl Layout {
     // (-1, -1)--------------------------(1, -1)
 
     pub fn calculate(&mut self) {
-        // let window_size = CONTEXT.with_borrow(|ctx| ctx.window_size);
-        // let mut translation = Vector3 { x: -1.0, y: 1.0, z: 0.0 };
         let mut offset = 0;
 
         self.nodes.iter().for_each(|id| {
             if let Some(shape) = self.shapes.get_mut(id) {
-                // shape.transform.set_translate(translation);
                 shape.pos.y += self.used_space.height;
-
                 self.used_space.height += shape.size.height;
-                // translation.y -= self.used_space.height as f32 / window_size.height as f32;
 
                 let mut data = shape.filled();
                 data.indices.iter_mut().for_each(|idx| *idx += offset as u32);

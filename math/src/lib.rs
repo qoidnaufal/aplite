@@ -1,5 +1,3 @@
-use crate::error::Error;
-
 #[derive(Debug,Clone, Copy)]
 pub struct Size<T> {
     pub width: T,
@@ -17,15 +15,6 @@ impl<T> From<(T, T)> for Size<T> {
         Self {
             width: value.0,
             height: value.1,
-        }
-    }
-}
-
-impl<T> From<winit::dpi::PhysicalSize<T>> for Size<T> {
-    fn from(val: winit::dpi::PhysicalSize<T>) -> Self {
-        Self {
-            width: val.width,
-            height: val.height,
         }
     }
 }
@@ -270,20 +259,11 @@ impl<T> From<Vector3<T>> for Vector2<T> {
     }
 }
 
-impl From<winit::dpi::PhysicalPosition<f32>> for Vector2<f32> {
-    fn from(value: winit::dpi::PhysicalPosition<f32>) -> Self {
+impl<T> From<(T, T)> for Vector2<T> {
+    fn from(value: (T, T)) -> Self {
         Self {
-            x: value.x,
-            y: value.y
-        }
-    }
-}
-
-impl From<winit::dpi::PhysicalPosition<u32>> for Vector2<u32> {
-    fn from(value: winit::dpi::PhysicalPosition<u32>) -> Self {
-        Self {
-            x: value.x,
-            y: value.y
+            x: value.0,
+            y: value.1,
         }
     }
 }
@@ -304,22 +284,12 @@ impl PartialEq for Vector2<f32> {
 
 impl Eq for Vector2<f32> {}
 
-pub fn cast_slice<A: Sized, B: Sized>(p: &[A]) -> Result<&[B], Error> {
-    if align_of::<B>() > align_of::<A>()
-        && (p.as_ptr() as *const () as usize) % align_of::<B>() != 0 {
-        return Err(Error::PointersHaveDifferentAlignmnet);
-    }
-    unsafe {
-        let len = size_of_val::<[A]>(p) / size_of::<B>();
-        Ok(core::slice::from_raw_parts(p.as_ptr() as *const B, len))
-    }
-}
 
 pub fn tan(x: f32, y: f32) -> f32 {
     (y / x).abs()
 }
 
-pub fn _cos(x: f32, y: f32) -> f32 {
+pub fn cos(x: f32, y: f32) -> f32 {
     let hyp = (x*x + y*y).sqrt();
     (x / hyp).abs()
 }

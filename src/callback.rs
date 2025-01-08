@@ -10,6 +10,7 @@ thread_local! {
 pub struct Callbacks {
     pub on_click: HashMap<NodeId, Callback>,
     pub on_drag: HashMap<NodeId, Callback>,
+    pub on_hover: HashMap<NodeId, Callback>,
 }
 
 pub struct Callback(Box<dyn FnMut(&mut Shape) + 'static>);

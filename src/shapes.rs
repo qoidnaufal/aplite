@@ -1,8 +1,8 @@
 use crate::{
     app::CONTEXT,
     color::Rgb,
-    types::{tan, Size, Vector2, Vector3}
 };
+use math::{tan, Size, Vector2, Vector3};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -35,29 +35,6 @@ impl Vertex {
 impl PartialEq for Vertex {
     fn eq(&self, other: &Self) -> bool {
         self.position == other.position && self.color == other.color
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Transform {
-    translate: Vector3<f32>,
-    rotate: Vector3<f32>,
-}
-
-impl Transform {
-    pub fn new() -> Self {
-        Self {
-            translate: Vector3::new(),
-            rotate: Vector3::new(),
-        }
-    }
-
-    pub fn set_translate(&mut self, new_translate: Vector3<f32>) {
-        self.translate = new_translate;
-    }
-
-    pub fn set_rotate(&mut self, new_rotate: Vector3<f32>) {
-        self.rotate = new_rotate;
     }
 }
 
@@ -107,7 +84,7 @@ pub struct Shape {
 
 impl Shape {
     pub fn new(pos: Vector2<u32>, size: Size<u32>, color: Rgb<u8>, typ_ : FilledShape) -> Self {
-        Self { pos, size, color, cached_color: color, /* transform: Transform::new(), */ typ_ }
+        Self { pos, size, color, cached_color: color, typ_ }
     }
 
     pub fn filled(&self) -> FilledShapeData {

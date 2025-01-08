@@ -1,13 +1,10 @@
 use std::{fs::File, io::{BufReader, Read}, path::Path};
-
 use image::{GenericImageView, ImageBuffer};
-
 use crate::{
     color::Rgb,
     shapes::{Shape, FilledShape},
-    types::{Size, Vector2}
 };
-
+use math::{Size, Vector2};
 use super::{NodeId, Widget, CALLBACKS};
 
 fn image_reader<P: AsRef<Path>>(path: P) -> TextureData {
@@ -51,6 +48,11 @@ impl Image {
 
     fn shape(&self) -> Shape {
         Shape::new(Vector2::new(), Size::new(500, 500), Rgb::RED, FilledShape::FilledRectangle)
+    }
+
+    pub fn on_hover<F: FnMut(&mut Shape) + 'static>(&self, f: F) -> &Self {
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
+        self
     }
 
     pub fn on_click<F: FnMut(&mut Shape) + 'static>(&self, f: F) -> &Self {
