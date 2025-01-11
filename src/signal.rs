@@ -20,7 +20,7 @@ impl<T: Clone> Signal<T> {
         val.clone()
     }
 
-    pub fn set<F: FnMut(&mut T) + 'static>(&self, mut f: F) {
+    pub fn set<F: FnOnce(&mut T) + 'static>(&self, f: F) {
         let mut val = self.write.0.borrow_mut();
         let v = val.deref_mut();
         f(v)

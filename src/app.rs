@@ -196,15 +196,14 @@ impl<'a> ApplicationHandler for App<'a> {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         let window = event_loop.create_window(Window::default_attributes()).unwrap();
         window.set_title("My App");
+
         let size = window.inner_size();
         CONTEXT.with_borrow_mut(|ctx| ctx.window_size = Size::from((size.width, size.height)));
         self.window = Some(window);
-
         self.layout.calculate();
 
         let gpu = self.request_gpu().unwrap();
-        let gfx = GfxRenderer::new(gpu, &self.layout);
-        let gfx: GfxRenderer<'a> = unsafe { std::mem::transmute(gfx) };
+        let gfx: GfxRenderer<'a> = unsafe { std::mem::transmute(GfxRenderer::new(gpu, &self.layout)) };
         self.gfx = Some(gfx);
     }
 
@@ -250,7 +249,7 @@ impl<'a> ApplicationHandler for App<'a> {
                 WindowEvent::MouseInput { state: action, button, .. } => {
                     CONTEXT.with_borrow_mut(|ctx| ctx.set_click_state(action.into(), button.into()));
 
-                    unsafe { self.layout.handle_click() };
+                    self.layout.handle_click();
                     if self.layout.has_changed {
                         self.request_redraw();
                         self.layout.has_changed = false;
@@ -260,7 +259,7 @@ impl<'a> ApplicationHandler for App<'a> {
                     CONTEXT.with_borrow_mut(|ctx| ctx.cursor.hover.pos = Vector2::from((position.cast().x, position.cast().y)));
                     self.detect_hover();
 
-                    unsafe { self.layout.handle_hover() };
+                    self.layout.handle_hover();
                     if self.layout.has_changed {
                         self.request_redraw();
                         self.layout.has_changed = false;

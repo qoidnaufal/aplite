@@ -1,10 +1,7 @@
-use std::{fs::File, io::{BufReader, Read}, path::Path};
-use image::{GenericImageView, ImageBuffer};
-use crate::{
-    color::Rgb,
-    shapes::{Shape, FilledShape},
-};
-use math::{Size, Vector2};
+use std::{fs::File, io::{BufReader, Read}, path::{Path, PathBuf}};
+use image::GenericImageView;
+use math::Size;
+use crate::shapes::{Shape, ShapeType};
 use super::{NodeId, Widget, CALLBACKS};
 
 fn image_reader<P: AsRef<Path>>(path: P) -> TextureData {
@@ -30,16 +27,13 @@ pub struct TextureData {
 #[derive(Debug)]
 pub struct Image {
     id: NodeId,
+    src: PathBuf,
 }
 
 impl Image {
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
-        let texture_data = image_reader(path);
-        eprintln!("{}", texture_data.data.len());
-        eprintln!("{:?}", texture_data.dimension);
         let id = NodeId::new();
-
-        Self { id }
+        Self { id, src: path.as_ref().to_path_buf() }
     }
 
     fn id(&self) -> NodeId {
@@ -47,7 +41,12 @@ impl Image {
     }
 
     fn shape(&self) -> Shape {
-        Shape::new(Vector2::new(), Size::new(500, 500), Rgb::RED, FilledShape::FilledRectangle)
+        let texture = image_reader(&self.src);
+        eprintln!("{}", texture.data.len());
+        eprintln!("{:?}", texture.dimension);
+
+        // Shape::new(Vector2::new(), Size::new(500, 500), Rgb::RED, FilledShape::FilledRectangle)
+        Shape::textured(texture.dimension, &texture.data, ShapeType::TexturedRectangle)
     }
 
     pub fn on_hover<F: FnMut(&mut Shape) + 'static>(&self, f: F) -> &Self {

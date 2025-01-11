@@ -1,9 +1,7 @@
 use crate::{
     color::Rgb,
-    shapes::{Shape, FilledShape},
+    shapes::{Shape, ShapeType},
 };
-use math::{Size, Vector2};
-
 use super::{NodeId, Widget, CALLBACKS};
 
 #[derive(Debug, Clone, Copy)]
@@ -22,7 +20,7 @@ impl Button {
     }
 
     fn shape(&self) -> Shape {
-        Shape::new(Vector2::new(), Size::new(500, 500), Rgb::RED, FilledShape::FilledRectangle)
+        Shape::filled(Rgb::RED, ShapeType::FilledRectangle)
     }
 
     pub fn on_hover<F: FnMut(&mut Shape) + 'static>(&self, f: F) -> &Self {

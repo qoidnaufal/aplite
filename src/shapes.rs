@@ -1,14 +1,14 @@
 use crate::{
     app::CONTEXT,
-    color::Rgb,
+    color::{Color, Rgb, Rgba}, pipeline::Texture,
 };
-use math::{tan, Size, Vector2, Vector3};
+use math::{tan, Matrix, Size, Vector2, Vector3};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Vertex {
     pub position: Vector3<f32>,
-    pub color: Rgb<f32>,
+    pub color: Vector2<f32>,
 }
 
 impl Vertex {
@@ -23,7 +23,7 @@ impl Vertex {
                     shader_location: 0,
                 },
                 wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x3,
+                    format: wgpu::VertexFormat::Float32x2,
                     offset: std::mem::size_of::<Vector3<f32>>() as wgpu::BufferAddress,
                     shader_location: 1,
                 },
@@ -39,23 +39,51 @@ impl PartialEq for Vertex {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FilledShape {
+pub enum ShapeType {
     FilledTriangle,
     FilledRectangle,
-    FilledCircle,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum TexturedShape {
-    TexturedTriangle,
     TexturedRectangle,
-    TexturedCircle,
 }
 
 #[derive(Debug, Clone)]
-pub struct FilledShapeData {
+pub struct ShapeData {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
+}
+
+impl From<ShapeType> for ShapeData {
+    fn from(typ_: ShapeType) -> Self {
+        match typ_ {
+            ShapeType::FilledTriangle => Self::triangle(),
+            ShapeType::FilledRectangle => Self::rectangle(),
+            ShapeType::TexturedRectangle => Self::rectangle(),
+        }
+    }
+}
+
+impl ShapeData {
+    fn rectangle() -> Self {
+        Self {
+            vertices: [
+                Vertex { position: Vector3 { x: -1.0, y:  1.0, z: 1.0 }, color: Vector2 { x: 0.0, y: 0.0 } },
+                Vertex { position: Vector3 { x: -1.0, y: -1.0, z: 1.0 }, color: Vector2 { x: 0.0, y: 1.0 } },
+                Vertex { position: Vector3 { x:  1.0, y: -1.0, z: 1.0 }, color: Vector2 { x: 1.0, y: 1.0 } },
+                Vertex { position: Vector3 { x:  1.0, y:  1.0, z: 1.0 }, color: Vector2 { x: 1.0, y: 0.0 } },
+                ].to_vec(),
+            indices: [0, 1, 2, 2, 3, 0].to_vec(),
+        }
+    }
+
+    fn triangle() -> Self {
+        Self {
+            vertices: [
+                Vertex { position: Vector3 { x:  0.0, y:  1.0, z: 1.0 }, color: Vector2 { x: 0.5, y: 0.0 } },
+                Vertex { position: Vector3 { x: -1.0, y: -1.0, z: 1.0 }, color: Vector2 { x: 0.0, y: 1.0 } },
+                Vertex { position: Vector3 { x:  1.0, y: -1.0, z: 1.0 }, color: Vector2 { x: 1.0, y: 1.0 } },
+                ].to_vec(),
+            indices: [0, 1, 2].to_vec(),
+        }
+    }
 }
 
 // originaly, every shape is rooted to the center of the screen where center is [0, 0]
@@ -72,97 +100,65 @@ pub struct FilledShapeData {
 // top right    [x + width/2, y + height/2],
 // where (width, height) is normalized to window's inner_size
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Shape {
-    pub pos: Vector2<u32>,
+    pub shape_data: ShapeData,
     pub size: Size<u32>,
-    pub color: Rgb<u8>,
-    pub cached_color: Rgb<u8>,
-    // pub transform: Transform,
-    pub typ_ : FilledShape,
+    pub uv_size: Size<u32>,
+    pub uv_data: Color<Rgba<u8>, u8>,
+    pub cached_color: Option<Color<Rgba<u8>, u8>>,
+    pub transform: Matrix<Vector3<f32>, 3>,
 }
 
 impl Shape {
-    pub fn new(pos: Vector2<u32>, size: Size<u32>, color: Rgb<u8>, typ_ : FilledShape) -> Self {
-        Self { pos, size, color, cached_color: color, typ_ }
-    }
-
-    pub fn filled(&self) -> FilledShapeData {
-        match self.typ_ {
-            FilledShape::FilledTriangle => self.filled_triangle(),
-            FilledShape::FilledRectangle => self.filled_rectangle(),
-            _ => self.filled_rectangle(),
+    pub fn filled(color: Rgb<u8>, typ_ : ShapeType) -> Self {
+        Self {
+            shape_data: typ_.into(),
+            size: Size::new(500, 500),
+            uv_size: (1, 1).into(),
+            uv_data: color.into(),
+            cached_color: Some(color.into()),
+            transform: Matrix::IDENTITIY,
         }
     }
 
-    fn filled_triangle(&self) -> FilledShapeData {
-        let window_size = CONTEXT.with_borrow(|ctx| ctx.window_size);
-
-        let x_pos = -1.0 + (self.pos.x as f32 / window_size.width as f32);
-        let y_pos = 1.0 - (self.pos.y as f32 / window_size.height as f32);
-        
-        let width = self.size.width as f32 / window_size.width as f32;
-        let height = -(self.size.height as f32 / window_size.height as f32);
-        let x_center = width / 2.0;
-
-        let t = Vector3 { x: x_pos + x_center, y: y_pos, z: 0.0 };
-        let l = Vector3 { x: x_pos, y: y_pos + height, z: 0.0 };
-        let r = Vector3 { x: x_pos + width, y: y_pos + height, z: 0.0 };
-
-        FilledShapeData {
-            vertices: [
-                Vertex { position: t, color: self.color.into() },
-                Vertex { position: l, color: self.color.into() },
-                Vertex { position: r, color: self.color.into() },
-            ].to_vec(),
-            indices: [0, 1, 2].to_vec()
+    pub fn textured(uv_size: Size<u32>, texture_data: &[u8], typ_: ShapeType) -> Self {
+        Self {
+            shape_data: typ_.into(),
+            size: Size::new(500, 500),
+            uv_size,
+            uv_data: texture_data.into(),
+            cached_color: None,
+            transform: Matrix::IDENTITIY,
         }
     }
 
-    fn filled_rectangle(&self) -> FilledShapeData {
-        let window_size = CONTEXT.with_borrow(|ctx| ctx.window_size);
-
-        let x_pos = -1.0 + (self.pos.x as f32 / window_size.width as f32);
-        let y_pos = 1.0 - (self.pos.y as f32 / window_size.height as f32);
-        
-        let width = self.size.width as f32 / window_size.width as f32;
-        let height = -(self.size.height as f32 / window_size.height as f32);
-
-        // let tl = Vector3 { x: -1.0 * width/2, y:  1.0 * height/2, z: 0.0 }.transform();
-        // let bl = Vector3 { x: -1.0 * width/2, y: -1.0 * height/2, z: 0.0 }.transform();
-        // let br = Vector3 { x:  1.0 * width/2, y: -1.0 * height/2, z: 0.0 }.transform();
-        // let tr = Vector3 { x:  1.0 * width/2, y:  1.0 * height/2, z: 0.0 }.transform();
-
-        let tl = Vector3 { x: x_pos,         y: y_pos,          z: 0.0 };
-        let bl = Vector3 { x: x_pos,         y: y_pos + height, z: 0.0 };
-        let br = Vector3 { x: x_pos + width, y: y_pos + height, z: 0.0 };
-        let tr = Vector3 { x: x_pos + width, y: y_pos,          z: 0.0 };
-
-        FilledShapeData {
-            vertices: [
-                Vertex { position: tl, color: self.color.into() },
-                Vertex { position: bl, color: self.color.into() },
-                Vertex { position: br, color: self.color.into() },
-                Vertex { position: tr, color: self.color.into() },
-            ].to_vec(),
-            indices: [0, 1, 2, 2, 3, 0].to_vec()
-        }
+    pub fn transform(&mut self) {
+        self.shape_data.vertices.iter_mut().for_each(|vert| {
+            vert.position = self.transform * vert.position;
+        });
+        self.transform = Matrix::IDENTITIY;
     }
 
-    fn textured_rectangle(&self) {}
+    pub fn translate(&mut self, tx: f32, ty: f32) {
+        self.transform.translation(tx, ty);
+    }
 
+    pub fn scale(&mut self, scale: Size<f32>) {
+        self.transform.scale(scale.width, scale.height);
+    }
+
+    pub fn process_texture(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> Texture {
+        Texture::new(device, queue, self.uv_size, &self.uv_data)
+    }
+
+    // for now, i think the dimension will always be constant due to scaling transform
+    // but still, i need better calculation later
     fn dimension(&self) -> Size<f32> {
         let window_size = CONTEXT.with_borrow(|ctx| ctx.window_size);
         let width = self.size.width as f32 / window_size.width as f32;
         let height = -(self.size.height as f32 / window_size.height as f32);
         Size { width, height }
-    }
-
-    fn pos(&self) -> Vector2<f32> {
-        let window_size = CONTEXT.with_borrow(|ctx| ctx.window_size);
-        let x = -1.0 + (self.pos.x as f32 / window_size.width as f32);
-        let y = 1.0 - (self.pos.y as f32 / window_size.height as f32);
-        Vector2 { x, y }
     }
 
     pub fn is_hovered(&self) -> bool {
@@ -171,9 +167,10 @@ impl Shape {
         let y_cursor = (0.5 - (cursor.hover.pos.y / window_size.height as f32)) * 2.0;
 
         let Size { width, height } = self.dimension();
-        let Vector2 { x: x_pos, y: y_pos } = self.pos();
+        let  x_pos = self.shape_data.vertices[1].position.x;
+        let  y_pos = self.shape_data.vertices[0].position.y;
 
-        let angled = if self.typ_ == FilledShape::FilledTriangle {
+        let angled = if self.shape_data.indices.len() == 3 {
             let x_center = width / 2.0;
             let cursor_tan = tan(x_pos + x_center - x_cursor, y_pos - y_cursor);
             let triangle_tan = tan(x_center, height);
@@ -185,20 +182,21 @@ impl Shape {
             && angled
     }
 
-    pub fn set_color<F: FnMut(&mut Rgb<u8>)>(&mut self, mut f: F) {
-        f(&mut self.color);
+    pub fn set_color<F: FnMut(&mut Color<Rgba<u8>, u8>)>(&mut self, mut f: F) {
+        f(&mut self.uv_data);
     }
 
     pub fn revert_color(&mut self) {
-        self.color = self.cached_color;
+        if let Some(ref c) = self.cached_color {
+            self.uv_data = c.clone();
+        }
     }
 
     pub fn set_position(&mut self) {
-        let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
-        let mut conv: Vector2<f32> = self.pos.into();
-        let transform = (cursor.hover.pos - cursor.click.pos) * 2.0;
-        conv += transform;
-        self.pos = conv.into();
+        let (cursor, window_size) = CONTEXT.with_borrow(|ctx| (ctx.cursor, Size::<f32>::from(ctx.window_size)));
+        let t = (cursor.hover.pos - cursor.click.pos) * 2.0;
+        self.translate(t.x / window_size.width, -t.y / window_size.height);
+        self.transform();
 
         CONTEXT.with_borrow_mut(|ctx| {
             ctx.cursor.click.pos = cursor.hover.pos;

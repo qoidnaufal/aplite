@@ -4,26 +4,31 @@ use crate::{
     error::Error,
     gpu::GpuResources,
     layout::Layout,
-    pipeline::Pipeline,
+    pipeline::{bind_goup_layout, Pipeline},
 };
 
 pub struct GfxRenderer<'a> {
     pub gpu: GpuResources<'a>,
     pipeline: Pipeline,
     buffer: Buffer,
+    bind_groups: Vec<wgpu::BindGroup>,
 }
 
 impl<'a> GfxRenderer<'a> {
     pub fn new(gpu: GpuResources<'a>, layouts: &Layout) -> Self {
-        let pipeline = Pipeline::new(&gpu.device, gpu.config.format);
+        let bg_layout = bind_goup_layout(&gpu.device);
         let vertices = layouts.vertices();
         let indices = layouts.indices();
+
+        let bind_groups = layouts.bind_groups(&gpu.device, &gpu.queue, &bg_layout);
         let buffer = Buffer::new(&gpu.device, vertices, indices);
+        let pipeline = Pipeline::new(&gpu.device, gpu.config.format, &bg_layout);
 
         Self {
             gpu,
             pipeline,
             buffer,
+            bind_groups,
         }
     }
 
@@ -48,7 +53,7 @@ impl<'a> GfxRenderer<'a> {
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("render encoder") });
 
-        draw(&mut encoder, &view, &self.pipeline, &self.buffer, indices_len);
+        draw(&mut encoder, &view, &self.pipeline, &self.buffer, indices_len, &self.bind_groups);
 
         self.gpu.queue.submit(std::iter::once(encoder.finish()));
         output.present();
@@ -63,6 +68,7 @@ fn draw(
     pipeline: &Pipeline,
     buffer: &Buffer,
     indices_len: usize,
+    bind_group: &[wgpu::BindGroup],
 ) {
     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("render pass"),
@@ -84,6 +90,7 @@ fn draw(
         occlusion_query_set: None,
     });
     pass.set_pipeline(&pipeline.pipeline);
+    bind_group.iter().for_each(|bg| pass.set_bind_group(0, bg, &[]));
     pass.set_vertex_buffer(0, buffer.v.slice(..));
     pass.set_index_buffer(buffer.i.slice(..), wgpu::IndexFormat::Uint32);
     pass.draw_indexed(0..indices_len as u32, 0, 0..1);
