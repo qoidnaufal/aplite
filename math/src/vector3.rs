@@ -10,14 +10,15 @@ pub struct Vector3<T> {
 impl<T> Vector3<T>
 where T:
     Default
-    + std::ops::Add
+    + std::ops::Add<T, Output = T>
     + std::ops::AddAssign
-    + std::ops::Sub
+    + std::ops::Sub<T, Output = T>
     + std::ops::SubAssign
-    + std::ops::Mul
+    + std::ops::Mul<T, Output = T>
     + std::ops::MulAssign
-    + std::ops::Div
+    + std::ops::Div<T, Output = T>
     + std::ops::DivAssign
+    + Copy
 {
     pub fn new() -> Self {
         Self {
@@ -39,21 +40,21 @@ impl<T: Default> From<Vector2<T>> for Vector3<T> {
 }
 
 // scalar multiplication
-impl std::ops::Mul<f32> for Vector3<f32> {
+impl<T> std::ops::Mul<T> for Vector3<T>
+where T:
+    Default
+    + std::ops::Add<T, Output = T>
+    + std::ops::AddAssign
+    + std::ops::Sub<T, Output = T>
+    + std::ops::SubAssign
+    + std::ops::Mul<T, Output = T>
+    + std::ops::MulAssign
+    + std::ops::Div<T, Output = T>
+    + std::ops::DivAssign
+    + Copy
+{
     type Output = Self;
-    fn mul(self, rhs: f32) -> Self::Output {
-        Self {
-            x: self.x * rhs,
-            y: self.y * rhs,
-            z: self.z * rhs,
-        }
-    }
-}
-
-// scalar multiplication
-impl std::ops::Mul<u32> for Vector3<u32> {
-    type Output = Self;
-    fn mul(self, rhs: u32) -> Self::Output {
+    fn mul(self, rhs: T) -> Self::Output {
         Self {
             x: self.x * rhs,
             y: self.y * rhs,
@@ -63,23 +64,39 @@ impl std::ops::Mul<u32> for Vector3<u32> {
 }
 
 // dot product
-impl std::ops::Mul<Self> for Vector3<f32> {
-    type Output = f32;
+impl<T> std::ops::Mul<Self> for Vector3<T>
+where T:
+    Default
+    + std::ops::Add<T, Output = T>
+    + std::ops::AddAssign
+    + std::ops::Sub<T, Output = T>
+    + std::ops::SubAssign
+    + std::ops::Mul<T, Output = T>
+    + std::ops::MulAssign
+    + std::ops::Div<T, Output = T>
+    + std::ops::DivAssign
+    + Copy
+{
+    type Output = T;
     fn mul(self, rhs: Self) -> Self::Output {
         self.x * rhs.x + self.y * rhs.y + self.z * rhs.z
     }
 }
 
-// dot product
-impl std::ops::Mul<Self> for Vector3<u32> {
-    type Output = u32;
-    fn mul(self, rhs: Self) -> Self::Output {
-        self.x * rhs.x + self.y * rhs.y + self.z * rhs.z
-    }
-}
-
-impl std::ops::Add<Self> for Vector3<f32> {
-    type Output = Vector3<f32>;
+impl<T> std::ops::Add<Self> for Vector3<T>
+where T:
+    Default
+    + std::ops::Add<T, Output = T>
+    + std::ops::AddAssign
+    + std::ops::Sub<T, Output = T>
+    + std::ops::SubAssign
+    + std::ops::Mul<T, Output = T>
+    + std::ops::MulAssign
+    + std::ops::Div<T, Output = T>
+    + std::ops::DivAssign
+    + Copy
+{
+    type Output = Self;
     fn add(self, rhs: Self) -> Self::Output {
         Self {
             x: self.x + rhs.x,
@@ -89,14 +106,38 @@ impl std::ops::Add<Self> for Vector3<f32> {
     }
 }
 
-impl std::ops::AddAssign<Self> for Vector3<f32> {
+impl<T> std::ops::AddAssign<Self> for Vector3<T>
+where T:
+    Default
+    + std::ops::Add<T, Output = T>
+    + std::ops::AddAssign
+    + std::ops::Sub<T, Output = T>
+    + std::ops::SubAssign
+    + std::ops::Mul<T, Output = T>
+    + std::ops::MulAssign
+    + std::ops::Div<T, Output = T>
+    + std::ops::DivAssign
+    + Copy
+{
     fn add_assign(&mut self, rhs: Self) {
         *self = *self + rhs
     }
 }
 
-impl std::ops::Sub<Self> for Vector3<f32> {
-    type Output = Vector3<f32>;
+impl<T> std::ops::Sub<Self> for Vector3<T>
+where T:
+    Default
+    + std::ops::Add<T, Output = T>
+    + std::ops::AddAssign
+    + std::ops::Sub<T, Output = T>
+    + std::ops::SubAssign
+    + std::ops::Mul<T, Output = T>
+    + std::ops::MulAssign
+    + std::ops::Div<T, Output = T>
+    + std::ops::DivAssign
+    + Copy
+{
+    type Output = Self;
     fn sub(self, rhs: Self) -> Self::Output {
         Self {
             x: self.x - rhs.x,
@@ -106,13 +147,28 @@ impl std::ops::Sub<Self> for Vector3<f32> {
     }
 }
 
-impl std::ops::SubAssign<Self> for Vector3<f32> {
+impl<T> std::ops::SubAssign<Self> for Vector3<T>
+where T:
+    Default
+    + std::ops::Add<T, Output = T>
+    + std::ops::AddAssign
+    + std::ops::Sub<T, Output = T>
+    + std::ops::SubAssign
+    + std::ops::Mul<T, Output = T>
+    + std::ops::MulAssign
+    + std::ops::Div<T, Output = T>
+    + std::ops::DivAssign
+    + Copy
+{
     fn sub_assign(&mut self, rhs: Self) {
         *self = *self - rhs
     }
 }
 
-impl PartialEq for Vector3<u32> {
+impl<T> PartialEq for Vector3<T>
+where T:
+    PartialEq<T>
+{
     fn eq(&self, other: &Self) -> bool {
         self.x == other.x
             && self.y == other.y
@@ -120,15 +176,4 @@ impl PartialEq for Vector3<u32> {
     }
 }
 
-impl Eq for Vector3<u32> {}
-
-impl PartialEq for Vector3<f32> {
-    fn eq(&self, other: &Self) -> bool {
-        self.x == other.x
-            && self.y == other.y
-            && self.z == other.z
-    }
-}
-
-impl Eq for Vector3<f32> {}
-
+impl<T: PartialEq<T> + Eq> Eq for Vector3<T> {}

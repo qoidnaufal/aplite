@@ -9,10 +9,17 @@ pub const SHADER: &str = r"
         @location(0) uv: vec2<f32>,
     };
 
+    // struct Uniforms {
+    //     mat: mat3x3<f32>,
+    // };
+
+    // @group(1) @binding(0) var<uniform> uniforms: Uniforms;
+
     @vertex
     fn vs_main(input: VertexInput) -> VertexOutput {
         var out: VertexOutput;
         out.uv = input.uv;
+        // const new_pos: vec3<f32> = transform.mat * input.position;
         out.position = vec4<f32>(input.position, 1.0);
         return out;
     }
@@ -25,4 +32,3 @@ pub const SHADER: &str = r"
         return textureSample(t, s, in.uv);
     }
 ";
-

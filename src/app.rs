@@ -17,7 +17,7 @@ thread_local! {
     pub static CONTEXT: RefCell<Context> = RefCell::new(Context::new());
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Context {
     pub cursor: Cursor,
     pub window_size: Size<u32>,
@@ -89,19 +89,19 @@ pub struct MouseState {
     pub button: MouseButton,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MouseClick {
     pub pos: Vector2<f32>,
     pub obj: Option<NodeId>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MouseHover {
     pub pos: Vector2<f32>,
     pub obj: Option<NodeId>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Cursor {
     pub hover: MouseHover,
     pub state: MouseState,

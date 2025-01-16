@@ -3,14 +3,13 @@ mod image;
 
 pub use {
     button::Button,
-    image::Image,
+    image::{image, Image},
 };
 use std::sync::atomic::{AtomicU64, Ordering};
-use math::Size;
 use crate::{
     callback::CALLBACKS,
     color::Rgb,
-    shapes::{Shape, ShapeType},
+    shapes::{Shape, ShapeKind},
 };
 
 thread_local! {
@@ -47,7 +46,7 @@ impl TestWidget {
     }
 
     fn shape(&self) -> Shape {
-        Shape::filled(Rgb::RED, ShapeType::FilledTriangle)
+        Shape::filled(Rgb::RED, ShapeKind::FilledTriangle)
     }
 
     pub fn on_hover<F: FnMut(&mut Shape) + 'static>(&self, f: F) -> Self {
@@ -92,7 +91,7 @@ impl TestCircleWidget {
     }
 
     fn shape(&self) -> Shape {
-        Shape::filled(Rgb::BLACK, ShapeType::FilledRectangle)
+        Shape::filled(Rgb::BLACK, ShapeKind::FilledRectangle)
     }
 
     pub fn on_hover<F: FnMut(&mut Shape) + 'static>(&self, f: F) -> Self {

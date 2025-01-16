@@ -11,6 +11,7 @@ mod buffer;
 mod layout;
 mod gpu;
 mod widget;
+mod texture;
 
 use app::App;
 use color::Rgb;
@@ -29,6 +30,7 @@ fn add_widget(app: &mut App) {
     let inc = move |shape: &mut Shape| {
         shape.set_color(|color| {
             *color.g() += 150;
+            *color.b() -= 150;
         });
         c1.set(|num| *num += 1);
         eprintln!("inc1 {}", c1.get());
@@ -67,8 +69,9 @@ fn add_widget(app: &mut App) {
     app
         .add_widget(Button::new().on_click(inc).on_drag(drag).on_hover(hover))
         .add_widget(TestWidget::new().on_click(dec).on_drag(drag).on_hover(hover))
-        .add_widget(TestCircleWidget::new().on_click(right_shift).on_drag(drag).on_hover(hover));
-        // .add_widget(Image::new("assets/image.jpg").on_click(shift_left).on_drag(drag).on_hover(hover));
+        .add_widget(image("assets/image2.jpg").on_click(shift_left.clone()).on_drag(drag).on_hover(hover))
+        .add_widget(TestCircleWidget::new().on_click(right_shift).on_drag(drag).on_hover(hover))
+        .add_widget(Image::new("assets/image1.jpg").on_click(shift_left).on_drag(drag).on_hover(hover));
 }
 
 fn main() -> Result<(), Error> {

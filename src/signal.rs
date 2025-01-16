@@ -15,21 +15,38 @@ impl<T: Clone> Signal<T> {
         }
     }
 
+    pub fn new_split(value: T) -> (SignalRead<T>, SignalWrite<T>) {
+        let v = Rc::new(RefCell::new(value));
+        (SignalRead(v.clone()), SignalWrite(v))
+    }
+
     pub fn get(&self) -> T {
-        let val = self.read.0.as_ref().borrow();
-        val.clone()
+        self.read.get()
     }
 
     pub fn set<F: FnOnce(&mut T) + 'static>(&self, f: F) {
-        let mut val = self.write.0.borrow_mut();
-        let v = val.deref_mut();
-        f(v)
+        self.write.set(f);
     }
 }
 
 #[derive(Clone)]
-struct SignalRead<T>(Rc<RefCell<T>>);
+pub struct SignalRead<T>(Rc<RefCell<T>>);
+
+impl<T: Clone> SignalRead<T> {
+    pub fn get(&self) -> T {
+        let val = self.0.as_ref().borrow();
+        val.clone()
+    }
+}
 
 #[derive(Clone)]
-struct SignalWrite<T>(Rc<RefCell<T>>);
+pub struct SignalWrite<T>(Rc<RefCell<T>>);
+
+impl<T: Clone> SignalWrite<T> {
+    pub fn set<F: FnOnce(&mut T) + 'static>(&self, f: F) {
+        let mut val = self.0.borrow_mut();
+        let v = val.deref_mut();
+        f(v)
+    }
+}
 

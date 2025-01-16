@@ -1,8 +1,12 @@
 use std::{fs::File, io::{BufReader, Read}, path::{Path, PathBuf}};
 use image::GenericImageView;
 use math::Size;
-use crate::shapes::{Shape, ShapeType};
+use crate::shapes::{Shape, ShapeKind};
 use super::{NodeId, Widget, CALLBACKS};
+
+pub fn image<P: AsRef<Path>>(src: P) -> Image {
+    Image::new(src)
+}
 
 fn image_reader<P: AsRef<Path>>(path: P) -> TextureData {
     let file = File::open(path).unwrap();
@@ -42,11 +46,7 @@ impl Image {
 
     fn shape(&self) -> Shape {
         let texture = image_reader(&self.src);
-        eprintln!("{}", texture.data.len());
-        eprintln!("{:?}", texture.dimension);
-
-        // Shape::new(Vector2::new(), Size::new(500, 500), Rgb::RED, FilledShape::FilledRectangle)
-        Shape::textured(texture.dimension, &texture.data, ShapeType::TexturedRectangle)
+        Shape::textured(texture.dimension, &texture.data, ShapeKind::TexturedRectangle)
     }
 
     pub fn on_hover<F: FnMut(&mut Shape) + 'static>(&self, f: F) -> &Self {

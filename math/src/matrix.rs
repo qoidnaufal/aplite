@@ -51,23 +51,38 @@ impl<Vector, const N: usize> IndexMut<usize> for Matrix<Vector, N> {
     }
 }
 
+// glam's implementation
+// Vector3 | vx | -> Vector3x { x * vx, y * vx, z * vx }
+// Vector3 | vy | -> Vector3y { x * vy, y * vy, z * vy }
+// Vector3 | vz | -> Vector3z { x * vz, y * vz, z * vz }
+//
+// Vector3x + Vector3y + Vector3z
+// Vector3 {
+//     x: (x * vx) + (x * vy) + (x * vz),
+//     y: (y * vx) + (y * vy) + (y * vz),
+//     z: (z * vx) + (z * vy) + (z * vz),
+// }
 impl Matrix<Vector3<f32>, 3> {
     pub const IDENTITIY: Self = Self {
         data: [
-            Vector3 { x: 1.0, y: 0.0, z: 0.0 }, // | x |
-            Vector3 { x: 0.0, y: 1.0, z: 0.0 }, // | y |
-            Vector3 { x: 0.0, y: 0.0, z: 1.0 }, // | z |
+            Vector3 { x: 1.0, y: 0.0, z: 0.0 },
+            Vector3 { x: 0.0, y: 1.0, z: 0.0 },
+            Vector3 { x: 0.0, y: 0.0, z: 1.0 },
         ]
     };
 
-    pub fn translation(&mut self, tx: f32, ty: f32) {
-        self[2].x += tx;
-        self[2].y += ty;
+    pub fn transform(tx: f32, ty: f32, sw: f32, sh: f32) -> Self {
+        Self {
+            data: [
+                Vector3 { x:  sw, y: 0.0, z: 0.0 },
+                Vector3 { x: 0.0, y:  sh, z: 0.0 },
+                Vector3 { x:  tx, y:  ty, z: 1.0 },
+            ]
+        }
     }
 
-    pub fn scale(&mut self, scale_x: f32, scale_y: f32) {
-        self[0].x = scale_x;
-        self[1].y = scale_y;
+    pub fn data(&self) -> &[Vector3<f32>] {
+        &self.data
     }
 }
 
