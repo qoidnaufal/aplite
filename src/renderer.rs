@@ -1,34 +1,44 @@
-use crate::{
-    app::CONTEXT,
-    buffer::Buffer,
-    error::Error,
-    gpu::GpuResources,
-    layout::Layout,
-    pipeline::{bind_group_layout, Pipeline}, texture::TextureCollection,
-};
+use crate::shapes::Transform;
+use crate::texture::TextureCollection;
+use crate::shapes::Vertex;
+use crate::pipeline::Pipeline;
+use crate::pipeline::bind_group_layout;
+use crate::layout::Layout;
+use crate::gpu::GpuResources;
+use crate::error::Error;
+use crate::buffer::Buffer;
+use crate::app::CONTEXT;
 
 pub struct GfxRenderer<'a> {
     pub gpu: GpuResources<'a>,
     pipeline: Pipeline,
-    buffer: Buffer,
+    v_buffer: Buffer<Vertex>,
+    i_buffer: Buffer<u32>,
+    u_buffer: Buffer<Transform>,
     texture: TextureCollection,
 }
 
 impl<'a> GfxRenderer<'a> {
     pub fn new(gpu: GpuResources<'a>, layouts: &Layout) -> Self {
-        let bg_layout = bind_group_layout(&gpu.device);
         let vertices = layouts.vertices();
         let indices = layouts.indices();
+        let transforms = layouts.transforms();
 
-        let texture = layouts.process_texture(&gpu.device, &gpu.queue, &bg_layout);
+        let bg_layout = bind_group_layout(&gpu.device);
 
-        let buffer = Buffer::new(&gpu.device, vertices, indices);
+        let v_buffer = Buffer::new(&gpu.device, wgpu::BufferUsages::VERTEX, vertices);
+        let i_buffer = Buffer::new(&gpu.device, wgpu::BufferUsages::INDEX, indices);
+        let u_buffer = Buffer::new(&gpu.device, wgpu::BufferUsages::UNIFORM, &transforms);
+
+        let texture = layouts.process_texture(&gpu.device, &gpu.queue, &bg_layout, &u_buffer.buffer);
         let pipeline = Pipeline::new(&gpu.device, gpu.config.format, &bg_layout);
 
         Self {
             gpu,
             pipeline,
-            buffer,
+            v_buffer,
+            i_buffer,
+            u_buffer,
             texture,
         }
     }
@@ -43,7 +53,8 @@ impl<'a> GfxRenderer<'a> {
     }
 
     pub fn update(&mut self, data: &[u8]) {
-        self.buffer.update(&self.gpu.queue, data);
+        // self.v_buffer.update(&self.gpu.queue, 0, data);
+        self.u_buffer.update(&self.gpu.queue, 0, data);
     }
 
     pub fn render(&mut self, indices_len: usize) -> Result<(), Error> {
@@ -58,7 +69,8 @@ impl<'a> GfxRenderer<'a> {
             &mut encoder,
             &view,
             &self.pipeline.pipeline,
-            &self.buffer,
+            &self.v_buffer,
+            &self.i_buffer,
             indices_len,
             &self.texture.bind_group(),
         );
@@ -74,7 +86,8 @@ fn draw(
     encoder: &mut wgpu::CommandEncoder,
     view: &wgpu::TextureView,
     pipeline: &wgpu::RenderPipeline,
-    buffer: &Buffer,
+    v_buffer: &Buffer<Vertex>,
+    i_buffer: &Buffer<u32>,
     indices_len: usize,
     bind_group: &wgpu::BindGroup,
 ) {
@@ -99,7 +112,7 @@ fn draw(
     });
     pass.set_pipeline(&pipeline);
     pass.set_bind_group(0, bind_group, &[]);
-    pass.set_vertex_buffer(0, buffer.v.slice(..));
-    pass.set_index_buffer(buffer.i.slice(..), wgpu::IndexFormat::Uint32);
+    pass.set_vertex_buffer(0, v_buffer.slice());
+    pass.set_index_buffer(i_buffer.slice(), wgpu::IndexFormat::Uint32);
     pass.draw_indexed(0..indices_len as u32, 0, 0..1);
 }

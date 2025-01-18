@@ -84,6 +84,11 @@ impl Matrix<Vector3<f32>, 3> {
     pub fn data(&self) -> &[Vector3<f32>] {
         &self.data
     }
+
+    pub fn translate(&mut self, tx: f32, ty: f32) {
+        self[2].x += tx;
+        self[2].y += ty;
+    }
 }
 
 // dot product

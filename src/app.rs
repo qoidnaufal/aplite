@@ -178,7 +178,8 @@ impl App<'_> {
     }
 
     fn update(&mut self) {
-        let data = self.layout.vertices();
+        // let data = self.layout.vertices();
+        let data = &self.layout.transforms();
         self.gfx.as_mut().unwrap().update(data);
     }
 

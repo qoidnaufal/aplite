@@ -2,16 +2,17 @@ use math::Size;
 
 use crate::pipeline::bind_group;
 
-pub struct TextureData {
-    pub texture: wgpu::Texture,
-    pub bind_group: wgpu::BindGroup,
-    pub size: Size<u32>,
+struct TextureData {
+    texture: wgpu::Texture,
+    bind_group: wgpu::BindGroup,
+    size: Size<u32>,
 }
 
 impl TextureData {
-    pub fn new(
+    fn new(
         device: &wgpu::Device,
         bg_layout: &wgpu::BindGroupLayout,
+        uniform: &wgpu::Buffer,
         size: Size<u32>,
     ) -> Self {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -30,7 +31,7 @@ impl TextureData {
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = sampler(device);
-        let bind_group = bind_group(device, bg_layout, &view, &sampler);
+        let bind_group = bind_group(device, bg_layout, &view, &sampler, uniform);
 
         Self { texture, bind_group, size }
     }
@@ -57,9 +58,10 @@ impl TextureCollection {
     pub fn new(
         device: &wgpu::Device,
         bg_layout: &wgpu::BindGroupLayout,
+        uniform: &wgpu::Buffer,
         size: Size<u32>,
     ) -> Self {
-        let data = TextureData::new(device, bg_layout, size);
+        let data = TextureData::new(device, bg_layout, uniform, size);
         Self { data, used_size: Size::new(0, 0) }
     }
 

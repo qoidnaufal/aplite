@@ -1,7 +1,7 @@
-use crate::{
-    app::CONTEXT, color::{Color, Rgb, Rgba}, layout::cast_slice, texture::TextureData
-};
 use math::{tan, Matrix, Size, Vector2, Vector3};
+use crate::layout::cast_slice;
+use crate::color::{Color, Rgb, Rgba};
+use crate::app::CONTEXT;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -39,16 +39,26 @@ impl PartialEq for Vertex {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct Transform {
     mat: Matrix<Vector3<f32>, 3>,
 }
 
+impl std::fmt::Debug for Transform {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.mat)
+    }
+}
+
 impl Transform {
-    pub fn new(t: Vector2<f32>, s: Size<f32>) -> Self {
-        Self {
-            mat: Matrix::transform(t.x, t.y, s.width, s.height)
-        }
+    const IDENTITY: Self = Self { mat: Matrix::IDENTITIY };
+
+    pub fn transform(&mut self, t: Vector2<f32>, s: Size<f32>) {
+        self.mat = Matrix::transform(t.x, t.y, s.width, s.height)
+    }
+
+    pub fn translate(&mut self, t: Vector2<f32>) {
+        self.mat.translate(t.x, t.y);
     }
 
     pub fn as_slice(&self) -> &[u8] {
@@ -120,70 +130,73 @@ impl Mesh {
 
 #[derive(Debug, Clone)]
 pub struct Shape {
-    pub size: Size<u32>,
+    pub dimensions: Size<u32>,
     pub cached_color: Option<Rgb<u8>>,
-    pub mesh: Mesh,
+    pub kind: ShapeKind,
     pub uv_size: Size<u32>,
     pub uv_data: Color<Rgba<u8>, u8>,
+    pub transform: Transform,
 }
 
 impl Shape {
     pub fn filled(color: Rgb<u8>, kind : ShapeKind) -> Self {
         Self {
-            mesh: kind.into(),
-            size: Size::new(500, 500),
+            kind,
+            dimensions: Size::new(500, 500),
             cached_color: Some(color),
             uv_size: (1, 1).into(),
             uv_data: color.into(),
+            transform: Transform::IDENTITY,
         }
     }
 
     pub fn textured(uv_size: Size<u32>, texture_data: &[u8], kind: ShapeKind) -> Self {
         Self {
-            mesh: kind.into(),
-            size: Size::new(500, 500),
+            kind,
+            dimensions: Size::new(500, 500),
             cached_color: None,
             uv_size,
             uv_data: texture_data.into(),
+            transform: Transform::IDENTITY,
         }
     }
 
-    pub fn transform(&mut self, t: Vector2<f32>, s: Size<f32>) {
-        self.mesh.vertices.iter_mut().for_each(|vert| {
-            vert.position = Matrix::transform(t.x, t.y, s.width, s.height) * vert.position;
+    pub fn set_transform(&mut self, t: Vector2<f32>, s: Size<f32>) {
+        self.transform.transform(t, s)
+        // self.kind.vertices.iter_mut().for_each(|vert| {
+        //     vert.position = Matrix::transform(t.x, t.y, s.width, s.height) * vert.position;
+        // });
+    }
+
+    fn set_translate(&mut self, t: Vector2<f32>) {
+        self.transform.translate(t);
+    }
+
+    pub fn vertices(&self) -> Vec<Vertex> {
+        let mut mesh = Mesh::from(self.kind).vertices.to_vec();
+        mesh.iter_mut().for_each(|vert| {
+            vert.position = self.transform.mat * vert.position;
         });
+        mesh
     }
 
-    pub fn _create_texture(
-        &self,
-        device: &wgpu::Device,
-        bg_layout: &wgpu::BindGroupLayout,
-        size: Size<u32>,
-    ) -> TextureData {
-        TextureData::new(device, bg_layout, size)
-    }
-
-    pub fn vertices(&self) -> &[Vertex] {
-        &self.mesh.vertices
-    }
-
-    pub fn indices(&self) -> &[u32] {
-        &self.mesh.indices
+    pub fn indices(&self) -> Vec<u32> {
+        Mesh::from(self.kind).indices.to_vec()
     }
 
     // for now, i think the dimension will always be constant due to scaling transform
     // but still, i need better calculation later
     fn dimension(&self) -> Size<f32> {
         let window_size = CONTEXT.with_borrow(|ctx| ctx.window_size);
-        let width = self.size.width as f32 / window_size.width as f32;
-        let height = -(self.size.height as f32 / window_size.height as f32);
+        let width = self.dimensions.width as f32 / window_size.width as f32;
+        let height = -(self.dimensions.height as f32 / window_size.height as f32);
         Size { width, height }
     }
 
     fn pos(&self) -> Vector2<f32> {
         Vector2 {
-            x: self.mesh.vertices[1].position.x,
-            y: self.mesh.vertices[0].position.y,
+            x: self.vertices()[1].position.x,
+            y: self.vertices()[0].position.y,
         }
     }
 
@@ -195,7 +208,7 @@ impl Shape {
         let Size { width, height } = self.dimension();
         let Vector2 { x, y } = self.pos();
 
-        let angled = if self.mesh.indices.len() == 3 {
+        let angled = if self.indices().len() == 3 {
             let x_center = width / 2.0;
             let cursor_tan = tan(x + x_center - x_cursor, y - y_cursor);
             let triangle_tan = tan(x_center, height);
@@ -220,9 +233,12 @@ impl Shape {
     pub fn set_position(&mut self) {
         let (cursor, window_size) = CONTEXT.with_borrow(|ctx| (ctx.cursor, Size::<f32>::from(ctx.window_size)));
         let t = (cursor.hover.pos - cursor.click.pos) * 2.0;
-        self.transform(
-            Vector2 { x: t.x / window_size.width, y: -t.y / window_size.height },
-            Size { width: 1.0, height: 1.0 }
+
+        self.set_translate(
+            Vector2 {
+                x: t.x / window_size.width,
+                y: -t.y / window_size.height
+            }
         );
 
         CONTEXT.with_borrow_mut(|ctx| {

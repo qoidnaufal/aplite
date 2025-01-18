@@ -1,13 +1,11 @@
 use std::collections::HashMap;
 use math::{Size, Vector2};
-use crate::{
-    app::CONTEXT,
-    callback::CALLBACKS,
-    error::Error,
-    shapes::{Shape, Vertex},
-    texture::TextureCollection,
-    widget::{NodeId, Widget},
-};
+use crate::widget::{NodeId, Widget};
+use crate::texture::TextureCollection;
+use crate::shapes::{Shape, Transform, Vertex};
+use crate::error::Error;
+use crate::callback::CALLBACKS;
+use crate::app::CONTEXT;
 
 pub fn cast_slice<A: Sized, B: Sized>(p: &[A]) -> Result<&[B], Error> {
     if align_of::<B>() > align_of::<A>()
@@ -25,9 +23,11 @@ pub fn cast_slice<A: Sized, B: Sized>(p: &[A]) -> Result<&[B], Error> {
 pub struct Layout {
     pub nodes: Vec<NodeId>,
     pub shapes: HashMap<NodeId, Shape>,
-    pub offset: HashMap<NodeId, usize>,
+    pub v_offset: HashMap<NodeId, usize>,
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
+    pub u_offset: HashMap<NodeId, usize>,
+    pub transforms: Vec<Transform>,
     pub has_changed: bool,
     last_changed_id: Option<NodeId>,
     used_space: Size<u32>,
@@ -38,9 +38,11 @@ impl Layout {
         Self {
             nodes: Vec::new(),
             shapes: HashMap::new(),
-            offset: HashMap::new(),
+            v_offset: HashMap::new(),
             vertices: Vec::new(),
             indices: Vec::new(),
+            u_offset: HashMap::new(),
+            transforms: Vec::new(),
             used_space: Size::new(0, 0),
             has_changed: false,
             last_changed_id: None,
@@ -60,6 +62,7 @@ impl Layout {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         bg_layout: &wgpu::BindGroupLayout,
+        uniforms: &wgpu::Buffer,
     ) -> TextureCollection {
         let mut size = Size::new(0, 0);
         self.nodes.iter().for_each(|node_id| {
@@ -67,7 +70,7 @@ impl Layout {
                 size += shape.uv_size;
             };
         });
-        let mut collection = TextureCollection::new(device, bg_layout, size);
+        let mut collection = TextureCollection::new(device, bg_layout, uniforms, size);
         self.nodes.iter().for_each(|node_id| {
             if let Some(shape) = self.shapes.get(node_id) {
                 collection.push(queue, shape.uv_size, &shape.uv_data);
@@ -86,6 +89,12 @@ impl Layout {
 
     pub fn indices_len(&self) -> usize {
         self.indices.len()
+    }
+
+    pub fn transforms(&self) -> Vec<u8> {
+        self.transforms.iter().flat_map(|t| {
+            t.as_slice()
+        }).copied().collect::<Vec<_>>()
     }
 
     pub fn detect_hover(&self) {
@@ -107,17 +116,18 @@ impl Layout {
 
     pub fn handle_hover(&mut self) {
         let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
-        if let (Some(ref hover_id), Some(ref change_id), None) = (cursor.hover.obj, self.last_changed_id, cursor.click.obj) {
-            if hover_id == change_id {
-                return;
-            }
-        }
+        if let (Some(ref hover_id), Some(ref change_id), None) = (
+            cursor.hover.obj, self.last_changed_id, cursor.click.obj
+        ) { if hover_id == change_id { return; } }
+
         if let Some(ref change_id) = self.last_changed_id.take() {
             if cursor.hover.obj.is_some_and(|hover_id| hover_id != *change_id) || cursor.hover.obj.is_none() {
                 let shape = self.shapes.get_mut(change_id).unwrap();
                 shape.revert_color();
-                let v_offset = self.offset.get(change_id).unwrap();
-                self.vertices[*v_offset..v_offset + shape.vertices().len()].copy_from_slice(shape.vertices());
+                let v_offset = self.v_offset.get(change_id).unwrap();
+                self.vertices[*v_offset..v_offset + shape.vertices().len()].copy_from_slice(&shape.vertices());
+                let u_offset = self.u_offset.get(change_id).unwrap();
+                self.transforms[*u_offset] = shape.transform;
                 self.has_changed = true;
             }
         }
@@ -135,9 +145,11 @@ impl Layout {
                 }
             });
             
-            let offset = self.offset.get(hover_id).unwrap();
+            let offset = self.v_offset.get(hover_id).unwrap();
             // this is much faster than using `splice()`
-            self.vertices[*offset..offset + shape.vertices().len()].copy_from_slice(shape.vertices());
+            self.vertices[*offset..offset + shape.vertices().len()].copy_from_slice(&shape.vertices());
+            let u_offset = self.u_offset.get(hover_id).unwrap();
+            self.transforms[*u_offset] = shape.transform;
             self.has_changed = true;
             self.last_changed_id = Some(*hover_id);
         }
@@ -152,8 +164,10 @@ impl Layout {
                     on_click(shape);
                 }
             });
-            let offset = self.offset.get(click_id).unwrap();
-            self.vertices[*offset..offset + shape.vertices().len()].copy_from_slice(shape.vertices());
+            let offset = self.v_offset.get(click_id).unwrap();
+            self.vertices[*offset..offset + shape.vertices().len()].copy_from_slice(&shape.vertices());
+            let u_offset = self.u_offset.get(click_id).unwrap();
+            self.transforms[*u_offset] = shape.transform;
             self.has_changed = true;
             self.last_changed_id = Some(*click_id)
         }
@@ -161,24 +175,33 @@ impl Layout {
 
     pub fn calculate(&mut self) {
         let window_size: Size<f32> = CONTEXT.with_borrow(|ctx| ctx.window_size.into());
-        let mut offset = 0;
+        let mut v_offset = 0;
+        let mut u_offset = 0;
 
         self.nodes.iter().for_each(|id| {
             if let Some(shape) = self.shapes.get_mut(id) {
-                let s = Size::<f32>::from(shape.size) / window_size / 2.0;
+                let s = Size::<f32>::from(shape.dimensions) / window_size / 2.0;
                 let used = Size::<f32>::from(self.used_space) / window_size;
                 let tx = (used.width + s.width) - 1.0;
                 let ty = 1.0 - (s.height + used.height);
 
-                shape.transform(Vector2 { x: tx, y: ty }, s);
-                shape.mesh.indices.iter_mut().for_each(|idx| *idx += offset as u32);
+                shape.set_transform(Vector2 { x: tx, y: ty }, s);
+                let vertices = shape.vertices();
+                let indices = shape.indices().iter_mut().map(|idx| {
+                    *idx += v_offset as u32;
+                    *idx
+                }).collect::<Vec<_>>();
 
-                self.used_space.height += shape.size.height;
-                self.offset.insert(*id, offset);
-                self.vertices.extend_from_slice(shape.vertices());
-                self.indices.extend_from_slice(shape.indices());
+                self.v_offset.insert(*id, v_offset);
+                self.u_offset.insert(*id, u_offset);
 
-                offset += shape.vertices().len();
+                self.vertices.extend_from_slice(&vertices);
+                self.indices.extend_from_slice(&indices);
+                self.transforms.push(shape.transform);
+
+                self.used_space.height += shape.dimensions.height;
+                v_offset += shape.vertices().len();
+                u_offset += 1;
             }
         });
     }

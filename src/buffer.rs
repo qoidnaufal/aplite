@@ -1,31 +1,39 @@
+use std::marker::PhantomData;
+
 use wgpu::util::DeviceExt;
 
-pub struct Buffer {
-    pub v: wgpu::Buffer,
-    pub i: wgpu::Buffer,
+#[derive(Debug)]
+pub struct Buffer<T> {
+    pub buffer: wgpu::Buffer,
+    pub len: usize,
+    _phantom: PhantomData<T>
 }
 
-impl Buffer {
-    pub fn new(device: &wgpu::Device, data: &[u8], indices: &[u8]) -> Self {
-        let v = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vertex buffer"),
+impl<T> Buffer<T> {
+    pub fn new(device: &wgpu::Device, usage: wgpu::BufferUsages, data: &[u8]) -> Self {
+        let len = data.len();
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("{} vertex buffer"),
             contents: data,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            usage: usage | wgpu::BufferUsages::COPY_DST,
         });
-        let i = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("index buffer"),
-            contents: indices,
-            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-        });
-        Self { v, i }
+        Self {
+            buffer,
+            len,
+            _phantom: PhantomData,
+        }
     }
 
-    pub fn update(&self, queue: &wgpu::Queue, data: &[u8]) {
+    pub fn slice(&self) -> wgpu::BufferSlice {
+        self.buffer.slice(..)
+    }
+
+    pub fn update(&self, queue: &wgpu::Queue, offset: usize, data: &[u8]) {
+        assert!(data.len() <= self.len - offset);
         queue.write_buffer(
-            &self.v,
-            0,
+            &self.buffer,
+            offset as wgpu::BufferAddress,
             data,
         );
     }
 }
-
