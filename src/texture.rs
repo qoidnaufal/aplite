@@ -5,7 +5,10 @@ use std::fs::File;
 use image::GenericImageView;
 use math::Size;
 
+use crate::buffer::Buffer;
 use crate::pipeline::bind_group;
+use crate::shapes::Transform;
+use crate::NodeId;
 
 pub fn image_reader<P: AsRef<Path>>(path: P) -> ImageData {
     let file = File::open(path).unwrap();
@@ -27,18 +30,23 @@ pub struct ImageData {
     pub data: Vec<u8>,
 }
 
-struct TextureData {
-    texture: wgpu::Texture,
-    bind_group: wgpu::BindGroup,
-    size: Size<u32>,
+#[derive(Debug)]
+pub struct TextureData {
+    pub node_id: NodeId,
+    // texture: wgpu::Texture,
+    pub bind_group: wgpu::BindGroup,
+    pub u_buffer: Buffer<Transform>,
 }
 
 impl TextureData {
-    fn new(
+    pub fn new(
         device: &wgpu::Device,
+        queue: &wgpu::Queue,
         bg_layout: &wgpu::BindGroupLayout,
-        uniform: &wgpu::Buffer,
+        u_buffer: Buffer<Transform>,
         size: Size<u32>,
+        uv_data: &[u8],
+        node_id: NodeId,
     ) -> Self {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("texture"),
@@ -58,10 +66,34 @@ impl TextureData {
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = sampler(device);
-        let bind_group = bind_group(device, bg_layout, &view, &sampler, uniform);
+        let bind_group = bind_group(device, bg_layout, &view, &sampler, &u_buffer.buffer);
 
-        Self { texture, bind_group, size }
+        submit_texture(queue, &texture, size, uv_data);
+
+        Self { bind_group, u_buffer, node_id }
     }
+}
+
+fn submit_texture(queue: &wgpu::Queue, texture: &wgpu::Texture, uv_size: Size<u32>, uv_data: &[u8]) {
+    queue.write_texture(
+        wgpu::ImageCopyTexture {
+            texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        uv_data,
+        wgpu::ImageDataLayout {
+            offset: 0,
+            bytes_per_row: Some(4 * uv_size.width),
+            rows_per_image: Some(uv_size.height),
+        },
+        wgpu::Extent3d {
+            width: uv_size.width,
+            height: uv_size.height,
+            depth_or_array_layers: 1,
+        }
+    );
 }
 
 fn sampler(device: &wgpu::Device) -> wgpu::Sampler {
@@ -74,73 +106,4 @@ fn sampler(device: &wgpu::Device) -> wgpu::Sampler {
         mipmap_filter: wgpu::FilterMode::Nearest,
         ..Default::default()
     })
-}
-
-pub struct TextureCollection {
-    data: TextureData,
-    used_size: Size<u32>,
-}
-
-impl TextureCollection {
-    pub fn new(
-        device: &wgpu::Device,
-        bg_layout: &wgpu::BindGroupLayout,
-        uniform: &wgpu::Buffer,
-        size: Size<u32>,
-    ) -> Self {
-        Self {
-            data: TextureData::new(device, bg_layout, uniform, size),
-            used_size: Size::new(0, 0)
-        }
-    }
-
-    pub fn bind_group(&self) -> &wgpu::BindGroup {
-        &self.data.bind_group
-    }
-
-    pub fn push(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        bg_layout: &wgpu::BindGroupLayout,
-        uniform: &wgpu::Buffer,
-        uv_size: Size<u32>,
-        uv_data: &[u8],
-    ) {
-        let new_size = self.data.size + uv_size;
-        let dst = TextureData::new(device, bg_layout, uniform, new_size);
-        let mut encoder = device.create_command_encoder(&Default::default());
-        encoder.copy_texture_to_texture(
-            self.data.texture.as_image_copy(),
-            dst.texture.as_image_copy(),
-            self.data.texture.size()
-        );
-        queue.submit(std::iter::once(encoder.finish()));
-        queue.write_texture(
-            wgpu::ImageCopyTexture {
-                texture: &dst.texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d {
-                    x: 0,
-                    y: self.used_size.height,
-                    z: 0,
-                },
-                aspect: wgpu::TextureAspect::All,
-            },
-            uv_data,
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: Some(4 * uv_size.width),
-                rows_per_image: Some(uv_size.height),
-            },
-            wgpu::Extent3d {
-                width: uv_size.width,
-                height: uv_size.height,
-                depth_or_array_layers: 1,
-            }
-        );
-
-        self.data = dst;
-        self.used_size += uv_size;
-    }
 }

@@ -1,53 +1,30 @@
-use math::Size;
-
-use crate::shapes::Transform;
-use crate::texture::TextureCollection;
-use crate::shapes::Vertex;
+use crate::buffer::Gfx;
 use crate::pipeline::Pipeline;
 use crate::pipeline::bind_group_layout;
 use crate::layout::Layout;
 use crate::gpu::GpuResources;
 use crate::error::Error;
-use crate::buffer::Buffer;
 use crate::app::CONTEXT;
+use crate::NodeId;
 
-pub struct GfxRenderer<'a> {
+pub struct Renderer<'a> {
     pub gpu: GpuResources<'a>,
     pipeline: Pipeline,
-    v_buffer: Buffer<Vertex>,
-    i_buffer: Buffer<u32>,
-    u_buffer: Buffer<Transform>,
-    texture: TextureCollection,
+    gfx: Gfx
 }
 
-impl<'a> GfxRenderer<'a> {
+impl<'a> Renderer<'a> {
     pub fn new(gpu: GpuResources<'a>, layouts: &Layout) -> Self {
-        let vertices = layouts.vertices();
-        let indices = layouts.indices();
-        let transforms = layouts.transforms();
-
         let bg_layout = bind_group_layout(&gpu.device);
+        let mut gfx = Gfx::default();
+        layouts.process_texture(&gpu.device, &gpu.queue, &bg_layout, &mut gfx);
 
-        let v_buffer = Buffer::new(&gpu.device, wgpu::BufferUsages::VERTEX, vertices);
-        let i_buffer = Buffer::new(&gpu.device, wgpu::BufferUsages::INDEX, indices);
-        let u_buffer = Buffer::new(&gpu.device, wgpu::BufferUsages::UNIFORM, &transforms);
-
-        let mut texture = TextureCollection::new(
-            &gpu.device,
-            &bg_layout,
-            &u_buffer.buffer,
-            Size::new(1, 1)
-        );
-        layouts.process_texture(&gpu.device, &gpu.queue, &bg_layout, &u_buffer.buffer, &mut texture);
         let pipeline = Pipeline::new(&gpu.device, gpu.config.format, &bg_layout);
 
         Self {
             gpu,
             pipeline,
-            v_buffer,
-            i_buffer,
-            u_buffer,
-            texture,
+            gfx,
         }
     }
 
@@ -60,12 +37,13 @@ impl<'a> GfxRenderer<'a> {
         }
     }
 
-    pub fn update(&mut self, data: &[u8]) {
-        // self.v_buffer.update(&self.gpu.queue, 0, data);
-        self.u_buffer.update(&self.gpu.queue, 0, data);
+    pub fn update(&mut self, data: &[u8], id: &NodeId) {
+        if let Some(texture) = self.gfx.textures.iter().find(|t| t.node_id == *id) {
+            texture.u_buffer.update(&self.gpu.queue, 0, data);
+        }
     }
 
-    pub fn render(&mut self, indices_len: usize) -> Result<(), Error> {
+    pub fn render(&mut self) -> Result<(), Error> {
         let output = self.gpu.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
@@ -77,10 +55,7 @@ impl<'a> GfxRenderer<'a> {
             &mut encoder,
             &view,
             &self.pipeline.pipeline,
-            &self.v_buffer,
-            &self.i_buffer,
-            indices_len,
-            &self.texture.bind_group(),
+            &self.gfx,
         );
 
         self.gpu.queue.submit(std::iter::once(encoder.finish()));
@@ -94,10 +69,7 @@ fn draw(
     encoder: &mut wgpu::CommandEncoder,
     view: &wgpu::TextureView,
     pipeline: &wgpu::RenderPipeline,
-    v_buffer: &Buffer<Vertex>,
-    i_buffer: &Buffer<u32>,
-    indices_len: usize,
-    bind_group: &wgpu::BindGroup,
+    gfx: &Gfx,
 ) {
     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("render pass"),
@@ -119,8 +91,13 @@ fn draw(
         occlusion_query_set: None,
     });
     pass.set_pipeline(&pipeline);
-    pass.set_bind_group(0, bind_group, &[]);
-    pass.set_vertex_buffer(0, v_buffer.slice());
-    pass.set_index_buffer(i_buffer.slice(), wgpu::IndexFormat::Uint32);
-    pass.draw_indexed(0..indices_len as u32, 0, 0..1);
+    for texture in &gfx.textures {
+        let v = &gfx.vertices[texture.node_id.0 as usize];
+        let i = &gfx.indices[texture.node_id.0 as usize];
+
+        pass.set_bind_group(0, &texture.bind_group, &[]);
+        pass.set_vertex_buffer(0, v.slice());
+        pass.set_index_buffer(i.slice(), wgpu::IndexFormat::Uint32);
+        pass.draw_indexed(0..i.materials as u32, 0, 0..1);
+    }
 }

@@ -9,7 +9,7 @@ use crate::{
     error::Error,
     gpu::GpuResources,
     layout::Layout,
-    renderer::GfxRenderer,
+    renderer::Renderer,
     widget::{NodeId, Widget},
 };
 
@@ -140,7 +140,7 @@ impl Cursor {
 }
 
 pub struct App<'a> {
-    pub gfx: Option<GfxRenderer<'a>>,
+    pub renderer: Option<Renderer<'a>>,
     pub window: Option<Window>,
     pub layout: Layout,
 }
@@ -148,7 +148,7 @@ pub struct App<'a> {
 impl App<'_> {
     pub fn new() -> Self {
         Self {
-            gfx: None,
+            renderer: None,
             window: None,
             layout: Layout::new(),
         }
@@ -165,11 +165,11 @@ impl App<'_> {
     }
 
     fn resize(&mut self) {
-        self.gfx.as_mut().unwrap().resize();
+        self.renderer.as_mut().unwrap().resize();
     }
 
     fn id(&self) -> winit::window::WindowId {
-        let gfx = self.gfx.as_ref().unwrap();
+        let gfx = self.renderer.as_ref().unwrap();
         gfx.gpu.id
     }
 
@@ -178,13 +178,16 @@ impl App<'_> {
     }
 
     fn update(&mut self) {
-        // let data = self.layout.vertices();
-        let data = &self.layout.transforms();
-        self.gfx.as_mut().unwrap().update(data);
+        let hover_id = CONTEXT.with_borrow(|ctx| ctx.cursor.hover.obj);
+        if let Some(ref id) = hover_id {
+            let shape = self.layout.shapes.get(id).unwrap();
+            let data = shape.transform.as_slice();
+            self.renderer.as_mut().unwrap().update(data, id);
+        }
     }
 
     fn render(&mut self) -> Result<(), Error> {
-        self.gfx.as_mut().unwrap().render(self.layout.indices_len())
+        self.renderer.as_mut().unwrap().render()
     }
 
     pub fn add_widget(&mut self, node: impl Widget) -> &mut Self {
@@ -204,8 +207,8 @@ impl<'a> ApplicationHandler for App<'a> {
         self.layout.calculate();
 
         let gpu = self.request_gpu().unwrap();
-        let gfx: GfxRenderer<'a> = unsafe { std::mem::transmute(GfxRenderer::new(gpu, &self.layout)) };
-        self.gfx = Some(gfx);
+        let renderer: Renderer<'a> = unsafe { std::mem::transmute(Renderer::new(gpu, &self.layout)) };
+        self.renderer = Some(renderer);
     }
 
     fn window_event(

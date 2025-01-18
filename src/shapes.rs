@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 
 use math::{tan, Matrix, Size, Vector2, Vector3, Vector4};
+use crate::buffer::Buffer;
 use crate::layout::cast_slice;
-use crate::color::{Color, Rgb, Rgba};
+use crate::color::Rgb;
 use crate::app::CONTEXT;
 
 #[repr(C)]
@@ -73,6 +74,16 @@ pub enum ShapeKind {
     FilledTriangle,
     FilledRectangle,
     TexturedRectangle,
+}
+
+impl ShapeKind {
+    pub fn elements(&self) -> usize {
+        match self {
+            ShapeKind::FilledTriangle => 3,
+            ShapeKind::FilledRectangle => 4,
+            ShapeKind::TexturedRectangle => 4,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -168,12 +179,18 @@ impl Shape {
         self.transform.translate(t);
     }
 
-    pub fn vertices(&self) -> Vec<Vertex> {
-        Mesh::from(self.kind).vertices.to_vec()
+    pub fn vertices(&self,device: &wgpu::Device) -> Buffer<Vertex> {
+        let vertices = Mesh::from(self.kind).vertices;
+        Buffer::new(device, wgpu::BufferUsages::VERTEX, cast_slice(&vertices).unwrap(), vertices.len())
     }
 
-    pub fn indices(&self) -> Vec<u32> {
-        Mesh::from(self.kind).indices.to_vec()
+    pub fn indices(&self, device: &wgpu::Device) -> Buffer<u32> {
+        let indices = Mesh::from(self.kind).indices;
+        Buffer::new(device, wgpu::BufferUsages::INDEX, cast_slice(&indices).unwrap(), indices.len())
+    }
+
+    pub fn uniform_buffer(&self, device: &wgpu::Device) -> Buffer<Transform> {
+        Buffer::new(device, wgpu::BufferUsages::UNIFORM, self.transform.as_slice(), 0)
     }
 
     // for now, i think the dimension will always be constant due to scaling transform
@@ -186,7 +203,7 @@ impl Shape {
     }
 
     pub fn pos(&self) -> Vector2<f32> {
-        let mut vertices = self.vertices();
+        let mut vertices = Mesh::from(self.kind).vertices;
         vertices.iter_mut().for_each(|vert| {
             let v4 = Vector4::from(vert.position);
             let v4 = self.transform.mat * v4;
@@ -206,7 +223,7 @@ impl Shape {
         let Size { width, height } = self.dimension();
         let Vector2 { x, y } = self.pos();
 
-        let angled = if self.indices().len() == 3 {
+        let angled = if self.kind.elements() == 3 {
             let x_center = width / 2.0;
             let cursor_tan = tan(x + x_center - x_cursor, y - y_cursor);
             let triangle_tan = tan(x_center, height);
