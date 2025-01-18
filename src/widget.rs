@@ -2,8 +2,8 @@ mod button;
 mod image;
 
 pub use {
-    button::Button,
-    image::{image, Image},
+    button::*,
+    image::*,
 };
 use std::sync::atomic::{AtomicU64, Ordering};
 use crate::{

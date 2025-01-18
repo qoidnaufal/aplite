@@ -224,8 +224,9 @@ impl<'a> ApplicationHandler for App<'a> {
                     event_loop.exit();
                 }
                 WindowEvent::RedrawRequested => {
-                    let start = std::time::Instant::now();
+                    // let start = std::time::Instant::now();
                     self.update();
+                    // eprintln!("{:?}", start.elapsed());
 
                     match self.render() {
                         Ok(_) => {},
@@ -244,7 +245,6 @@ impl<'a> ApplicationHandler for App<'a> {
                         }
                         Err(_) => panic!()
                     }
-                    eprintln!("{:?}", start.elapsed());
                 }
                 WindowEvent::Resized(new_size) => {
                     CONTEXT.with_borrow_mut(|ctx| ctx.window_size = Size::from((new_size.width, new_size.height)));

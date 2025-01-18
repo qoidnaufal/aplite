@@ -4,13 +4,17 @@ use crate::{
 };
 use super::{NodeId, Widget, CALLBACKS};
 
+pub fn button() -> Button {
+    Button::new()
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Button {
     id: NodeId,
 }
 
 impl Button {
-    pub fn new() -> Self {
+    fn new() -> Self {
         let id = NodeId::new();
         Self { id }
     }
