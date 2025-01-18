@@ -1,4 +1,6 @@
-use math::{tan, Matrix, Size, Vector2, Vector3};
+use std::path::PathBuf;
+
+use math::{tan, Matrix, Size, Vector2, Vector3, Vector4};
 use crate::layout::cast_slice;
 use crate::color::{Color, Rgb, Rgba};
 use crate::app::CONTEXT;
@@ -41,7 +43,7 @@ impl PartialEq for Vertex {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Transform {
-    mat: Matrix<Vector3<f32>, 3>,
+    mat: Matrix<Vector4<f32>, 4>,
 }
 
 impl std::fmt::Debug for Transform {
@@ -54,7 +56,7 @@ impl Transform {
     const IDENTITY: Self = Self { mat: Matrix::IDENTITIY };
 
     pub fn transform(&mut self, t: Vector2<f32>, s: Size<f32>) {
-        self.mat = Matrix::transform(t.x, t.y, s.width, s.height)
+        self.mat.transform(t.x, t.y, s.width, s.height)
     }
 
     pub fn translate(&mut self, t: Vector2<f32>) {
@@ -131,41 +133,35 @@ impl Mesh {
 #[derive(Debug, Clone)]
 pub struct Shape {
     pub dimensions: Size<u32>,
-    pub cached_color: Option<Rgb<u8>>,
+    pub cached_color: Rgb<u8>,
+    pub src: Option<PathBuf>,
     pub kind: ShapeKind,
-    pub uv_size: Size<u32>,
-    pub uv_data: Color<Rgba<u8>, u8>,
     pub transform: Transform,
 }
 
 impl Shape {
     pub fn filled(color: Rgb<u8>, kind : ShapeKind) -> Self {
         Self {
-            kind,
             dimensions: Size::new(500, 500),
-            cached_color: Some(color),
-            uv_size: (1, 1).into(),
-            uv_data: color.into(),
+            cached_color: color,
+            src: None,
+            kind,
             transform: Transform::IDENTITY,
         }
     }
 
-    pub fn textured(uv_size: Size<u32>, texture_data: &[u8], kind: ShapeKind) -> Self {
+    pub fn textured(src: PathBuf, kind: ShapeKind) -> Self {
         Self {
-            kind,
             dimensions: Size::new(500, 500),
-            cached_color: None,
-            uv_size,
-            uv_data: texture_data.into(),
+            cached_color: Rgb::WHITE,
+            src: Some(src),
+            kind,
             transform: Transform::IDENTITY,
         }
     }
 
     pub fn set_transform(&mut self, t: Vector2<f32>, s: Size<f32>) {
         self.transform.transform(t, s)
-        // self.kind.vertices.iter_mut().for_each(|vert| {
-        //     vert.position = Matrix::transform(t.x, t.y, s.width, s.height) * vert.position;
-        // });
     }
 
     fn set_translate(&mut self, t: Vector2<f32>) {
@@ -173,11 +169,7 @@ impl Shape {
     }
 
     pub fn vertices(&self) -> Vec<Vertex> {
-        let mut mesh = Mesh::from(self.kind).vertices.to_vec();
-        mesh.iter_mut().for_each(|vert| {
-            vert.position = self.transform.mat * vert.position;
-        });
-        mesh
+        Mesh::from(self.kind).vertices.to_vec()
     }
 
     pub fn indices(&self) -> Vec<u32> {
@@ -193,10 +185,16 @@ impl Shape {
         Size { width, height }
     }
 
-    fn pos(&self) -> Vector2<f32> {
+    pub fn pos(&self) -> Vector2<f32> {
+        let mut vertices = self.vertices();
+        vertices.iter_mut().for_each(|vert| {
+            let v4 = Vector4::from(vert.position);
+            let v4 = self.transform.mat * v4;
+            vert.position = Vector3 { x: v4.x, y: v4.y, z: v4.z };
+        });
         Vector2 {
-            x: self.vertices()[1].position.x,
-            y: self.vertices()[0].position.y,
+            x: vertices[1].position.x,
+            y: vertices[0].position.y,
         }
     }
 
@@ -220,15 +218,15 @@ impl Shape {
             && angled
     }
 
-    pub fn set_color<F: FnOnce(&mut Color<Rgba<u8>, u8>)>(&mut self, f: F) {
-        f(&mut self.uv_data);
+    pub fn set_color<F: FnOnce(&mut Rgb<u8>)>(&mut self, f: F) {
+        f(&mut self.cached_color);
     }
 
-    pub fn revert_color(&mut self) {
-        if let Some(ref c) = self.cached_color {
-            self.uv_data = c.clone().into();
-        }
-    }
+    // pub fn revert_color(&mut self) {
+    //     if let Some(ref c) = self.cached_color {
+    //         self.uv_data = c.clone().into();
+    //     }
+    // }
 
     pub fn set_position(&mut self) {
         let (cursor, window_size) = CONTEXT.with_borrow(|ctx| (ctx.cursor, Size::<f32>::from(ctx.window_size)));

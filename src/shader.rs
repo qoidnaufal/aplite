@@ -10,7 +10,7 @@ pub const SHADER: &str = r"
     };
 
     struct Uniforms {
-        mat: mat3x3<f32>,
+        mat: mat4x4<f32>,
     };
 
     @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -19,7 +19,7 @@ pub const SHADER: &str = r"
     fn vs_main(input: VertexInput) -> VertexOutput {
         var out: VertexOutput;
         out.uv = input.uv;
-        out.position = vec4<f32>(uniforms.mat * input.position, 1.0);
+        out.position = vec4<f32>(uniforms.mat * vec4<f32>(input.position, 1.0));
         return out;
     }
 

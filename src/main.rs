@@ -27,51 +27,41 @@ fn add_widget(app: &mut App) {
     eprintln!("init {}", counter.get());
 
     let c1 = counter.clone();
-    let inc = move |shape: &mut Shape| {
-        shape.set_color(|color| {
-            *color.g() += 150;
-            *color.b() -= 150;
-        });
+    let inc = move |_: &mut Shape| {
         c1.set(|num| *num += 1);
         eprintln!("inc1 {}", c1.get());
     };
 
     let c2 = counter.clone();
-    let shift_left = move |shape: &mut Shape| {
-        shape.set_color(|color| {
-            *color.r() += 100;
-            *color.g() += 100;
-        });
+    let shift_left = move |_: &mut Shape| {
         c2.set(|num| *num <<= 1);
         eprintln!("shift left {}", c2.get());
     };
 
     let c3 = counter.clone();
-    let dec = move |shape: &mut Shape| {
-        shape.set_color(|color| *color.r() += 150);
+    let dec = move |_: &mut Shape| {
         c3.set(|num| *num -= 1);
         eprintln!("dec {}", c3.get());
     };
 
     let c4 = counter.clone();
-    let right_shift = move |shape: &mut Shape| {
-        shape.set_color(|color| *color = Rgb::BLACK.into());
+    let right_shift = move |_: &mut Shape| {
         c4.set(|num| *num >>= 1);
         eprintln!("right shift {}", c4.get());
     };
 
-    let hover = move |shape: &mut Shape| { shape.set_color(|color| *color = Rgb::BLUE.into()) };
+    // let hover = move |shape: &mut Shape| { shape.set_color(|color| *color = Rgb::BLUE.into()) };
     let drag = move |shape: &mut Shape| {
-        shape.set_color(|color| *color = Rgb::GREEN.into());
+        // shape.set_color(|color| *color = Rgb::GREEN.into());
         shape.set_position();
     };
 
     app
-        .add_widget(Button::new().on_click(inc).on_drag(drag).on_hover(hover))
-        .add_widget(TestWidget::new().on_click(dec).on_drag(drag).on_hover(hover))
-        .add_widget(image("assets/image2.jpg").on_click(shift_left.clone()).on_drag(drag).on_hover(hover))
-        .add_widget(TestCircleWidget::new().on_click(right_shift).on_drag(drag).on_hover(hover))
-        .add_widget(Image::new("assets/image1.jpg").on_click(shift_left).on_drag(drag).on_hover(hover));
+        .add_widget(Button::new().on_click(inc).on_drag(drag))
+        .add_widget(TestWidget::new().on_click(dec).on_drag(drag))
+        .add_widget(image("assets/image2.jpg").on_click(shift_left.clone()).on_drag(drag))
+        .add_widget(TestCircleWidget::new().on_click(right_shift).on_drag(drag))
+        .add_widget(image("assets/image1.jpg").on_click(shift_left).on_drag(drag));
 }
 
 fn main() -> Result<(), Error> {

@@ -1,3 +1,5 @@
+use math::Size;
+
 use crate::shapes::Transform;
 use crate::texture::TextureCollection;
 use crate::shapes::Vertex;
@@ -30,7 +32,13 @@ impl<'a> GfxRenderer<'a> {
         let i_buffer = Buffer::new(&gpu.device, wgpu::BufferUsages::INDEX, indices);
         let u_buffer = Buffer::new(&gpu.device, wgpu::BufferUsages::UNIFORM, &transforms);
 
-        let texture = layouts.process_texture(&gpu.device, &gpu.queue, &bg_layout, &u_buffer.buffer);
+        let mut texture = TextureCollection::new(
+            &gpu.device,
+            &bg_layout,
+            &u_buffer.buffer,
+            Size::new(1, 1)
+        );
+        layouts.process_texture(&gpu.device, &gpu.queue, &bg_layout, &u_buffer.buffer, &mut texture);
         let pipeline = Pipeline::new(&gpu.device, gpu.config.format, &bg_layout);
 
         Self {

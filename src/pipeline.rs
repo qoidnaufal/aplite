@@ -113,11 +113,7 @@ pub fn bind_group(
         entries: &[
             wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                    buffer: uniform,
-                    offset: 0,
-                    size: None,
-                }),
+                resource: wgpu::BindingResource::Buffer(uniform.as_entire_buffer_binding()),
             },
             wgpu::BindGroupEntry {
                 binding: 1,

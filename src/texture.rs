@@ -1,6 +1,31 @@
+use std::path::Path;
+use std::io::{BufReader, Read};
+use std::fs::File;
+
+use image::GenericImageView;
 use math::Size;
 
 use crate::pipeline::bind_group;
+
+pub fn image_reader<P: AsRef<Path>>(path: P) -> ImageData {
+    let file = File::open(path).unwrap();
+    let mut reader = BufReader::new(file);
+    let mut buf = Vec::new();
+    let len = reader.read_to_end(&mut buf).unwrap();
+
+    let image = image::load_from_memory(&buf[..len]).unwrap();
+
+    ImageData {
+        dimension: image.dimensions().into(),
+        data: image.to_rgba8().to_vec(),
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ImageData {
+    pub dimension: Size<u32>,
+    pub data: Vec<u8>,
+}
 
 struct TextureData {
     texture: wgpu::Texture,
@@ -26,7 +51,9 @@ impl TextureData {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_DST
+                | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -61,8 +88,10 @@ impl TextureCollection {
         uniform: &wgpu::Buffer,
         size: Size<u32>,
     ) -> Self {
-        let data = TextureData::new(device, bg_layout, uniform, size);
-        Self { data, used_size: Size::new(0, 0) }
+        Self {
+            data: TextureData::new(device, bg_layout, uniform, size),
+            used_size: Size::new(0, 0)
+        }
     }
 
     pub fn bind_group(&self) -> &wgpu::BindGroup {
@@ -71,14 +100,25 @@ impl TextureCollection {
 
     pub fn push(
         &mut self,
+        device: &wgpu::Device,
         queue: &wgpu::Queue,
+        bg_layout: &wgpu::BindGroupLayout,
+        uniform: &wgpu::Buffer,
         uv_size: Size<u32>,
         uv_data: &[u8],
     ) {
-        assert!(self.used_size < self.data.size);
+        let new_size = self.data.size + uv_size;
+        let dst = TextureData::new(device, bg_layout, uniform, new_size);
+        let mut encoder = device.create_command_encoder(&Default::default());
+        encoder.copy_texture_to_texture(
+            self.data.texture.as_image_copy(),
+            dst.texture.as_image_copy(),
+            self.data.texture.size()
+        );
+        queue.submit(std::iter::once(encoder.finish()));
         queue.write_texture(
             wgpu::ImageCopyTexture {
-                texture: &self.data.texture,
+                texture: &dst.texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d {
                     x: 0,
@@ -100,6 +140,7 @@ impl TextureCollection {
             }
         );
 
+        self.data = dst;
         self.used_size += uv_size;
     }
 }

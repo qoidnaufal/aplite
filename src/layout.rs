@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use math::{Size, Vector2};
+use crate::color::Color;
 use crate::widget::{NodeId, Widget};
-use crate::texture::TextureCollection;
-use crate::shapes::{Shape, Transform, Vertex};
+use crate::texture::{image_reader, ImageData, TextureCollection};
+use crate::shapes::{Shape, Vertex};
 use crate::error::Error;
 use crate::callback::CALLBACKS;
 use crate::app::CONTEXT;
@@ -26,8 +27,6 @@ pub struct Layout {
     pub v_offset: HashMap<NodeId, usize>,
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
-    pub u_offset: HashMap<NodeId, usize>,
-    pub transforms: Vec<Transform>,
     pub has_changed: bool,
     last_changed_id: Option<NodeId>,
     used_space: Size<u32>,
@@ -41,8 +40,6 @@ impl Layout {
             v_offset: HashMap::new(),
             vertices: Vec::new(),
             indices: Vec::new(),
-            u_offset: HashMap::new(),
-            transforms: Vec::new(),
             used_space: Size::new(0, 0),
             has_changed: false,
             last_changed_id: None,
@@ -63,20 +60,22 @@ impl Layout {
         queue: &wgpu::Queue,
         bg_layout: &wgpu::BindGroupLayout,
         uniforms: &wgpu::Buffer,
-    ) -> TextureCollection {
-        let mut size = Size::new(0, 0);
+        texture_collection: &mut TextureCollection,
+    ) {
         self.nodes.iter().for_each(|node_id| {
             if let Some(shape) = self.shapes.get(node_id) {
-                size += shape.uv_size;
-            };
-        });
-        let mut collection = TextureCollection::new(device, bg_layout, uniforms, size);
-        self.nodes.iter().for_each(|node_id| {
-            if let Some(shape) = self.shapes.get(node_id) {
-                collection.push(queue, shape.uv_size, &shape.uv_data);
+                let texture_data = if let Some(ref src) = shape.src {
+                    image_reader(src)
+                } else {
+                    ImageData {
+                        dimension: (1, 1).into(),
+                        data: Color::from(shape.cached_color).to_vec(),
+                    }
+                };
+                eprintln!("{:?}", texture_data.dimension);
+                texture_collection.push(device, queue, bg_layout, uniforms, texture_data.dimension, &texture_data.data);
             }
         });
-        collection
     }
 
     pub fn vertices(&self) -> &[u8] {
@@ -92,9 +91,10 @@ impl Layout {
     }
 
     pub fn transforms(&self) -> Vec<u8> {
-        self.transforms.iter().flat_map(|t| {
-            t.as_slice()
-        }).copied().collect::<Vec<_>>()
+        self.nodes.iter().flat_map(|node_id| {
+            let shape = self.shapes.get(node_id).unwrap();
+            shape.transform.as_slice()
+        }).copied().collect()
     }
 
     pub fn detect_hover(&self) {
@@ -123,11 +123,9 @@ impl Layout {
         if let Some(ref change_id) = self.last_changed_id.take() {
             if cursor.hover.obj.is_some_and(|hover_id| hover_id != *change_id) || cursor.hover.obj.is_none() {
                 let shape = self.shapes.get_mut(change_id).unwrap();
-                shape.revert_color();
+                // shape.revert_color();
                 let v_offset = self.v_offset.get(change_id).unwrap();
                 self.vertices[*v_offset..v_offset + shape.vertices().len()].copy_from_slice(&shape.vertices());
-                let u_offset = self.u_offset.get(change_id).unwrap();
-                self.transforms[*u_offset] = shape.transform;
                 self.has_changed = true;
             }
         }
@@ -146,10 +144,7 @@ impl Layout {
             });
             
             let offset = self.v_offset.get(hover_id).unwrap();
-            // this is much faster than using `splice()`
             self.vertices[*offset..offset + shape.vertices().len()].copy_from_slice(&shape.vertices());
-            let u_offset = self.u_offset.get(hover_id).unwrap();
-            self.transforms[*u_offset] = shape.transform;
             self.has_changed = true;
             self.last_changed_id = Some(*hover_id);
         }
@@ -166,8 +161,6 @@ impl Layout {
             });
             let offset = self.v_offset.get(click_id).unwrap();
             self.vertices[*offset..offset + shape.vertices().len()].copy_from_slice(&shape.vertices());
-            let u_offset = self.u_offset.get(click_id).unwrap();
-            self.transforms[*u_offset] = shape.transform;
             self.has_changed = true;
             self.last_changed_id = Some(*click_id)
         }
@@ -176,7 +169,6 @@ impl Layout {
     pub fn calculate(&mut self) {
         let window_size: Size<f32> = CONTEXT.with_borrow(|ctx| ctx.window_size.into());
         let mut v_offset = 0;
-        let mut u_offset = 0;
 
         self.nodes.iter().for_each(|id| {
             if let Some(shape) = self.shapes.get_mut(id) {
@@ -193,15 +185,11 @@ impl Layout {
                 }).collect::<Vec<_>>();
 
                 self.v_offset.insert(*id, v_offset);
-                self.u_offset.insert(*id, u_offset);
-
                 self.vertices.extend_from_slice(&vertices);
                 self.indices.extend_from_slice(&indices);
-                self.transforms.push(shape.transform);
 
                 self.used_space.height += shape.dimensions.height;
-                v_offset += shape.vertices().len();
-                u_offset += 1;
+                v_offset += vertices.len();
             }
         });
     }
