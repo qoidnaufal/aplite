@@ -20,7 +20,6 @@ pub fn cast_slice<A: Sized, B: Sized>(p: &[A]) -> Result<&[B], Error> {
     }
 }
 
-// FIXME: inefficient storage for shapes, vertices, & indices
 #[derive(Debug)]
 pub struct Layout {
     pub nodes: Vec<NodeId>,
@@ -63,35 +62,28 @@ impl Layout {
                 } else {
                     ImageData {
                         dimension: (1, 1).into(),
-                        data: Color::from(shape.cached_color).to_vec(),
+                        data: Color::from(shape.color).to_vec(),
                     }
                 };
-                let vertice = shape.vertices(device);
-                let indice = shape.indices(device);
-                let uniform = shape.uniform_buffer(device);
+                let v_buffer = shape.v_buffer(device);
+                let i_buffer = shape.i_buffer(device);
+                let u_buffer = shape.u_buffer(device);
                 let texture = TextureData::new(
                     device,
                     queue,
                     bg_layout,
-                    uniform,
+                    u_buffer,
                     image_data.dimension,
                     &image_data.data,
                     *node_id,
                 );
 
-                gfx.vertices.push(vertice);
-                gfx.indices.push(indice);
+                gfx.v_buffer.push(v_buffer);
+                gfx.i_buffer.push(i_buffer);
                 gfx.textures.push(texture);
             }
         });
     }
-
-    // pub fn transforms(&self) -> Vec<u8> {
-    //     self.nodes.iter().flat_map(|node_id| {
-    //         let shape = self.shapes.get(node_id).unwrap();
-    //         shape.transform.as_slice()
-    //     }).copied().collect()
-    // }
 
     pub fn detect_hover(&self) {
         let hovered = self.shapes.iter().find(|(_, shape)| {
@@ -110,7 +102,7 @@ impl Layout {
         }
     }
 
-    pub fn handle_hover(&mut self) {
+    pub fn handle_hover(&mut self, queue: &wgpu::Queue, gfx: &Gfx) {
         let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
         if let (Some(ref hover_id), Some(ref change_id), None) = (
             cursor.hover.obj, self.last_changed_id, cursor.click.obj
@@ -119,9 +111,10 @@ impl Layout {
         if let Some(ref change_id) = self.last_changed_id.take() {
             if cursor.hover.obj.is_some_and(|hover_id| hover_id != *change_id) || cursor.hover.obj.is_none() {
                 let shape = self.shapes.get_mut(change_id).unwrap();
-                // shape.revert_color();
-                // let v_offset = self.v_offset.get(change_id).unwrap();
-                // self.vertices[*v_offset..v_offset + shape.vertices().len()].copy_from_slice(&shape.vertices());
+                shape.revert_color();
+                if let Some(texture) = gfx.textures.iter().find(|t| t.node_id == *change_id) {
+                    texture.change_color(queue, shape.color);
+                }
                 self.has_changed = true;
             }
         }
@@ -139,14 +132,15 @@ impl Layout {
                 }
             });
             
-            // let offset = self.v_offset.get(hover_id).unwrap();
-            // self.vertices[*offset..offset + shape.vertices().len()].copy_from_slice(&shape.vertices());
+            if let Some(texture) = gfx.textures.iter().find(|t| t.node_id == *hover_id) {
+                texture.change_color(queue, shape.color);
+            }
             self.has_changed = true;
             self.last_changed_id = Some(*hover_id);
         }
     }
 
-    pub fn handle_click(&mut self) {
+    pub fn handle_click(&mut self, queue: &wgpu::Queue, gfx: &Gfx) {
         let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
         if let Some(ref click_id) = cursor.click.obj {
             let shape = self.shapes.get_mut(click_id).unwrap();
@@ -155,8 +149,9 @@ impl Layout {
                     on_click(shape);
                 }
             });
-            // let offset = self.v_offset.get(click_id).unwrap();
-            // self.vertices[*offset..offset + shape.vertices().len()].copy_from_slice(&shape.vertices());
+            if let Some(texture) = gfx.textures.iter().find(|t| t.node_id == *click_id) {
+                texture.change_color(queue, shape.color);
+            }
             self.has_changed = true;
             self.last_changed_id = Some(*click_id)
         }

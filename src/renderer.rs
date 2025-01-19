@@ -10,7 +10,7 @@ use crate::NodeId;
 pub struct Renderer<'a> {
     pub gpu: GpuResources<'a>,
     pipeline: Pipeline,
-    gfx: Gfx
+    pub gfx: Gfx
 }
 
 impl<'a> Renderer<'a> {
@@ -92,8 +92,8 @@ fn draw(
     });
     pass.set_pipeline(&pipeline);
     for texture in &gfx.textures {
-        let v = &gfx.vertices[texture.node_id.0 as usize];
-        let i = &gfx.indices[texture.node_id.0 as usize];
+        let v = &gfx.v_buffer[texture.node_id.0 as usize];
+        let i = &gfx.i_buffer[texture.node_id.0 as usize];
 
         pass.set_bind_group(0, &texture.bind_group, &[]);
         pass.set_vertex_buffer(0, v.slice());

@@ -6,6 +6,7 @@ use image::GenericImageView;
 use math::Size;
 
 use crate::buffer::Buffer;
+use crate::color::{Color, Rgb};
 use crate::pipeline::bind_group;
 use crate::shapes::Transform;
 use crate::NodeId;
@@ -33,7 +34,7 @@ pub struct ImageData {
 #[derive(Debug)]
 pub struct TextureData {
     pub node_id: NodeId,
-    // texture: wgpu::Texture,
+    texture: wgpu::Texture,
     pub bind_group: wgpu::BindGroup,
     pub u_buffer: Buffer<Transform>,
 }
@@ -68,20 +69,21 @@ impl TextureData {
         let sampler = sampler(device);
         let bind_group = bind_group(device, bg_layout, &view, &sampler, &u_buffer.buffer);
 
-        submit_texture(queue, &texture, size, uv_data);
+        submit_texture(queue, texture.as_image_copy(), size, uv_data);
 
-        Self { bind_group, u_buffer, node_id }
+        Self { node_id, texture, bind_group, u_buffer }
+    }
+
+    pub fn change_color(&self, queue: &wgpu::Queue, new_color: Rgb<u8>) {
+        let size = Size::new(1, 1);
+        let color_data = Color::from(new_color);
+        submit_texture(queue, self.texture.as_image_copy(), size, &color_data);
     }
 }
 
-fn submit_texture(queue: &wgpu::Queue, texture: &wgpu::Texture, uv_size: Size<u32>, uv_data: &[u8]) {
+fn submit_texture(queue: &wgpu::Queue, texture: wgpu::ImageCopyTexture, uv_size: Size<u32>, uv_data: &[u8]) {
     queue.write_texture(
-        wgpu::ImageCopyTexture {
-            texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
+        texture,
         uv_data,
         wgpu::ImageDataLayout {
             offset: 0,

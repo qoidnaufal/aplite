@@ -1,17 +1,13 @@
 use std::cell::RefCell;
-use winit::{
-    application::ApplicationHandler,
-    event::WindowEvent,
-    window::Window,
-};
+use winit::window::Window;
+use winit::event::WindowEvent;
+use winit::application::ApplicationHandler;
 use math::{Size, Vector2};
-use crate::{
-    error::Error,
-    gpu::GpuResources,
-    layout::Layout,
-    renderer::Renderer,
-    widget::{NodeId, Widget},
-};
+use crate::widget::{NodeId, Widget};
+use crate::renderer::Renderer;
+use crate::layout::Layout;
+use crate::gpu::GpuResources;
+use crate::error::Error;
 
 thread_local! {
     pub static CONTEXT: RefCell<Context> = RefCell::new(Context::new());
@@ -143,6 +139,14 @@ pub struct App<'a> {
     pub renderer: Option<Renderer<'a>>,
     pub window: Option<Window>,
     pub layout: Layout,
+    pub stats: Vec<std::time::Duration>,
+}
+
+impl Drop for App<'_> {
+    fn drop(&mut self) {
+        let avg = self.stats.iter().sum::<std::time::Duration>() / self.stats.len() as u32;
+        eprintln!("average render time: {:?}", avg);
+    }
 }
 
 impl App<'_> {
@@ -151,6 +155,7 @@ impl App<'_> {
             renderer: None,
             window: None,
             layout: Layout::new(),
+            stats: Vec::new(),
         }
     }
 
@@ -219,15 +224,15 @@ impl<'a> ApplicationHandler for App<'a> {
         ) {
 
         if self.id() == window_id {
+            let renderer = self.renderer.as_ref().unwrap();
             match event {
                 WindowEvent::CloseRequested => {
                     event_loop.exit();
                 }
                 WindowEvent::RedrawRequested => {
-                    // let start = std::time::Instant::now();
                     self.update();
-                    // eprintln!("{:?}", start.elapsed());
 
+                    let start = std::time::Instant::now();
                     match self.render() {
                         Ok(_) => {},
                         Err(Error::SurfaceRendering(surface_err)) => {
@@ -245,6 +250,9 @@ impl<'a> ApplicationHandler for App<'a> {
                         }
                         Err(_) => panic!()
                     }
+                    let elapsed = start.elapsed();
+                    eprintln!("{:?}", elapsed);
+                    self.stats.push(elapsed);
                 }
                 WindowEvent::Resized(new_size) => {
                     CONTEXT.with_borrow_mut(|ctx| ctx.window_size = Size::from((new_size.width, new_size.height)));
@@ -253,7 +261,7 @@ impl<'a> ApplicationHandler for App<'a> {
                 WindowEvent::MouseInput { state: action, button, .. } => {
                     CONTEXT.with_borrow_mut(|ctx| ctx.set_click_state(action.into(), button.into()));
 
-                    self.layout.handle_click();
+                    self.layout.handle_click(&renderer.gpu.queue, &renderer.gfx);
                     if self.layout.has_changed {
                         self.request_redraw();
                         self.layout.has_changed = false;
@@ -263,7 +271,7 @@ impl<'a> ApplicationHandler for App<'a> {
                     CONTEXT.with_borrow_mut(|ctx| ctx.cursor.hover.pos = Vector2::from((position.cast().x, position.cast().y)));
                     self.detect_hover();
 
-                    self.layout.handle_hover();
+                    self.layout.handle_hover(&renderer.gpu.queue, &renderer.gfx);
                     if self.layout.has_changed {
                         self.request_redraw();
                         self.layout.has_changed = false;

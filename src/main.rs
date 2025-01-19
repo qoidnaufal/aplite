@@ -14,7 +14,7 @@ mod widget;
 mod texture;
 
 use app::App;
-use color::Rgb;
+use color::*;
 use shapes::Shape;
 use signal::Signal;
 use widget::*;
@@ -50,18 +50,18 @@ fn add_widget(app: &mut App) {
         eprintln!("right shift {}", c4.get());
     };
 
-    // let hover = move |shape: &mut Shape| { shape.set_color(|color| *color = Rgb::BLUE.into()) };
+    let hover = move |shape: &mut Shape| { shape.set_color(|color| *color = Rgb::BLUE.into()) };
     let drag = move |shape: &mut Shape| {
-        // shape.set_color(|color| *color = Rgb::GREEN.into());
+        shape.set_color(|color| *color = Rgb::GREEN.into());
         shape.set_position();
     };
 
     app
-        .add_widget(button().on_click(inc).on_drag(drag))
-        .add_widget(TestWidget::new().on_click(dec).on_drag(drag))
-        .add_widget(image("assets/image2.jpg").on_click(shift_left.clone()).on_drag(drag))
-        .add_widget(TestCircleWidget::new().on_click(right_shift).on_drag(drag))
-        .add_widget(image("assets/image1.jpg").on_click(shift_left).on_drag(drag));
+        .add_widget(button().on_click(inc).on_drag(drag).on_hover(hover))
+        .add_widget(TestWidget::new().on_click(dec).on_drag(drag).on_hover(hover))
+        .add_widget(image("assets/image2.jpg").on_click(shift_left.clone()).on_drag(drag).on_hover(hover))
+        .add_widget(TestCircleWidget::new().on_click(right_shift).on_drag(drag).on_hover(hover))
+        .add_widget(image("assets/image1.jpg").on_click(shift_left).on_drag(drag).on_hover(hover));
 }
 
 fn main() -> Result<(), Error> {

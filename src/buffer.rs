@@ -44,7 +44,7 @@ impl<T> Buffer<T> {
 
 #[derive(Default)]
 pub struct Gfx {
-    pub vertices: Vec<Buffer<Vertex>>,
-    pub indices: Vec<Buffer<u32>>,
+    pub v_buffer: Vec<Buffer<Vertex>>,
+    pub i_buffer: Vec<Buffer<u32>>,
     pub textures: Vec<TextureData>,
 }

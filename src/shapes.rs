@@ -87,12 +87,12 @@ impl ShapeKind {
 }
 
 #[derive(Debug, Clone)]
-pub struct Mesh {
-    pub vertices: Vec<Vertex>,
-    pub indices: Vec<u32>,
+pub struct Mesh<'a> {
+    pub vertices: &'a [Vertex],
+    pub indices: &'a [u32],
 }
 
-impl From<ShapeKind> for Mesh {
+impl From<ShapeKind> for Mesh<'_> {
     fn from(kind: ShapeKind) -> Self {
         match kind {
             ShapeKind::FilledTriangle => Self::triangle(),
@@ -102,49 +102,36 @@ impl From<ShapeKind> for Mesh {
     }
 }
 
-impl Mesh {
+impl Mesh<'_> {
     fn rectangle() -> Self {
         Self {
-            vertices: [
+            vertices: &[
                 Vertex { position: Vector3 { x: -1.0, y:  1.0, z: 1.0 }, uv: Vector2 { x: 0.0, y: 0.0 } },
                 Vertex { position: Vector3 { x: -1.0, y: -1.0, z: 1.0 }, uv: Vector2 { x: 0.0, y: 1.0 } },
                 Vertex { position: Vector3 { x:  1.0, y: -1.0, z: 1.0 }, uv: Vector2 { x: 1.0, y: 1.0 } },
                 Vertex { position: Vector3 { x:  1.0, y:  1.0, z: 1.0 }, uv: Vector2 { x: 1.0, y: 0.0 } },
-                ].to_vec(),
-            indices: [0, 1, 2, 2, 3, 0].to_vec(),
+                ],
+            indices: &[0, 1, 2, 2, 3, 0],
         }
     }
 
     fn triangle() -> Self {
         Self {
-            vertices: [
+            vertices: &[
                 Vertex { position: Vector3 { x:  0.0, y:  1.0, z: 1.0 }, uv: Vector2 { x: 0.5, y: 0.0 } },
                 Vertex { position: Vector3 { x: -1.0, y: -1.0, z: 1.0 }, uv: Vector2 { x: 0.0, y: 1.0 } },
                 Vertex { position: Vector3 { x:  1.0, y: -1.0, z: 1.0 }, uv: Vector2 { x: 1.0, y: 1.0 } },
-                ].to_vec(),
-            indices: [0, 1, 2].to_vec(),
+                ],
+            indices: &[0, 1, 2],
         }
     }
 }
 
-// originaly, every shape is rooted to the center of the screen where center is [0, 0]
-// going top    -> [ 0,  y ],
-// going left   -> [-x,  0 ],
-// going bottom -> [ 0, -y ],
-// going right  -> [ x,  0 ],
-//
-//
-// a normal square with (width, height) would have
-// top left     [x - width/2, y + height/2],
-// bottom left  [x - width/2, y - height/2],
-// bottom right [x + width/2, y - height/2],
-// top right    [x + width/2, y + height/2],
-// where (width, height) is normalized to window's inner_size
-
 #[derive(Debug, Clone)]
 pub struct Shape {
     pub dimensions: Size<u32>,
-    pub cached_color: Rgb<u8>,
+    pub color: Rgb<u8>,
+    pub cached_color: Option<Rgb<u8>>,
     pub src: Option<PathBuf>,
     pub kind: ShapeKind,
     pub transform: Transform,
@@ -154,7 +141,8 @@ impl Shape {
     pub fn filled(color: Rgb<u8>, kind : ShapeKind) -> Self {
         Self {
             dimensions: Size::new(500, 500),
-            cached_color: color,
+            color,
+            cached_color: Some(color),
             src: None,
             kind,
             transform: Transform::IDENTITY,
@@ -164,7 +152,8 @@ impl Shape {
     pub fn textured(src: PathBuf, kind: ShapeKind) -> Self {
         Self {
             dimensions: Size::new(500, 500),
-            cached_color: Rgb::WHITE,
+            color: Rgb::WHITE,
+            cached_color: None,
             src: Some(src),
             kind,
             transform: Transform::IDENTITY,
@@ -179,22 +168,20 @@ impl Shape {
         self.transform.translate(t);
     }
 
-    pub fn vertices(&self,device: &wgpu::Device) -> Buffer<Vertex> {
+    pub fn v_buffer(&self,device: &wgpu::Device) -> Buffer<Vertex> {
         let vertices = Mesh::from(self.kind).vertices;
-        Buffer::new(device, wgpu::BufferUsages::VERTEX, cast_slice(&vertices).unwrap(), vertices.len())
+        Buffer::new(device, wgpu::BufferUsages::VERTEX, cast_slice(&vertices).unwrap(), 0)
     }
 
-    pub fn indices(&self, device: &wgpu::Device) -> Buffer<u32> {
+    pub fn i_buffer(&self, device: &wgpu::Device) -> Buffer<u32> {
         let indices = Mesh::from(self.kind).indices;
         Buffer::new(device, wgpu::BufferUsages::INDEX, cast_slice(&indices).unwrap(), indices.len())
     }
 
-    pub fn uniform_buffer(&self, device: &wgpu::Device) -> Buffer<Transform> {
+    pub fn u_buffer(&self, device: &wgpu::Device) -> Buffer<Transform> {
         Buffer::new(device, wgpu::BufferUsages::UNIFORM, self.transform.as_slice(), 0)
     }
 
-    // for now, i think the dimension will always be constant due to scaling transform
-    // but still, i need better calculation later
     fn dimension(&self) -> Size<f32> {
         let window_size = CONTEXT.with_borrow(|ctx| ctx.window_size);
         let width = self.dimensions.width as f32 / window_size.width as f32;
@@ -203,16 +190,10 @@ impl Shape {
     }
 
     pub fn pos(&self) -> Vector2<f32> {
-        let mut vertices = Mesh::from(self.kind).vertices;
-        vertices.iter_mut().for_each(|vert| {
-            let v4 = Vector4::from(vert.position);
-            let v4 = self.transform.mat * v4;
-            vert.position = Vector3 { x: v4.x, y: v4.y, z: v4.z };
-        });
-        Vector2 {
-            x: vertices[1].position.x,
-            y: vertices[0].position.y,
-        }
+        let vertices = Mesh::from(self.kind).vertices;
+        let x = (self.transform.mat * Vector4::from(vertices[1].position)).x;
+        let y = (self.transform.mat * Vector4::from(vertices[0].position)).y;
+        Vector2 { x, y }
     }
 
     pub fn is_hovered(&self) -> bool {
@@ -236,14 +217,14 @@ impl Shape {
     }
 
     pub fn set_color<F: FnOnce(&mut Rgb<u8>)>(&mut self, f: F) {
-        f(&mut self.cached_color);
+        f(&mut self.color);
     }
 
-    // pub fn revert_color(&mut self) {
-    //     if let Some(ref c) = self.cached_color {
-    //         self.uv_data = c.clone().into();
-    //     }
-    // }
+    pub fn revert_color(&mut self) {
+        if let Some(cached) = self.cached_color {
+            self.color = cached;
+        }
+    }
 
     pub fn set_position(&mut self) {
         let (cursor, window_size) = CONTEXT.with_borrow(|ctx| (ctx.cursor, Size::<f32>::from(ctx.window_size)));
