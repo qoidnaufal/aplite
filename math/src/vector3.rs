@@ -42,15 +42,7 @@ impl<T: Default> From<Vector2<T>> for Vector3<T> {
 // scalar multiplication
 impl<T> std::ops::Mul<T> for Vector3<T>
 where T:
-    Default
-    + std::ops::Add<T, Output = T>
-    + std::ops::AddAssign
-    + std::ops::Sub<T, Output = T>
-    + std::ops::SubAssign
-    + std::ops::Mul<T, Output = T>
-    + std::ops::MulAssign
-    + std::ops::Div<T, Output = T>
-    + std::ops::DivAssign
+    std::ops::Mul<T, Output = T>
     + Copy
 {
     type Output = Self;
@@ -66,15 +58,8 @@ where T:
 // dot product
 impl<T> std::ops::Mul<Self> for Vector3<T>
 where T:
-    Default
-    + std::ops::Add<T, Output = T>
-    + std::ops::AddAssign
-    + std::ops::Sub<T, Output = T>
-    + std::ops::SubAssign
+    std::ops::Add<T, Output = T>
     + std::ops::Mul<T, Output = T>
-    + std::ops::MulAssign
-    + std::ops::Div<T, Output = T>
-    + std::ops::DivAssign
     + Copy
 {
     type Output = T;
@@ -85,15 +70,7 @@ where T:
 
 impl<T> std::ops::Add<Self> for Vector3<T>
 where T:
-    Default
-    + std::ops::Add<T, Output = T>
-    + std::ops::AddAssign
-    + std::ops::Sub<T, Output = T>
-    + std::ops::SubAssign
-    + std::ops::Mul<T, Output = T>
-    + std::ops::MulAssign
-    + std::ops::Div<T, Output = T>
-    + std::ops::DivAssign
+    std::ops::Add<T, Output = T>
     + Copy
 {
     type Output = Self;
@@ -108,15 +85,8 @@ where T:
 
 impl<T> std::ops::AddAssign<Self> for Vector3<T>
 where T:
-    Default
-    + std::ops::Add<T, Output = T>
+    std::ops::Add<T, Output = T>
     + std::ops::AddAssign
-    + std::ops::Sub<T, Output = T>
-    + std::ops::SubAssign
-    + std::ops::Mul<T, Output = T>
-    + std::ops::MulAssign
-    + std::ops::Div<T, Output = T>
-    + std::ops::DivAssign
     + Copy
 {
     fn add_assign(&mut self, rhs: Self) {
@@ -126,15 +96,7 @@ where T:
 
 impl<T> std::ops::Sub<Self> for Vector3<T>
 where T:
-    Default
-    + std::ops::Add<T, Output = T>
-    + std::ops::AddAssign
-    + std::ops::Sub<T, Output = T>
-    + std::ops::SubAssign
-    + std::ops::Mul<T, Output = T>
-    + std::ops::MulAssign
-    + std::ops::Div<T, Output = T>
-    + std::ops::DivAssign
+    std::ops::Sub<T, Output = T>
     + Copy
 {
     type Output = Self;
@@ -149,15 +111,8 @@ where T:
 
 impl<T> std::ops::SubAssign<Self> for Vector3<T>
 where T:
-    Default
-    + std::ops::Add<T, Output = T>
-    + std::ops::AddAssign
-    + std::ops::Sub<T, Output = T>
+    std::ops::Sub<T, Output = T>
     + std::ops::SubAssign
-    + std::ops::Mul<T, Output = T>
-    + std::ops::MulAssign
-    + std::ops::Div<T, Output = T>
-    + std::ops::DivAssign
     + Copy
 {
     fn sub_assign(&mut self, rhs: Self) {

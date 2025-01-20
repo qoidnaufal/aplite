@@ -6,19 +6,19 @@ pub struct Color<Container, T> {
     _phatom: PhantomData<Container>,
 }
 
-impl Color<Rgba<u8>, u8> {
-    pub fn r(&mut self) -> &mut u8 {
-        &mut self[0]
-    }
+// impl Color<Rgba<u8>, u8> {
+//     pub fn r(&mut self) -> &mut u8 {
+//         &mut self[0]
+//     }
 
-    pub fn g(&mut self) -> &mut u8 {
-        &mut self[1]
-    }
+//     pub fn g(&mut self) -> &mut u8 {
+//         &mut self[1]
+//     }
 
-    pub fn b(&mut self) -> &mut u8 {
-        &mut self[2]
-    }
-}
+//     pub fn b(&mut self) -> &mut u8 {
+//         &mut self[2]
+//     }
+// }
 
 impl<Container, T> std::ops::Index<usize> for Color<Container, T> {
     type Output = T;

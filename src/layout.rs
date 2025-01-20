@@ -65,22 +65,22 @@ impl Layout {
                         data: Color::from(shape.color).to_vec(),
                     }
                 };
-                let v_buffer = shape.v_buffer(device);
-                let i_buffer = shape.i_buffer(device);
-                let u_buffer = shape.u_buffer(device);
-                let texture = TextureData::new(
+                let v = shape.v_buffer(device);
+                let i = shape.i_buffer(device);
+                let u = shape.u_buffer(device);
+                let t = TextureData::new(
                     device,
                     queue,
                     bg_layout,
-                    u_buffer,
+                    u,
                     image_data.dimension,
                     &image_data.data,
                     *node_id,
                 );
 
-                gfx.v_buffer.push(v_buffer);
-                gfx.i_buffer.push(i_buffer);
-                gfx.textures.push(texture);
+                gfx.v_buffer.push(v);
+                gfx.i_buffer.push(i);
+                gfx.textures.push(t);
             }
         });
     }
@@ -111,16 +111,16 @@ impl Layout {
         if let Some(ref change_id) = self.last_changed_id.take() {
             if cursor.hover.obj.is_some_and(|hover_id| hover_id != *change_id) || cursor.hover.obj.is_none() {
                 let shape = self.shapes.get_mut(change_id).unwrap();
-                shape.revert_color();
-                if let Some(texture) = gfx.textures.iter().find(|t| t.node_id == *change_id) {
-                    texture.change_color(queue, shape.color);
+                if shape.revert_color() {
+                    if let Some(texture) = gfx.textures.iter().find(|t| t.node_id == *change_id) {
+                        texture.change_color(queue, shape.color);
+                    }
+                    self.has_changed = true;
                 }
-                self.has_changed = true;
             }
         }
         if let Some(ref hover_id) = cursor.hover.obj {
             let shape = self.shapes.get_mut(hover_id).unwrap();
-
             CALLBACKS.with_borrow_mut(|callbacks| {
                 if let Some(on_hover) = callbacks.on_hover.get_mut(hover_id) {
                     on_hover(shape);

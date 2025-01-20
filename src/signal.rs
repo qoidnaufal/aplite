@@ -15,10 +15,10 @@ impl<T: Clone> Signal<T> {
         }
     }
 
-    pub fn new_split(value: T) -> (SignalRead<T>, SignalWrite<T>) {
-        let v = Rc::new(RefCell::new(value));
-        (SignalRead(v.clone()), SignalWrite(v))
-    }
+    // pub fn new_split(value: T) -> (SignalRead<T>, SignalWrite<T>) {
+    //     let v = Rc::new(RefCell::new(value));
+    //     (SignalRead(v.clone()), SignalWrite(v))
+    // }
 
     pub fn get(&self) -> T {
         self.read.get()

@@ -77,7 +77,7 @@ pub enum ShapeKind {
 }
 
 impl ShapeKind {
-    pub fn elements(&self) -> usize {
+    pub fn vertices(&self) -> usize {
         match self {
             ShapeKind::FilledTriangle => 3,
             ShapeKind::FilledRectangle => 4,
@@ -170,16 +170,16 @@ impl Shape {
 
     pub fn v_buffer(&self,device: &wgpu::Device) -> Buffer<Vertex> {
         let vertices = Mesh::from(self.kind).vertices;
-        Buffer::new(device, wgpu::BufferUsages::VERTEX, cast_slice(&vertices).unwrap(), 0)
+        Buffer::new(device, wgpu::BufferUsages::VERTEX, cast_slice(&vertices).unwrap())
     }
 
     pub fn i_buffer(&self, device: &wgpu::Device) -> Buffer<u32> {
         let indices = Mesh::from(self.kind).indices;
-        Buffer::new(device, wgpu::BufferUsages::INDEX, cast_slice(&indices).unwrap(), indices.len())
+        Buffer::new(device, wgpu::BufferUsages::INDEX, cast_slice(&indices).unwrap())
     }
 
     pub fn u_buffer(&self, device: &wgpu::Device) -> Buffer<Transform> {
-        Buffer::new(device, wgpu::BufferUsages::UNIFORM, self.transform.as_slice(), 0)
+        Buffer::new(device, wgpu::BufferUsages::UNIFORM, self.transform.as_slice())
     }
 
     fn dimension(&self) -> Size<f32> {
@@ -204,7 +204,7 @@ impl Shape {
         let Size { width, height } = self.dimension();
         let Vector2 { x, y } = self.pos();
 
-        let angled = if self.kind.elements() == 3 {
+        let angled = if self.kind.vertices() == 3 {
             let x_center = width / 2.0;
             let cursor_tan = tan(x + x_center - x_cursor, y - y_cursor);
             let triangle_tan = tan(x_center, height);
@@ -220,10 +220,11 @@ impl Shape {
         f(&mut self.color);
     }
 
-    pub fn revert_color(&mut self) {
+    pub fn revert_color(&mut self) -> bool {
         if let Some(cached) = self.cached_color {
             self.color = cached;
-        }
+            true
+        } else { false }
     }
 
     pub fn set_position(&mut self) {

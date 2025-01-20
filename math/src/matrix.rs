@@ -23,20 +23,28 @@ impl From<Vector3<f32>> for Vector4<f32> {
 
 impl<T> std::ops::Mul<Self> for Vector4<T>
 where T:
-    Default
-    + std::ops::Add<T, Output = T>
-    + std::ops::AddAssign
-    + std::ops::Sub<T, Output = T>
-    + std::ops::SubAssign
+    std::ops::Add<T, Output = T>
     + std::ops::Mul<T, Output = T>
-    + std::ops::MulAssign
-    + std::ops::Div<T, Output = T>
-    + std::ops::DivAssign
     + Copy
 {
     type Output = T;
     fn mul(self, rhs: Self) -> Self::Output {
         self.x * rhs.x + self.y * rhs.y + self.z * rhs.z + self.w * rhs.w
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Matrix<Vector, const N: usize> {
+    data: [Vector; N]
+}
+
+impl Matrix<Vector4<f32>, 4> {
+    fn convert(&self) -> [Vector4<f32>; 4] {
+        let x = Vector4 { x: self[0].x, y: self[1].x, z: self[2].x, w: self[3].x };
+        let y = Vector4 { x: self[0].y, y: self[1].y, z: self[2].y, w: self[3].y };
+        let z = Vector4 { x: self[0].z, y: self[1].z, z: self[2].z, w: self[3].z };
+        let w = Vector4 { x: self[0].w, y: self[1].w, z: self[2].w, w: self[3].w };
+        [x, y, z, w]
     }
 }
 
@@ -52,18 +60,10 @@ where T:
 // x |  1   9  -13 |
 // y | 20   5   -6 |
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct Matrix<Vector, const N: usize> {
-    data: [Vector; N]
-}
-
 impl std::fmt::Debug for Matrix<Vector4<f32>, 4> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // let x = Vector3 { x: self[0].x, y: self[1].x, z: self[2].x };
-        // let y = Vector3 { x: self[0].y, y: self[1].y, z: self[2].y };
-        // let z = Vector3 { x: self[0].z, y: self[1].z, z: self[2].z };
-        // let conv = Self { data: [x, y, z] };
-        self.data.iter().enumerate().try_for_each(|(idx, vec4)| {
+        let mat = self.convert();
+        mat.iter().enumerate().try_for_each(|(idx, vec4)| {
             let (prefix, suffix) = match idx {
                 0 => ("x", "\n"),
                 1 => ("y", "\n"),
@@ -71,7 +71,11 @@ impl std::fmt::Debug for Matrix<Vector4<f32>, 4> {
                 3 => ("w",  "" ),
                 _ => unreachable!()
             };
-            write!(f, "{prefix} | {:0.3} {:0.3} {:0.3} {:0.3} |{suffix}", vec4.x, vec4.y, vec4.z, vec4.w)
+            write!(
+                f,
+                "{prefix} | {:0.3} {:0.3} {:0.3} {:0.3} |{suffix}",
+                vec4.x, vec4.y, vec4.z, vec4.w
+            )
         })
     }
 }
@@ -131,10 +135,11 @@ impl Matrix<Vector4<f32>, 4> {
 impl std::ops::Mul<Vector4<f32>> for Matrix<Vector4<f32>, 4> {
     type Output = Vector4<f32>;
     fn mul(self, rhs: Vector4<f32>) -> Self::Output {
-        let x = Vector4 { x: self[0].x, y: self[1].x, z: self[2].x, w: self[3].x } * rhs;
-        let y = Vector4 { x: self[0].y, y: self[1].y, z: self[2].y, w: self[3].y } * rhs;
-        let z = Vector4 { x: self[0].z, y: self[1].z, z: self[2].z, w: self[3].z } * rhs;
-        let w = Vector4 { x: self[0].w, y: self[1].w, z: self[2].w, w: self[3].w } * rhs;
+        let conv = self.convert();
+        let x = conv[0] * rhs;
+        let y = conv[1] * rhs;
+        let z = conv[2] * rhs;
+        let w = conv[3] * rhs;
 
         Vector4 { x, y, z, w }
     }

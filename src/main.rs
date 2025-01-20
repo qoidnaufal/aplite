@@ -59,9 +59,9 @@ fn add_widget(app: &mut App) {
     app
         .add_widget(button().on_click(inc).on_drag(drag).on_hover(hover))
         .add_widget(TestWidget::new().on_click(dec).on_drag(drag).on_hover(hover))
-        .add_widget(image("assets/image2.jpg").on_click(shift_left.clone()).on_drag(drag).on_hover(hover))
+        .add_widget(image("assets/image2.jpg").on_click(shift_left.clone()).on_drag(drag))
         .add_widget(TestCircleWidget::new().on_click(right_shift).on_drag(drag).on_hover(hover))
-        .add_widget(image("assets/image1.jpg").on_click(shift_left).on_drag(drag).on_hover(hover));
+        .add_widget(image("assets/image1.jpg").on_click(shift_left).on_drag(drag));
 }
 
 fn main() -> Result<(), Error> {

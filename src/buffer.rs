@@ -8,12 +8,11 @@ use crate::{shapes::Vertex, texture::TextureData};
 pub struct Buffer<T> {
     pub buffer: wgpu::Buffer,
     pub len: usize,
-    pub materials: usize,
     _phantom: PhantomData<T>
 }
 
 impl<T> Buffer<T> {
-    pub fn new(device: &wgpu::Device, usage: wgpu::BufferUsages, data: &[u8], materials: usize) -> Self {
+    pub fn new(device: &wgpu::Device, usage: wgpu::BufferUsages, data: &[u8]) -> Self {
         let len = data.len();
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("{} vertex buffer"),
@@ -23,7 +22,6 @@ impl<T> Buffer<T> {
         Self {
             buffer,
             len,
-            materials,
             _phantom: PhantomData,
         }
     }

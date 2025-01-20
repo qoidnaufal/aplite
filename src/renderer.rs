@@ -94,10 +94,11 @@ fn draw(
     for texture in &gfx.textures {
         let v = &gfx.v_buffer[texture.node_id.0 as usize];
         let i = &gfx.i_buffer[texture.node_id.0 as usize];
+        let i_len = i.len / size_of::<u32>();
 
         pass.set_bind_group(0, &texture.bind_group, &[]);
         pass.set_vertex_buffer(0, v.slice());
         pass.set_index_buffer(i.slice(), wgpu::IndexFormat::Uint32);
-        pass.draw_indexed(0..i.materials as u32, 0, 0..1);
+        pass.draw_indexed(0..i_len as u32, 0, 0..1);
     }
 }
