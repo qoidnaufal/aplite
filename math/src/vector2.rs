@@ -1,15 +1,20 @@
 use crate::Vector3;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct Vector2<T> {
     pub x: T,
     pub y: T,
 }
 
-impl<T: Default> Vector2<T>
-{
+impl<T: Default> Vector2<T> {
     pub fn new() -> Self {
         Self { x: T::default(), y: T::default() }
+    }
+}
+
+impl<T: std::fmt::Display> std::fmt::Debug for Vector2<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "x: {:0.3}, y: {:0.3}", self.x, self.y)
     }
 }
 

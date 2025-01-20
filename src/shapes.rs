@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use math::{tan, Matrix, Size, Vector2, Vector3, Vector4};
 use crate::buffer::Buffer;
-use crate::layout::cast_slice;
+use crate::widget_tree::cast_slice;
 use crate::color::Rgb;
 use crate::app::CONTEXT;
 
@@ -47,6 +47,13 @@ pub struct Transform {
     mat: Matrix<Vector4<f32>, 4>,
 }
 
+impl std::ops::Index<usize> for Transform {
+    type Output = Vector4<f32>;
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.mat[index]
+    }
+}
+
 impl std::fmt::Debug for Transform {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.mat)
@@ -56,12 +63,16 @@ impl std::fmt::Debug for Transform {
 impl Transform {
     const IDENTITY: Self = Self { mat: Matrix::IDENTITIY };
 
-    pub fn transform(&mut self, t: Vector2<f32>, s: Size<f32>) {
+    fn transform(&mut self, t: Vector2<f32>, s: Size<f32>) {
         self.mat.transform(t.x, t.y, s.width, s.height)
     }
 
-    pub fn translate(&mut self, t: Vector2<f32>) {
+    fn translate(&mut self, t: Vector2<f32>) {
         self.mat.translate(t.x, t.y);
+    }
+
+    fn scale(&mut self, s: Size<f32>) {
+        self.mat.scale(s.width, s.height);
     }
 
     pub fn as_slice(&self) -> &[u8] {
@@ -161,11 +172,15 @@ impl Shape {
     }
 
     pub fn set_transform(&mut self, t: Vector2<f32>, s: Size<f32>) {
-        self.transform.transform(t, s)
+        self.transform.transform(t, s);
     }
 
-    fn set_translate(&mut self, t: Vector2<f32>) {
+    pub fn set_translate(&mut self, t: Vector2<f32>) {
         self.transform.translate(t);
+    }
+
+    pub fn set_scale(&mut self, s: Size<f32>) {
+        self.transform.scale(s);
     }
 
     pub fn v_buffer(&self,device: &wgpu::Device) -> Buffer<Vertex> {

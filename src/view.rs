@@ -22,7 +22,7 @@ impl NodeId {
     }
 }
 
-pub trait Widget: std::fmt::Debug {
+pub trait View: std::fmt::Debug {
     fn id(&self) -> NodeId;
     fn shape(&self) -> Shape;
 
@@ -63,7 +63,7 @@ impl TestWidget {
 
 }
 
-impl Widget for TestWidget {
+impl View for TestWidget {
     fn id(&self) -> NodeId {
         self.id()
     }
@@ -73,7 +73,7 @@ impl Widget for TestWidget {
     }
 }
 
-impl Widget for &TestWidget {
+impl View for &TestWidget {
     fn id(&self) -> NodeId {
         (*self).id()
     }
@@ -103,7 +103,7 @@ impl TestCircleWidget {
     }
 }
 
-impl Widget for TestCircleWidget {
+impl View for TestCircleWidget {
     fn id(&self) -> NodeId {
         self.id()
     }
@@ -113,7 +113,7 @@ impl Widget for TestCircleWidget {
     }
 }
 
-impl Widget for &TestCircleWidget {
+impl View for &TestCircleWidget {
     fn id(&self) -> NodeId {
         (*self).id()
     }

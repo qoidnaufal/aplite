@@ -1,23 +1,23 @@
-mod error;
-mod shapes;
-mod renderer;
-mod pipeline;
 mod app;
-mod callback;
-mod shader;
-mod signal;
-mod color;
 mod buffer;
-mod layout;
+mod callback;
+mod color;
+mod error;
 mod gpu;
-mod widget;
+mod pipeline;
+mod renderer;
+mod shader;
+mod shapes;
+mod signal;
 mod texture;
+mod widget_tree;
+mod view;
 
 use app::App;
 use color::*;
 use shapes::Shape;
 use signal::Signal;
-use widget::*;
+use view::*;
 use winit::event_loop::EventLoop;
 
 use error::Error;
@@ -65,8 +65,6 @@ fn add_widget(app: &mut App) {
 }
 
 fn main() -> Result<(), Error> {
-    env_logger::init();
-
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
 

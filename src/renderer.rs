@@ -1,7 +1,7 @@
 use crate::buffer::Gfx;
 use crate::pipeline::Pipeline;
 use crate::pipeline::bind_group_layout;
-use crate::layout::Layout;
+use crate::widget_tree::WidgetTree;
 use crate::gpu::GpuResources;
 use crate::error::Error;
 use crate::app::CONTEXT;
@@ -14,10 +14,10 @@ pub struct Renderer<'a> {
 }
 
 impl<'a> Renderer<'a> {
-    pub fn new(gpu: GpuResources<'a>, layouts: &Layout) -> Self {
+    pub fn new(gpu: GpuResources<'a>, widgets: &WidgetTree) -> Self {
         let bg_layout = bind_group_layout(&gpu.device);
         let mut gfx = Gfx::default();
-        layouts.process_texture(&gpu.device, &gpu.queue, &bg_layout, &mut gfx);
+        widgets.process_texture(&gpu.device, &gpu.queue, &bg_layout, &mut gfx);
 
         let pipeline = Pipeline::new(&gpu.device, gpu.config.format, &bg_layout);
 
@@ -28,13 +28,14 @@ impl<'a> Renderer<'a> {
         }
     }
 
-    pub fn resize(&mut self) {
-        let new_size = CONTEXT.with_borrow(|ctx| ctx.window_size);
-        if new_size.width > 0 && new_size.height > 0 {
-            self.gpu.config.width = new_size.width;
-            self.gpu.config.height = new_size.height;
+    pub fn resize(&mut self, widgets: &mut WidgetTree) {
+        let nws = CONTEXT.with_borrow(|ctx| ctx.window_size);
+        if nws.width > 0 && nws.height > 0 {
+            self.gpu.config.width = nws.width;
+            self.gpu.config.height = nws.height;
             self.gpu.configure();
         }
+        widgets.recalculate_layout(&self.gpu.queue, &self.gfx);
     }
 
     pub fn update(&mut self, data: &[u8], id: &NodeId) {
@@ -94,11 +95,10 @@ fn draw(
     for texture in &gfx.textures {
         let v = &gfx.v_buffer[texture.node_id.0 as usize];
         let i = &gfx.i_buffer[texture.node_id.0 as usize];
-        let i_len = i.len / size_of::<u32>();
 
         pass.set_bind_group(0, &texture.bind_group, &[]);
         pass.set_vertex_buffer(0, v.slice());
         pass.set_index_buffer(i.slice(), wgpu::IndexFormat::Uint32);
-        pass.draw_indexed(0..i_len as u32, 0, 0..1);
+        pass.draw_indexed(0..i.len, 0, 0..1);
     }
 }

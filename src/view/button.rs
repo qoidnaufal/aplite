@@ -2,7 +2,7 @@ use crate::{
     color::Rgb,
     shapes::{Shape, ShapeKind},
 };
-use super::{NodeId, Widget};
+use super::{NodeId, View};
 
 pub fn button() -> Button {
     Button::new()
@@ -28,7 +28,7 @@ impl Button {
     }
 }
 
-impl Widget for Button {
+impl View for Button {
     fn id(&self) -> NodeId {
         self.id()
     }
@@ -38,7 +38,7 @@ impl Widget for Button {
     }
 }
 
-impl Widget for &Button {
+impl View for &Button {
     fn id(&self) -> NodeId {
         (*self).id()
     }

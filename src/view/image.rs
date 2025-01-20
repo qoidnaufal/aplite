@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use crate::shapes::{Shape, ShapeKind};
-use super::{NodeId, Widget};
+use super::{NodeId, View};
 
 pub fn image<P: AsRef<Path>>(src: P) -> Image {
     Image::new(src)
@@ -27,7 +27,7 @@ impl Image {
     }
 }
 
-impl Widget for Image {
+impl View for Image {
     fn id(&self) -> NodeId {
         self.id()
     }
@@ -37,7 +37,7 @@ impl Widget for Image {
     }
 }
 
-impl Widget for &Image {
+impl View for &Image {
     fn id(&self) -> NodeId {
         (*self).id()
     }

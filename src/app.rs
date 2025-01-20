@@ -1,11 +1,13 @@
 use std::cell::RefCell;
+
 use winit::window::Window;
 use winit::event::WindowEvent;
 use winit::application::ApplicationHandler;
 use math::{Size, Vector2};
-use crate::widget::{NodeId, Widget};
+
+use crate::view::{NodeId, View};
 use crate::renderer::Renderer;
-use crate::layout::Layout;
+use crate::widget_tree::WidgetTree;
 use crate::gpu::GpuResources;
 use crate::error::Error;
 
@@ -23,7 +25,7 @@ impl Context {
     fn new() -> Self {
         Self {
             cursor: Cursor::new(),
-            window_size: Size::new(0, 0)
+            window_size: Size::new(0, 0),
         }
     }
 
@@ -135,18 +137,57 @@ impl Cursor {
     }
 }
 
+struct Stats<const N: usize> {
+    counter: usize,
+    render_time: [std::time::Duration; N]
+}
+
+impl<const N: usize> Stats<N> {
+    fn new() -> Self {
+        Self {
+            counter: 0,
+            render_time: [std::time::Duration::from_micros(0); N],
+        }
+    }
+
+    fn push(&mut self, d: std::time::Duration) {
+        let idx = self.counter;
+        self[idx] = d;
+        self.counter += 1;
+        self.counter %= N;
+    }
+}
+
+impl<const N: usize> Drop for Stats<N> {
+    fn drop(&mut self) {
+        let divisor = if self.counter == 0 { N } else { self.counter };
+        let avg = self.render_time[..self.counter]
+            .iter()
+            .sum::<std::time::Duration>() / divisor as u32;
+        eprintln!("average render time: {avg:?}");
+    }
+}
+
+impl<const N: usize> std::ops::Index<usize> for Stats<N> {
+    type Output = std::time::Duration;
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.render_time[index]
+    }
+}
+
+impl<const N: usize> std::ops::IndexMut<usize> for Stats<N> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.render_time[index]
+    }
+}
+
 pub struct App<'a> {
     pub renderer: Option<Renderer<'a>>,
     pub window: Option<Window>,
-    pub layout: Layout,
-    pub stats: Vec<std::time::Duration>,
-}
-
-impl Drop for App<'_> {
-    fn drop(&mut self) {
-        let avg = self.stats.iter().sum::<std::time::Duration>() / self.stats.len() as u32;
-        eprintln!("average render time: {:?}", avg);
-    }
+    pub widgets: WidgetTree,
+    initial_size: Size<u32>,
+    resize_count: usize,
+    stats: Stats<20>,
 }
 
 impl App<'_> {
@@ -154,8 +195,10 @@ impl App<'_> {
         Self {
             renderer: None,
             window: None,
-            layout: Layout::new(),
-            stats: Vec::new(),
+            widgets: WidgetTree::new(),
+            initial_size: Size::new(0, 0),
+            resize_count: 0,
+            stats: Stats::new(),
         }
     }
 
@@ -170,7 +213,7 @@ impl App<'_> {
     }
 
     fn resize(&mut self) {
-        self.renderer.as_mut().unwrap().resize();
+        self.renderer.as_mut().unwrap().resize(&mut self.widgets);
     }
 
     fn id(&self) -> winit::window::WindowId {
@@ -179,13 +222,13 @@ impl App<'_> {
     }
 
     fn detect_hover(&self) {
-        self.layout.detect_hover();
+        self.widgets.detect_hover();
     }
 
     fn update(&mut self) {
         let hover_id = CONTEXT.with_borrow(|ctx| ctx.cursor.hover.obj);
         if let Some(ref id) = hover_id {
-            let shape = self.layout.shapes.get(id).unwrap();
+            let shape = self.widgets.shapes.get(id).unwrap();
             let data = shape.transform.as_slice();
             self.renderer.as_mut().unwrap().update(data, id);
         }
@@ -195,8 +238,8 @@ impl App<'_> {
         self.renderer.as_mut().unwrap().render()
     }
 
-    pub fn add_widget(&mut self, node: impl Widget) -> &mut Self {
-        self.layout.insert(node);
+    pub fn add_widget(&mut self, node: impl View) -> &mut Self {
+        self.widgets.insert(node);
         self
     }
 }
@@ -207,12 +250,13 @@ impl<'a> ApplicationHandler for App<'a> {
         window.set_title("My App");
 
         let size = window.inner_size();
-        CONTEXT.with_borrow_mut(|ctx| ctx.window_size = Size::from((size.width, size.height)));
+        self.initial_size = Size::new(size.width, size.height);
+        CONTEXT.with_borrow_mut(|ctx| ctx.window_size = self.initial_size);
         self.window = Some(window);
-        self.layout.calculate();
+        self.widgets.compute_layout();
 
         let gpu = self.request_gpu().unwrap();
-        let renderer: Renderer<'a> = unsafe { std::mem::transmute(Renderer::new(gpu, &self.layout)) };
+        let renderer: Renderer<'a> = unsafe { std::mem::transmute(Renderer::new(gpu, &self.widgets)) };
         self.renderer = Some(renderer);
     }
 
@@ -238,43 +282,52 @@ impl<'a> ApplicationHandler for App<'a> {
                         Err(Error::SurfaceRendering(surface_err)) => {
                             match surface_err {
                                 wgpu::SurfaceError::Outdated
-                                | wgpu::SurfaceError::Lost => self.resize(),
+                                | wgpu::SurfaceError::Lost => {
+                                    eprintln!("surface lost / outdated");
+                                    self.resize();
+                                },
                                 wgpu::SurfaceError::OutOfMemory => {
-                                    log::error!("Out of Memory");
+                                    eprintln!("Out of Memory");
                                     event_loop.exit();
                                 },
                                 wgpu::SurfaceError::Timeout => {
-                                    log::warn!("Surface Timeout")
+                                    eprintln!("Surface Timeout")
                                 },
                             }
                         }
                         Err(_) => panic!()
                     }
                     let elapsed = start.elapsed();
-                    eprintln!("{:?}", elapsed);
                     self.stats.push(elapsed);
                 }
                 WindowEvent::Resized(new_size) => {
-                    CONTEXT.with_borrow_mut(|ctx| ctx.window_size = Size::from((new_size.width, new_size.height)));
-                    self.resize();
+                    CONTEXT.with_borrow_mut(|ctx| {
+                        ctx.window_size = Size::from((new_size.width, new_size.height));
+                    });
+                    // on startup, this window event is called 2x
+                    if self.resize_count > 0 {
+                        self.resize();
+                    }
+                    self.resize_count += 1;
                 }
                 WindowEvent::MouseInput { state: action, button, .. } => {
                     CONTEXT.with_borrow_mut(|ctx| ctx.set_click_state(action.into(), button.into()));
 
-                    self.layout.handle_click(&renderer.gpu.queue, &renderer.gfx);
-                    if self.layout.has_changed {
+                    self.widgets.handle_click(&renderer.gpu.queue, &renderer.gfx);
+                    if self.widgets.has_changed() {
                         self.request_redraw();
-                        self.layout.has_changed = false;
+                        self.widgets.invalidate_change();
                     }
                 }
                 WindowEvent::CursorMoved { position, .. } => {
-                    CONTEXT.with_borrow_mut(|ctx| ctx.cursor.hover.pos = Vector2::from((position.cast().x, position.cast().y)));
+                    let p: winit::dpi::PhysicalPosition<f32> = position.cast();
+                    CONTEXT.with_borrow_mut(|ctx| ctx.cursor.hover.pos = Vector2::from((p.x, p.y)));
                     self.detect_hover();
 
-                    self.layout.handle_hover(&renderer.gpu.queue, &renderer.gfx);
-                    if self.layout.has_changed {
+                    self.widgets.handle_hover(&renderer.gpu.queue, &renderer.gfx);
+                    if self.widgets.has_changed() {
                         self.request_redraw();
-                        self.layout.has_changed = false;
+                        self.widgets.invalidate_change();
                     }
                 }
                 _ => {}

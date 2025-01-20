@@ -127,6 +127,11 @@ impl Matrix<Vector4<f32>, 4> {
         self[3].y += ty;
     }
 
+    pub fn scale(&mut self, sw: f32, sh: f32) {
+        self[0].x = sw;
+        self[1].y = sh;
+    }
+
     pub fn data(&self) -> &[Vector4<f32>] {
         &self.data
     }
@@ -142,5 +147,27 @@ impl std::ops::Mul<Vector4<f32>> for Matrix<Vector4<f32>, 4> {
         let w = conv[3] * rhs;
 
         Vector4 { x, y, z, w }
+    }
+}
+
+//   matrix A  *  matrix B
+// [ x x x x ]  [ x y z w ] |
+// [ y y y y ]  [ x y z w ] |
+// [ z z z z ]  [ x y z w ] |
+// [ w w w w ]  [ x y z w ] |
+
+impl std::ops::Mul for Matrix<Vector4<f32>, 4> {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self::Output {
+        let conv = self.convert();
+        let rhs = rhs.convert();
+        let x = Vector4 { x: conv[0] * rhs[0], y: conv[0] * rhs[1], z: conv[0] * rhs[2], w: conv[0] * rhs[3] };
+        let y = Vector4 { x: conv[1] * rhs[0], y: conv[1] * rhs[1], z: conv[1] * rhs[2], w: conv[1] * rhs[3] };
+        let z = Vector4 { x: conv[2] * rhs[0], y: conv[2] * rhs[1], z: conv[2] * rhs[2], w: conv[2] * rhs[3] };
+        let w = Vector4 { x: conv[3] * rhs[0], y: conv[3] * rhs[1], z: conv[3] * rhs[2], w: conv[3] * rhs[3] };
+
+        Self {
+            data: [x, y, z, w],
+        }
     }
 }

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use math::{Size, Vector2};
 use crate::buffer::Gfx;
 use crate::color::Color;
-use crate::widget::{NodeId, Widget};
+use crate::view::{NodeId, View};
 use crate::texture::{image_reader, ImageData, TextureData};
 use crate::shapes::Shape;
 use crate::error::Error;
@@ -21,31 +21,37 @@ pub fn cast_slice<A: Sized, B: Sized>(p: &[A]) -> Result<&[B], Error> {
 }
 
 #[derive(Debug)]
-pub struct Layout {
+pub struct WidgetTree {
     pub nodes: Vec<NodeId>,
     pub shapes: HashMap<NodeId, Shape>,
-    pub has_changed: bool,
+    has_changed: bool,
     last_changed_id: Option<NodeId>,
-    used_space: Size<u32>,
 }
 
-impl Layout {
+impl WidgetTree {
     pub fn new() -> Self {
         Self {
             nodes: Vec::new(),
             shapes: HashMap::new(),
-            used_space: Size::new(0, 0),
             has_changed: false,
             last_changed_id: None,
         }
     }
 
-    pub fn insert(&mut self, node: impl Widget) -> &mut Self {
+    pub fn insert(&mut self, node: impl View) -> &mut Self {
         let id = node.id();
         let shape = node.shape();
         self.nodes.push(id);
         self.shapes.insert(id, shape);
         self
+    }
+
+    pub fn has_changed(&self) -> bool {
+        self.has_changed
+    }
+
+    pub fn invalidate_change(&mut self) {
+        self.has_changed = false;
     }
 
     pub fn process_texture(
@@ -152,22 +158,43 @@ impl Layout {
             if let Some(texture) = gfx.textures.iter().find(|t| t.node_id == *click_id) {
                 texture.change_color(queue, shape.color);
             }
+            eprintln!("{:?}\n", shape.transform);
             self.has_changed = true;
             self.last_changed_id = Some(*click_id)
         }
     }
 
-    pub fn calculate(&mut self) {
+    pub fn recalculate_layout(&mut self, queue: &wgpu::Queue, gfx: &Gfx) {
+        let ws = CONTEXT.with_borrow(|ctx| ctx.window_size);
+        let window_size: Size<f32> = ws.into();
+
+        self.shapes.iter_mut().for_each(|(node_id, shape)| {
+            let s = Size::<f32>::from(shape.dimensions) / window_size / 2.0;
+            let x = s.width - shape.transform[0].x;
+            let y = s.height - shape.transform[1].y;
+            let new_translate = Vector2 { x, y };
+            let current_scale = Vector2 { x: shape.transform[0].x, y: shape.transform[1].y };
+            eprintln!("{node_id:?} | {new_translate:?} | {current_scale:?}");
+            shape.set_scale(s);
+            shape.set_translate(new_translate);
+            gfx.textures[node_id.0 as usize].u_buffer.update(queue, 0, shape.transform.as_slice());
+        });
+        eprintln!();
+    }
+
+    pub fn compute_layout(&mut self) {
         let window_size: Size<f32> = CONTEXT.with_borrow(|ctx| ctx.window_size.into());
+        // this should be something like &mut LayoutCtx
+        let mut used_space = Size::new(0, 0);
 
         self.nodes.iter().for_each(|id| {
             if let Some(shape) = self.shapes.get_mut(id) {
                 let s = Size::<f32>::from(shape.dimensions) / window_size / 2.0;
-                let used = Size::<f32>::from(self.used_space) / window_size;
+                let used = Size::<f32>::from(used_space) / window_size;
                 let tx = (used.width + s.width) - 1.0;
                 let ty = 1.0 - (s.height + used.height);
                 shape.set_transform(Vector2 { x: tx, y: ty }, s);
-                self.used_space.height += shape.dimensions.height;
+                used_space.height += shape.dimensions.height;
             }
         });
     }
