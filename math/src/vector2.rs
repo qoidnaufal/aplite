@@ -6,6 +6,12 @@ pub struct Vector2<T> {
     pub y: T,
 }
 
+impl<T: Default> Default for Vector2<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: Default> Vector2<T> {
     pub fn new() -> Self {
         Self { x: T::default(), y: T::default() }
@@ -14,7 +20,7 @@ impl<T: Default> Vector2<T> {
 
 impl<T: std::fmt::Display> std::fmt::Debug for Vector2<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "x: {:0.3}, y: {:0.3}", self.x, self.y)
+        write!(f, "Vector2 {{ x: {:0.3}, y: {:0.3} }}", self.x, self.y)
     }
 }
 

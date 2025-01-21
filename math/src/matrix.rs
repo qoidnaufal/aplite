@@ -123,8 +123,8 @@ impl Matrix<Vector4<f32>, 4> {
     }
 
     pub fn translate(&mut self, tx: f32, ty: f32) {
-        self[3].x += tx;
-        self[3].y += ty;
+        self[3].x = tx;
+        self[3].y = ty;
     }
 
     pub fn scale(&mut self, sw: f32, sh: f32) {

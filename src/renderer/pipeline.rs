@@ -1,4 +1,5 @@
-use crate::{shader::SHADER, shapes::Vertex};
+use crate::shapes::Vertex;
+use super::SHADER;
 
 pub struct Pipeline {
     _shader: wgpu::ShaderModule,
@@ -117,11 +118,11 @@ pub fn bind_group(
             },
             wgpu::BindGroupEntry {
                 binding: 1,
-                resource: wgpu::BindingResource::TextureView(&view),
+                resource: wgpu::BindingResource::TextureView(view),
             },
             wgpu::BindGroupEntry {
                 binding: 2,
-                resource: wgpu::BindingResource::Sampler(&sampler),
+                resource: wgpu::BindingResource::Sampler(sampler),
             },
         ],
     })

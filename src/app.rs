@@ -8,7 +8,7 @@ use math::{Size, Vector2};
 use crate::view::{NodeId, View};
 use crate::renderer::Renderer;
 use crate::widget_tree::WidgetTree;
-use crate::gpu::GpuResources;
+use crate::renderer::GpuResources;
 use crate::error::Error;
 
 thread_local! {
@@ -302,7 +302,7 @@ impl<'a> ApplicationHandler for App<'a> {
                 }
                 WindowEvent::Resized(new_size) => {
                     CONTEXT.with_borrow_mut(|ctx| {
-                        ctx.window_size = Size::from((new_size.width, new_size.height));
+                        ctx.window_size = Size::new(new_size.width, new_size.height);
                     });
                     // on startup, this window event is called 2x
                     if self.resize_count > 0 {

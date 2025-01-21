@@ -1,8 +1,15 @@
-use crate::buffer::Gfx;
-use crate::pipeline::Pipeline;
-use crate::pipeline::bind_group_layout;
+mod gpu;
+mod buffer;
+mod shader;
+mod pipeline;
+
+pub use buffer::{Gfx, Buffer};
+pub use pipeline::Pipeline;
+pub use pipeline::{bind_group_layout, bind_group};
+pub use gpu::GpuResources;
+pub use shader::SHADER;
+
 use crate::widget_tree::WidgetTree;
-use crate::gpu::GpuResources;
 use crate::error::Error;
 use crate::app::CONTEXT;
 use crate::NodeId;
@@ -91,7 +98,7 @@ fn draw(
         timestamp_writes: None,
         occlusion_query_set: None,
     });
-    pass.set_pipeline(&pipeline);
+    pass.set_pipeline(pipeline);
     for texture in &gfx.textures {
         let v = &gfx.v_buffer[texture.node_id.0 as usize];
         let i = &gfx.i_buffer[texture.node_id.0 as usize];

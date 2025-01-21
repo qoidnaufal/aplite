@@ -5,9 +5,9 @@ use std::fs::File;
 use image::GenericImageView;
 use math::Size;
 
-use crate::buffer::Buffer;
+use crate::renderer::Buffer;
+use crate::renderer::bind_group;
 use crate::color::{Color, Rgb};
-use crate::pipeline::bind_group;
 use crate::shapes::Transform;
 use crate::NodeId;
 

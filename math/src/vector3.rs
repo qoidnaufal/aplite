@@ -7,6 +7,24 @@ pub struct Vector3<T> {
     pub z: T
 }
 
+impl<T> Default for Vector3<T>
+where T:
+    Default
+    + std::ops::Add<T, Output = T>
+    + std::ops::AddAssign
+    + std::ops::Sub<T, Output = T>
+    + std::ops::SubAssign
+    + std::ops::Mul<T, Output = T>
+    + std::ops::MulAssign
+    + std::ops::Div<T, Output = T>
+    + std::ops::DivAssign
+    + Copy
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T> Vector3<T>
 where T:
     Default

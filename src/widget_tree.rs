@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use math::{Size, Vector2};
-use crate::buffer::Gfx;
+use crate::renderer::Gfx;
 use crate::color::Color;
 use crate::view::{NodeId, View};
 use crate::texture::{image_reader, ImageData, TextureData};
@@ -168,18 +168,23 @@ impl WidgetTree {
         let ws = CONTEXT.with_borrow(|ctx| ctx.window_size);
         let window_size: Size<f32> = ws.into();
 
-        self.shapes.iter_mut().for_each(|(node_id, shape)| {
-            let s = Size::<f32>::from(shape.dimensions) / window_size / 2.0;
-            let x = s.width - shape.transform[0].x;
-            let y = s.height - shape.transform[1].y;
+        self.nodes.iter().for_each(|node_id| {
+            let shape = self.shapes.get_mut(node_id).unwrap();
+            let new_scale = Size::<f32>::from(shape.dimensions) / window_size / 2.0;
+            let delta_scale = new_scale - Size::new(shape.transform[0].x, shape.transform[1].y);
+            // let x = s.width - shape.transform[0].x;   // this might later be useful for flex style
+            // let y = s.height - shape.transform[1].y;  // this might later be useful for flex style
+            //
+            // the transform means how "far" the shape from the left & top edge
+            eprintln!("{node_id:?} | {delta_scale:?}");
+            let x = shape.transform[3].x - delta_scale.width;
+            let y = shape.transform[3].y - delta_scale.height;
             let new_translate = Vector2 { x, y };
-            let current_scale = Vector2 { x: shape.transform[0].x, y: shape.transform[1].y };
-            eprintln!("{node_id:?} | {new_translate:?} | {current_scale:?}");
-            shape.set_scale(s);
-            shape.set_translate(new_translate);
+            shape.set_transform(new_translate, new_scale);
             gfx.textures[node_id.0 as usize].u_buffer.update(queue, 0, shape.transform.as_slice());
         });
-        eprintln!();
+
+        eprintln!()
     }
 
     pub fn compute_layout(&mut self) {
@@ -188,14 +193,14 @@ impl WidgetTree {
         let mut used_space = Size::new(0, 0);
 
         self.nodes.iter().for_each(|id| {
-            if let Some(shape) = self.shapes.get_mut(id) {
-                let s = Size::<f32>::from(shape.dimensions) / window_size / 2.0;
-                let used = Size::<f32>::from(used_space) / window_size;
-                let tx = (used.width + s.width) - 1.0;
-                let ty = 1.0 - (s.height + used.height);
-                shape.set_transform(Vector2 { x: tx, y: ty }, s);
-                used_space.height += shape.dimensions.height;
-            }
+            let shape = self.shapes.get_mut(id).unwrap();
+            let scale = Size::<f32>::from(shape.dimensions) / window_size / 2.0; // div by 2.0 to set the center
+            let used = Size::<f32>::from(used_space) / window_size;
+            let x = (used.width + scale.width) - 1.0;   // -1.0 is the left edge of the screen coordinate
+            let y = 1.0 - (used.height + scale.height); //  1.0 is the top  edge of the screen coordinate
+            let translate = Vector2 { x, y };
+            shape.set_transform(translate, scale);
+            used_space.height += shape.dimensions.height;
         });
     }
 }

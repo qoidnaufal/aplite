@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use math::{tan, Matrix, Size, Vector2, Vector3, Vector4};
-use crate::buffer::Buffer;
+use crate::renderer::Buffer;
 use crate::widget_tree::cast_slice;
 use crate::color::Rgb;
 use crate::app::CONTEXT;
@@ -71,9 +71,9 @@ impl Transform {
         self.mat.translate(t.x, t.y);
     }
 
-    fn scale(&mut self, s: Size<f32>) {
-        self.mat.scale(s.width, s.height);
-    }
+    // fn scale(&mut self, s: Size<f32>) {
+    //     self.mat.scale(s.width, s.height);
+    // }
 
     pub fn as_slice(&self) -> &[u8] {
         cast_slice(self.mat.data()).unwrap()
@@ -179,18 +179,18 @@ impl Shape {
         self.transform.translate(t);
     }
 
-    pub fn set_scale(&mut self, s: Size<f32>) {
-        self.transform.scale(s);
-    }
+    // pub fn set_scale(&mut self, s: Size<f32>) {
+    //     self.transform.scale(s);
+    // }
 
     pub fn v_buffer(&self,device: &wgpu::Device) -> Buffer<Vertex> {
         let vertices = Mesh::from(self.kind).vertices;
-        Buffer::new(device, wgpu::BufferUsages::VERTEX, cast_slice(&vertices).unwrap())
+        Buffer::new(device, wgpu::BufferUsages::VERTEX, cast_slice(vertices).unwrap())
     }
 
     pub fn i_buffer(&self, device: &wgpu::Device) -> Buffer<u32> {
         let indices = Mesh::from(self.kind).indices;
-        Buffer::new(device, wgpu::BufferUsages::INDEX, cast_slice(&indices).unwrap())
+        Buffer::new(device, wgpu::BufferUsages::INDEX, cast_slice(indices).unwrap())
     }
 
     pub fn u_buffer(&self, device: &wgpu::Device) -> Buffer<Transform> {
@@ -243,19 +243,13 @@ impl Shape {
     }
 
     pub fn set_position(&mut self) {
-        let (cursor, window_size) = CONTEXT.with_borrow(|ctx| (ctx.cursor, Size::<f32>::from(ctx.window_size)));
-        let t = (cursor.hover.pos - cursor.click.pos) * 2.0;
+        let (cursor, window_size) = CONTEXT.with_borrow(|ctx| (ctx.cursor, ctx.window_size));
+        let ws = Size::<f32>::from(window_size) / 2.0;
+        let x = cursor.hover.pos.x / ws.width - 1.0;
+        let y = 1.0 - cursor.hover.pos.y / ws.height;
+        let t = Vector2 { x, y };
 
-        self.set_translate(
-            Vector2 {
-                x: t.x / window_size.width,
-                y: -t.y / window_size.height
-            }
-        );
-
-        CONTEXT.with_borrow_mut(|ctx| {
-            ctx.cursor.click.pos = cursor.hover.pos;
-        });
+        self.set_translate(t);
     }
 }
 

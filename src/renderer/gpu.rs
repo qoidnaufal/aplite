@@ -10,11 +10,22 @@ pub struct GpuResources<'a> {
     pub id: winit::window::WindowId,
 }
 
+#[cfg(all(not(target_os = "macos"), unix))]
+fn backend() -> wgpu::Backends {
+    wgpu::Backends::GL
+}
+
+#[cfg(target_os = "macos")]
+fn backend() -> wgpu::Backends {
+    wgpu::Backends::METAL
+}
+
 impl<'a> GpuResources<'a> {
     pub fn request(window: &'a Window) -> Result<Self, Error> {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
+            backends: backend(),
+            // backends: wgpu::Backends::PRIMARY,
             ..Default::default()
         });
         let surface = instance.create_surface(window)?;

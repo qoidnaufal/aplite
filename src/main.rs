@@ -1,12 +1,9 @@
 mod app;
-mod buffer;
 mod callback;
 mod color;
 mod error;
-mod gpu;
-mod pipeline;
+mod layout;
 mod renderer;
-mod shader;
 mod shapes;
 mod signal;
 mod texture;
@@ -50,9 +47,9 @@ fn add_widget(app: &mut App) {
         eprintln!("right shift {}", c4.get());
     };
 
-    let hover = move |shape: &mut Shape| { shape.set_color(|color| *color = Rgb::BLUE.into()) };
+    let hover = move |shape: &mut Shape| { shape.set_color(|color| *color = Rgb::BLUE) };
     let drag = move |shape: &mut Shape| {
-        shape.set_color(|color| *color = Rgb::GREEN.into());
+        shape.set_color(|color| *color = Rgb::GREEN);
         shape.set_position();
     };
 
