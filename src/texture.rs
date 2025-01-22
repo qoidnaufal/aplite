@@ -81,11 +81,11 @@ impl TextureData {
     }
 }
 
-fn submit_texture(queue: &wgpu::Queue, texture: wgpu::ImageCopyTexture, uv_size: Size<u32>, uv_data: &[u8]) {
+fn submit_texture(queue: &wgpu::Queue, texture: wgpu::TexelCopyTextureInfo, uv_size: Size<u32>, uv_data: &[u8]) {
     queue.write_texture(
         texture,
         uv_data,
-        wgpu::ImageDataLayout {
+        wgpu::TexelCopyBufferLayout {
             offset: 0,
             bytes_per_row: Some(4 * uv_size.width),
             rows_per_image: Some(uv_size.height),

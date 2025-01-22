@@ -12,7 +12,7 @@ pub use shader::SHADER;
 use crate::widget_tree::WidgetTree;
 use crate::error::Error;
 use crate::app::CONTEXT;
-use crate::NodeId;
+use crate::{NodeId, Rgb};
 
 pub struct Renderer<'a> {
     pub gpu: GpuResources<'a>,
@@ -85,12 +85,7 @@ fn draw(
             view,
             resolve_target: None,
             ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color {
-                    r: 0.1,
-                    g: 0.2,
-                    b: 0.3,
-                    a: 1.0,
-                }),
+                load: wgpu::LoadOp::Clear(Rgb::DARK_GRAY.into()),
                 store: wgpu::StoreOp::Store,
             }
         })],

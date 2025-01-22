@@ -158,7 +158,6 @@ impl WidgetTree {
             if let Some(texture) = gfx.textures.iter().find(|t| t.node_id == *click_id) {
                 texture.change_color(queue, shape.color);
             }
-            eprintln!("{:?}\n", shape.transform);
             self.has_changed = true;
             self.last_changed_id = Some(*click_id)
         }
@@ -176,15 +175,12 @@ impl WidgetTree {
             // let y = s.height - shape.transform[1].y;  // this might later be useful for flex style
             //
             // the transform means how "far" the shape from the left & top edge
-            eprintln!("{node_id:?} | {delta_scale:?}");
             let x = shape.transform[3].x - delta_scale.width;
             let y = shape.transform[3].y - delta_scale.height;
             let new_translate = Vector2 { x, y };
             shape.set_transform(new_translate, new_scale);
             gfx.textures[node_id.0 as usize].u_buffer.update(queue, 0, shape.transform.as_slice());
         });
-
-        eprintln!()
     }
 
     pub fn compute_layout(&mut self) {

@@ -104,6 +104,7 @@ impl Rgb<u8> {
     pub const BLUE: Self = Self { r: 0, g: 0, b: 255 };
     pub const YELLOW: Self = Self { r: 255, g: 255, b: 0 };
     pub const BLACK: Self = Self { r: 0, g: 0, b: 0 };
+    pub const DARK_GRAY: Self = Self { r: 33, g: 33, b: 29 };
     pub const WHITE: Self = Self { r: 255, g: 255, b: 255 };
 }
 
@@ -123,6 +124,17 @@ impl From<Rgb<f32>> for Rgb<u8> {
             r: (val.r * u8::MAX as f32) as u8,
             g: (val.g * u8::MAX as f32) as u8,
             b: (val.b * u8::MAX as f32) as u8,
+        }
+    }
+}
+
+impl From<Rgb<u8>> for wgpu::Color {
+    fn from(rgb: Rgb<u8>) -> Self {
+        Self {
+            r: rgb.r as f64 / u8::MAX as f64,
+            g: rgb.g as f64 / u8::MAX as f64,
+            b: rgb.b as f64 / u8::MAX as f64,
+            a: 1.0,
         }
     }
 }

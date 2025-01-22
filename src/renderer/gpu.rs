@@ -23,9 +23,8 @@ fn backend() -> wgpu::Backends {
 impl<'a> GpuResources<'a> {
     pub fn request(window: &'a Window) -> Result<Self, Error> {
         let size = window.inner_size();
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: backend(),
-            // backends: wgpu::Backends::PRIMARY,
             ..Default::default()
         });
         let surface = instance.create_surface(window)?;

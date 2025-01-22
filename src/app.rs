@@ -286,8 +286,9 @@ impl<'a> ApplicationHandler for App<'a> {
                                     eprintln!("surface lost / outdated");
                                     self.resize();
                                 },
-                                wgpu::SurfaceError::OutOfMemory => {
-                                    eprintln!("Out of Memory");
+                                wgpu::SurfaceError::OutOfMemory
+                                | wgpu::SurfaceError::Other => {
+                                    eprintln!("Out of Memory / other error");
                                     event_loop.exit();
                                 },
                                 wgpu::SurfaceError::Timeout => {

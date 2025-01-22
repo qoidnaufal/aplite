@@ -7,8 +7,8 @@ edition = "2021"
 members = [ "math", "pollster" ]
 
 [dependencies]
-wgpu = "23.0.1"
 winit = "0.30.7"
 image = { version = "0.25.5", features = ["png", "jpeg"] }
 math = { path = "./math" }
 pollster = { path = "./pollster" }
+wgpu = "24.0.0"

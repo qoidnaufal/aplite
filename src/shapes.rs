@@ -88,11 +88,10 @@ pub enum ShapeKind {
 }
 
 impl ShapeKind {
-    pub fn vertices(&self) -> usize {
+    pub fn is_triangle(&self) -> bool {
         match self {
-            ShapeKind::FilledTriangle => 3,
-            ShapeKind::FilledRectangle => 4,
-            ShapeKind::TexturedRectangle => 4,
+            ShapeKind::FilledTriangle => true,
+            _ => false
         }
     }
 }
@@ -219,7 +218,7 @@ impl Shape {
         let Size { width, height } = self.dimension();
         let Vector2 { x, y } = self.pos();
 
-        let angled = if self.kind.vertices() == 3 {
+        let angled = if self.kind.is_triangle() {
             let x_center = width / 2.0;
             let cursor_tan = tan(x + x_center - x_cursor, y - y_cursor);
             let triangle_tan = tan(x_center, height);

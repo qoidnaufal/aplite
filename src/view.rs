@@ -22,7 +22,7 @@ impl NodeId {
     }
 }
 
-pub trait View: std::fmt::Debug {
+pub trait View {
     fn id(&self) -> NodeId;
     fn shape(&self) -> Shape;
 
