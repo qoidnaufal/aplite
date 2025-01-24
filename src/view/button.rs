@@ -1,14 +1,12 @@
 use crate::{
-    color::Rgb,
-    shapes::{Shape, ShapeKind},
+    callback::CALLBACKS, color::Rgb, shapes::{Shape, ShapeKind}
 };
-use super::{NodeId, View, Widget};
+use super::{AnyView, IntoView, NodeId, View};
 
 pub fn button() -> Button {
     Button::new()
 }
 
-#[derive(Debug)]
 pub struct Button {
     id: NodeId,
 }
@@ -24,7 +22,17 @@ impl Button {
     }
 
     fn shape(&self) -> Shape {
-        Shape::filled(Rgb::RED, ShapeKind::FilledRectangle)
+        Shape::filled(Rgb::RED, ShapeKind::FilledRectangle, (300, 100))
+    }
+
+    pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
+        self
+    }
+
+    pub fn on_click<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
+        self
     }
 }
 
@@ -33,7 +41,7 @@ impl View for Button {
         self.id()
     }
 
-    fn children(&self) -> Option<&[(NodeId, Shape)]> {
+    fn children(&self) -> Option<&[AnyView]> {
         None
     }
 
@@ -42,19 +50,9 @@ impl View for Button {
     }
 }
 
-impl View for &Button {
-    fn id(&self) -> NodeId {
-        (*self).id()
-    }
-
-    fn children(&self) -> Option<&[(NodeId, Shape)]> {
-        None
-    }
-
-    fn shape(&self) -> Shape {
-        (*self).shape()
+impl IntoView for Button {
+    type V = Self;
+    fn into_view(self) -> Self::V {
+        self
     }
 }
-
-impl Widget for Button {}
-impl Widget for &Button {}

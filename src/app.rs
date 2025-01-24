@@ -5,11 +5,12 @@ use winit::event::WindowEvent;
 use winit::application::ApplicationHandler;
 use math::{Size, Vector2};
 
-use crate::view::{NodeId, View};
+use crate::view::NodeId;
 use crate::renderer::Renderer;
-use crate::storage::WidgetsStorage;
+use crate::storage::WidgetStorage;
 use crate::renderer::Gpu;
 use crate::error::Error;
+use crate::IntoView;
 
 thread_local! {
     pub static CONTEXT: RefCell<Context> = RefCell::new(Context::new());
@@ -190,7 +191,7 @@ impl<const N: usize> std::ops::IndexMut<usize> for Stats<N> {
 pub struct App<'a> {
     pub renderer: Option<Renderer<'a>>,
     pub window: Option<Window>,
-    pub widgets: WidgetsStorage,
+    pub widgets: WidgetStorage,
     initial_size: Size<u32>,
     stats: Stats<50>,
 }
@@ -200,7 +201,7 @@ impl App<'_> {
         Self {
             renderer: None,
             window: None,
-            widgets: WidgetsStorage::new(),
+            widgets: WidgetStorage::new(),
             initial_size: Size::new(0, 0),
             stats: Stats::new(),
         }
@@ -240,7 +241,7 @@ impl App<'_> {
         self.renderer.as_mut().unwrap().render(&self.widgets.nodes)
     }
 
-    pub fn add_widget(&mut self, node: impl View) -> &mut Self {
+    pub fn add_widget(&mut self, node: impl IntoView) -> &mut Self {
         self.widgets.insert(node);
         self
     }
@@ -260,8 +261,6 @@ impl<'a> ApplicationHandler for App<'a> {
         let gpu = self.request_gpu().unwrap();
         let renderer: Renderer<'a> = unsafe { std::mem::transmute(Renderer::new(gpu, &self.widgets)) };
         self.renderer = Some(renderer);
-
-        eprintln!("{:#?}", self.widgets);
     }
 
     fn window_event(

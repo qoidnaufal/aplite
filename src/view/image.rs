@@ -1,12 +1,11 @@
 use std::path::{Path, PathBuf};
-use crate::shapes::{Shape, ShapeKind};
-use super::{NodeId, View, Widget};
+use crate::{callback::CALLBACKS, shapes::{Shape, ShapeKind}};
+use super::{AnyView, IntoView, NodeId, View};
 
 pub fn image<P: AsRef<Path>>(src: P) -> Image {
     Image::new(src)
 }
 
-#[derive(Debug)]
 pub struct Image {
     id: NodeId,
     src: PathBuf,
@@ -25,6 +24,21 @@ impl Image {
     fn shape(&self) -> Shape {
         Shape::textured(self.src.clone(), ShapeKind::TexturedRectangle)
     }
+
+    pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
+        self
+    }
+
+    pub fn on_click<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
+        self
+    }
+
+    pub fn on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
+        self
+    }
 }
 
 impl View for Image {
@@ -32,7 +46,7 @@ impl View for Image {
         self.id()
     }
 
-    fn children(&self) -> Option<&[(NodeId, Shape)]> {
+    fn children(&self) -> Option<&[AnyView]> {
         None
     }
 
@@ -41,19 +55,9 @@ impl View for Image {
     }
 }
 
-impl View for &Image {
-    fn id(&self) -> NodeId {
-        (*self).id()
-    }
-
-    fn children(&self) -> Option<&[(NodeId, Shape)]> {
-        None
-    }
-
-    fn shape(&self) -> Shape {
-        (*self).shape()
+impl IntoView for Image {
+    type V = Self;
+    fn into_view(self) -> Self::V {
+        self
     }
 }
-
-impl Widget for Image {}
-impl Widget for &Image {}

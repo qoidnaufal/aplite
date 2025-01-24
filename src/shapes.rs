@@ -149,9 +149,9 @@ pub struct Shape {
 }
 
 impl Shape {
-    pub fn filled(color: Rgb<u8>, kind : ShapeKind) -> Self {
+    pub fn filled(color: Rgb<u8>, kind : ShapeKind, size: impl Into<Size<u32>>) -> Self {
         Self {
-            dimensions: Size::new(500, 500),
+            dimensions: size.into(),
             color,
             cached_color: Some(color),
             src: None,

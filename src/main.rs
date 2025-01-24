@@ -46,7 +46,7 @@ fn add_widget(app: &mut App) {
     let c4 = counter.clone();
     let shift_right = move |_: &mut Shape| {
         c4.set(|num| *num >>= 1);
-        eprintln!("right shift {}", c4.get());
+        eprintln!("shift right {}", c4.get());
     };
 
     let hover = move |shape: &mut Shape| { shape.set_color(|color| *color = Rgb::BLUE) };
@@ -56,12 +56,18 @@ fn add_widget(app: &mut App) {
     };
 
     app
-        .add_widget(vstack(
-            [button().on_click(inc).on_drag(drag).on_hover(hover)].into_iter()
+        .add_widget(hstack(
+            [
+                image("assets/image2.jpg").on_click(shift_left),
+                image("assets/image1.jpg").on_click(shift_right),
+            ]
         ).on_click(dec.clone()).on_drag(drag).on_hover(hover))
-        .add_widget(image("assets/image2.jpg").on_click(shift_left).on_drag(drag))
-        .add_widget(TestCircleWidget::new().on_click(dec).on_drag(drag).on_hover(hover))
-        .add_widget(image("assets/image1.jpg").on_click(shift_right).on_drag(drag));
+        .add_widget(vstack(
+            [
+                button().on_click(inc).on_hover(hover),
+            ]
+        ).on_click(dec.clone()).on_drag(drag).on_hover(hover))
+        .add_widget(TestCircleWidget::new().on_click(dec).on_drag(drag).on_hover(hover));
 }
 
 fn main() -> Result<(), Error> {

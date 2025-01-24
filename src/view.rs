@@ -1,11 +1,13 @@
 mod button;
 mod image;
 mod vstack;
+mod hstack;
 
 pub use {
     button::*,
     image::*,
     vstack::*,
+    hstack::*,
 };
 use std::sync::atomic::{AtomicU64, Ordering};
 use crate::{
@@ -24,30 +26,22 @@ impl NodeId {
     }
 }
 
-pub trait Widget: View {
-    fn on_hover<F: FnMut(&mut Shape) + 'static>(&self, f: F) -> &Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
-        self
-    }
+pub type AnyView = Box<dyn View>;
 
-    fn on_click<F: FnMut(&mut Shape) + 'static>(&self, f: F) -> &Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
-        self
-    }
-
-    fn on_drag<F: FnMut(&mut Shape) + 'static>(&self, f: F) -> &Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
-        self
-    }
-}
-
-pub trait View: std::fmt::Debug {
+pub trait View {
     fn id(&self) -> NodeId;
     fn shape(&self) -> Shape;
-    fn children(&self) -> Option<&[(NodeId, Shape)]>;
+    fn children(&self) -> Option<&[AnyView]>;
 }
 
-#[derive(Debug)]
+pub trait IntoView: Sized {
+    type V: View + 'static;
+    fn into_view(self) -> Self::V;
+    fn into_any(self) -> AnyView {
+        Box::new(self.into_view())
+    }
+}
+
 pub struct TestCircleWidget {
     id: NodeId,
 }
@@ -63,7 +57,23 @@ impl TestCircleWidget {
     }
 
     fn shape(&self) -> Shape {
-        Shape::filled(Rgb::YELLOW, ShapeKind::FilledTriangle)
+        Shape::filled(Rgb::YELLOW, ShapeKind::FilledTriangle, (500, 500))
+
+    }
+
+    pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
+        self
+    }
+
+    pub fn on_click<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
+        self
+    }
+
+    pub fn on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
+        self
     }
 }
 
@@ -72,7 +82,7 @@ impl View for TestCircleWidget {
         self.id()
     }
 
-    fn children(&self) -> Option<&[(NodeId, Shape)]> {
+    fn children(&self) -> Option<&[Box<dyn View>]> {
         None
     }
 
@@ -81,19 +91,9 @@ impl View for TestCircleWidget {
     }
 }
 
-impl View for &TestCircleWidget {
-    fn id(&self) -> NodeId {
-        (*self).id()
-    }
-
-    fn children(&self) -> Option<&[(NodeId, Shape)]> {
-        None
-    }
-
-    fn shape(&self) -> Shape {
-        (*self).shape()
+impl IntoView for TestCircleWidget {
+    type V = Self;
+    fn into_view(self) -> Self::V {
+        self
     }
 }
-
-impl Widget for TestCircleWidget {}
-impl Widget for &TestCircleWidget {}

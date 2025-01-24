@@ -10,7 +10,7 @@ pub use gpu::Gpu;
 pub use shader::SHADER;
 
 use crate::shapes::Shape;
-use crate::storage::WidgetsStorage;
+use crate::storage::WidgetStorage;
 use crate::error::Error;
 use crate::app::CONTEXT;
 use crate::{NodeId, Rgb};
@@ -22,7 +22,7 @@ pub struct Renderer<'a> {
 }
 
 impl<'a> Renderer<'a> {
-    pub fn new(gpu: Gpu<'a>, widgets: &WidgetsStorage) -> Self {
+    pub fn new(gpu: Gpu<'a>, widgets: &WidgetStorage) -> Self {
         let bg_layout = bind_group_layout(&gpu.device);
         let mut gfx = Gfx::default();
         let pipeline = Pipeline::new(&gpu.device, gpu.config.format, &bg_layout);
@@ -35,14 +35,14 @@ impl<'a> Renderer<'a> {
         }
     }
 
-    pub fn resize(&mut self, widgets: &mut WidgetsStorage) {
+    pub fn resize(&mut self, widgets: &mut WidgetStorage) {
         let nws = CONTEXT.with_borrow(|ctx| ctx.window_size);
         if nws.width > 0 && nws.height > 0 {
             self.gpu.config.width = nws.width;
             self.gpu.config.height = nws.height;
             self.gpu.configure();
         }
-        widgets.recalculate_layout();
+        widgets.compute_layout();
     }
 
     pub fn update(&mut self, id: &NodeId, shape: &Shape) {

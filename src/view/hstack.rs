@@ -1,21 +1,19 @@
 use math::Size;
-
 use crate::callback::CALLBACKS;
 use crate::Rgb;
 use crate::shapes::{Shape, ShapeKind};
-
 use super::{AnyView, IntoView, NodeId, View};
 
-pub fn vstack(child_nodes: impl IntoIterator<Item = impl IntoView>) -> VStack {
-    VStack::new(child_nodes)
+pub fn hstack(child_nodes: impl IntoIterator<Item = impl IntoView>) -> HStack {
+    HStack::new(child_nodes)
 }
 
-pub struct VStack {
+pub struct HStack {
     id: NodeId,
-    children: Vec<Box<dyn View>>,
+    children: Vec<AnyView>,
 }
 
-impl VStack {
+impl HStack {
     fn new(child_nodes: impl IntoIterator<Item = impl IntoView>) -> Self {
         let id = NodeId::new();
         let children = child_nodes.into_iter().map(IntoView::into_any).collect();
@@ -56,7 +54,7 @@ impl VStack {
     }
 }
 
-impl View for VStack {
+impl View for HStack {
     fn id(&self) -> NodeId {
         self.id()
     }
@@ -70,7 +68,7 @@ impl View for VStack {
     }
 }
 
-impl IntoView for VStack {
+impl IntoView for HStack {
     type V = Self;
     fn into_view(self) -> Self::V {
         self

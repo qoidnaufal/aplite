@@ -1,9 +1,6 @@
-use std::collections::HashMap;
-use math::Size;
-use crate::NodeId;
+use math::{Matrix, Size, Vector4};
 
 pub struct LayoutCtx {
     size: Size<u32>,
-    children: HashMap<NodeId, Vec<NodeId>>,
-    parent: HashMap<NodeId, Option<NodeId>>,
+    transform: Matrix<Vector4<f32>, 4>,
 }

@@ -8,6 +8,7 @@ use crate::shapes::Shape;
 use crate::error::Error;
 use crate::callback::CALLBACKS;
 use crate::app::{MouseAction, CONTEXT};
+use crate::IntoView;
 
 pub fn cast_slice<A: Sized, B: Sized>(p: &[A]) -> Result<&[B], Error> {
     if align_of::<B>() > align_of::<A>()
@@ -21,7 +22,7 @@ pub fn cast_slice<A: Sized, B: Sized>(p: &[A]) -> Result<&[B], Error> {
 }
 
 #[derive(Debug)]
-pub struct WidgetsStorage {
+pub struct WidgetStorage {
     pub nodes: Vec<NodeId>,
     pub shapes: HashMap<NodeId, Shape>,
     pub children: HashMap<NodeId, Vec<NodeId>>,
@@ -29,7 +30,7 @@ pub struct WidgetsStorage {
     pub changed_ids: Vec<NodeId>,
 }
 
-impl WidgetsStorage {
+impl WidgetStorage {
     pub fn new() -> Self {
         Self {
             nodes: Vec::new(),
@@ -40,23 +41,26 @@ impl WidgetsStorage {
         }
     }
 
-    pub fn insert(&mut self, node: impl View) -> &mut Self {
+    pub fn insert(&mut self, node: impl IntoView) -> &mut Self {
+        let node = node.into_view();
         let id = node.id();
         let shape = node.shape();
-        if let Some(children) = node.children() {
-            children.iter().for_each(|(child_id, shape)| {
-                self.nodes.push(*child_id);
-                self.shapes.insert(*child_id, shape.clone());
-                self.parent.insert(*child_id, Some(id));
-                if let Some(child_storage) = self.children.get_mut(&id) {
-                    child_storage.push(*child_id);
-                } else {
-                    self.children.insert(id, vec![*child_id]);
-                }
-            });
-        }
         self.nodes.push(id);
         self.shapes.insert(id, shape);
+        if let Some(children) = node.children() {
+            children.iter().for_each(|child_view| {
+                let child_id = child_view.id();
+                let child_shape = child_view.shape();
+                self.nodes.push(child_id);
+                self.shapes.insert(child_id, child_shape);
+                self.parent.insert(child_id, Some(id));
+            });
+            if let Some(child_storage) = self.children.get_mut(&id) {
+                child_storage.extend(children.iter().map(|v| v.id()));
+            } else {
+                self.children.insert(id, children.iter().map(|v| v.id()).collect());
+            }
+        }
         self
     }
 
@@ -169,24 +173,6 @@ impl WidgetsStorage {
         }
     }
 
-    pub fn recalculate_layout(&mut self) {
-        let ws = CONTEXT.with_borrow(|ctx| ctx.window_size);
-        let window_size: Size<f32> = ws.into();
-        let mut used_space = Size::new(0, 0);
-
-        self.nodes.iter().for_each(|node_id| {
-            let shape = self.shapes.get_mut(node_id).unwrap();
-            let new_scale = Size::<f32>::from(shape.dimensions) / window_size / 2.0;
-            let used = Size::<f32>::from(used_space) / window_size;
-            let x = (used.width + new_scale.width) - 1.0;
-            let y = 1.0 - (used.height + new_scale.height);
-            let translate = Vector2 { x, y };
-            shape.set_transform(translate, new_scale);
-            self.changed_ids.push(*node_id);
-            used_space.height += shape.dimensions.height;
-        });
-    }
-
     pub fn compute_layout(&mut self) {
         let window_size: Size<f32> = CONTEXT.with_borrow(|ctx| ctx.window_size.into());
         // this should be something like &mut LayoutCtx
@@ -200,6 +186,7 @@ impl WidgetsStorage {
             let y = 1.0 - (used.height + scale.height); //  1.0 is the top  edge of the screen coordinate
             let translate = Vector2 { x, y };
             shape.set_transform(translate, scale);
+            self.changed_ids.push(*id);
             used_space.height += shape.dimensions.height;
         });
     }
