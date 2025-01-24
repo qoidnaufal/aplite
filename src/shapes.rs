@@ -2,9 +2,10 @@ use std::path::PathBuf;
 
 use math::{tan, Matrix, Size, Vector2, Vector3, Vector4};
 use crate::renderer::Buffer;
-use crate::widget_tree::cast_slice;
+use crate::storage::cast_slice;
 use crate::color::Rgb;
 use crate::app::CONTEXT;
+use crate::NodeId;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -182,18 +183,18 @@ impl Shape {
     //     self.transform.scale(s);
     // }
 
-    pub fn v_buffer(&self,device: &wgpu::Device) -> Buffer<Vertex> {
+    pub fn v_buffer(&self, node_id: NodeId, device: &wgpu::Device) -> Buffer<Vertex> {
         let vertices = Mesh::from(self.kind).vertices;
-        Buffer::new(device, wgpu::BufferUsages::VERTEX, cast_slice(vertices).unwrap())
+        Buffer::new(device, wgpu::BufferUsages::VERTEX, cast_slice(vertices).unwrap(), node_id)
     }
 
-    pub fn i_buffer(&self, device: &wgpu::Device) -> Buffer<u32> {
+    pub fn i_buffer(&self, node_id: NodeId, device: &wgpu::Device) -> Buffer<Vec<u32>> {
         let indices = Mesh::from(self.kind).indices;
-        Buffer::new(device, wgpu::BufferUsages::INDEX, cast_slice(indices).unwrap())
+        Buffer::new(device, wgpu::BufferUsages::INDEX, cast_slice(indices).unwrap(), node_id)
     }
 
-    pub fn u_buffer(&self, device: &wgpu::Device) -> Buffer<Transform> {
-        Buffer::new(device, wgpu::BufferUsages::UNIFORM, self.transform.as_slice())
+    pub fn u_buffer(&self, node_id: NodeId, device: &wgpu::Device) -> Buffer<Transform> {
+        Buffer::new(device, wgpu::BufferUsages::UNIFORM, self.transform.as_slice(), node_id)
     }
 
     fn dimension(&self) -> Size<f32> {
@@ -211,7 +212,7 @@ impl Shape {
     }
 
     pub fn is_hovered(&self) -> bool {
-        let (cursor, window_size) = CONTEXT.with_borrow(|ctx| (ctx.cursor, ctx.window_size));
+        let (cursor, window_size) = CONTEXT.with_borrow(|ctx| (ctx.cursor.clone(), ctx.window_size));
         let x_cursor = ((cursor.hover.pos.x / window_size.width as f32) - 0.5) * 2.0;
         let y_cursor = (0.5 - (cursor.hover.pos.y / window_size.height as f32)) * 2.0;
 
@@ -242,7 +243,7 @@ impl Shape {
     }
 
     pub fn set_position(&mut self) {
-        let (cursor, window_size) = CONTEXT.with_borrow(|ctx| (ctx.cursor, ctx.window_size));
+        let (cursor, window_size) = CONTEXT.with_borrow(|ctx| (ctx.cursor.clone(), ctx.window_size));
         let ws = Size::<f32>::from(window_size) / 2.0;
         let x = cursor.hover.pos.x / ws.width - 1.0;
         let y = 1.0 - cursor.hover.pos.y / ws.height;

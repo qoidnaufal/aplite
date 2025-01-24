@@ -6,27 +6,27 @@ mod pipeline;
 pub use buffer::{Gfx, Buffer};
 pub use pipeline::Pipeline;
 pub use pipeline::{bind_group_layout, bind_group};
-pub use gpu::GpuResources;
+pub use gpu::Gpu;
 pub use shader::SHADER;
 
-use crate::widget_tree::WidgetTree;
+use crate::shapes::Shape;
+use crate::storage::WidgetsStorage;
 use crate::error::Error;
 use crate::app::CONTEXT;
 use crate::{NodeId, Rgb};
 
 pub struct Renderer<'a> {
-    pub gpu: GpuResources<'a>,
+    pub gpu: Gpu<'a>,
     pipeline: Pipeline,
     pub gfx: Gfx
 }
 
 impl<'a> Renderer<'a> {
-    pub fn new(gpu: GpuResources<'a>, widgets: &WidgetTree) -> Self {
+    pub fn new(gpu: Gpu<'a>, widgets: &WidgetsStorage) -> Self {
         let bg_layout = bind_group_layout(&gpu.device);
         let mut gfx = Gfx::default();
-        widgets.process_texture(&gpu.device, &gpu.queue, &bg_layout, &mut gfx);
-
         let pipeline = Pipeline::new(&gpu.device, gpu.config.format, &bg_layout);
+        widgets.prepare(&gpu.device, &gpu.queue, &bg_layout, &mut gfx);
 
         Self {
             gpu,
@@ -35,23 +35,25 @@ impl<'a> Renderer<'a> {
         }
     }
 
-    pub fn resize(&mut self, widgets: &mut WidgetTree) {
+    pub fn resize(&mut self, widgets: &mut WidgetsStorage) {
         let nws = CONTEXT.with_borrow(|ctx| ctx.window_size);
         if nws.width > 0 && nws.height > 0 {
             self.gpu.config.width = nws.width;
             self.gpu.config.height = nws.height;
             self.gpu.configure();
         }
-        widgets.recalculate_layout(&self.gpu.queue, &self.gfx);
+        widgets.recalculate_layout();
     }
 
-    pub fn update(&mut self, data: &[u8], id: &NodeId) {
-        if let Some(texture) = self.gfx.textures.iter().find(|t| t.node_id == *id) {
-            texture.u_buffer.update(&self.gpu.queue, 0, data);
+    pub fn update(&mut self, id: &NodeId, shape: &Shape) {
+        if let Some(texture) = self.gfx.textures.get_mut(id) {
+            let data = shape.transform.as_slice();
+            texture.change_color(&self.gpu.queue, shape.color);
+            texture.u_buffer.update(&self.gpu.device, &self.gpu.queue, 0, data);
         }
     }
 
-    pub fn render(&mut self) -> Result<(), Error> {
+    pub fn render(&mut self, nodes: &[NodeId]) -> Result<(), Error> {
         let output = self.gpu.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
@@ -63,6 +65,7 @@ impl<'a> Renderer<'a> {
             &mut encoder,
             &view,
             &self.pipeline.pipeline,
+            nodes,
             &self.gfx,
         );
 
@@ -77,6 +80,7 @@ fn draw(
     encoder: &mut wgpu::CommandEncoder,
     view: &wgpu::TextureView,
     pipeline: &wgpu::RenderPipeline,
+    nodes: &[NodeId],
     gfx: &Gfx,
 ) {
     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -94,13 +98,14 @@ fn draw(
         occlusion_query_set: None,
     });
     pass.set_pipeline(pipeline);
-    for texture in &gfx.textures {
-        let v = &gfx.v_buffer[texture.node_id.0 as usize];
-        let i = &gfx.i_buffer[texture.node_id.0 as usize];
+    for node_id in nodes {
+        let v = &gfx.v_buffer[node_id];
+        let i = &gfx.i_buffer[node_id];
+        let t = &gfx.textures[node_id];
 
-        pass.set_bind_group(0, &texture.bind_group, &[]);
+        pass.set_bind_group(0, &t.bind_group, &[]);
         pass.set_vertex_buffer(0, v.slice());
         pass.set_index_buffer(i.slice(), wgpu::IndexFormat::Uint32);
-        pass.draw_indexed(0..i.len, 0, 0..1);
+        pass.draw_indexed(0..i.materials, 0, 0..1);
     }
 }

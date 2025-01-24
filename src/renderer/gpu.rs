@@ -2,7 +2,7 @@ use winit::window::Window;
 
 use crate::error::Error;
 
-pub struct GpuResources<'a> {
+pub struct Gpu<'a> {
     pub surface: wgpu::Surface<'a>,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -20,7 +20,7 @@ fn backend() -> wgpu::Backends {
     wgpu::Backends::METAL
 }
 
-impl<'a> GpuResources<'a> {
+impl<'a> Gpu<'a> {
     pub fn request(window: &'a Window) -> Result<Self, Error> {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {

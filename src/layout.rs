@@ -1,7 +1,9 @@
+use std::collections::HashMap;
 use math::Size;
-use winit::window::Window;
+use crate::NodeId;
 
-pub struct LayoutCtx<'a> {
-    window: &'a Window,
+pub struct LayoutCtx {
     size: Size<u32>,
+    children: HashMap<NodeId, Vec<NodeId>>,
+    parent: HashMap<NodeId, Option<NodeId>>,
 }

@@ -7,7 +7,7 @@ use crate::texture::{image_reader, ImageData, TextureData};
 use crate::shapes::Shape;
 use crate::error::Error;
 use crate::callback::CALLBACKS;
-use crate::app::CONTEXT;
+use crate::app::{MouseAction, CONTEXT};
 
 pub fn cast_slice<A: Sized, B: Sized>(p: &[A]) -> Result<&[B], Error> {
     if align_of::<B>() > align_of::<A>()
@@ -21,40 +21,50 @@ pub fn cast_slice<A: Sized, B: Sized>(p: &[A]) -> Result<&[B], Error> {
 }
 
 #[derive(Debug)]
-pub struct WidgetTree {
+pub struct WidgetsStorage {
     pub nodes: Vec<NodeId>,
     pub shapes: HashMap<NodeId, Shape>,
-    has_changed: bool,
-    last_changed_id: Option<NodeId>,
+    pub children: HashMap<NodeId, Vec<NodeId>>,
+    pub parent: HashMap<NodeId, Option<NodeId>>,
+    pub changed_ids: Vec<NodeId>,
 }
 
-impl WidgetTree {
+impl WidgetsStorage {
     pub fn new() -> Self {
         Self {
             nodes: Vec::new(),
             shapes: HashMap::new(),
-            has_changed: false,
-            last_changed_id: None,
+            children: HashMap::new(),
+            parent: HashMap::new(),
+            changed_ids: Vec::new(),
         }
     }
 
     pub fn insert(&mut self, node: impl View) -> &mut Self {
         let id = node.id();
         let shape = node.shape();
+        if let Some(children) = node.children() {
+            children.iter().for_each(|(child_id, shape)| {
+                self.nodes.push(*child_id);
+                self.shapes.insert(*child_id, shape.clone());
+                self.parent.insert(*child_id, Some(id));
+                if let Some(child_storage) = self.children.get_mut(&id) {
+                    child_storage.push(*child_id);
+                } else {
+                    self.children.insert(id, vec![*child_id]);
+                }
+            });
+        }
         self.nodes.push(id);
         self.shapes.insert(id, shape);
         self
     }
 
     pub fn has_changed(&self) -> bool {
-        self.has_changed
+        !self.changed_ids.is_empty()
     }
 
-    pub fn invalidate_change(&mut self) {
-        self.has_changed = false;
-    }
-
-    pub fn process_texture(
+    pub fn prepare(
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -71,9 +81,9 @@ impl WidgetTree {
                         data: Color::from(shape.color).to_vec(),
                     }
                 };
-                let v = shape.v_buffer(device);
-                let i = shape.i_buffer(device);
-                let u = shape.u_buffer(device);
+                let v = shape.v_buffer(*node_id, device);
+                let i = shape.i_buffer(*node_id, device);
+                let u = shape.u_buffer(*node_id, device);
                 let t = TextureData::new(
                     device,
                     queue,
@@ -81,12 +91,11 @@ impl WidgetTree {
                     u,
                     image_data.dimension,
                     &image_data.data,
-                    *node_id,
                 );
 
-                gfx.v_buffer.push(v);
-                gfx.i_buffer.push(i);
-                gfx.textures.push(t);
+                gfx.v_buffer.insert(*node_id, v);
+                gfx.i_buffer.insert(*node_id, i);
+                gfx.textures.insert(*node_id, t);
             }
         });
     }
@@ -97,35 +106,30 @@ impl WidgetTree {
         });
         if let Some((id, _)) = hovered {
             CONTEXT.with_borrow_mut(|ctx| {
-                if let Some(click_id) = ctx.cursor.click.obj {
-                    ctx.cursor.hover.obj = Some(click_id);
-                } else {
-                    ctx.cursor.hover.obj = Some(*id);
+                if ctx.cursor.click.obj.is_none() {
+                    ctx.cursor.hover.prev = ctx.cursor.hover.curr;
+                    ctx.cursor.hover.curr = Some(*id);
                 }
             })
         } else {
-            CONTEXT.with_borrow_mut(|ctx| ctx.cursor.hover.obj = None)
+            CONTEXT.with_borrow_mut(|ctx| {
+                ctx.cursor.hover.prev = ctx.cursor.hover.curr.take();
+            });
         }
     }
 
-    pub fn handle_hover(&mut self, queue: &wgpu::Queue, gfx: &Gfx) {
+    pub fn handle_hover(&mut self) {
         let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
-        if let (Some(ref hover_id), Some(ref change_id), None) = (
-            cursor.hover.obj, self.last_changed_id, cursor.click.obj
-        ) { if hover_id == change_id { return; } }
-
-        if let Some(ref change_id) = self.last_changed_id.take() {
-            if cursor.hover.obj.is_some_and(|hover_id| hover_id != *change_id) || cursor.hover.obj.is_none() {
-                let shape = self.shapes.get_mut(change_id).unwrap();
-                if shape.revert_color() {
-                    if let Some(texture) = gfx.textures.iter().find(|t| t.node_id == *change_id) {
-                        texture.change_color(queue, shape.color);
-                    }
-                    self.has_changed = true;
-                }
+        if cursor.is_hovering_same_obj() && cursor.click.obj.is_none() {
+            return;
+        }
+        if let Some(ref prev_id) = CONTEXT.with_borrow_mut(|ctx| ctx.cursor.hover.prev.take()) {
+            let shape = self.shapes.get_mut(prev_id).unwrap();
+            if shape.revert_color() {
+                self.changed_ids.push(*prev_id);
             }
         }
-        if let Some(ref hover_id) = cursor.hover.obj {
+        if let Some(ref hover_id) = cursor.hover.curr {
             let shape = self.shapes.get_mut(hover_id).unwrap();
             CALLBACKS.with_borrow_mut(|callbacks| {
                 if let Some(on_hover) = callbacks.on_hover.get_mut(hover_id) {
@@ -137,49 +141,49 @@ impl WidgetTree {
                     }
                 }
             });
-            
-            if let Some(texture) = gfx.textures.iter().find(|t| t.node_id == *hover_id) {
-                texture.change_color(queue, shape.color);
-            }
-            self.has_changed = true;
-            self.last_changed_id = Some(*hover_id);
+            self.changed_ids.push(*hover_id);
         }
     }
 
-    pub fn handle_click(&mut self, queue: &wgpu::Queue, gfx: &Gfx) {
-        let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
+    pub fn handle_click(&mut self) {
+        let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor.clone());
         if let Some(ref click_id) = cursor.click.obj {
             let shape = self.shapes.get_mut(click_id).unwrap();
             CALLBACKS.with_borrow_mut(|callbacks| {
                 if let Some(on_click) = callbacks.on_click.get_mut(click_id) {
                     on_click(shape);
+                    self.changed_ids.push(*click_id);
                 }
             });
-            if let Some(texture) = gfx.textures.iter().find(|t| t.node_id == *click_id) {
-                texture.change_color(queue, shape.color);
+        }
+        if cursor.state.action == MouseAction::Released {
+            if let Some(ref hover_id) = cursor.hover.curr {
+                let shape = self.shapes.get_mut(hover_id).unwrap();
+                CALLBACKS.with_borrow_mut(|callbacks| {
+                    if let Some(on_hover) = callbacks.on_hover.get_mut(hover_id) {
+                        on_hover(shape);
+                        self.changed_ids.push(*hover_id);
+                    }
+                });
             }
-            self.has_changed = true;
-            self.last_changed_id = Some(*click_id)
         }
     }
 
-    pub fn recalculate_layout(&mut self, queue: &wgpu::Queue, gfx: &Gfx) {
+    pub fn recalculate_layout(&mut self) {
         let ws = CONTEXT.with_borrow(|ctx| ctx.window_size);
         let window_size: Size<f32> = ws.into();
+        let mut used_space = Size::new(0, 0);
 
         self.nodes.iter().for_each(|node_id| {
             let shape = self.shapes.get_mut(node_id).unwrap();
             let new_scale = Size::<f32>::from(shape.dimensions) / window_size / 2.0;
-            let delta_scale = new_scale - Size::new(shape.transform[0].x, shape.transform[1].y);
-            // let x = s.width - shape.transform[0].x;   // this might later be useful for flex style
-            // let y = s.height - shape.transform[1].y;  // this might later be useful for flex style
-            //
-            // the transform means how "far" the shape from the left & top edge
-            let x = shape.transform[3].x - delta_scale.width;
-            let y = shape.transform[3].y - delta_scale.height;
-            let new_translate = Vector2 { x, y };
-            shape.set_transform(new_translate, new_scale);
-            gfx.textures[node_id.0 as usize].u_buffer.update(queue, 0, shape.transform.as_slice());
+            let used = Size::<f32>::from(used_space) / window_size;
+            let x = (used.width + new_scale.width) - 1.0;
+            let y = 1.0 - (used.height + new_scale.height);
+            let translate = Vector2 { x, y };
+            shape.set_transform(translate, new_scale);
+            self.changed_ids.push(*node_id);
+            used_space.height += shape.dimensions.height;
         });
     }
 

@@ -7,7 +7,7 @@ mod renderer;
 mod shapes;
 mod signal;
 mod texture;
-mod widget_tree;
+mod storage;
 mod view;
 
 use app::App;
@@ -24,9 +24,10 @@ fn add_widget(app: &mut App) {
     eprintln!("init {}", counter.get());
 
     let c1 = counter.clone();
-    let inc = move |_: &mut Shape| {
+    let inc = move |shape: &mut Shape| {
         c1.set(|num| *num += 1);
         eprintln!("inc1 {}", c1.get());
+        shape.set_color(|color| *color = Rgb::WHITE);
     };
 
     let c2 = counter.clone();
@@ -36,13 +37,14 @@ fn add_widget(app: &mut App) {
     };
 
     let c3 = counter.clone();
-    let dec = move |_: &mut Shape| {
+    let dec = move |shape: &mut Shape| {
         c3.set(|num| *num -= 1);
         eprintln!("dec {}", c3.get());
+        shape.set_color(|color| color.r += 150);
     };
 
     let c4 = counter.clone();
-    let right_shift = move |_: &mut Shape| {
+    let shift_right = move |_: &mut Shape| {
         c4.set(|num| *num >>= 1);
         eprintln!("right shift {}", c4.get());
     };
@@ -54,11 +56,12 @@ fn add_widget(app: &mut App) {
     };
 
     app
-        .add_widget(button().on_click(inc).on_drag(drag).on_hover(hover))
-        .add_widget(TestWidget::new().on_click(dec).on_drag(drag).on_hover(hover))
-        .add_widget(image("assets/image2.jpg").on_click(shift_left.clone()).on_drag(drag))
-        .add_widget(TestCircleWidget::new().on_click(right_shift).on_drag(drag).on_hover(hover))
-        .add_widget(image("assets/image1.jpg").on_click(shift_left).on_drag(drag));
+        .add_widget(vstack(
+            [button().on_click(inc).on_drag(drag).on_hover(hover)].into_iter()
+        ).on_click(dec.clone()).on_drag(drag).on_hover(hover))
+        .add_widget(image("assets/image2.jpg").on_click(shift_left).on_drag(drag))
+        .add_widget(TestCircleWidget::new().on_click(dec).on_drag(drag).on_hover(hover))
+        .add_widget(image("assets/image1.jpg").on_click(shift_right).on_drag(drag));
 }
 
 fn main() -> Result<(), Error> {

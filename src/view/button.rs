@@ -2,13 +2,13 @@ use crate::{
     color::Rgb,
     shapes::{Shape, ShapeKind},
 };
-use super::{NodeId, View};
+use super::{NodeId, View, Widget};
 
 pub fn button() -> Button {
     Button::new()
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 pub struct Button {
     id: NodeId,
 }
@@ -33,6 +33,10 @@ impl View for Button {
         self.id()
     }
 
+    fn children(&self) -> Option<&[(NodeId, Shape)]> {
+        None
+    }
+
     fn shape(&self) -> Shape {
         self.shape()
     }
@@ -43,7 +47,14 @@ impl View for &Button {
         (*self).id()
     }
 
+    fn children(&self) -> Option<&[(NodeId, Shape)]> {
+        None
+    }
+
     fn shape(&self) -> Shape {
         (*self).shape()
     }
 }
+
+impl Widget for Button {}
+impl Widget for &Button {}

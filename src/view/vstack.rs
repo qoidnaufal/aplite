@@ -1,21 +1,23 @@
-use std::path::{Path, PathBuf};
+use crate::Rgb;
 use crate::shapes::{Shape, ShapeKind};
+
 use super::{NodeId, View, Widget};
 
-pub fn image<P: AsRef<Path>>(src: P) -> Image {
-    Image::new(src)
+pub fn vstack(child_node: impl Iterator<Item = impl View>) -> VStack {
+    VStack::new(child_node)
 }
 
 #[derive(Debug)]
-pub struct Image {
+pub struct VStack {
     id: NodeId,
-    src: PathBuf,
+    child: Vec<(NodeId, Shape)>,
 }
 
-impl Image {
-    pub fn new<P: AsRef<Path>>(path: P) -> Self {
+impl VStack {
+    fn new(child_node: impl Iterator<Item = impl View>) -> Self {
         let id = NodeId::new();
-        Self { id, src: path.as_ref().to_path_buf() }
+        let child = child_node.map(|v| (v.id(), v.shape())).collect();
+        Self { id, child }
     }
 
     fn id(&self) -> NodeId {
@@ -23,17 +25,18 @@ impl Image {
     }
 
     fn shape(&self) -> Shape {
-        Shape::textured(self.src.clone(), ShapeKind::TexturedRectangle)
+        Shape::filled(Rgb::BLACK, ShapeKind::FilledRectangle)
     }
+
 }
 
-impl View for Image {
+impl View for VStack {
     fn id(&self) -> NodeId {
         self.id()
     }
 
     fn children(&self) -> Option<&[(NodeId, Shape)]> {
-        None
+        Some(&self.child)
     }
 
     fn shape(&self) -> Shape {
@@ -41,13 +44,13 @@ impl View for Image {
     }
 }
 
-impl View for &Image {
+impl View for &VStack {
     fn id(&self) -> NodeId {
         (*self).id()
     }
 
     fn children(&self) -> Option<&[(NodeId, Shape)]> {
-        None
+        Some(&self.child)
     }
 
     fn shape(&self) -> Shape {
@@ -55,5 +58,5 @@ impl View for &Image {
     }
 }
 
-impl Widget for Image {}
-impl Widget for &Image {}
+impl Widget for VStack {}
+impl Widget for &VStack {}

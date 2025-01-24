@@ -9,7 +9,6 @@ use crate::renderer::Buffer;
 use crate::renderer::bind_group;
 use crate::color::{Color, Rgb};
 use crate::shapes::Transform;
-use crate::NodeId;
 
 pub fn image_reader<P: AsRef<Path>>(path: P) -> ImageData {
     let file = File::open(path).unwrap();
@@ -33,7 +32,6 @@ pub struct ImageData {
 
 #[derive(Debug)]
 pub struct TextureData {
-    pub node_id: NodeId,
     texture: wgpu::Texture,
     pub bind_group: wgpu::BindGroup,
     pub u_buffer: Buffer<Transform>,
@@ -47,7 +45,6 @@ impl TextureData {
         u_buffer: Buffer<Transform>,
         size: Size<u32>,
         uv_data: &[u8],
-        node_id: NodeId,
     ) -> Self {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("texture"),
@@ -71,7 +68,7 @@ impl TextureData {
 
         submit_texture(queue, texture.as_image_copy(), size, uv_data);
 
-        Self { node_id, texture, bind_group, u_buffer }
+        Self { texture, bind_group, u_buffer }
     }
 
     pub fn change_color(&self, queue: &wgpu::Queue, new_color: Rgb<u8>) {

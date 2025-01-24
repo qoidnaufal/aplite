@@ -7,8 +7,8 @@ use math::{Size, Vector2};
 
 use crate::view::{NodeId, View};
 use crate::renderer::Renderer;
-use crate::widget_tree::WidgetTree;
-use crate::renderer::GpuResources;
+use crate::storage::WidgetsStorage;
+use crate::renderer::Gpu;
 use crate::error::Error;
 
 thread_local! {
@@ -34,7 +34,7 @@ impl Context {
 
         match (self.cursor.state.action, self.cursor.state.button) {
             (MouseAction::Pressed, MouseButton::Left) => {
-                self.cursor.click.obj = self.cursor.hover.obj;
+                self.cursor.click.obj = self.cursor.hover.curr;
                 self.cursor.click.pos = self.cursor.hover.pos;
             },
             (MouseAction::Released, MouseButton::Left) => self.cursor.click.obj = None,
@@ -96,7 +96,8 @@ pub struct MouseClick {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MouseHover {
     pub pos: Vector2<f32>,
-    pub obj: Option<NodeId>,
+    pub curr: Option<NodeId>,
+    pub prev: Option<NodeId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -111,7 +112,8 @@ impl Cursor {
         Self {
             hover: MouseHover {
                 pos: Vector2::new(),
-                obj: None,
+                curr: None,
+                prev: None,
             },
             state: MouseState {
                 action: MouseAction::Released,
@@ -134,6 +136,10 @@ impl Cursor {
     pub fn is_dragging(&self, hover_id: NodeId) -> bool {
         self.click.obj.is_some_and(|click_id| click_id == hover_id)
             && self.hover.pos != self.click.pos
+    }
+
+    pub fn is_hovering_same_obj(&self) -> bool {
+        self.hover.curr == self.hover.prev
     }
 }
 
@@ -184,10 +190,9 @@ impl<const N: usize> std::ops::IndexMut<usize> for Stats<N> {
 pub struct App<'a> {
     pub renderer: Option<Renderer<'a>>,
     pub window: Option<Window>,
-    pub widgets: WidgetTree,
+    pub widgets: WidgetsStorage,
     initial_size: Size<u32>,
-    resize_count: usize,
-    stats: Stats<20>,
+    stats: Stats<50>,
 }
 
 impl App<'_> {
@@ -195,15 +200,14 @@ impl App<'_> {
         Self {
             renderer: None,
             window: None,
-            widgets: WidgetTree::new(),
+            widgets: WidgetsStorage::new(),
             initial_size: Size::new(0, 0),
-            resize_count: 0,
             stats: Stats::new(),
         }
     }
 
-    fn request_gpu(&self) -> Result<GpuResources, Error> {
-        let gpu = GpuResources::request(self.window.as_ref().unwrap())?;
+    fn request_gpu(&self) -> Result<Gpu, Error> {
+        let gpu = Gpu::request(self.window.as_ref().unwrap())?;
         gpu.configure();
         Ok(gpu)
     }
@@ -226,16 +230,14 @@ impl App<'_> {
     }
 
     fn update(&mut self) {
-        let hover_id = CONTEXT.with_borrow(|ctx| ctx.cursor.hover.obj);
-        if let Some(ref id) = hover_id {
-            let shape = self.widgets.shapes.get(id).unwrap();
-            let data = shape.transform.as_slice();
-            self.renderer.as_mut().unwrap().update(data, id);
+        while let Some(ref change_id) = self.widgets.changed_ids.pop() {
+            let shape = self.widgets.shapes.get(change_id).unwrap();
+            self.renderer.as_mut().unwrap().update(change_id, shape);
         }
     }
 
     fn render(&mut self) -> Result<(), Error> {
-        self.renderer.as_mut().unwrap().render()
+        self.renderer.as_mut().unwrap().render(&self.widgets.nodes)
     }
 
     pub fn add_widget(&mut self, node: impl View) -> &mut Self {
@@ -258,6 +260,8 @@ impl<'a> ApplicationHandler for App<'a> {
         let gpu = self.request_gpu().unwrap();
         let renderer: Renderer<'a> = unsafe { std::mem::transmute(Renderer::new(gpu, &self.widgets)) };
         self.renderer = Some(renderer);
+
+        eprintln!("{:#?}", self.widgets);
     }
 
     fn window_event(
@@ -266,9 +270,7 @@ impl<'a> ApplicationHandler for App<'a> {
             window_id: winit::window::WindowId,
             event: WindowEvent,
         ) {
-
         if self.id() == window_id {
-            let renderer = self.renderer.as_ref().unwrap();
             match event {
                 WindowEvent::CloseRequested => {
                     event_loop.exit();
@@ -299,25 +301,21 @@ impl<'a> ApplicationHandler for App<'a> {
                         Err(_) => panic!()
                     }
                     let elapsed = start.elapsed();
+                    // eprintln!("{elapsed:?}");
                     self.stats.push(elapsed);
                 }
                 WindowEvent::Resized(new_size) => {
                     CONTEXT.with_borrow_mut(|ctx| {
                         ctx.window_size = Size::new(new_size.width, new_size.height);
                     });
-                    // on startup, this window event is called 2x
-                    if self.resize_count > 0 {
-                        self.resize();
-                    }
-                    self.resize_count += 1;
+                    self.resize();
                 }
                 WindowEvent::MouseInput { state: action, button, .. } => {
                     CONTEXT.with_borrow_mut(|ctx| ctx.set_click_state(action.into(), button.into()));
 
-                    self.widgets.handle_click(&renderer.gpu.queue, &renderer.gfx);
+                    self.widgets.handle_click();
                     if self.widgets.has_changed() {
                         self.request_redraw();
-                        self.widgets.invalidate_change();
                     }
                 }
                 WindowEvent::CursorMoved { position, .. } => {
@@ -325,10 +323,9 @@ impl<'a> ApplicationHandler for App<'a> {
                     CONTEXT.with_borrow_mut(|ctx| ctx.cursor.hover.pos = Vector2::from((p.x, p.y)));
                     self.detect_hover();
 
-                    self.widgets.handle_hover(&renderer.gpu.queue, &renderer.gfx);
+                    self.widgets.handle_hover();
                     if self.widgets.has_changed() {
                         self.request_redraw();
-                        self.widgets.invalidate_change();
                     }
                 }
                 _ => {}
