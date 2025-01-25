@@ -8,13 +8,13 @@ pub struct Vector2<T> {
 
 impl<T: Default> Default for Vector2<T> {
     fn default() -> Self {
-        Self::new()
+        Self::new(T::default(), T::default())
     }
 }
 
 impl<T: Default> Vector2<T> {
-    pub fn new() -> Self {
-        Self { x: T::default(), y: T::default() }
+    pub fn new(x: T, y: T) -> Self {
+        Self { x, y }
     }
 }
 

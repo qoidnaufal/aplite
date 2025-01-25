@@ -64,16 +64,16 @@ impl std::fmt::Debug for Matrix<Vector4<f32>, 4> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mat = self.convert();
         mat.iter().enumerate().try_for_each(|(idx, vec4)| {
-            let (prefix, suffix) = match idx {
-                0 => ("x", "\n"),
-                1 => ("y", "\n"),
-                2 => ("z", "\n"),
-                3 => ("w",  "" ),
+            let prefix = match idx {
+                0 => "\nx",
+                1 => "\ny",
+                2 => "\nz",
+                3 => "\nw",
                 _ => unreachable!()
             };
             write!(
                 f,
-                "{prefix} | {:0.3} {:0.3} {:0.3} {:0.3} |{suffix}",
+                "{prefix} | {:0.3} {:0.3} {:0.3} {:0.3} |",
                 vec4.x, vec4.y, vec4.z, vec4.w
             )
         })

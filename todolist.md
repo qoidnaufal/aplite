@@ -11,7 +11,8 @@
 20240118    [X] gpu side transform via uniform buffer
 20240118    [X] fix texture for each id
 20240119    [X] signal injection & handling on each shape
-????????    [ ] layouting
+20240125    [X] layouting (start from each widget) & later just scaling on storage
+????????    [ ] improve z-stack hovering & child-parent transform
 ????????    [ ] improve render performance (CPU side)
 ????????    [ ] circle shape
 ????????    [ ] better hover detection, currently using iterator

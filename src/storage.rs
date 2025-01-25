@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 use math::{Size, Vector2};
+use crate::context::{MouseAction, CONTEXT};
 use crate::renderer::Gfx;
-use crate::color::Color;
 use crate::view::{NodeId, View};
-use crate::texture::{image_reader, ImageData, TextureData};
+use crate::texture::{image_reader, TextureData};
 use crate::shapes::Shape;
 use crate::error::Error;
 use crate::callback::CALLBACKS;
-use crate::app::{MouseAction, CONTEXT};
 use crate::IntoView;
 
 pub fn cast_slice<A: Sized, B: Sized>(p: &[A]) -> Result<&[B], Error> {
@@ -26,7 +25,7 @@ pub struct WidgetStorage {
     pub nodes: Vec<NodeId>,
     pub shapes: HashMap<NodeId, Shape>,
     pub children: HashMap<NodeId, Vec<NodeId>>,
-    pub parent: HashMap<NodeId, Option<NodeId>>,
+    pub parent: HashMap<NodeId, NodeId>,
     pub changed_ids: Vec<NodeId>,
 }
 
@@ -43,22 +42,23 @@ impl WidgetStorage {
 
     pub fn insert(&mut self, node: impl IntoView) -> &mut Self {
         let node = node.into_view();
-        let id = node.id();
+        node.layout();
+        let node_id = node.id();
         let shape = node.shape();
-        self.nodes.push(id);
-        self.shapes.insert(id, shape);
+        self.nodes.push(node_id);
+        self.shapes.insert(node_id, shape);
         if let Some(children) = node.children() {
             children.iter().for_each(|child_view| {
                 let child_id = child_view.id();
                 let child_shape = child_view.shape();
                 self.nodes.push(child_id);
                 self.shapes.insert(child_id, child_shape);
-                self.parent.insert(child_id, Some(id));
+                self.parent.insert(child_id, node_id);
             });
-            if let Some(child_storage) = self.children.get_mut(&id) {
+            if let Some(child_storage) = self.children.get_mut(&node_id) {
                 child_storage.extend(children.iter().map(|v| v.id()));
             } else {
-                self.children.insert(id, children.iter().map(|v| v.id()).collect());
+                self.children.insert(node_id, children.iter().map(|v| v.id()).collect());
             }
         }
         self
@@ -80,10 +80,11 @@ impl WidgetStorage {
                 let image_data = if let Some(ref src) = shape.src {
                     image_reader(src)
                 } else {
-                    ImageData {
-                        dimension: (1, 1).into(),
-                        data: Color::from(shape.color).to_vec(),
-                    }
+                    shape.color.into()
+                    // ImageData {
+                    //     dimension: (1, 1).into(),
+                    //     data: Color::from(shape.color).to_vec(),
+                    // }
                 };
                 let v = shape.v_buffer(*node_id, device);
                 let i = shape.i_buffer(*node_id, device);
@@ -93,8 +94,7 @@ impl WidgetStorage {
                     queue,
                     bg_layout,
                     u,
-                    image_data.dimension,
-                    &image_data.data,
+                    image_data,
                 );
 
                 gfx.v_buffer.insert(*node_id, v);
@@ -150,7 +150,7 @@ impl WidgetStorage {
     }
 
     pub fn handle_click(&mut self) {
-        let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor.clone());
+        let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
         if let Some(ref click_id) = cursor.click.obj {
             let shape = self.shapes.get_mut(click_id).unwrap();
             CALLBACKS.with_borrow_mut(|callbacks| {
@@ -173,20 +173,30 @@ impl WidgetStorage {
         }
     }
 
-    pub fn compute_layout(&mut self) {
+    pub fn layout(&mut self) {
         let window_size: Size<f32> = CONTEXT.with_borrow(|ctx| ctx.window_size.into());
         // this should be something like &mut LayoutCtx
         let mut used_space = Size::new(0, 0);
 
-        self.nodes.iter().for_each(|id| {
-            let shape = self.shapes.get_mut(id).unwrap();
-            let scale = Size::<f32>::from(shape.dimensions) / window_size / 2.0; // div by 2.0 to set the center
-            let used = Size::<f32>::from(used_space) / window_size;
-            let x = (used.width + scale.width) - 1.0;   // -1.0 is the left edge of the screen coordinate
-            let y = 1.0 - (used.height + scale.height); //  1.0 is the top  edge of the screen coordinate
+        self.nodes.iter().for_each(|node_id| {
+            // if let Some(children) = self.children.get(node_id) {
+            //     children.iter().for_each(|child_id| {
+            //         let parent_id = self.parent[child_id];
+            //         let parent_shape = self.shapes.get(&parent_id).unwrap();
+            //         let child_shape = self.shapes.get_mut(child_id).unwrap();
+            //         // child_shape.scale();
+            //     });
+            // }
+
+            let shape = self.shapes.get_mut(node_id).unwrap();
+            shape.scale();
+            let pos: Vector2<f32> = CONTEXT.with_borrow(|cx| cx.layout.get_position(node_id).unwrap().clone()).into();
+            let used = Size::<f32>::new(pos.x, pos.y) / window_size;
+            let x = (used.width + shape.transform[0].x) - 1.0;   // -1.0 is the left edge of the screen coordinate
+            let y = 1.0 - (used.height + shape.transform[1].y); //  1.0 is the top  edge of the screen coordinate
             let translate = Vector2 { x, y };
-            shape.set_transform(translate, scale);
-            self.changed_ids.push(*id);
+            shape.set_translate(translate);
+            self.changed_ids.push(*node_id);
             used_space.height += shape.dimensions.height;
         });
     }

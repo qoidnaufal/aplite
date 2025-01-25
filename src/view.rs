@@ -3,6 +3,8 @@ mod image;
 mod vstack;
 mod hstack;
 
+use math::Vector2;
+
 pub use {
     button::*,
     image::*,
@@ -11,9 +13,7 @@ pub use {
 };
 use std::sync::atomic::{AtomicU64, Ordering};
 use crate::{
-    callback::CALLBACKS,
-    color::Rgb,
-    shapes::{Shape, ShapeKind},
+    callback::CALLBACKS, color::Rgb, context::CONTEXT, shapes::{Shape, ShapeKind}
 };
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -32,21 +32,20 @@ pub trait View {
     fn id(&self) -> NodeId;
     fn shape(&self) -> Shape;
     fn children(&self) -> Option<&[AnyView]>;
+    fn layout(&self);
 }
 
 pub trait IntoView: Sized {
     type V: View + 'static;
     fn into_view(self) -> Self::V;
-    fn into_any(self) -> AnyView {
-        Box::new(self.into_view())
-    }
+    fn into_any(self) -> AnyView { Box::new(self.into_view()) }
 }
 
-pub struct TestCircleWidget {
+pub struct TestTirangleWidget {
     id: NodeId,
 }
 
-impl TestCircleWidget {
+impl TestTirangleWidget {
     pub fn new() -> Self {
         let id = NodeId::new();
         Self { id }
@@ -57,8 +56,7 @@ impl TestCircleWidget {
     }
 
     fn shape(&self) -> Shape {
-        Shape::filled(Rgb::YELLOW, ShapeKind::FilledTriangle, (500, 500))
-
+        Shape::filled(Rgb::BLACK, ShapeKind::FilledTriangle, (500, 500))
     }
 
     pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
@@ -77,7 +75,7 @@ impl TestCircleWidget {
     }
 }
 
-impl View for TestCircleWidget {
+impl View for TestTirangleWidget {
     fn id(&self) -> NodeId {
         self.id()
     }
@@ -89,9 +87,20 @@ impl View for TestCircleWidget {
     fn shape(&self) -> Shape {
         self.shape()
     }
+
+    fn layout(&self) {
+        let dimensions = self.shape().dimensions;
+        CONTEXT.with_borrow_mut(|cx| {
+            if cx.layout.get_position(&self.id()).is_none() {
+                let used_space = cx.layout.used_space();
+                cx.layout.insert(self.id(), (0, used_space.y).into());
+                cx.layout.set_used_space(|space| space.y += dimensions.height);
+            }
+        });
+    }
 }
 
-impl IntoView for TestCircleWidget {
+impl IntoView for TestTirangleWidget {
     type V = Self;
     fn into_view(self) -> Self::V {
         self

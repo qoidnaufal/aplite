@@ -9,10 +9,10 @@ pub use pipeline::{bind_group_layout, bind_group};
 pub use gpu::Gpu;
 pub use shader::SHADER;
 
+use crate::context::CONTEXT;
 use crate::shapes::Shape;
 use crate::storage::WidgetStorage;
 use crate::error::Error;
-use crate::app::CONTEXT;
 use crate::{NodeId, Rgb};
 
 pub struct Renderer<'a> {
@@ -42,7 +42,7 @@ impl<'a> Renderer<'a> {
             self.gpu.config.height = nws.height;
             self.gpu.configure();
         }
-        widgets.compute_layout();
+        widgets.layout();
     }
 
     pub fn update(&mut self, id: &NodeId, shape: &Shape) {

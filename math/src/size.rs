@@ -53,17 +53,6 @@ where T:
     }
 }
 
-impl<T> PartialEq for Size<T>
-where T:
-    PartialEq<T>
-{
-    fn eq(&self, other: &Self) -> bool {
-        self.width == other.width && self.height == other.height
-    }
-}
-
-impl<T: PartialEq + Eq> Eq for Size<T> {}
-
 impl<T> std::ops::Div<T> for Size<T>
 where T:
     std::ops::Div<T, Output = T>
@@ -158,6 +147,17 @@ where T:
         *self = *self * rhs
     }
 }
+
+impl<T> PartialEq for Size<T>
+where T:
+    PartialEq<T>
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.width == other.width && self.height == other.height
+    }
+}
+
+impl<T: PartialEq + Eq> Eq for Size<T> {}
 
 impl<T> PartialOrd for Size<T>
 where T:

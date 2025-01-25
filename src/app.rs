@@ -1,148 +1,14 @@
-use std::cell::RefCell;
-
 use winit::window::Window;
 use winit::event::WindowEvent;
 use winit::application::ApplicationHandler;
 use math::{Size, Vector2};
 
-use crate::view::NodeId;
+use crate::context::CONTEXT;
 use crate::renderer::Renderer;
 use crate::storage::WidgetStorage;
 use crate::renderer::Gpu;
 use crate::error::Error;
 use crate::IntoView;
-
-thread_local! {
-    pub static CONTEXT: RefCell<Context> = RefCell::new(Context::new());
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Context {
-    pub cursor: Cursor,
-    pub window_size: Size<u32>,
-}
-
-impl Context {
-    fn new() -> Self {
-        Self {
-            cursor: Cursor::new(),
-            window_size: Size::new(0, 0),
-        }
-    }
-
-    fn set_click_state(&mut self, action: MouseAction, button: MouseButton) {
-        self.cursor.set_state(action, button);
-
-        match (self.cursor.state.action, self.cursor.state.button) {
-            (MouseAction::Pressed, MouseButton::Left) => {
-                self.cursor.click.obj = self.cursor.hover.curr;
-                self.cursor.click.pos = self.cursor.hover.pos;
-            },
-            (MouseAction::Released, MouseButton::Left) => self.cursor.click.obj = None,
-            _ => {}
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MouseAction {
-    Pressed,
-    Released,
-}
-
-impl From<winit::event::ElementState> for MouseAction {
-    fn from(value: winit::event::ElementState) -> Self {
-        match value {
-            winit::event::ElementState::Pressed => Self::Pressed,
-            winit::event::ElementState::Released => Self::Released,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MouseButton {
-    Left,
-    Right,
-    Middle,
-    Back,
-    Forward,
-    Other(u16),
-}
-
-impl From<winit::event::MouseButton> for MouseButton {
-    fn from(value: winit::event::MouseButton) -> Self {
-        match value {
-            winit::event::MouseButton::Left => Self::Left,
-            winit::event::MouseButton::Right => Self::Right,
-            winit::event::MouseButton::Middle => Self::Middle,
-            winit::event::MouseButton::Back => Self::Back,
-            winit::event::MouseButton::Forward => Self::Forward,
-            winit::event::MouseButton::Other(n) => Self::Other(n),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct MouseState {
-    pub action: MouseAction,
-    pub button: MouseButton,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct MouseClick {
-    pub pos: Vector2<f32>,
-    pub obj: Option<NodeId>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct MouseHover {
-    pub pos: Vector2<f32>,
-    pub curr: Option<NodeId>,
-    pub prev: Option<NodeId>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Cursor {
-    pub hover: MouseHover,
-    pub state: MouseState,
-    pub click: MouseClick,
-}
-
-impl Cursor {
-    fn new() -> Self {
-        Self {
-            hover: MouseHover {
-                pos: Vector2::new(),
-                curr: None,
-                prev: None,
-            },
-            state: MouseState {
-                action: MouseAction::Released,
-                button: MouseButton::Left,
-            },
-            click: MouseClick {
-                pos: Vector2::new(),
-                obj: None,
-            },
-        }
-    }
-
-    pub fn set_state(&mut self,
-        action: MouseAction,
-        button: MouseButton
-    ) {
-        self.state = MouseState { action, button };
-    }
-
-    pub fn is_dragging(&self, hover_id: NodeId) -> bool {
-        self.click.obj.is_some_and(|click_id| click_id == hover_id)
-            && self.hover.pos != self.click.pos
-    }
-
-    pub fn is_hovering_same_obj(&self) -> bool {
-        self.hover.curr == self.hover.prev
-    }
-}
 
 struct Stats<const N: usize> {
     counter: usize,
@@ -256,11 +122,14 @@ impl<'a> ApplicationHandler for App<'a> {
         self.initial_size = Size::new(size.width, size.height);
         CONTEXT.with_borrow_mut(|ctx| ctx.window_size = self.initial_size);
         self.window = Some(window);
-        self.widgets.compute_layout();
+        self.widgets.layout();
 
         let gpu = self.request_gpu().unwrap();
         let renderer: Renderer<'a> = unsafe { std::mem::transmute(Renderer::new(gpu, &self.widgets)) };
         self.renderer = Some(renderer);
+
+        eprintln!("{:?}", self.widgets.nodes);
+        CONTEXT.with_borrow(|cx| eprintln!("{:#?}", cx.layout));
     }
 
     fn window_event(

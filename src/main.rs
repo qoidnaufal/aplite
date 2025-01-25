@@ -2,7 +2,7 @@ mod app;
 mod callback;
 mod color;
 mod error;
-mod layout;
+mod context;
 mod renderer;
 mod shapes;
 mod signal;
@@ -64,10 +64,13 @@ fn add_widget(app: &mut App) {
         ).on_click(dec.clone()).on_drag(drag).on_hover(hover))
         .add_widget(vstack(
             [
+                button().on_click(inc.clone()).on_hover(hover),
+                button().on_click(inc.clone()).on_hover(hover),
+                button().on_click(inc.clone()).on_hover(hover),
                 button().on_click(inc).on_hover(hover),
             ]
         ).on_click(dec.clone()).on_drag(drag).on_hover(hover))
-        .add_widget(TestCircleWidget::new().on_click(dec).on_drag(drag).on_hover(hover));
+        .add_widget(TestTirangleWidget::new().on_click(dec).on_drag(drag).on_hover(hover));
 }
 
 fn main() -> Result<(), Error> {

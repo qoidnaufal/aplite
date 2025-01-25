@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 
 use math::{tan, Matrix, Size, Vector2, Vector3, Vector4};
+use crate::context::CONTEXT;
 use crate::renderer::Buffer;
 use crate::storage::cast_slice;
 use crate::color::Rgb;
-use crate::app::CONTEXT;
 use crate::NodeId;
 
 #[repr(C)]
@@ -43,7 +43,7 @@ impl PartialEq for Vertex {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Transform {
     mat: Matrix<Vector4<f32>, 4>,
 }
@@ -52,12 +52,6 @@ impl std::ops::Index<usize> for Transform {
     type Output = Vector4<f32>;
     fn index(&self, index: usize) -> &Self::Output {
         &self.mat[index]
-    }
-}
-
-impl std::fmt::Debug for Transform {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.mat)
     }
 }
 
@@ -72,9 +66,9 @@ impl Transform {
         self.mat.translate(t.x, t.y);
     }
 
-    // fn scale(&mut self, s: Size<f32>) {
-    //     self.mat.scale(s.width, s.height);
-    // }
+    fn scale(&mut self, s: Size<f32>) {
+        self.mat.scale(s.width, s.height);
+    }
 
     pub fn as_slice(&self) -> &[u8] {
         cast_slice(self.mat.data()).unwrap()
@@ -90,10 +84,7 @@ pub enum ShapeKind {
 
 impl ShapeKind {
     pub fn is_triangle(&self) -> bool {
-        match self {
-            ShapeKind::FilledTriangle => true,
-            _ => false
-        }
+        matches!(self, Self::FilledTriangle)
     }
 }
 
@@ -171,17 +162,19 @@ impl Shape {
         }
     }
 
-    pub fn set_transform(&mut self, t: Vector2<f32>, s: Size<f32>) {
-        self.transform.transform(t, s);
-    }
+    // pub fn set_transform(&mut self, t: Vector2<f32>, s: Size<f32>) {
+    //     self.transform.transform(t, s);
+    // }
 
     pub fn set_translate(&mut self, t: Vector2<f32>) {
         self.transform.translate(t);
     }
 
-    // pub fn set_scale(&mut self, s: Size<f32>) {
-    //     self.transform.scale(s);
-    // }
+    pub fn scale(&mut self) {
+        let ws: Size<f32> = CONTEXT.with_borrow(|ctx| ctx.window_size.into());
+        let s = Size::<f32>::from(self.dimensions) / ws / 2.0;
+        self.transform.scale(s);
+    }
 
     pub fn v_buffer(&self, node_id: NodeId, device: &wgpu::Device) -> Buffer<Vertex> {
         let vertices = Mesh::from(self.kind).vertices;
@@ -212,7 +205,7 @@ impl Shape {
     }
 
     pub fn is_hovered(&self) -> bool {
-        let (cursor, window_size) = CONTEXT.with_borrow(|ctx| (ctx.cursor.clone(), ctx.window_size));
+        let (cursor, window_size) = CONTEXT.with_borrow(|ctx| (ctx.cursor, ctx.window_size));
         let x_cursor = ((cursor.hover.pos.x / window_size.width as f32) - 0.5) * 2.0;
         let y_cursor = (0.5 - (cursor.hover.pos.y / window_size.height as f32)) * 2.0;
 
@@ -243,13 +236,17 @@ impl Shape {
     }
 
     pub fn set_position(&mut self) {
-        let (cursor, window_size) = CONTEXT.with_borrow(|ctx| (ctx.cursor.clone(), ctx.window_size));
+        let (cursor, window_size) = CONTEXT.with_borrow(|ctx| (ctx.cursor, ctx.window_size));
         let ws = Size::<f32>::from(window_size) / 2.0;
         let x = cursor.hover.pos.x / ws.width - 1.0;
         let y = 1.0 - cursor.hover.pos.y / ws.height;
         let t = Vector2 { x, y };
 
         self.set_translate(t);
+    }
+
+    pub fn layout(&self) -> Vector2<u32> {
+        todo!()
     }
 }
 

@@ -1,5 +1,5 @@
 use crate::{
-    callback::CALLBACKS, color::Rgb, shapes::{Shape, ShapeKind}
+    callback::CALLBACKS, color::Rgb, context::CONTEXT, shapes::{Shape, ShapeKind}
 };
 use super::{AnyView, IntoView, NodeId, View};
 
@@ -47,6 +47,17 @@ impl View for Button {
 
     fn shape(&self) -> Shape {
         self.shape()
+    }
+
+    fn layout(&self) {
+        let dimensions = self.shape().dimensions;
+        CONTEXT.with_borrow_mut(|cx| {
+            if cx.layout.get_position(&self.id()).is_none() {
+                let used_space = cx.layout.used_space();
+                cx.layout.insert(self.id(), (0, used_space.y).into());
+                cx.layout.set_used_space(|space| space.y += dimensions.height);
+            }
+        });
     }
 }
 

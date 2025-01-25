@@ -1,24 +1,27 @@
 use std::marker::PhantomData;
 
+use math::Size;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Color<Container, T> {
+    dimensions: Size<u32>,
     data: Vec<T>,
     _phatom: PhantomData<Container>,
 }
 
-// impl Color<Rgba<u8>, u8> {
-//     pub fn r(&mut self) -> &mut u8 {
-//         &mut self[0]
-//     }
+impl Color<Rgba<u8>, u8> {
+    pub fn new(dimensions: impl Into<Size<u32>>, data: &[u8]) -> Self {
+        Self {
+            dimensions: dimensions.into(),
+            data: data.to_vec(),
+            _phatom: PhantomData,
+        }
+    }
 
-//     pub fn g(&mut self) -> &mut u8 {
-//         &mut self[1]
-//     }
-
-//     pub fn b(&mut self) -> &mut u8 {
-//         &mut self[2]
-//     }
-// }
+    pub fn dimensions(&self) -> Size<u32> {
+        self.dimensions
+    }
+}
 
 impl<Container, T> std::ops::Index<usize> for Color<Container, T> {
     type Output = T;
@@ -33,26 +36,18 @@ impl<Container, T> std::ops::IndexMut<usize> for Color<Container, T> {
     }
 }
 
-impl std::ops::Deref for Color<Rgba<u8>, u8> {
-    type Target = Vec<u8>;
+impl<T> std::ops::Deref for Color<Rgba<T>, T> {
+    type Target = Vec<T>;
     fn deref(&self) -> &Self::Target {
         &self.data
     }
 }
 
-impl<T> From<Rgb<T>> for Color<Rgb<T>, T> {
-    fn from(rgb: Rgb<T>) -> Self {
+impl From<Rgb<u8>> for Color<Rgb<u8>, u8> {
+    fn from(rgb: Rgb<u8>) -> Self {
         Self {
+            dimensions: Size::new(1, 1),
             data: vec![rgb.r, rgb.g, rgb.b],
-            _phatom: PhantomData,
-        }
-    }
-}
-
-impl<T> From<Rgba<T>> for Color<Rgba<T>, T> {
-    fn from(rgba: Rgba<T>) -> Self {
-        Self {
-            data: vec![rgba.r, rgba.g, rgba.b, rgba.a],
             _phatom: PhantomData,
         }
     }
@@ -61,31 +56,18 @@ impl<T> From<Rgba<T>> for Color<Rgba<T>, T> {
 impl From<Rgb<u8>> for Color<Rgba<u8>, u8> {
     fn from(rgb: Rgb<u8>) -> Self {
         Self {
+            dimensions: Size::new(1, 1),
             data: vec![rgb.r, rgb.g, rgb.b, u8::MAX],
             _phatom: PhantomData,
         }
     }
 }
 
-impl From<&[u8]> for Color<Rgba<u8>, u8> {
-    fn from(value: &[u8]) -> Self {
+impl From<Rgba<u8>> for Color<Rgba<u8>, u8> {
+    fn from(rgba: Rgba<u8>) -> Self {
         Self {
-            data: value.to_vec(),
-            _phatom: PhantomData,
-        }
-    }
-}
-
-impl From<Color<Rgba<u8>, u8>> for Color<Rgba<f32>, f32> {
-    fn from(color: Color<Rgba<u8>, u8>) -> Self {
-        let rgba = color.data;
-        Self {
-            data: vec![
-                rgba[0] as f32 / u8::MAX as f32,
-                rgba[1] as f32 / u8::MAX as f32,
-                rgba[2] as f32 / u8::MAX as f32,
-                rgba[3] as f32 / u8::MAX as f32,
-            ],
+            dimensions: Size::new(1, 1),
+            data: vec![rgba.r, rgba.g, rgba.b, rgba.a],
             _phatom: PhantomData,
         }
     }
@@ -99,13 +81,13 @@ pub struct Rgb<T> {
 }
 
 impl Rgb<u8> {
+    pub const BLACK: Self = Self { r: 0, g: 0, b: 0 };
     pub const RED: Self = Self { r: 255, g: 0, b: 0 };
     pub const GREEN: Self = Self { r: 0, g: 255, b: 0 };
     pub const BLUE: Self = Self { r: 0, g: 0, b: 255 };
-    pub const YELLOW: Self = Self { r: 255, g: 255, b: 0 };
-    pub const BLACK: Self = Self { r: 0, g: 0, b: 0 };
-    pub const DARK_GRAY: Self = Self { r: 33, g: 33, b: 29 };
     pub const WHITE: Self = Self { r: 255, g: 255, b: 255 };
+    pub const YELLOW: Self = Self { r: 255, g: 255, b: 0 };
+    pub const DARK_GRAY: Self = Self { r: 33, g: 33, b: 29 };
 }
 
 impl From<Rgb<u8>> for Rgb<f32> {
@@ -162,13 +144,6 @@ pub struct Rgba<T> {
     pub b: T,
     pub a: T,
 }
-
-// impl Rgba<u8> {
-//     pub const RED: Self = Self { r: 255, g: 0, b: 0, a: 255 };
-//     pub const GREEN: Self = Self { r: 0, g: 255, b: 0, a: 255 };
-//     pub const BLUE: Self = Self { r: 0, g: 0, b: 255, a: 255 };
-//     pub const BLACK: Self = Self { r: 0, g: 0, b: 0, a: 255 };
-// }
 
 impl From<Rgba<u8>> for Rgba<f32> {
     fn from(val: Rgba<u8>) -> Self {
