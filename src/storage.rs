@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use math::{Size, Vector2};
 use crate::context::{MouseAction, CONTEXT};
 use crate::renderer::Gfx;
-use crate::view::{NodeId, View};
+use crate::view::NodeId;
 use crate::texture::{image_reader, TextureData};
 use crate::shapes::Shape;
 use crate::error::Error;
 use crate::callback::CALLBACKS;
-use crate::IntoView;
+use crate::{IntoView, View};
 
 pub fn cast_slice<A: Sized, B: Sized>(p: &[A]) -> Result<&[B], Error> {
     if align_of::<B>() > align_of::<A>()
@@ -81,10 +81,6 @@ impl WidgetStorage {
                     image_reader(src)
                 } else {
                     shape.color.into()
-                    // ImageData {
-                    //     dimension: (1, 1).into(),
-                    //     data: Color::from(shape.color).to_vec(),
-                    // }
                 };
                 let v = shape.v_buffer(*node_id, device);
                 let i = shape.i_buffer(*node_id, device);
@@ -105,10 +101,12 @@ impl WidgetStorage {
     }
 
     pub fn detect_hover(&self) {
-        let hovered = self.shapes.iter().find(|(_, shape)| {
-            shape.is_hovered()
-        });
-        if let Some((id, _)) = hovered {
+        let hovered = self.shapes.iter().filter_map(|(id, shape)| {
+            if shape.is_hovered() {
+                Some(id)
+            } else { None }
+        }).min();
+        if let Some(id) = hovered {
             CONTEXT.with_borrow_mut(|ctx| {
                 if ctx.cursor.click.obj.is_none() {
                     ctx.cursor.hover.prev = ctx.cursor.hover.curr;
@@ -175,29 +173,17 @@ impl WidgetStorage {
 
     pub fn layout(&mut self) {
         let window_size: Size<f32> = CONTEXT.with_borrow(|ctx| ctx.window_size.into());
-        // this should be something like &mut LayoutCtx
-        let mut used_space = Size::new(0, 0);
 
         self.nodes.iter().for_each(|node_id| {
-            // if let Some(children) = self.children.get(node_id) {
-            //     children.iter().for_each(|child_id| {
-            //         let parent_id = self.parent[child_id];
-            //         let parent_shape = self.shapes.get(&parent_id).unwrap();
-            //         let child_shape = self.shapes.get_mut(child_id).unwrap();
-            //         // child_shape.scale();
-            //     });
-            // }
-
             let shape = self.shapes.get_mut(node_id).unwrap();
             shape.scale();
             let pos: Vector2<f32> = CONTEXT.with_borrow(|cx| cx.layout.get_position(node_id).unwrap().clone()).into();
             let used = Size::<f32>::new(pos.x, pos.y) / window_size;
-            let x = (used.width + shape.transform[0].x) - 1.0;   // -1.0 is the left edge of the screen coordinate
+            let x = (used.width + shape.transform[0].x) - 1.0;  // -1.0 is the left edge of the screen coordinate
             let y = 1.0 - (used.height + shape.transform[1].y); //  1.0 is the top  edge of the screen coordinate
             let translate = Vector2 { x, y };
             shape.set_translate(translate);
             self.changed_ids.push(*node_id);
-            used_space.height += shape.dimensions.height;
         });
     }
 }

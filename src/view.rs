@@ -3,8 +3,6 @@ mod image;
 mod vstack;
 mod hstack;
 
-use math::Vector2;
-
 pub use {
     button::*,
     image::*,
@@ -41,11 +39,11 @@ pub trait IntoView: Sized {
     fn into_any(self) -> AnyView { Box::new(self.into_view()) }
 }
 
-pub struct TestTirangleWidget {
+pub struct TestTriangleWidget {
     id: NodeId,
 }
 
-impl TestTirangleWidget {
+impl TestTriangleWidget {
     pub fn new() -> Self {
         let id = NodeId::new();
         Self { id }
@@ -56,7 +54,7 @@ impl TestTirangleWidget {
     }
 
     fn shape(&self) -> Shape {
-        Shape::filled(Rgb::BLACK, ShapeKind::FilledTriangle, (500, 500))
+        Shape::filled(Rgb::YELLOW, ShapeKind::FilledTriangle, (500, 500))
     }
 
     pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
@@ -75,7 +73,7 @@ impl TestTirangleWidget {
     }
 }
 
-impl View for TestTirangleWidget {
+impl View for TestTriangleWidget {
     fn id(&self) -> NodeId {
         self.id()
     }
@@ -100,7 +98,7 @@ impl View for TestTirangleWidget {
     }
 }
 
-impl IntoView for TestTirangleWidget {
+impl IntoView for TestTriangleWidget {
     type V = Self;
     fn into_view(self) -> Self::V {
         self

@@ -56,21 +56,31 @@ fn add_widget(app: &mut App) {
     };
 
     app
-        .add_widget(hstack(
-            [
-                image("assets/image2.jpg").on_click(shift_left),
-                image("assets/image1.jpg").on_click(shift_right),
-            ]
-        ).on_click(dec.clone()).on_drag(drag).on_hover(hover))
-        .add_widget(vstack(
-            [
-                button().on_click(inc.clone()).on_hover(hover),
-                button().on_click(inc.clone()).on_hover(hover),
-                button().on_click(inc.clone()).on_hover(hover),
-                button().on_click(inc).on_hover(hover),
-            ]
-        ).on_click(dec.clone()).on_drag(drag).on_hover(hover))
-        .add_widget(TestTirangleWidget::new().on_click(dec).on_drag(drag).on_hover(hover));
+        .add_widget(
+            hstack(
+                [
+                    image("assets/image1.jpg").on_click(shift_right).into_any(),
+                    image("assets/image2.jpg").on_click(shift_left).into_any(),
+                    TestTriangleWidget::new().on_hover(hover).into_any(),
+                ]
+            )
+        )
+        .add_widget(
+            vstack(
+                [
+                    button().on_click(inc.clone()).on_hover(hover).into_any(),
+                    button().on_click(inc.clone()).on_hover(hover).into_any(),
+                    button().on_click(inc.clone()).on_hover(hover).into_any(),
+                    button().on_click(inc).on_hover(hover).into_any(),
+                ]
+            )
+        )
+        .add_widget(
+            TestTriangleWidget::new()
+                .on_click(dec)
+                .on_drag(drag)
+                .on_hover(hover)
+        );
 }
 
 fn main() -> Result<(), Error> {

@@ -7,7 +7,7 @@ use crate::shapes::{Shape, ShapeKind};
 
 use super::{AnyView, IntoView, NodeId, View};
 
-pub fn vstack(child_nodes: impl IntoIterator<Item = impl IntoView>) -> VStack {
+pub fn vstack(child_nodes: impl IntoIterator<Item = AnyView>) -> VStack {
     VStack::new(child_nodes)
 }
 
@@ -17,9 +17,9 @@ pub struct VStack {
 }
 
 impl VStack {
-    fn new(child_nodes: impl IntoIterator<Item = impl IntoView>) -> Self {
+    fn new(child_nodes: impl IntoIterator<Item = AnyView>) -> Self {
         let id = NodeId::new();
-        let children = child_nodes.into_iter().map(IntoView::into_any).collect();
+        let children = child_nodes.into_iter().collect();
         Self { id, children }
     }
 
@@ -44,7 +44,7 @@ impl VStack {
         } else {
             size = (1, 1).into();
         }
-        Shape::filled(Rgb::BLACK, ShapeKind::FilledRectangle, size)
+        Shape::filled(Rgb::GRAY, ShapeKind::FilledRectangle, size)
     }
 
     pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {

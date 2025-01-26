@@ -244,9 +244,5 @@ impl Shape {
 
         self.set_translate(t);
     }
-
-    pub fn layout(&self) -> Vector2<u32> {
-        todo!()
-    }
 }
 

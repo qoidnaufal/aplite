@@ -13,7 +13,7 @@ use crate::context::CONTEXT;
 use crate::shapes::Shape;
 use crate::storage::WidgetStorage;
 use crate::error::Error;
-use crate::{NodeId, Rgb};
+use crate::NodeId;
 
 pub struct Renderer<'a> {
     pub gpu: Gpu<'a>,
@@ -89,7 +89,7 @@ fn draw(
             view,
             resolve_target: None,
             ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(Rgb::DARK_GRAY.into()),
+                load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                 store: wgpu::StoreOp::Store,
             }
         })],
@@ -106,6 +106,6 @@ fn draw(
         pass.set_bind_group(0, &t.bind_group, &[]);
         pass.set_vertex_buffer(0, v.slice());
         pass.set_index_buffer(i.slice(), wgpu::IndexFormat::Uint32);
-        pass.draw_indexed(0..i.materials, 0, 0..1);
+        pass.draw_indexed(0..i.count, 0, 0..1);
     }
 }

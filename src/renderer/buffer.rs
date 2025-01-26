@@ -7,7 +7,7 @@ use crate::{shapes::Vertex, texture::TextureData, NodeId};
 #[derive(Debug)]
 pub struct Buffer<T> {
     pub buffer: wgpu::Buffer,
-    pub materials: u32,
+    pub count: u32,
     usage: wgpu::BufferUsages,
     len: usize,
     label: String,
@@ -18,7 +18,7 @@ impl<T> Buffer<T> {
     pub fn new(device: &wgpu::Device, usage: wgpu::BufferUsages, data: &[u8], node_id: NodeId) -> Self {
         let len = data.len();
         let label = format!("{node_id:?} buffer");
-        let materials = (data.len() / size_of_val(&usage)) as u32;
+        let count = (len / size_of_val(&usage)) as u32;
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(label.as_str()),
             contents: data,
@@ -26,7 +26,7 @@ impl<T> Buffer<T> {
         });
         Self {
             buffer,
-            materials,
+            count,
             usage,
             len,
             label,
@@ -45,6 +45,8 @@ impl<T> Buffer<T> {
                 contents: data,
                 usage: self.usage | wgpu::BufferUsages::COPY_DST,
             });
+            self.len = data.len();
+            self.count = (self.len / size_of_val(&self.usage)) as u32;
         } else {
             queue.write_buffer(
                 &self.buffer,
