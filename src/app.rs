@@ -120,11 +120,10 @@ impl<'a> ApplicationHandler for App<'a> {
         self.widgets.layout();
 
         let gpu = self.request_gpu().unwrap();
-        let renderer: Renderer<'a> = unsafe { std::mem::transmute(Renderer::new(gpu, &self.widgets)) };
+        let renderer: Renderer<'a> = unsafe {
+            std::mem::transmute(Renderer::new(gpu, &self.widgets))
+        };
         self.renderer = Some(renderer);
-
-        eprintln!("{:?}", self.widgets.nodes);
-        eprintln!("{:?}", self.widgets.layout);
     }
 
     fn window_event(

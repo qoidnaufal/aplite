@@ -54,6 +54,38 @@ pub trait IntoView: Sized {
     fn into_any(self) -> AnyView { Box::new(self.into_view()) }
 }
 
+pub struct DynView(AnyView);
+
+impl View for DynView {
+    fn id(&self) -> NodeId {
+        self.0.id()
+    }
+
+    fn shape(&self) -> Shape {
+        self.0.shape()
+    }
+
+    fn children(&self) -> Option<&[AnyView]> {
+        self.0.children()
+    }
+
+    fn layout(&self, cx: &mut LayoutCtx) {
+        self.0.layout(cx);
+    }
+}
+
+impl<F, IV> IntoView for F
+where
+    F: Fn() -> IV + 'static,
+    IV: IntoView + 'static
+{
+    type V = DynView;
+    fn into_view(self) -> Self::V {
+        let a = self().into_any();
+        DynView(a)
+    }
+}
+
 pub struct TestTriangleWidget {
     id: NodeId,
 }

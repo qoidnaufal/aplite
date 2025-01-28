@@ -129,7 +129,7 @@ impl WidgetStorage {
                     if let Some(on_drag) = callbacks.on_drag.get_mut(hover_id) {
                         on_drag(shape);
                         shape.set_position();
-                        // self.layout.insert(*hover_id, shape.physical_pos());
+                        // self.layout.insert_pos(*hover_id, shape.physical_pos());
                     }
                 }
             });

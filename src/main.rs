@@ -85,7 +85,7 @@ fn main() -> Result<(), Error> {
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
 
     let mut app = App::new();
-    app.add_widget(root());
+    app.add_widget(root);
 
     event_loop.run_app(&mut app)?;
     Ok(())
