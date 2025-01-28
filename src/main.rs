@@ -19,7 +19,7 @@ use winit::event_loop::EventLoop;
 
 use error::Error;
 
-fn add_widget(app: &mut App) {
+fn root() -> impl IntoView {
     let counter = Signal::new(0i32);
     eprintln!("init {}", counter.get());
 
@@ -52,20 +52,17 @@ fn add_widget(app: &mut App) {
     let hover = move |shape: &mut Shape| { shape.set_color(|color| *color = Rgb::BLUE) };
     let drag = move |shape: &mut Shape| {
         shape.set_color(|color| *color = Rgb::GREEN);
-        shape.set_position();
     };
 
-    app
-        .add_widget(
+    vstack(
+        [
             hstack(
                 [
                     image("assets/image1.jpg").on_click(shift_right).into_any(),
                     image("assets/image2.jpg").on_click(shift_left).into_any(),
                     TestTriangleWidget::new().on_hover(hover).into_any(),
                 ]
-            )
-        )
-        .add_widget(
+            ).on_hover(hover).into_any(),
             vstack(
                 [
                     button().on_click(inc.clone()).on_hover(hover).into_any(),
@@ -73,14 +70,14 @@ fn add_widget(app: &mut App) {
                     button().on_click(inc.clone()).on_hover(hover).into_any(),
                     button().on_click(inc).on_hover(hover).into_any(),
                 ]
-            )
-        )
-        .add_widget(
+            ).on_hover(hover).into_any(),
             TestTriangleWidget::new()
                 .on_click(dec)
                 .on_drag(drag)
                 .on_hover(hover)
-        );
+                .into_any(),
+        ]
+    ).on_hover(hover)
 }
 
 fn main() -> Result<(), Error> {
@@ -88,7 +85,7 @@ fn main() -> Result<(), Error> {
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
 
     let mut app = App::new();
-    add_widget(&mut app);
+    app.add_widget(root());
 
     event_loop.run_app(&mut app)?;
     Ok(())

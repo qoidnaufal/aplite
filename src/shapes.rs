@@ -58,16 +58,8 @@ impl std::ops::Index<usize> for Transform {
 impl Transform {
     const IDENTITY: Self = Self { mat: Matrix::IDENTITIY };
 
-    fn transform(&mut self, t: Vector2<f32>, s: Size<f32>) {
-        self.mat.transform(t.x, t.y, s.width, s.height)
-    }
-
-    fn translate(&mut self, t: Vector2<f32>) {
-        self.mat.translate(t.x, t.y);
-    }
-
-    fn scale(&mut self, s: Size<f32>) {
-        self.mat.scale(s.width, s.height);
+    fn transform<F: FnMut(&mut Matrix<Vector4<f32>, 4>)>(&mut self, mut f: F) {
+        f(&mut self.mat)
     }
 
     pub fn as_slice(&self) -> &[u8] {
@@ -162,18 +154,14 @@ impl Shape {
         }
     }
 
-    // pub fn set_transform(&mut self, t: Vector2<f32>, s: Size<f32>) {
-    //     self.transform.transform(t, s);
-    // }
-
     pub fn set_translate(&mut self, t: Vector2<f32>) {
-        self.transform.translate(t);
+        self.transform.transform(|mat| mat.translate(t.x, t.y));
     }
 
     pub fn scale(&mut self) {
         let ws: Size<f32> = CONTEXT.with_borrow(|ctx| ctx.window_size.into());
         let s = Size::<f32>::from(self.dimensions) / ws / 2.0;
-        self.transform.scale(s);
+        self.transform.transform(|mat| mat.scale(s.width, s.height));
     }
 
     pub fn v_buffer(&self, node_id: NodeId, device: &wgpu::Device) -> Buffer<Vertex> {
@@ -197,10 +185,18 @@ impl Shape {
         Size { width, height }
     }
 
-    pub fn pos(&self) -> Vector2<f32> {
+    fn pos(&self) -> Vector2<f32> {
         let vertices = Mesh::from(self.kind).vertices;
         let x = (self.transform.mat * Vector4::from(vertices[1].position)).x;
         let y = (self.transform.mat * Vector4::from(vertices[0].position)).y;
+        Vector2 { x, y }
+    }
+
+    pub fn physical_pos(&self) -> Vector2<u32> {
+        let ws: Size<f32> = CONTEXT.with_borrow(|cx| cx.window_size.into());
+        let pos = self.pos();
+        let x = ((pos.x + 1.0 - self.transform[0].x) * ws.width) as u32;
+        let y = ((pos.y - 1.0 + self.transform[0].y) * -ws.width) as u32;
         Vector2 { x, y }
     }
 

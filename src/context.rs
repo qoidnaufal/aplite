@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap};
 
-use math::{Matrix, Size, Vector2, Vector4};
+use math::{Size, Vector2};
 
 use crate::NodeId;
 
@@ -12,7 +12,6 @@ thread_local! {
 pub struct Context {
     pub cursor: Cursor,
     pub window_size: Size<u32>,
-    pub layout: LayoutCtx,
 }
 
 impl Context {
@@ -20,7 +19,6 @@ impl Context {
         Self {
             cursor: Cursor::new(),
             window_size: Size::new(0, 0),
-            layout: LayoutCtx::new(),
         }
     }
 
@@ -138,23 +136,66 @@ impl Cursor {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct LayoutCtx {
-    used_space: Vector2<u32>,
+    next_pos: Vector2<u32>,
+    next_child_pos: Vector2<u32>,
     positions: HashMap<NodeId, Vector2<u32>>,
-    transform: Matrix<Vector4<f32>, 4>,
+    parent: HashMap<NodeId, NodeId>,
+    children: HashMap<NodeId, Vec<NodeId>>,
+}
+
+impl std::fmt::Debug for LayoutCtx {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.positions.iter().try_for_each(|(node_id, pos)| {
+            writeln!(f, "Pos | {node_id:?} | {pos:?}")
+        })?;
+        self.parent.iter().try_for_each(|(child_id, parent_id)| {
+            writeln!(f, "Parent | {child_id:?} | {parent_id:?}")
+        })?;
+        self.children.iter().try_for_each(|(parent_id, children)| {
+            writeln!(f, "Children | {parent_id:?} | {children:?}")
+        })?;
+        Ok(())
+    }
 }
 
 impl LayoutCtx {
     pub fn new() -> Self {
         Self {
-            used_space: Vector2::new(0, 0),
+            next_pos: Vector2::new(0, 0),
+            next_child_pos: Vector2::new(0, 0),
             positions: HashMap::new(),
-            transform: Matrix::IDENTITIY,
+            parent: HashMap::new(),
+            children: HashMap::new(),
         }
     }
 
-    pub fn insert(&mut self, node_id: NodeId, pos: Vector2<u32>) {
+    pub fn set_next_child_pos<F: FnMut(&mut Vector2<u32>)>(&mut self, mut f: F) {
+        f(&mut self.next_child_pos);
+    }
+
+    pub fn next_child_pos(&self) -> Vector2<u32> {
+        self.next_child_pos
+    }
+
+    pub fn get_parent(&self, node_id: &NodeId) -> Option<&NodeId> {
+        self.parent.get(node_id)
+    }
+
+    pub fn insert_parent(&mut self, node_id: NodeId, parent_id: NodeId) {
+        self.parent.insert(node_id, parent_id);
+    }
+
+    pub fn insert_children(&mut self, node_id: NodeId, child_id: NodeId) {
+        if let Some(children) = self.children.get_mut(&node_id) {
+            children.push(child_id);
+        } else {
+            self.children.insert(node_id, vec![child_id]);
+        }
+    }
+
+    pub fn insert_pos(&mut self, node_id: NodeId, pos: Vector2<u32>) {
         self.positions.insert(node_id, Vector2::new(pos.x, pos.y));
     }
 
@@ -162,11 +203,11 @@ impl LayoutCtx {
         self.positions.get(node_id)
     }
 
-    pub fn used_space(&self) -> Vector2<u32> {
-        self.used_space
+    pub fn next_pos(&self) -> Vector2<u32> {
+        self.next_pos
     }
 
-    pub fn set_used_space<F: FnMut(&mut Vector2<u32>)>(&mut self, mut f: F) {
-        f(&mut self.used_space);
+    pub fn set_next_pos<F: FnMut(&mut Vector2<u32>)>(&mut self, mut f: F) {
+        f(&mut self.next_pos);
     }
 }

@@ -13,6 +13,7 @@
 20240119    [X] signal injection & handling on each shape
 20240125    [X] layouting (start from each widget) & later just scaling on storage
 20240126    [X] fixed hover detection to the topmost object
+20240128    [X] fixed layouting
 ????????    [ ] improve render performance (CPU side)
 ????????    [ ] circle shape
 ????????    [ ] better hover detection, currently using iterator

@@ -11,7 +11,7 @@ pub use {
 };
 use std::sync::atomic::{AtomicU64, Ordering};
 use crate::{
-    callback::CALLBACKS, color::Rgb, context::CONTEXT, shapes::{Shape, ShapeKind}
+    callback::CALLBACKS, color::Rgb, context::LayoutCtx, shapes::{Shape, ShapeKind}, storage::WidgetStorage
 };
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -30,7 +30,22 @@ pub trait View {
     fn id(&self) -> NodeId;
     fn shape(&self) -> Shape;
     fn children(&self) -> Option<&[AnyView]>;
-    fn layout(&self);
+    fn layout(&self, cx: &mut LayoutCtx);
+    fn insert_into(&self, storage: &mut WidgetStorage) {
+        let id = self.id();
+        let mut shape = self.shape();
+        if storage.layout.get_parent(&id).is_none() {
+            shape.color = Rgb::BLACK;
+            shape.cached_color.replace(Rgb::BLACK);
+        }
+        storage.nodes.push(id);
+        storage.shapes.insert(id, shape);
+        if let Some(children) = self.children() {
+            children.iter().for_each(|child| {
+                child.insert_into(storage);
+            });
+        }
+    }
 }
 
 pub trait IntoView: Sized {
@@ -54,7 +69,7 @@ impl TestTriangleWidget {
     }
 
     fn shape(&self) -> Shape {
-        Shape::filled(Rgb::YELLOW, ShapeKind::FilledTriangle, (500, 500))
+        Shape::filled(Rgb::RED, ShapeKind::FilledTriangle, (500, 500))
     }
 
     pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
@@ -86,15 +101,14 @@ impl View for TestTriangleWidget {
         self.shape()
     }
 
-    fn layout(&self) {
-        let dimensions = self.shape().dimensions;
-        CONTEXT.with_borrow_mut(|cx| {
-            if cx.layout.get_position(&self.id()).is_none() {
-                let used_space = cx.layout.used_space();
-                cx.layout.insert(self.id(), (0, used_space.y).into());
-                cx.layout.set_used_space(|space| space.y += dimensions.height);
-            }
-        });
+    fn layout(&self, layout: &mut LayoutCtx) {
+        if layout.get_parent(&self.id()).is_some() {
+            let next_pos = layout.next_child_pos();
+            layout.insert_pos(self.id(), next_pos);
+        } else {
+            let next_pos = layout.next_pos();
+            layout.insert_pos(self.id(), next_pos);
+        }
     }
 }
 

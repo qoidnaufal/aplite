@@ -58,7 +58,6 @@ pub struct App<'a> {
     pub renderer: Option<Renderer<'a>>,
     pub window: Option<Window>,
     pub widgets: WidgetStorage,
-    initial_size: Size<u32>,
     stats: Stats<50>,
 }
 
@@ -68,7 +67,6 @@ impl App<'_> {
             renderer: None,
             window: None,
             widgets: WidgetStorage::new(),
-            initial_size: Size::new(0, 0),
             stats: Stats::new(),
         }
     }
@@ -97,10 +95,8 @@ impl App<'_> {
     }
 
     fn update(&mut self) {
-        while let Some(ref change_id) = self.widgets.changed_ids.pop() {
-            let shape = self.widgets.shapes.get(change_id).unwrap();
-            self.renderer.as_mut().unwrap().update(change_id, shape);
-        }
+        let renderer = self.renderer.as_mut().unwrap();
+        self.widgets.update(renderer);
     }
 
     fn render(&mut self) -> Result<(), Error> {
@@ -119,8 +115,7 @@ impl<'a> ApplicationHandler for App<'a> {
         window.set_title("My App");
 
         let size = window.inner_size();
-        self.initial_size = Size::new(size.width, size.height);
-        CONTEXT.with_borrow_mut(|ctx| ctx.window_size = self.initial_size);
+        CONTEXT.with_borrow_mut(|ctx| ctx.window_size = Size::new(size.width, size.height));
         self.window = Some(window);
         self.widgets.layout();
 
@@ -129,7 +124,7 @@ impl<'a> ApplicationHandler for App<'a> {
         self.renderer = Some(renderer);
 
         eprintln!("{:?}", self.widgets.nodes);
-        CONTEXT.with_borrow(|cx| eprintln!("{:#?}", cx.layout));
+        eprintln!("{:?}", self.widgets.layout);
     }
 
     fn window_event(

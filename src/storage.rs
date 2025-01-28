@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use math::{Size, Vector2};
-use crate::context::{MouseAction, CONTEXT};
-use crate::renderer::Gfx;
+use crate::context::{LayoutCtx, MouseAction, CONTEXT};
+use crate::renderer::{Gfx, Renderer};
 use crate::view::NodeId;
 use crate::texture::{image_reader, TextureData};
 use crate::shapes::Shape;
@@ -24,9 +24,8 @@ pub fn cast_slice<A: Sized, B: Sized>(p: &[A]) -> Result<&[B], Error> {
 pub struct WidgetStorage {
     pub nodes: Vec<NodeId>,
     pub shapes: HashMap<NodeId, Shape>,
-    pub children: HashMap<NodeId, Vec<NodeId>>,
-    pub parent: HashMap<NodeId, NodeId>,
-    pub changed_ids: Vec<NodeId>,
+    pub layout: LayoutCtx,
+    pending_update: Vec<NodeId>,
 }
 
 impl WidgetStorage {
@@ -34,38 +33,27 @@ impl WidgetStorage {
         Self {
             nodes: Vec::new(),
             shapes: HashMap::new(),
-            children: HashMap::new(),
-            parent: HashMap::new(),
-            changed_ids: Vec::new(),
+            layout: LayoutCtx::new(),
+            pending_update: Vec::new(),
         }
     }
 
     pub fn insert(&mut self, node: impl IntoView) -> &mut Self {
         let node = node.into_view();
-        node.layout();
-        let node_id = node.id();
-        let shape = node.shape();
-        self.nodes.push(node_id);
-        self.shapes.insert(node_id, shape);
-        if let Some(children) = node.children() {
-            children.iter().for_each(|child_view| {
-                let child_id = child_view.id();
-                let child_shape = child_view.shape();
-                self.nodes.push(child_id);
-                self.shapes.insert(child_id, child_shape);
-                self.parent.insert(child_id, node_id);
-            });
-            if let Some(child_storage) = self.children.get_mut(&node_id) {
-                child_storage.extend(children.iter().map(|v| v.id()));
-            } else {
-                self.children.insert(node_id, children.iter().map(|v| v.id()).collect());
-            }
-        }
+        node.layout(&mut self.layout);
+        node.insert_into(self);
         self
     }
 
     pub fn has_changed(&self) -> bool {
-        !self.changed_ids.is_empty()
+        !self.pending_update.is_empty()
+    }
+
+    pub fn update(&mut self, renderer: &mut Renderer) {
+        while let Some(ref change_id) = self.pending_update.pop() {
+            let shape = self.shapes.get(change_id).unwrap();
+            renderer.update(change_id, shape);
+        }
     }
 
     pub fn prepare(
@@ -128,7 +116,7 @@ impl WidgetStorage {
         if let Some(ref prev_id) = CONTEXT.with_borrow_mut(|ctx| ctx.cursor.hover.prev.take()) {
             let shape = self.shapes.get_mut(prev_id).unwrap();
             if shape.revert_color() {
-                self.changed_ids.push(*prev_id);
+                self.pending_update.push(*prev_id);
             }
         }
         if let Some(ref hover_id) = cursor.hover.curr {
@@ -140,10 +128,12 @@ impl WidgetStorage {
                 if cursor.is_dragging(*hover_id) {
                     if let Some(on_drag) = callbacks.on_drag.get_mut(hover_id) {
                         on_drag(shape);
+                        shape.set_position();
+                        // self.layout.insert(*hover_id, shape.physical_pos());
                     }
                 }
             });
-            self.changed_ids.push(*hover_id);
+            self.pending_update.push(*hover_id);
         }
     }
 
@@ -154,7 +144,7 @@ impl WidgetStorage {
             CALLBACKS.with_borrow_mut(|callbacks| {
                 if let Some(on_click) = callbacks.on_click.get_mut(click_id) {
                     on_click(shape);
-                    self.changed_ids.push(*click_id);
+                    self.pending_update.push(*click_id);
                 }
             });
         }
@@ -164,7 +154,7 @@ impl WidgetStorage {
                 CALLBACKS.with_borrow_mut(|callbacks| {
                     if let Some(on_hover) = callbacks.on_hover.get_mut(hover_id) {
                         on_hover(shape);
-                        self.changed_ids.push(*hover_id);
+                        self.pending_update.push(*hover_id);
                     }
                 });
             }
@@ -177,13 +167,18 @@ impl WidgetStorage {
         self.nodes.iter().for_each(|node_id| {
             let shape = self.shapes.get_mut(node_id).unwrap();
             shape.scale();
-            let pos: Vector2<f32> = CONTEXT.with_borrow(|cx| cx.layout.get_position(node_id).unwrap().clone()).into();
+            let pos: Vector2<f32> = self
+                .layout
+                .get_position(node_id)
+                .cloned()
+                .unwrap()
+                .into();
             let used = Size::<f32>::new(pos.x, pos.y) / window_size;
             let x = (used.width + shape.transform[0].x) - 1.0;  // -1.0 is the left edge of the screen coordinate
             let y = 1.0 - (used.height + shape.transform[1].y); //  1.0 is the top  edge of the screen coordinate
             let translate = Vector2 { x, y };
             shape.set_translate(translate);
-            self.changed_ids.push(*node_id);
+            self.pending_update.push(*node_id);
         });
     }
 }

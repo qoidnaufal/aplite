@@ -63,6 +63,19 @@ where T:
     }
 }
 
+impl<T> std::ops::Add<T> for Vector2<T>
+where T:
+    std::ops::Add<T, Output = T> + Copy
+{
+    type Output = Self;
+    fn add(self, rhs: T) -> Self::Output {
+        Self {
+            x: self.x + rhs,
+            y: self.y + rhs
+        }
+    }
+}
+
 impl<T> std::ops::Sub<Self> for Vector2<T>
 where T:
     std::ops::Sub<T, Output = T>

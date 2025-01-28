@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use crate::{callback::CALLBACKS, context::CONTEXT, shapes::{Shape, ShapeKind}};
+use crate::{callback::CALLBACKS, context::LayoutCtx, shapes::{Shape, ShapeKind}};
 use super::{AnyView, IntoView, NodeId, View};
 
 pub fn image<P: AsRef<Path>>(src: P) -> Image {
@@ -54,15 +54,14 @@ impl View for Image {
         self.shape()
     }
 
-    fn layout(&self) {
-        let dimensions = self.shape().dimensions;
-        CONTEXT.with_borrow_mut(|cx| {
-            if cx.layout.get_position(&self.id()).is_none() {
-                let used_space = cx.layout.used_space();
-                cx.layout.insert(self.id(), (0, used_space.y).into());
-                cx.layout.set_used_space(|space| space.y += dimensions.height);
-            }
-        });
+    fn layout(&self, layout: &mut LayoutCtx) {
+        if layout.get_parent(&self.id()).is_some() {
+            let next_pos = layout.next_child_pos();
+            layout.insert_pos(self.id(), next_pos);
+        } else {
+            let next_pos = layout.next_pos();
+            layout.insert_pos(self.id(), next_pos);
+        }
     }
 }
 

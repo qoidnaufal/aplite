@@ -1,7 +1,7 @@
 use math::Size;
 
 use crate::callback::CALLBACKS;
-use crate::context::CONTEXT;
+use crate::context::LayoutCtx;
 use crate::Rgb;
 use crate::shapes::{Shape, ShapeKind};
 
@@ -52,15 +52,15 @@ impl VStack {
         self
     }
 
-    pub fn on_click<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
-        self
-    }
+    // pub fn on_click<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+    //     CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
+    //     self
+    // }
 
-    pub fn on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
-        self
-    }
+    // pub fn on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+    //     CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
+    //     self
+    // }
 }
 
 impl View for VStack {
@@ -76,25 +76,40 @@ impl View for VStack {
         self.shape()
     }
 
-    fn layout(&self) {
-        let dimensions = self.shape().dimensions;
-        CONTEXT.with_borrow_mut(|cx| {
-            let used_space = cx.layout.used_space();
-            if cx.layout.get_position(&self.id()).is_none() {
-                cx.layout.insert(self.id(), (used_space.x, used_space.y).into());
-                cx.layout.set_used_space(|space| {
-                    space.y += dimensions.height;
-                });
-                if !self.children.is_empty() {
-                    let mut child_space = used_space;
-                    self.children.iter().for_each(|child| {
-                        let child_shape = child.shape();
-                        cx.layout.insert(child.id(), (child_space.x + self.padding(), child_space.y + self.padding()).into());
-                        child_space.y += child_shape.dimensions.height + self.padding();
-                    });
-                }
-            }
+    fn layout(&self, cx: &mut LayoutCtx) {
+        if cx.get_parent(&self.id()).is_some() {
+            let next_pos = cx.next_child_pos();
+            cx.insert_pos(self.id(), next_pos);
+        } else {
+            let next_pos = cx.next_pos();
+            cx.insert_pos(self.id(), next_pos);
+        }
+
+        let current_pos = *cx.get_position(&self.id()).unwrap();
+        cx.set_next_child_pos(|pos| {
+            pos.x = current_pos.x + self.padding();
+            pos.y = current_pos.y + self.padding();
         });
+
+        self.children.iter().for_each(|child| {
+            cx.insert_parent(child.id(), self.id());
+            cx.insert_children(self.id(), child.id());
+            child.layout(cx);
+            cx.set_next_child_pos(|pos| {
+                pos.y += child.shape().dimensions.height + self.padding();
+            });
+        });
+
+        if cx.get_parent(&self.id()).is_some() {
+            cx.set_next_child_pos(|pos| {
+                pos.x = current_pos.x;
+                pos.y = current_pos.y;
+            });
+        } else {
+            cx.set_next_pos(|pos| {
+                pos.y += self.shape().dimensions.height;
+            });
+        }
     }
 }
 
