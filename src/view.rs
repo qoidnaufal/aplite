@@ -3,6 +3,8 @@ mod image;
 mod vstack;
 mod hstack;
 
+use math::Vector2;
+
 pub use {
     button::*,
     image::*,
@@ -31,12 +33,15 @@ pub trait View {
     fn shape(&self) -> Shape;
     fn children(&self) -> Option<&[AnyView]>;
     fn layout(&self, cx: &mut LayoutCtx);
+    fn padding(&self) -> u32;
+    fn spacing(&self) -> u32;
+
     fn insert_into(&self, storage: &mut WidgetStorage) {
         let id = self.id();
         let mut shape = self.shape();
         if storage.layout.get_parent(&id).is_none() {
-            shape.color = Rgb::BLACK;
-            shape.cached_color.replace(Rgb::BLACK);
+            shape.color = Rgb::GRAY;
+            shape.cached_color.replace(Rgb::GRAY);
         }
         storage.nodes.push(id);
         storage.shapes.insert(id, shape);
@@ -57,21 +62,17 @@ pub trait IntoView: Sized {
 pub struct DynView(AnyView);
 
 impl View for DynView {
-    fn id(&self) -> NodeId {
-        self.0.id()
-    }
+    fn id(&self) -> NodeId { self.0.id() }
 
-    fn shape(&self) -> Shape {
-        self.0.shape()
-    }
+    fn shape(&self) -> Shape { self.0.shape() }
 
-    fn children(&self) -> Option<&[AnyView]> {
-        self.0.children()
-    }
+    fn children(&self) -> Option<&[AnyView]> { self.0.children() }
 
-    fn layout(&self, cx: &mut LayoutCtx) {
-        self.0.layout(cx);
-    }
+    fn layout(&self, cx: &mut LayoutCtx) { self.0.layout(cx); }
+
+    fn padding(&self) -> u32 { self.0.padding() }
+
+    fn spacing(&self) -> u32 { self.0.spacing() }
 }
 
 impl<F, IV> IntoView for F
@@ -133,15 +134,20 @@ impl View for TestTriangleWidget {
         self.shape()
     }
 
-    fn layout(&self, layout: &mut LayoutCtx) {
-        if layout.get_parent(&self.id()).is_some() {
-            let next_pos = layout.next_child_pos();
-            layout.insert_pos(self.id(), next_pos);
+    fn layout(&self, cx: &mut LayoutCtx) {
+        let dimensions = self.shape().dimensions / 2;
+        if cx.get_parent(&self.id()).is_some() {
+            let next_pos = cx.next_child_pos() + Vector2::new(dimensions.width, dimensions.height);
+            cx.insert_pos(self.id(), next_pos);
         } else {
-            let next_pos = layout.next_pos();
-            layout.insert_pos(self.id(), next_pos);
+            let next_pos = cx.next_pos() + Vector2::new(dimensions.width, dimensions.height);
+            cx.insert_pos(self.id(), next_pos);
         }
     }
+
+    fn padding(&self) -> u32 { 0 }
+
+    fn spacing(&self) -> u32 { 20 }
 }
 
 impl IntoView for TestTriangleWidget {

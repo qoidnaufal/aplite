@@ -27,12 +27,11 @@ fn root() -> impl IntoView {
     let inc = move |shape: &mut Shape| {
         c1.set(|num| *num += 1);
         eprintln!("inc1 {}", c1.get());
-        shape.set_color(|color| *color = Rgb::WHITE);
+        shape.set_color(|color| *color = Rgb::GREEN);
     };
 
     let c2 = counter.clone();
     let shift_left = move |_: &mut Shape| {
-        c2.set(|num| *num <<= 1);
         eprintln!("shift left {}", c2.get());
     };
 
@@ -45,7 +44,6 @@ fn root() -> impl IntoView {
 
     let c4 = counter.clone();
     let shift_right = move |_: &mut Shape| {
-        c4.set(|num| *num >>= 1);
         eprintln!("shift right {}", c4.get());
     };
 
@@ -63,7 +61,7 @@ fn root() -> impl IntoView {
                     TestTriangleWidget::new().on_hover(hover).into_any(),
                 ]
             ).on_hover(hover).into_any(),
-            vstack(
+            hstack(
                 [
                     button().on_click(inc.clone()).on_hover(hover).into_any(),
                     button().on_click(inc.clone()).on_hover(hover).into_any(),
@@ -90,3 +88,12 @@ fn main() -> Result<(), Error> {
     event_loop.run_app(&mut app)?;
     Ok(())
 }
+
+// fn dummy() -> impl IntoView {
+//     let hover = move |shape: &mut Shape| { shape.set_color(|color| *color = Rgb::BLUE) };
+//     let drag = move |shape: &mut Shape| {
+//         shape.set_color(|color| *color = Rgb::GREEN);
+//     };
+//     TestTriangleWidget::new().on_hover(hover).on_drag(drag)
+//     // image("assets/image2.jpg")
+// }

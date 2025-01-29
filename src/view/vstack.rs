@@ -1,4 +1,4 @@
-use math::Size;
+use math::{Size, Vector2};
 
 use crate::callback::CALLBACKS;
 use crate::context::LayoutCtx;
@@ -27,10 +27,6 @@ impl VStack {
         self.id
     }
 
-    fn padding(&self) -> u32 {
-        50
-    }
-
     fn shape(&self) -> Shape {
         let mut size = Size::new(0, 0);
         if !self.children.is_empty() {
@@ -40,11 +36,11 @@ impl VStack {
                 size.width = size.width.max(child_size.width + self.padding() * 2);
             });
             let child_len = self.children.len() as u32;
-            size.height += self.padding() * (child_len + 1);
+            size.height += self.padding() * 2 + self.spacing() * (child_len - 1);
         } else {
             size = (1, 1).into();
         }
-        Shape::filled(Rgb::GRAY, ShapeKind::FilledRectangle, size)
+        Shape::filled(Rgb::YELLOW, ShapeKind::FilledRectangle, size)
     }
 
     pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
@@ -77,18 +73,19 @@ impl View for VStack {
     }
 
     fn layout(&self, cx: &mut LayoutCtx) {
+        let dimensions = self.shape().dimensions / 2;
         if cx.get_parent(&self.id()).is_some() {
-            let next_pos = cx.next_child_pos();
+            let next_pos = cx.next_child_pos() + Vector2::new(dimensions.width, dimensions.height);
             cx.insert_pos(self.id(), next_pos);
         } else {
-            let next_pos = cx.next_pos();
+            let next_pos = cx.next_pos() + Vector2::new(dimensions.width, dimensions.height);
             cx.insert_pos(self.id(), next_pos);
         }
 
         let current_pos = *cx.get_position(&self.id()).unwrap();
         cx.set_next_child_pos(|pos| {
-            pos.x = current_pos.x + self.padding();
-            pos.y = current_pos.y + self.padding();
+            pos.x = current_pos.x - dimensions.width + self.padding();
+            pos.y = current_pos.y - dimensions.height + self.padding();
         });
 
         self.children.iter().for_each(|child| {
@@ -96,14 +93,14 @@ impl View for VStack {
             cx.insert_children(self.id(), child.id());
             child.layout(cx);
             cx.set_next_child_pos(|pos| {
-                pos.y += child.shape().dimensions.height + self.padding();
+                pos.y += child.shape().dimensions.height + self.spacing();
             });
         });
 
         if cx.get_parent(&self.id()).is_some() {
             cx.set_next_child_pos(|pos| {
-                pos.x = current_pos.x;
-                pos.y = current_pos.y;
+                pos.x = current_pos.x - dimensions.width;
+                pos.y = current_pos.y - dimensions.height;
             });
         } else {
             cx.set_next_pos(|pos| {
@@ -111,6 +108,10 @@ impl View for VStack {
             });
         }
     }
+
+    fn padding(&self) -> u32 { 20 }
+
+    fn spacing(&self) -> u32 { 20 }
 }
 
 impl IntoView for VStack {

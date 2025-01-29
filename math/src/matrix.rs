@@ -1,6 +1,6 @@
 use std::ops::{Index, IndexMut};
 
-use crate::Vector3;
+use crate::{Vector2, Vector3};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Vector4<T> {
@@ -16,6 +16,17 @@ impl From<Vector3<f32>> for Vector4<f32> {
             x: v3.x,
             y: v3.y,
             z: v3.z,
+            w: 1.0,
+        }
+    }
+}
+
+impl From<Vector2<f32>> for Vector4<f32> {
+    fn from(v2: Vector2<f32>) -> Self {
+        Self {
+            x: v2.x,
+            y: v2.y,
+            z: 1.0,
             w: 1.0,
         }
     }

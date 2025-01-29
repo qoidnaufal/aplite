@@ -58,7 +58,7 @@ impl std::ops::Index<usize> for Transform {
 impl Transform {
     const IDENTITY: Self = Self { mat: Matrix::IDENTITIY };
 
-    fn transform<F: FnMut(&mut Matrix<Vector4<f32>, 4>)>(&mut self, mut f: F) {
+    pub fn transform<F: FnMut(&mut Matrix<Vector4<f32>, 4>)>(&mut self, mut f: F) {
         f(&mut self.mat)
     }
 
@@ -160,7 +160,7 @@ impl Shape {
 
     pub fn scale(&mut self) {
         let ws: Size<f32> = CONTEXT.with_borrow(|ctx| ctx.window_size.into());
-        let s = Size::<f32>::from(self.dimensions) / ws / 2.0;
+        let s = Size::<f32>::from(self.dimensions) / ws;
         self.transform.transform(|mat| mat.scale(s.width, s.height));
     }
 
@@ -178,45 +178,31 @@ impl Shape {
         Buffer::new(device, wgpu::BufferUsages::UNIFORM, self.transform.as_slice(), node_id)
     }
 
-    fn dimension(&self) -> Size<f32> {
-        let window_size = CONTEXT.with_borrow(|ctx| ctx.window_size);
-        let width = self.dimensions.width as f32 / window_size.width as f32;
-        let height = -(self.dimensions.height as f32 / window_size.height as f32);
-        Size { width, height }
-    }
-
-    fn pos(&self) -> Vector2<f32> {
-        let vertices = Mesh::from(self.kind).vertices;
-        let x = (self.transform.mat * Vector4::from(vertices[1].position)).x;
-        let y = (self.transform.mat * Vector4::from(vertices[0].position)).y;
-        Vector2 { x, y }
-    }
-
-    pub fn physical_pos(&self) -> Vector2<u32> {
+    pub fn pos(&self) -> Vector2<u32> {
         let ws: Size<f32> = CONTEXT.with_borrow(|cx| cx.window_size.into());
-        let pos = self.pos();
-        let x = ((pos.x + 1.0 - self.transform[0].x) * ws.width) as u32;
-        let y = ((pos.y - 1.0 + self.transform[0].y) * -ws.width) as u32;
-        Vector2 { x, y }
+        let x = (self.transform[3].x / 2.0 + 0.5) * ws.width;
+        let y = -(self.transform[3].y / 2.0 - 0.5) * ws.height;
+        Vector2::new(x as u32, y as u32)
     }
 
-    pub fn is_hovered(&self) -> bool {
-        let (cursor, window_size) = CONTEXT.with_borrow(|ctx| (ctx.cursor, ctx.window_size));
-        let x_cursor = ((cursor.hover.pos.x / window_size.width as f32) - 0.5) * 2.0;
-        let y_cursor = (0.5 - (cursor.hover.pos.y / window_size.height as f32)) * 2.0;
+    pub fn is_hovered(&self, center: Vector2<u32>) -> bool {
+        let (cursor, ws) = CONTEXT.with_borrow(|cx| (cx.cursor, cx.window_size));
+        let ws: Size<f32> = ws.into();
+        let x_cursor = ((cursor.hover.pos.x / ws.width) - 0.5) * 2.0;
+        let y_cursor = (0.5 - (cursor.hover.pos.y / ws.height)) * 2.0;
 
-        let Size { width, height } = self.dimension();
-        let Vector2 { x, y } = self.pos();
+        let x = (center.x as f32 / ws.width - 0.5) * 2.0;
+        let y = (0.5 - center.y as f32 / ws.height) * 2.0;
+        let Size { width, height } = Size::<f32>::from(self.dimensions) / ws;
 
         let angled = if self.kind.is_triangle() {
-            let x_center = width / 2.0;
-            let cursor_tan = tan(x + x_center - x_cursor, y - y_cursor);
-            let triangle_tan = tan(x_center, height);
+            let cursor_tan = tan(x - x_cursor, y + height - y_cursor);
+            let triangle_tan = tan(x - (x - width), (y + height) - (y - height));
             cursor_tan >= triangle_tan
         } else { true };
 
-        (y + height..y).contains(&y_cursor)
-            && (x..x + width).contains(&x_cursor)
+        (y - height..y + height).contains(&y_cursor)
+            && (x - width..x + width).contains(&x_cursor)
             && angled
     }
 
@@ -233,9 +219,9 @@ impl Shape {
 
     pub fn set_position(&mut self) {
         let (cursor, window_size) = CONTEXT.with_borrow(|ctx| (ctx.cursor, ctx.window_size));
-        let ws = Size::<f32>::from(window_size) / 2.0;
-        let x = cursor.hover.pos.x / ws.width - 1.0;
-        let y = 1.0 - cursor.hover.pos.y / ws.height;
+        let ws = Size::<f32>::from(window_size);
+        let x = (cursor.hover.pos.x / ws.width - 0.5) * 2.0;
+        let y = (0.5 - cursor.hover.pos.y / ws.height) * 2.0;
         let t = Vector2 { x, y };
 
         self.set_translate(t);

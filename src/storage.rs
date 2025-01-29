@@ -90,7 +90,8 @@ impl WidgetStorage {
 
     pub fn detect_hover(&self) {
         let hovered = self.shapes.iter().filter_map(|(id, shape)| {
-            if shape.is_hovered() {
+            let pos = self.layout.get_position(id).copied().unwrap();
+            if shape.is_hovered(pos) {
                 Some(id)
             } else { None }
         }).min();
@@ -129,7 +130,7 @@ impl WidgetStorage {
                     if let Some(on_drag) = callbacks.on_drag.get_mut(hover_id) {
                         on_drag(shape);
                         shape.set_position();
-                        // self.layout.insert_pos(*hover_id, shape.physical_pos());
+                        self.layout.insert_pos(*hover_id, shape.pos());
                     }
                 }
             });
@@ -162,21 +163,21 @@ impl WidgetStorage {
     }
 
     pub fn layout(&mut self) {
-        let window_size: Size<f32> = CONTEXT.with_borrow(|ctx| ctx.window_size.into());
+        let ws: Size<f32> = CONTEXT.with_borrow(|ctx| ctx.window_size.into());
 
         self.nodes.iter().for_each(|node_id| {
             let shape = self.shapes.get_mut(node_id).unwrap();
             shape.scale();
-            let pos: Vector2<f32> = self
+            let center: Vector2<f32> = self
                 .layout
                 .get_position(node_id)
-                .cloned()
+                .copied()
                 .unwrap()
                 .into();
-            let used = Size::<f32>::new(pos.x, pos.y) / window_size;
-            let x = (used.width + shape.transform[0].x) - 1.0;  // -1.0 is the left edge of the screen coordinate
-            let y = 1.0 - (used.height + shape.transform[1].y); //  1.0 is the top  edge of the screen coordinate
-            let translate = Vector2 { x, y };
+            let translate = Vector2 {
+                x: (center.x / ws.width - 0.5) * 2.0,
+                y: (0.5 - center.y / ws.height) * 2.0,
+            };
             shape.set_translate(translate);
             self.pending_update.push(*node_id);
         });

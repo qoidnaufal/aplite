@@ -13,12 +13,9 @@
 20240119    [X] signal injection & handling on each shape
 20240125    [X] layouting (start from each widget) & later just scaling on storage
 20240126    [X] fixed hover detection to the topmost object
-20240128    [X] fixed layouting
+20240128    [X] fixed layouting algorithm
+????????    [ ] sdf -> position (layouting) based on shape's centerpoint
 ????????    [ ] improve render performance (CPU side)
-????????    [ ] circle shape
 ????????    [ ] better hover detection, currently using iterator
-????????    [ ] shape modification defined by the widget, currently in layout
-????????    [ ] there's occassional vertices fuck up, i guess it's because of the `thread_local!` macro, maybe just purely use function
-????????    [ ] parent-children widget
-????????    [ ] diff the data before writing into the buffer & better redraw invalidation
+????????    [ ] dynamic (runtime) widget insertion
 ????????    [ ] render text, ttf parsing

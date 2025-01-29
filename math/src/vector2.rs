@@ -38,6 +38,19 @@ where T:
     }
 }
 
+impl<T> std::ops::Div<T> for Vector2<T>
+where T:
+    std::ops::Div<T, Output = T> + Copy
+{
+    type Output = Self;
+    fn div(self, rhs: T) -> Self::Output {
+        Self {
+            x: self.x / rhs,
+            y: self.y / rhs
+        }
+    }
+}
+
 impl<T> std::ops::Add<Self> for Vector2<T>
 where T:
     std::ops::Add<T, Output = T>

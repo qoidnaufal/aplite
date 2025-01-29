@@ -1,4 +1,6 @@
 use std::path::{Path, PathBuf};
+use math::Vector2;
+
 use crate::{callback::CALLBACKS, context::LayoutCtx, shapes::{Shape, ShapeKind}};
 use super::{AnyView, IntoView, NodeId, View};
 
@@ -54,15 +56,20 @@ impl View for Image {
         self.shape()
     }
 
-    fn layout(&self, layout: &mut LayoutCtx) {
-        if layout.get_parent(&self.id()).is_some() {
-            let next_pos = layout.next_child_pos();
-            layout.insert_pos(self.id(), next_pos);
+    fn layout(&self, cx: &mut LayoutCtx) {
+        let dimensions = self.shape().dimensions / 2;
+        if cx.get_parent(&self.id()).is_some() {
+            let next_pos = cx.next_child_pos() + Vector2::new(dimensions.width, dimensions.height);
+            cx.insert_pos(self.id(), next_pos);
         } else {
-            let next_pos = layout.next_pos();
-            layout.insert_pos(self.id(), next_pos);
+            let next_pos = cx.next_pos() + Vector2::new(dimensions.width, dimensions.height);
+            cx.insert_pos(self.id(), next_pos);
         }
     }
+
+    fn padding(&self) -> u32 { 0 }
+
+    fn spacing(&self) -> u32 { 0 }
 }
 
 impl IntoView for Image {

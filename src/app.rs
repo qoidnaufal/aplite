@@ -103,9 +103,8 @@ impl App<'_> {
         self.renderer.as_mut().unwrap().render(&self.widgets.nodes)
     }
 
-    pub fn add_widget(&mut self, node: impl IntoView) -> &mut Self {
+    pub fn add_widget(&mut self, node: impl IntoView) {
         self.widgets.insert(node);
-        self
     }
 }
 
@@ -124,6 +123,8 @@ impl<'a> ApplicationHandler for App<'a> {
             std::mem::transmute(Renderer::new(gpu, &self.widgets))
         };
         self.renderer = Some(renderer);
+
+        eprintln!("{:?}", self.widgets.layout);
     }
 
     fn window_event(
