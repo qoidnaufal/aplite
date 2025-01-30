@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use math::{Size, Vector2};
-use crate::context::{LayoutCtx, MouseAction, CONTEXT};
+use crate::context::{Cursor, LayoutCtx, MouseAction};
 use crate::renderer::{Gfx, Renderer};
 use crate::view::NodeId;
 use crate::texture::{image_reader, TextureData};
@@ -88,35 +88,30 @@ impl WidgetStorage {
         });
     }
 
-    pub fn detect_hover(&self) {
+    pub fn detect_hover(&self, cursor: &mut Cursor, size: Size<u32>) {
         // let start = std::time::Instant::now();
         let hovered = self.shapes.iter().filter_map(|(id, shape)| {
             let pos = self.layout.get_position(id).copied().unwrap();
-            if shape.is_hovered(pos) {
+            if shape.is_hovered(cursor, pos, size) {
                 Some(id)
             } else { None }
         }).min();
         // eprintln!("{:?}", start.elapsed());
         if let Some(id) = hovered {
-            CONTEXT.with_borrow_mut(|ctx| {
-                if ctx.cursor.click.obj.is_none() {
-                    ctx.cursor.hover.prev = ctx.cursor.hover.curr;
-                    ctx.cursor.hover.curr = Some(*id);
-                }
-            })
+            if cursor.click.obj.is_none() {
+                cursor.hover.prev = cursor.hover.curr;
+                cursor.hover.curr = Some(*id);
+            }
         } else {
-            CONTEXT.with_borrow_mut(|ctx| {
-                ctx.cursor.hover.prev = ctx.cursor.hover.curr.take();
-            });
+            cursor.hover.prev = cursor.hover.curr.take();
         }
     }
 
-    pub fn handle_hover(&mut self) {
-        let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
+    pub fn handle_hover(&mut self, cursor: &mut Cursor, size: Size<u32>) {
         if cursor.is_hovering_same_obj() && cursor.click.obj.is_none() {
             return;
         }
-        if let Some(ref prev_id) = CONTEXT.with_borrow_mut(|ctx| ctx.cursor.hover.prev.take()) {
+        if let Some(ref prev_id) = cursor.hover.prev.take() {
             let shape = self.shapes.get_mut(prev_id).unwrap();
             if shape.revert_color() {
                 self.pending_update.push(*prev_id);
@@ -131,8 +126,8 @@ impl WidgetStorage {
                 if cursor.is_dragging(*hover_id) {
                     if let Some(on_drag) = callbacks.on_drag.get_mut(hover_id) {
                         on_drag(shape);
-                        shape.set_position();
-                        self.layout.insert_pos(*hover_id, shape.pos());
+                        shape.set_position(cursor, size);
+                        self.layout.insert_pos(*hover_id, shape.pos(size));
                     }
                 }
             });
@@ -140,8 +135,7 @@ impl WidgetStorage {
         }
     }
 
-    pub fn handle_click(&mut self) {
-        let cursor = CONTEXT.with_borrow(|ctx| ctx.cursor);
+    pub fn handle_click(&mut self, cursor: &Cursor) {
         if let Some(ref click_id) = cursor.click.obj {
             let shape = self.shapes.get_mut(click_id).unwrap();
             CALLBACKS.with_borrow_mut(|callbacks| {
@@ -164,12 +158,12 @@ impl WidgetStorage {
         }
     }
 
-    pub fn layout(&mut self) {
-        let ws: Size<f32> = CONTEXT.with_borrow(|ctx| ctx.window_size.into());
+    pub fn layout(&mut self, size: Size<u32>) {
+        let ws: Size<f32> = size.into();
 
         self.nodes.iter().for_each(|node_id| {
             let shape = self.shapes.get_mut(node_id).unwrap();
-            shape.scale();
+            shape.scale(size);
             let center: Vector2<f32> = self
                 .layout
                 .get_position(node_id)

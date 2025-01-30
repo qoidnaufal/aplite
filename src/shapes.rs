@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use math::{tan, Matrix, Size, Vector2, Vector3, Vector4};
-use crate::context::CONTEXT;
+use crate::context::Cursor;
 use crate::renderer::Buffer;
 use crate::storage::cast_slice;
 use crate::color::Rgb;
@@ -158,8 +158,8 @@ impl Shape {
         self.transform.transform(|mat| mat.translate(t.x, t.y));
     }
 
-    pub fn scale(&mut self) {
-        let ws: Size<f32> = CONTEXT.with_borrow(|ctx| ctx.window_size.into());
+    pub fn scale(&mut self, size: Size<u32>) {
+        let ws: Size<f32> = size.into();
         let s = Size::<f32>::from(self.dimensions) / ws;
         self.transform.transform(|mat| mat.scale(s.width, s.height));
     }
@@ -178,16 +178,15 @@ impl Shape {
         Buffer::new(device, wgpu::BufferUsages::UNIFORM, self.transform.as_slice(), node_id)
     }
 
-    pub fn pos(&self) -> Vector2<u32> {
-        let ws: Size<f32> = CONTEXT.with_borrow(|cx| cx.window_size.into());
+    pub fn pos(&self, size: Size<u32>) -> Vector2<u32> {
+        let ws: Size<f32> = size.into();
         let x = (self.transform[3].x / 2.0 + 0.5) * ws.width;
         let y = (0.5 - self.transform[3].y / 2.0) * ws.height;
         Vector2::new(x as u32, y as u32)
     }
 
-    pub fn is_hovered(&self, center: Vector2<u32>) -> bool {
-        let (cursor, ws) = CONTEXT.with_borrow(|cx| (cx.cursor, cx.window_size));
-        let ws: Size<f32> = ws.into();
+    pub fn is_hovered(&self, cursor: &Cursor, center: Vector2<u32>, size: Size<u32>) -> bool {
+        let ws: Size<f32> = size.into();
         let x_cursor = ((cursor.hover.pos.x / ws.width) - 0.5) * 2.0;
         let y_cursor = (0.5 - (cursor.hover.pos.y / ws.height)) * 2.0;
 
@@ -217,9 +216,8 @@ impl Shape {
         } else { false }
     }
 
-    pub fn set_position(&mut self) {
-        let (cursor, window_size) = CONTEXT.with_borrow(|ctx| (ctx.cursor, ctx.window_size));
-        let ws = Size::<f32>::from(window_size);
+    pub fn set_position(&mut self, cursor: &Cursor, size: Size<u32>) {
+        let ws = Size::<f32>::from(size);
         let x = (cursor.hover.pos.x / ws.width - 0.5) * 2.0;
         let y = (0.5 - cursor.hover.pos.y / ws.height) * 2.0;
         let t = Vector2 { x, y };

@@ -1,40 +1,6 @@
-use std::{cell::RefCell, collections::HashMap};
-
-use math::{Size, Vector2};
-
+use std::collections::HashMap;
+use math::Vector2;
 use crate::NodeId;
-
-thread_local! {
-    pub static CONTEXT: RefCell<Context> = RefCell::new(Context::new());
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Context {
-    pub cursor: Cursor,
-    pub window_size: Size<u32>,
-}
-
-impl Context {
-    fn new() -> Self {
-        Self {
-            cursor: Cursor::new(),
-            window_size: Size::new(0, 0),
-        }
-    }
-
-    pub fn set_click_state(&mut self, action: MouseAction, button: MouseButton) {
-        self.cursor.set_state(action, button);
-
-        match (self.cursor.state.action, self.cursor.state.button) {
-            (MouseAction::Pressed, MouseButton::Left) => {
-                self.cursor.click.obj = self.cursor.hover.curr;
-                self.cursor.click.pos = self.cursor.hover.pos;
-            },
-            (MouseAction::Released, MouseButton::Left) => self.cursor.click.obj = None,
-            _ => {}
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseAction {
@@ -101,7 +67,7 @@ pub struct Cursor {
 }
 
 impl Cursor {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             hover: MouseHover {
                 pos: Vector2::default(),
@@ -119,11 +85,21 @@ impl Cursor {
         }
     }
 
-    pub fn set_state(&mut self,
-        action: MouseAction,
-        button: MouseButton
-    ) {
+    fn set_state(&mut self, action: MouseAction, button: MouseButton) {
         self.state = MouseState { action, button };
+    }
+
+    pub fn set_click_state(&mut self, action: MouseAction, button: MouseButton) {
+        self.set_state(action, button);
+
+        match (self.state.action, self.state.button) {
+            (MouseAction::Pressed, MouseButton::Left) => {
+                self.click.obj = self.hover.curr;
+                self.click.pos = self.hover.pos;
+            },
+            (MouseAction::Released, MouseButton::Left) => self.click.obj = None,
+            _ => {}
+        }
     }
 
     pub fn is_dragging(&self, hover_id: NodeId) -> bool {
@@ -175,9 +151,7 @@ impl LayoutCtx {
         f(&mut self.next_child_pos);
     }
 
-    pub fn next_child_pos(&self) -> Vector2<u32> {
-        self.next_child_pos
-    }
+    pub fn next_child_pos(&self) -> Vector2<u32> { self.next_child_pos }
 
     pub fn get_parent(&self, node_id: &NodeId) -> Option<&NodeId> {
         self.parent.get(node_id)
@@ -203,9 +177,7 @@ impl LayoutCtx {
         self.positions.get(node_id)
     }
 
-    pub fn next_pos(&self) -> Vector2<u32> {
-        self.next_pos
-    }
+    pub fn next_pos(&self) -> Vector2<u32> { self.next_pos }
 
     pub fn set_next_pos<F: FnMut(&mut Vector2<u32>)>(&mut self, mut f: F) {
         f(&mut self.next_pos);

@@ -1,3 +1,4 @@
+use math::Size;
 use winit::window::Window;
 
 use crate::error::Error;
@@ -74,5 +75,9 @@ impl<'a> Gpu<'a> {
 
     pub fn configure(&self) {
         self.surface.configure(&self.device, &self.config);
+    }
+
+    pub fn size(&self) -> Size<u32> {
+        Size::new(self.config.width, self.config.height)
     }
 }

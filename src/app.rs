@@ -3,7 +3,7 @@ use winit::event::WindowEvent;
 use winit::application::ApplicationHandler;
 use math::{Size, Vector2};
 
-use crate::context::CONTEXT;
+use crate::context::Cursor;
 use crate::renderer::Renderer;
 use crate::storage::WidgetStorage;
 use crate::renderer::Gpu;
@@ -37,7 +37,7 @@ impl<const N: usize> Drop for Stats<N> {
         let avg = self.render_time[..self.counter]
             .iter()
             .sum::<std::time::Duration>() / divisor as u32;
-        eprintln!("average render time: {avg:?}");
+        eprintln!("average update time: {avg:?}");
     }
 }
 
@@ -58,6 +58,7 @@ pub struct App<'a> {
     pub renderer: Option<Renderer<'a>>,
     pub window: Option<Window>,
     pub widgets: WidgetStorage,
+    pub cursor: Cursor,
     stats: Stats<50>,
 }
 
@@ -67,31 +68,22 @@ impl App<'_> {
             renderer: None,
             window: None,
             widgets: WidgetStorage::new(),
+            cursor: Cursor::new(),
             stats: Stats::new(),
         }
-    }
-
-    fn request_gpu(&self) -> Result<Gpu, Error> {
-        let gpu = Gpu::request(self.window.as_ref().unwrap())?;
-        gpu.configure();
-        Ok(gpu)
     }
 
     fn request_redraw(&self) {
         self.window.as_ref().unwrap().request_redraw();
     }
 
-    fn resize(&mut self) {
-        self.renderer.as_mut().unwrap().resize(&mut self.widgets);
+    fn resize(&mut self, size: Size<u32>) {
+        self.renderer.as_mut().unwrap().resize(&mut self.widgets, size);
     }
 
     fn id(&self) -> winit::window::WindowId {
         let gfx = self.renderer.as_ref().unwrap();
         gfx.gpu.id
-    }
-
-    fn detect_hover(&self) {
-        self.widgets.detect_hover();
     }
 
     fn update(&mut self) {
@@ -113,18 +105,14 @@ impl<'a> ApplicationHandler for App<'a> {
         let window = event_loop.create_window(Window::default_attributes()).unwrap();
         window.set_title("My App");
 
-        let size = window.inner_size();
-        CONTEXT.with_borrow_mut(|ctx| ctx.window_size = Size::new(size.width, size.height));
-        self.window = Some(window);
-        self.widgets.layout();
-
-        let gpu = self.request_gpu().unwrap();
+        let gpu = Gpu::request(&window).unwrap();
         let renderer: Renderer<'a> = unsafe {
-            std::mem::transmute(Renderer::new(gpu, &self.widgets))
+            std::mem::transmute(Renderer::new(gpu, &mut self.widgets))
         };
+        self.window = Some(window);
         self.renderer = Some(renderer);
 
-        eprintln!("{:?}", self.widgets.layout);
+        // eprintln!("{:?}", self.widgets.layout);
     }
 
     fn window_event(
@@ -133,15 +121,18 @@ impl<'a> ApplicationHandler for App<'a> {
             window_id: winit::window::WindowId,
             event: WindowEvent,
         ) {
+        let size = self.renderer.as_ref().unwrap().gpu.size();
         if self.id() == window_id {
             match event {
                 WindowEvent::CloseRequested => {
                     event_loop.exit();
                 }
                 WindowEvent::RedrawRequested => {
-                    self.update();
-
                     let start = std::time::Instant::now();
+                    self.update();
+                    let elapsed = start.elapsed();
+                    self.stats.push(elapsed);
+
                     match self.render() {
                         Ok(_) => {},
                         Err(Error::SurfaceRendering(surface_err)) => {
@@ -149,7 +140,7 @@ impl<'a> ApplicationHandler for App<'a> {
                                 wgpu::SurfaceError::Outdated
                                 | wgpu::SurfaceError::Lost => {
                                     eprintln!("surface lost / outdated");
-                                    self.resize();
+                                    self.resize(size);
                                 },
                                 wgpu::SurfaceError::OutOfMemory
                                 | wgpu::SurfaceError::Other => {
@@ -163,30 +154,21 @@ impl<'a> ApplicationHandler for App<'a> {
                         }
                         Err(_) => panic!()
                     }
-                    let elapsed = start.elapsed();
-                    // eprintln!("{elapsed:?}");
-                    self.stats.push(elapsed);
                 }
                 WindowEvent::Resized(new_size) => {
-                    CONTEXT.with_borrow_mut(|ctx| {
-                        ctx.window_size = Size::new(new_size.width, new_size.height);
-                    });
-                    self.resize();
+                    self.resize(Size::new(new_size.width, new_size.height));
                 }
                 WindowEvent::MouseInput { state: action, button, .. } => {
-                    CONTEXT.with_borrow_mut(|ctx| ctx.set_click_state(action.into(), button.into()));
-
-                    self.widgets.handle_click();
+                    self.cursor.set_click_state(action.into(), button.into());
+                    self.widgets.handle_click(&self.cursor);
                     if self.widgets.has_changed() {
                         self.request_redraw();
                     }
                 }
                 WindowEvent::CursorMoved { position, .. } => {
-                    let p: winit::dpi::PhysicalPosition<f32> = position.cast();
-                    CONTEXT.with_borrow_mut(|ctx| ctx.cursor.hover.pos = Vector2::from((p.x, p.y)));
-                    self.detect_hover();
-
-                    self.widgets.handle_hover();
+                    self.cursor.hover.pos = Vector2::new(position.x as _, position.y as _);
+                    self.widgets.detect_hover(&mut self.cursor, size);
+                    self.widgets.handle_hover(&mut self.cursor, size);
                     if self.widgets.has_changed() {
                         self.request_redraw();
                     }

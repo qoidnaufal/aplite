@@ -4,12 +4,12 @@ mod shader;
 mod pipeline;
 
 pub use buffer::{Gfx, Buffer};
+use math::Size;
 pub use pipeline::Pipeline;
 pub use pipeline::{bind_group_layout, bind_group};
 pub use gpu::Gpu;
 pub use shader::SHADER;
 
-use crate::context::CONTEXT;
 use crate::shapes::Shape;
 use crate::storage::WidgetStorage;
 use crate::error::Error;
@@ -22,10 +22,12 @@ pub struct Renderer<'a> {
 }
 
 impl<'a> Renderer<'a> {
-    pub fn new(gpu: Gpu<'a>, widgets: &WidgetStorage) -> Self {
+    pub fn new(gpu: Gpu<'a>, widgets: &mut WidgetStorage) -> Self {
         let bg_layout = bind_group_layout(&gpu.device);
         let mut gfx = Gfx::default();
         let pipeline = Pipeline::new(&gpu.device, gpu.config.format, &bg_layout);
+        gpu.configure();
+        widgets.layout(gpu.size());
         widgets.prepare(&gpu.device, &gpu.queue, &bg_layout, &mut gfx);
 
         Self {
@@ -35,14 +37,13 @@ impl<'a> Renderer<'a> {
         }
     }
 
-    pub fn resize(&mut self, widgets: &mut WidgetStorage) {
-        let nws = CONTEXT.with_borrow(|ctx| ctx.window_size);
-        if nws.width > 0 && nws.height > 0 {
-            self.gpu.config.width = nws.width;
-            self.gpu.config.height = nws.height;
+    pub fn resize(&mut self, widgets: &mut WidgetStorage, size: Size<u32>) {
+        if size.width > 0 && size.height > 0 {
+            self.gpu.config.width = size.width;
+            self.gpu.config.height = size.height;
             self.gpu.configure();
         }
-        widgets.layout();
+        widgets.layout(self.gpu.size());
     }
 
     pub fn update(&mut self, id: &NodeId, shape: &Shape) {
@@ -61,7 +62,7 @@ impl<'a> Renderer<'a> {
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("render encoder") });
 
-        draw(
+        encode(
             &mut encoder,
             &view,
             &self.pipeline.pipeline,
@@ -76,7 +77,7 @@ impl<'a> Renderer<'a> {
     }
 }
 
-fn draw(
+fn encode(
     encoder: &mut wgpu::CommandEncoder,
     view: &wgpu::TextureView,
     pipeline: &wgpu::RenderPipeline,
