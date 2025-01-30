@@ -181,7 +181,7 @@ impl Shape {
     pub fn pos(&self) -> Vector2<u32> {
         let ws: Size<f32> = CONTEXT.with_borrow(|cx| cx.window_size.into());
         let x = (self.transform[3].x / 2.0 + 0.5) * ws.width;
-        let y = -(self.transform[3].y / 2.0 - 0.5) * ws.height;
+        let y = (0.5 - self.transform[3].y / 2.0) * ws.height;
         Vector2::new(x as u32, y as u32)
     }
 
@@ -196,9 +196,9 @@ impl Shape {
         let Size { width, height } = Size::<f32>::from(self.dimensions) / ws;
 
         let angled = if self.kind.is_triangle() {
-            let cursor_tan = tan(x - x_cursor, y + height - y_cursor);
-            let triangle_tan = tan(x - (x - width), (y + height) - (y - height));
-            cursor_tan >= triangle_tan
+            let c_tangen = tan(x - x_cursor, y + height - y_cursor);
+            let t_tangen = tan(width / 2.0, height);
+            (t_tangen - c_tangen).is_sign_negative()
         } else { true };
 
         (y - height..y + height).contains(&y_cursor)

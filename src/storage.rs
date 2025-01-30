@@ -89,12 +89,14 @@ impl WidgetStorage {
     }
 
     pub fn detect_hover(&self) {
+        // let start = std::time::Instant::now();
         let hovered = self.shapes.iter().filter_map(|(id, shape)| {
             let pos = self.layout.get_position(id).copied().unwrap();
             if shape.is_hovered(pos) {
                 Some(id)
             } else { None }
         }).min();
+        // eprintln!("{:?}", start.elapsed());
         if let Some(id) = hovered {
             CONTEXT.with_borrow_mut(|ctx| {
                 if ctx.cursor.click.obj.is_none() {

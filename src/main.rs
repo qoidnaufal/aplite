@@ -60,7 +60,7 @@ fn root() -> impl IntoView {
                     image("assets/image2.jpg").on_click(shift_left).into_any(),
                     TestTriangleWidget::new().on_hover(hover).into_any(),
                 ]
-            ).on_hover(hover).into_any(),
+            ).into_any(),
             hstack(
                 [
                     button().on_click(inc.clone()).on_hover(hover).into_any(),
@@ -68,14 +68,14 @@ fn root() -> impl IntoView {
                     button().on_click(inc.clone()).on_hover(hover).into_any(),
                     button().on_click(inc).on_hover(hover).into_any(),
                 ]
-            ).on_hover(hover).into_any(),
+            ).into_any(),
             TestTriangleWidget::new()
                 .on_click(dec)
                 .on_drag(drag)
                 .on_hover(hover)
                 .into_any(),
         ]
-    ).on_hover(hover)
+    )
 }
 
 fn main() -> Result<(), Error> {
