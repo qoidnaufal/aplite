@@ -2,7 +2,8 @@ use std::{collections::HashMap, marker::PhantomData};
 
 use wgpu::util::DeviceExt;
 
-use crate::{shapes::Vertex, texture::TextureData, NodeId};
+use crate::{texture::TextureData, NodeId};
+// use crate::shapes::Vertex;
 
 #[derive(Debug)]
 pub struct Buffer<T> {
@@ -15,9 +16,25 @@ pub struct Buffer<T> {
 }
 
 impl<T> Buffer<T> {
-    pub fn new(device: &wgpu::Device, usage: wgpu::BufferUsages, data: &[u8], node_id: NodeId) -> Self {
+    // pub fn v(device: &wgpu::Device, data: &[u8], node_id: NodeId) -> Self {
+    //     Self::new(device, wgpu::BufferUsages::VERTEX, data, node_id)
+    // }
+
+    pub fn i(device: &wgpu::Device, data: &[u8], node_id: NodeId) -> Self {
+        Self::new(device, wgpu::BufferUsages::INDEX, data, node_id)
+    }
+
+    pub fn u(device: &wgpu::Device, data: &[u8], node_id: NodeId) -> Self {
+        Self::new(device, wgpu::BufferUsages::UNIFORM, data, node_id)
+    }
+
+    // pub fn s(device: &wgpu::Device, data: &[u8], node_id: NodeId) -> Self {
+    //     Self::new(device, wgpu::BufferUsages::STORAGE, data, node_id)
+    // }
+
+    fn new(device: &wgpu::Device, usage: wgpu::BufferUsages, data: &[u8], node_id: NodeId) -> Self {
         let len = data.len();
-        let label = format!("{node_id:?} buffer");
+        let label = node_id.to_string();
         let count = (len / size_of_val(&usage)) as u32;
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(label.as_str()),
@@ -59,7 +76,7 @@ impl<T> Buffer<T> {
 
 #[derive(Default)]
 pub struct Gfx {
-    pub v_buffer: HashMap<NodeId, Buffer<Vertex>>,
+    // pub v_buffer: HashMap<NodeId, Buffer<Vertex>>,
     pub i_buffer: HashMap<NodeId, Buffer<Vec<u32>>>,
     pub textures: HashMap<NodeId, TextureData>,
 }

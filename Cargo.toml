@@ -18,4 +18,4 @@ winit = "0.30.7"
 image = { version = "0.25.5", features = ["png", "jpeg"] }
 math = { path = "./math" }
 pollster = { path = "./pollster" }
-wgpu = "24.0.0"
+wgpu = "24.0.1"

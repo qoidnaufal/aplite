@@ -15,7 +15,6 @@ pub fn image_reader<P: AsRef<Path>>(path: P) -> Color<Rgba<u8>, u8> {
     let mut reader = BufReader::new(file);
     let mut buf = Vec::new();
     let len = reader.read_to_end(&mut buf).unwrap();
-
     let image = image::load_from_memory(&buf[..len]).unwrap();
 
     Color::new(image.dimensions(), &image.to_rgba8())
@@ -62,12 +61,15 @@ impl TextureData {
     }
 
     pub fn change_color(&self, queue: &wgpu::Queue, new_color: Rgb<u8>) {
-        // FIXME: texture size checking
         submit_texture(queue, self.texture.as_image_copy(), new_color.into());
     }
 }
 
-fn submit_texture(queue: &wgpu::Queue, texture: wgpu::TexelCopyTextureInfo, data: Color<Rgba<u8>, u8>) {
+fn submit_texture(
+    queue: &wgpu::Queue,
+    texture: wgpu::TexelCopyTextureInfo,
+    data: Color<Rgba<u8>, u8>
+) {
     queue.write_texture(
         texture,
         &data,

@@ -116,6 +116,7 @@ impl Cursor {
 pub struct LayoutCtx {
     next_pos: Vector2<u32>,
     next_child_pos: Vector2<u32>,
+    // coordinate of the center of the shape
     positions: HashMap<NodeId, Vector2<u32>>,
     parent: HashMap<NodeId, NodeId>,
     children: HashMap<NodeId, Vec<NodeId>>,

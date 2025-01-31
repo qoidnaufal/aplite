@@ -1,4 +1,4 @@
-use crate::shapes::Vertex;
+// use crate::shapes::Vertex;
 use super::SHADER;
 
 pub struct Pipeline {
@@ -29,7 +29,7 @@ impl Pipeline {
                 module: &shader,
                 entry_point: Some("vs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[Vertex::desc()],
+                buffers: &[], //&[Vertex::desc()],
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,

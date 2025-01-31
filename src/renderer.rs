@@ -100,12 +100,12 @@ fn encode(
     });
     pass.set_pipeline(pipeline);
     for node_id in nodes {
-        let v = &gfx.v_buffer[node_id];
+        // let v = &gfx.v_buffer[node_id];
         let i = &gfx.i_buffer[node_id];
         let t = &gfx.textures[node_id];
 
         pass.set_bind_group(0, &t.bind_group, &[]);
-        pass.set_vertex_buffer(0, v.slice());
+        // pass.set_vertex_buffer(0, v.slice());
         pass.set_index_buffer(i.slice(), wgpu::IndexFormat::Uint32);
         pass.draw_indexed(0..i.count, 0, 0..1);
     }

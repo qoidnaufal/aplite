@@ -88,12 +88,3 @@ fn main() -> Result<(), Error> {
     event_loop.run_app(&mut app)?;
     Ok(())
 }
-
-// fn dummy() -> impl IntoView {
-//     let hover = move |shape: &mut Shape| { shape.set_color(|color| *color = Rgb::BLUE) };
-//     let drag = move |shape: &mut Shape| {
-//         shape.set_color(|color| *color = Rgb::GREEN);
-//     };
-//     TestTriangleWidget::new().on_hover(hover).on_drag(drag)
-//     // image("assets/image2.jpg")
-// }

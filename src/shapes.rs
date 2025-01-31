@@ -1,46 +1,46 @@
 use std::path::PathBuf;
 
-use math::{tan, Matrix, Size, Vector2, Vector3, Vector4};
+use math::{tan, Matrix, Size, Vector2, Vector4};
 use crate::context::Cursor;
 use crate::renderer::Buffer;
 use crate::storage::cast_slice;
 use crate::color::Rgb;
 use crate::NodeId;
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct Vertex {
-    pub position: Vector3<f32>,
-    pub uv: Vector2<f32>,
-}
+// #[repr(C)]
+// #[derive(Debug, Clone, Copy)]
+// pub struct Vertex {
+//     pub position: Vector2<f32>,
+//     pub uv: Vector2<f32>,
+// }
 
-impl Vertex {
-    pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
-        wgpu::VertexBufferLayout {
-            array_stride: size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x3,
-                    offset: 0,
-                    shader_location: 0,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x2,
-                    offset: size_of::<Vector3<f32>>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                },
-            ],
-        }
-    }
-}
+// impl Vertex {
+//     pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+//         wgpu::VertexBufferLayout {
+//             array_stride: size_of::<Self>() as wgpu::BufferAddress,
+//             step_mode: wgpu::VertexStepMode::Vertex,
+//             attributes: &[
+//                 wgpu::VertexAttribute {
+//                     format: wgpu::VertexFormat::Float32x2,
+//                     offset: 0,
+//                     shader_location: 0,
+//                 },
+//                 wgpu::VertexAttribute {
+//                     format: wgpu::VertexFormat::Float32x2,
+//                     offset: size_of::<Vector2<f32>>() as wgpu::BufferAddress,
+//                     shader_location: 1,
+//                 },
+//             ],
+//         }
+//     }
+// }
 
-impl PartialEq for Vertex {
-    fn eq(&self, other: &Self) -> bool {
-        self.position == other.position
-            && self.uv == other.uv
-    }
-}
+// impl PartialEq for Vertex {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.position == other.position
+//             && self.uv == other.uv
+//     }
+// }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -63,7 +63,7 @@ impl Transform {
     }
 
     pub fn as_slice(&self) -> &[u8] {
-        cast_slice(self.mat.data()).unwrap()
+        cast_slice(self.mat.data())
     }
 }
 
@@ -82,7 +82,7 @@ impl ShapeKind {
 
 #[derive(Debug, Clone)]
 pub struct Mesh<'a> {
-    pub vertices: &'a [Vertex],
+    // pub vertices: &'a [Vertex],
     pub indices: &'a [u32],
 }
 
@@ -99,24 +99,24 @@ impl From<ShapeKind> for Mesh<'_> {
 impl Mesh<'_> {
     fn rectangle() -> Self {
         Self {
-            vertices: &[
-                Vertex { position: Vector3 { x: -1.0, y:  1.0, z: 1.0 }, uv: Vector2 { x: 0.0, y: 0.0 } },
-                Vertex { position: Vector3 { x: -1.0, y: -1.0, z: 1.0 }, uv: Vector2 { x: 0.0, y: 1.0 } },
-                Vertex { position: Vector3 { x:  1.0, y: -1.0, z: 1.0 }, uv: Vector2 { x: 1.0, y: 1.0 } },
-                Vertex { position: Vector3 { x:  1.0, y:  1.0, z: 1.0 }, uv: Vector2 { x: 1.0, y: 0.0 } },
-                ],
+            // vertices: &[
+            //     Vertex { position: Vector2 { x: -1.0, y:  1.0 }, uv: Vector2 { x: 0.0, y: 0.0 } },
+            //     Vertex { position: Vector2 { x: -1.0, y: -1.0 }, uv: Vector2 { x: 0.0, y: 1.0 } },
+            //     Vertex { position: Vector2 { x:  1.0, y: -1.0 }, uv: Vector2 { x: 1.0, y: 1.0 } },
+            //     Vertex { position: Vector2 { x:  1.0, y:  1.0 }, uv: Vector2 { x: 1.0, y: 0.0 } },
+            //     ],
             indices: &[0, 1, 2, 2, 3, 0],
         }
     }
 
     fn triangle() -> Self {
         Self {
-            vertices: &[
-                Vertex { position: Vector3 { x:  0.0, y:  1.0, z: 1.0 }, uv: Vector2 { x: 0.5, y: 0.0 } },
-                Vertex { position: Vector3 { x: -1.0, y: -1.0, z: 1.0 }, uv: Vector2 { x: 0.0, y: 1.0 } },
-                Vertex { position: Vector3 { x:  1.0, y: -1.0, z: 1.0 }, uv: Vector2 { x: 1.0, y: 1.0 } },
-                ],
-            indices: &[0, 1, 2],
+            // vertices: &[
+            //     Vertex { position: Vector2 { x:  0.0, y:  1.0 }, uv: Vector2 { x: 0.5, y: 0.0 } },
+            //     Vertex { position: Vector2 { x: -1.0, y: -1.0 }, uv: Vector2 { x: 0.0, y: 1.0 } },
+            //     Vertex { position: Vector2 { x:  1.0, y: -1.0 }, uv: Vector2 { x: 1.0, y: 1.0 } },
+            //     ],
+            indices: &[4, 1, 2],
         }
     }
 }
@@ -164,18 +164,18 @@ impl Shape {
         self.transform.transform(|mat| mat.scale(s.width, s.height));
     }
 
-    pub fn v_buffer(&self, node_id: NodeId, device: &wgpu::Device) -> Buffer<Vertex> {
-        let vertices = Mesh::from(self.kind).vertices;
-        Buffer::new(device, wgpu::BufferUsages::VERTEX, cast_slice(vertices).unwrap(), node_id)
-    }
+    // pub fn v_buffer(&self, node_id: NodeId, device: &wgpu::Device) -> Buffer<Vertex> {
+    //     let vertices = Mesh::from(self.kind).vertices;
+    //     Buffer::v(device, cast_slice(vertices), node_id)
+    // }
 
     pub fn i_buffer(&self, node_id: NodeId, device: &wgpu::Device) -> Buffer<Vec<u32>> {
         let indices = Mesh::from(self.kind).indices;
-        Buffer::new(device, wgpu::BufferUsages::INDEX, cast_slice(indices).unwrap(), node_id)
+        Buffer::i(device, cast_slice(indices), node_id)
     }
 
     pub fn u_buffer(&self, node_id: NodeId, device: &wgpu::Device) -> Buffer<Transform> {
-        Buffer::new(device, wgpu::BufferUsages::UNIFORM, self.transform.as_slice(), node_id)
+        Buffer::u(device, self.transform.as_slice(), node_id)
     }
 
     pub fn pos(&self, size: Size<u32>) -> Vector2<u32> {

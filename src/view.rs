@@ -26,6 +26,12 @@ impl NodeId {
     }
 }
 
+impl std::fmt::Display for NodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
 pub type AnyView = Box<dyn View>;
 
 pub trait View {

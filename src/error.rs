@@ -5,7 +5,6 @@ pub enum Error {
     SurfaceRendering(wgpu::SurfaceError),
     DeviceRequest(wgpu::RequestDeviceError),
     NoAdapterFound,
-    PointersHaveDifferentAlignmnet,
 }
 
 impl std::fmt::Display for Error {
@@ -16,7 +15,6 @@ impl std::fmt::Display for Error {
             Self::SurfaceRendering(err) => err.to_string(),
             Self::DeviceRequest(err) => err.to_string(),
             Self::NoAdapterFound => "No adapter found".to_string(),
-            Self::PointersHaveDifferentAlignmnet => "Alignment doesn't match".to_string(),
         };
 
         write!(f, "{}", err_kind)
@@ -31,7 +29,6 @@ impl std::error::Error for Error {
             Error::SurfaceRendering(err) => err.source(),
             Error::DeviceRequest(err) => err.source(),
             Error::NoAdapterFound => None,
-            Error::PointersHaveDifferentAlignmnet => None,
         }
     }
 }

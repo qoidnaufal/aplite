@@ -23,19 +23,6 @@ impl Color<Rgba<u8>, u8> {
     }
 }
 
-impl<Container, T> std::ops::Index<usize> for Color<Container, T> {
-    type Output = T;
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.data[index]
-    }
-}
-
-impl<Container, T> std::ops::IndexMut<usize> for Color<Container, T> {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.data[index]
-    }
-}
-
 impl<T> std::ops::Deref for Color<Rgba<T>, T> {
     type Target = Vec<T>;
     fn deref(&self) -> &Self::Target {

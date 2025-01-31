@@ -5,18 +5,13 @@ use crate::renderer::{Gfx, Renderer};
 use crate::view::NodeId;
 use crate::texture::{image_reader, TextureData};
 use crate::shapes::Shape;
-use crate::error::Error;
 use crate::callback::CALLBACKS;
 use crate::{IntoView, View};
 
-pub fn cast_slice<A: Sized, B: Sized>(p: &[A]) -> Result<&[B], Error> {
-    if align_of::<B>() > align_of::<A>()
-        && (p.as_ptr() as *const () as usize) % align_of::<B>() != 0 {
-        return Err(Error::PointersHaveDifferentAlignmnet);
-    }
+pub fn cast_slice<A: Sized, B: Sized>(p: &[A]) -> &[B] {
     unsafe {
         let len = size_of_val::<[A]>(p) / size_of::<B>();
-        Ok(core::slice::from_raw_parts(p.as_ptr() as *const B, len))
+        core::slice::from_raw_parts(p.as_ptr() as *const B, len)
     }
 }
 
@@ -49,7 +44,7 @@ impl WidgetStorage {
         !self.pending_update.is_empty()
     }
 
-    pub fn update(&mut self, renderer: &mut Renderer) {
+    pub fn submit_update(&mut self, renderer: &mut Renderer) {
         while let Some(ref change_id) = self.pending_update.pop() {
             let shape = self.shapes.get(change_id).unwrap();
             renderer.update(change_id, shape);
@@ -70,7 +65,7 @@ impl WidgetStorage {
                 } else {
                     shape.color.into()
                 };
-                let v = shape.v_buffer(*node_id, device);
+                // let v = shape.v_buffer(*node_id, device);
                 let i = shape.i_buffer(*node_id, device);
                 let u = shape.u_buffer(*node_id, device);
                 let t = TextureData::new(
@@ -81,7 +76,7 @@ impl WidgetStorage {
                     image_data,
                 );
 
-                gfx.v_buffer.insert(*node_id, v);
+                // gfx.v_buffer.insert(*node_id, v);
                 gfx.i_buffer.insert(*node_id, i);
                 gfx.textures.insert(*node_id, t);
             }

@@ -26,8 +26,7 @@ impl<const N: usize> Stats<N> {
     fn push(&mut self, d: std::time::Duration) {
         let idx = self.counter;
         self[idx] = d;
-        self.counter += 1;
-        self.counter %= N;
+        self.counter = (self.counter + 1) % N;
     }
 }
 
@@ -88,7 +87,7 @@ impl App<'_> {
 
     fn update(&mut self) {
         let renderer = self.renderer.as_mut().unwrap();
-        self.widgets.update(renderer);
+        self.widgets.submit_update(renderer);
     }
 
     fn render(&mut self) -> Result<(), Error> {
@@ -116,11 +115,11 @@ impl<'a> ApplicationHandler for App<'a> {
     }
 
     fn window_event(
-            &mut self,
-            event_loop: &winit::event_loop::ActiveEventLoop,
-            window_id: winit::window::WindowId,
-            event: WindowEvent,
-        ) {
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        window_id: winit::window::WindowId,
+        event: WindowEvent,
+    ) {
         let size = self.renderer.as_ref().unwrap().gpu.size();
         if self.id() == window_id {
             match event {
