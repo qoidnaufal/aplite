@@ -3,10 +3,11 @@ mod buffer;
 mod shader;
 mod pipeline;
 
+use std::collections::HashMap;
+
 pub use buffer::{Gfx, Buffer};
 use math::Size;
-pub use pipeline::Pipeline;
-pub use pipeline::{bind_group_layout, bind_group};
+pub use pipeline::{bind_group_layout, bind_group, pipeline};
 pub use gpu::Gpu;
 pub use shader::SHADER;
 
@@ -17,23 +18,23 @@ use crate::NodeId;
 
 pub struct Renderer<'a> {
     pub gpu: Gpu<'a>,
-    pipeline: Pipeline,
-    pub gfx: Gfx
+    pipeline: wgpu::RenderPipeline,
+    pub scenes: HashMap<NodeId, Gfx>,
 }
 
 impl<'a> Renderer<'a> {
     pub fn new(gpu: Gpu<'a>, widgets: &mut WidgetStorage) -> Self {
         let bg_layout = bind_group_layout(&gpu.device);
-        let mut gfx = Gfx::default();
-        let pipeline = Pipeline::new(&gpu.device, gpu.config.format, &bg_layout);
+        let pipeline = pipeline(&gpu.device, gpu.config.format, &bg_layout);
+        let mut scenes = HashMap::default();
         gpu.configure();
         widgets.layout(gpu.size());
-        widgets.prepare(&gpu.device, &gpu.queue, &bg_layout, &mut gfx);
+        widgets.prepare(&gpu.device, &gpu.queue, &bg_layout, &mut scenes);
 
         Self {
             gpu,
             pipeline,
-            gfx,
+            scenes,
         }
     }
 
@@ -47,10 +48,10 @@ impl<'a> Renderer<'a> {
     }
 
     pub fn update(&mut self, id: &NodeId, shape: &Shape) {
-        if let Some(texture) = self.gfx.textures.get_mut(id) {
+        if let Some(gfx) = self.scenes.get_mut(id) {
             let data = shape.transform.as_slice();
-            texture.change_color(&self.gpu.queue, shape.color);
-            texture.u_buffer.update(&self.gpu.device, &self.gpu.queue, 0, data);
+            gfx.t.update_color(&self.gpu.queue, shape.color);
+            gfx.u.update(&self.gpu.device, &self.gpu.queue, 0, data);
         }
     }
 
@@ -65,9 +66,9 @@ impl<'a> Renderer<'a> {
         encode(
             &mut encoder,
             &view,
-            &self.pipeline.pipeline,
+            &self.pipeline,
             nodes,
-            &self.gfx,
+            &self.scenes,
         );
 
         self.gpu.queue.submit(std::iter::once(encoder.finish()));
@@ -82,7 +83,7 @@ fn encode(
     view: &wgpu::TextureView,
     pipeline: &wgpu::RenderPipeline,
     nodes: &[NodeId],
-    gfx: &Gfx,
+    scenes: &HashMap<NodeId, Gfx>,
 ) {
     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("render pass"),
@@ -100,13 +101,9 @@ fn encode(
     });
     pass.set_pipeline(pipeline);
     for node_id in nodes {
-        // let v = &gfx.v_buffer[node_id];
-        let i = &gfx.i_buffer[node_id];
-        let t = &gfx.textures[node_id];
-
-        pass.set_bind_group(0, &t.bind_group, &[]);
-        // pass.set_vertex_buffer(0, v.slice());
-        pass.set_index_buffer(i.slice(), wgpu::IndexFormat::Uint32);
-        pass.draw_indexed(0..i.count, 0, 0..1);
+        let gfx = &scenes[node_id];
+        pass.set_bind_group(0, &gfx.bg, &[]);
+        pass.set_index_buffer(gfx.i.slice(), wgpu::IndexFormat::Uint32);
+        pass.draw_indexed(0..gfx.i.count, 0, 0..1);
     }
 }

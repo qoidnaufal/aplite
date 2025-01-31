@@ -3,9 +3,10 @@ use std::path::PathBuf;
 use math::{tan, Matrix, Size, Vector2, Vector4};
 use crate::context::Cursor;
 use crate::renderer::Buffer;
-use crate::storage::cast_slice;
 use crate::color::Rgb;
-use crate::NodeId;
+use crate::storage::cast_slice;
+use crate::texture::image_reader;
+use crate::{Color, NodeId, Rgba};
 
 // #[repr(C)]
 // #[derive(Debug, Clone, Copy)]
@@ -58,7 +59,7 @@ impl std::ops::Index<usize> for Transform {
 impl Transform {
     const IDENTITY: Self = Self { mat: Matrix::IDENTITIY };
 
-    pub fn transform<F: FnMut(&mut Matrix<Vector4<f32>, 4>)>(&mut self, mut f: F) {
+    pub fn set<F: FnMut(&mut Matrix<Vector4<f32>, 4>)>(&mut self, mut f: F) {
         f(&mut self.mat)
     }
 
@@ -154,14 +155,22 @@ impl Shape {
         }
     }
 
+    pub fn image_data(&self) -> Color<Rgba<u8>, u8> {
+        if let Some(ref src) = self.src {
+            image_reader(src)
+        } else {
+            self.color.into()
+        }
+    }
+
     pub fn set_translate(&mut self, t: Vector2<f32>) {
-        self.transform.transform(|mat| mat.translate(t.x, t.y));
+        self.transform.set(|mat| mat.translate(t.x, t.y));
     }
 
     pub fn scale(&mut self, size: Size<u32>) {
         let ws: Size<f32> = size.into();
         let s = Size::<f32>::from(self.dimensions) / ws;
-        self.transform.transform(|mat| mat.scale(s.width, s.height));
+        self.transform.set(|mat| mat.scale(s.width, s.height));
     }
 
     // pub fn v_buffer(&self, node_id: NodeId, device: &wgpu::Device) -> Buffer<Vertex> {

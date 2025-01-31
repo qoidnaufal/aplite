@@ -4,10 +4,8 @@ use std::fs::File;
 
 use image::GenericImageView;
 
-use crate::renderer::Buffer;
 use crate::renderer::bind_group;
 use crate::color::{Color, Rgb};
-use crate::shapes::Transform;
 use crate::Rgba;
 
 pub fn image_reader<P: AsRef<Path>>(path: P) -> Color<Rgba<u8>, u8> {
@@ -23,16 +21,14 @@ pub fn image_reader<P: AsRef<Path>>(path: P) -> Color<Rgba<u8>, u8> {
 #[derive(Debug)]
 pub struct TextureData {
     texture: wgpu::Texture,
-    pub bind_group: wgpu::BindGroup,
-    pub u_buffer: Buffer<Transform>,
+    view: wgpu::TextureView,
+    sampler: wgpu::Sampler,
 }
 
 impl TextureData {
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        bg_layout: &wgpu::BindGroupLayout,
-        u_buffer: Buffer<Transform>,
         data: Color<Rgba<u8>, u8>,
     ) -> Self {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -53,14 +49,21 @@ impl TextureData {
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = sampler(device);
-        let bind_group = bind_group(device, bg_layout, &view, &sampler, &u_buffer.buffer);
-
         submit_texture(queue, texture.as_image_copy(), data);
 
-        Self { texture, bind_group, u_buffer }
+        Self { texture, view, sampler }
     }
 
-    pub fn change_color(&self, queue: &wgpu::Queue, new_color: Rgb<u8>) {
+    pub fn bind_group(
+        &self,
+        device: &wgpu::Device,
+        bg_layout: &wgpu::BindGroupLayout,
+        uniform: &wgpu::Buffer,
+    ) -> wgpu::BindGroup {
+        bind_group(device, bg_layout, &self.view, &self.sampler, uniform)
+    }
+
+    pub fn update_color(&self, queue: &wgpu::Queue, new_color: Rgb<u8>) {
         submit_texture(queue, self.texture.as_image_copy(), new_color.into());
     }
 }

@@ -1,9 +1,10 @@
-use std::{collections::HashMap, marker::PhantomData};
+use std::marker::PhantomData;
 
 use wgpu::util::DeviceExt;
 
-use crate::{texture::TextureData, NodeId};
-// use crate::shapes::Vertex;
+use crate::NodeId;
+use crate::texture::TextureData;
+use crate::shapes::{Shape, Transform};
 
 #[derive(Debug)]
 pub struct Buffer<T> {
@@ -74,9 +75,26 @@ impl<T> Buffer<T> {
     }
 }
 
-#[derive(Default)]
 pub struct Gfx {
-    // pub v_buffer: HashMap<NodeId, Buffer<Vertex>>,
-    pub i_buffer: HashMap<NodeId, Buffer<Vec<u32>>>,
-    pub textures: HashMap<NodeId, TextureData>,
+    pub i: Buffer<Vec<u32>>,
+    pub u: Buffer<Transform>,
+    pub t: TextureData,
+    pub bg: wgpu::BindGroup,
+}
+
+impl Gfx {
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        bg_layout: &wgpu::BindGroupLayout,
+        shape: &Shape,
+        node_id: NodeId
+    ) -> Self {
+        let i = shape.i_buffer(node_id, device);
+        let u = shape.u_buffer(node_id, device);
+        let t = TextureData::new(device, queue, shape.image_data());
+        let bg = t.bind_group(device, bg_layout, &u.buffer);
+
+        Self { i, u, t, bg }
+    }
 }

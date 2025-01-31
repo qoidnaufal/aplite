@@ -3,16 +3,13 @@ use math::{Size, Vector2};
 use crate::context::{Cursor, LayoutCtx, MouseAction};
 use crate::renderer::{Gfx, Renderer};
 use crate::view::NodeId;
-use crate::texture::{image_reader, TextureData};
 use crate::shapes::Shape;
 use crate::callback::CALLBACKS;
 use crate::{IntoView, View};
 
-pub fn cast_slice<A: Sized, B: Sized>(p: &[A]) -> &[B] {
-    unsafe {
-        let len = size_of_val::<[A]>(p) / size_of::<B>();
-        core::slice::from_raw_parts(p.as_ptr() as *const B, len)
-    }
+pub fn cast_slice<SRC: Sized, DST: Sized>(src: &[SRC]) -> &[DST] {
+    let len = size_of_val::<[SRC]>(src) / size_of::<DST>();
+    unsafe { core::slice::from_raw_parts(src.as_ptr() as *const DST, len) }
 }
 
 #[derive(Debug)]
@@ -56,29 +53,12 @@ impl WidgetStorage {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         bg_layout: &wgpu::BindGroupLayout,
-        gfx: &mut Gfx,
+        scenes: &mut HashMap<NodeId, Gfx>,
     ) {
         self.nodes.iter().for_each(|node_id| {
             if let Some(shape) = self.shapes.get(node_id) {
-                let image_data = if let Some(ref src) = shape.src {
-                    image_reader(src)
-                } else {
-                    shape.color.into()
-                };
-                // let v = shape.v_buffer(*node_id, device);
-                let i = shape.i_buffer(*node_id, device);
-                let u = shape.u_buffer(*node_id, device);
-                let t = TextureData::new(
-                    device,
-                    queue,
-                    bg_layout,
-                    u,
-                    image_data,
-                );
-
-                // gfx.v_buffer.insert(*node_id, v);
-                gfx.i_buffer.insert(*node_id, i);
-                gfx.textures.insert(*node_id, t);
+                let gfx = Gfx::new(device, queue, bg_layout, shape, *node_id);
+                scenes.insert(*node_id, gfx);
             }
         });
     }

@@ -43,10 +43,10 @@ impl VStack {
         Shape::filled(Rgb::YELLOW, ShapeKind::FilledRectangle, size)
     }
 
-    pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
-        self
-    }
+    // pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+    //     CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
+    //     self
+    // }
 
     // pub fn on_click<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
     //     CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));

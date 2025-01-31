@@ -27,20 +27,20 @@ impl Image {
         Shape::textured(self.src.clone(), ShapeKind::TexturedRectangle)
     }
 
-    pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
-        self
-    }
+    // pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+    //     CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
+    //     self
+    // }
 
     pub fn on_click<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
         self
     }
 
-    pub fn on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
-        self
-    }
+    // pub fn on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+    //     CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
+    //     self
+    // }
 }
 
 impl View for Image {
