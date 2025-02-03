@@ -6,7 +6,6 @@ mod context;
 mod renderer;
 mod shapes;
 mod signal;
-mod texture;
 mod storage;
 mod view;
 
@@ -27,12 +26,14 @@ fn root() -> impl IntoView {
     let inc = move |shape: &mut Shape| {
         c1.set(|num| *num += 1);
         eprintln!("inc1 {}", c1.get());
-        shape.set_color(|color| *color = Rgb::GREEN);
+        shape.set_color(|color| color.r += 150);
     };
 
     let c2 = counter.clone();
-    let shift_left = move |_: &mut Shape| {
+    let shift_left = move |shape: &mut Shape| {
+        c2.set(|num| *num <<= 1);
         eprintln!("shift left {}", c2.get());
+        shape.set_color(|color| color.r += 150);
     };
 
     let c3 = counter.clone();
@@ -43,8 +44,10 @@ fn root() -> impl IntoView {
     };
 
     let c4 = counter.clone();
-    let shift_right = move |_: &mut Shape| {
+    let shift_right = move |shape: &mut Shape| {
+        c4.set(|num| *num >>= 1);
         eprintln!("shift right {}", c4.get());
+        shape.set_color(|color| color.r += 150);
     };
 
     let hover = move |shape: &mut Shape| { shape.set_color(|color| *color = Rgb::BLUE) };
@@ -56,21 +59,20 @@ fn root() -> impl IntoView {
         [
             hstack(
                 [
-                    image("assets/image1.jpg").on_click(shift_right).into_any(),
-                    image("assets/image2.jpg").on_click(shift_left).into_any(),
+                    image("assets/image1.jpg").into_any(),
+                    image("assets/image2.jpg").into_any(),
                     TestTriangleWidget::new().on_hover(hover).into_any(),
                 ]
             ).into_any(),
             hstack(
                 [
-                    button().on_click(inc.clone()).on_hover(hover).into_any(),
-                    button().on_click(inc.clone()).on_hover(hover).into_any(),
-                    button().on_click(inc.clone()).on_hover(hover).into_any(),
+                    button().on_click(shift_right).on_hover(hover).into_any(),
+                    button().on_click(shift_left).on_hover(hover).into_any(),
+                    button().on_click(dec).on_hover(hover).into_any(),
                     button().on_click(inc).on_hover(hover).into_any(),
                 ]
             ).into_any(),
             TestTriangleWidget::new()
-                .on_click(dec)
                 .on_drag(drag)
                 .on_hover(hover)
                 .into_any(),
@@ -78,10 +80,22 @@ fn root() -> impl IntoView {
     )
 }
 
+// fn dummy() -> impl IntoView {
+//     let hover = move |shape: &mut Shape| { shape.set_color(|color| *color = Rgb::BLUE) };
+//     let drag = move |shape: &mut Shape| {
+//         shape.set_color(|color| *color = Rgb::GREEN);
+//     };
+//     vstack(
+//         [
+//             TestTriangleWidget::new().on_hover(hover).on_drag(drag).into_any(),
+//             button().on_hover(hover).into_any(),
+//             button().on_hover(hover).into_any(),
+//         ]
+//     )
+// }
+
 fn main() -> Result<(), Error> {
     let event_loop = EventLoop::new()?;
-    event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
-
     let mut app = App::new();
     app.add_widget(root);
 

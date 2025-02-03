@@ -5,9 +5,7 @@ use crate::{
 };
 use super::{AnyView, IntoView, NodeId, View};
 
-pub fn button() -> Button {
-    Button::new()
-}
+pub fn button() -> Button { Button::new() }
 
 pub struct Button {
     id: NodeId,
@@ -19,9 +17,7 @@ impl Button {
         Self { id }
     }
 
-    fn id(&self) -> NodeId {
-        self.id
-    }
+    fn id(&self) -> NodeId { self.id }
 
     fn shape(&self) -> Shape {
         Shape::filled(Rgb::RED, ShapeKind::FilledRectangle, (120, 40))
@@ -39,17 +35,13 @@ impl Button {
 }
 
 impl View for Button {
-    fn id(&self) -> NodeId {
-        self.id()
-    }
+    fn id(&self) -> NodeId { self.id() }
 
-    fn children(&self) -> Option<&[AnyView]> {
-        None
-    }
+    fn children(&self) -> Option<&[AnyView]> { None }
 
-    fn shape(&self) -> Shape {
-        self.shape()
-    }
+    fn shape(&self) -> Shape { self.shape() }
+
+    fn img_src(&self) -> Option<&std::path::PathBuf> { None }
 
     fn layout(&self, cx: &mut LayoutCtx) {
         let dimensions = self.shape().dimensions / 2;
@@ -69,7 +61,5 @@ impl View for Button {
 
 impl IntoView for Button {
     type V = Self;
-    fn into_view(self) -> Self::V {
-        self
-    }
+    fn into_view(self) -> Self::V { self }
 }

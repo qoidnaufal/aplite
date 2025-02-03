@@ -1,12 +1,9 @@
-use std::path::PathBuf;
-
 use math::{tan, Matrix, Size, Vector2, Vector4};
-use crate::context::Cursor;
+use crate::context::{Cursor, LayoutCtx};
 use crate::renderer::Buffer;
 use crate::color::Rgb;
 use crate::storage::cast_slice;
-use crate::texture::image_reader;
-use crate::{Color, NodeId, Rgba};
+use crate::NodeId;
 
 // #[repr(C)]
 // #[derive(Debug, Clone, Copy)]
@@ -43,31 +40,6 @@ use crate::{Color, NodeId, Rgba};
 //     }
 // }
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct Transform {
-    mat: Matrix<Vector4<f32>, 4>,
-}
-
-impl std::ops::Index<usize> for Transform {
-    type Output = Vector4<f32>;
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.mat[index]
-    }
-}
-
-impl Transform {
-    const IDENTITY: Self = Self { mat: Matrix::IDENTITIY };
-
-    pub fn set<F: FnMut(&mut Matrix<Vector4<f32>, 4>)>(&mut self, mut f: F) {
-        f(&mut self.mat)
-    }
-
-    pub fn as_slice(&self) -> &[u8] {
-        cast_slice(self.mat.data())
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShapeKind {
     FilledTriangle,
@@ -76,18 +48,31 @@ pub enum ShapeKind {
 }
 
 impl ShapeKind {
-    pub fn is_triangle(&self) -> bool {
-        matches!(self, Self::FilledTriangle)
+    pub fn is_triangle(&self) -> bool { matches!(self, Self::FilledTriangle) }
+}
+
+impl From<u32> for ShapeKind {
+    fn from(num: u32) -> Self {
+        match num {
+            0 => Self::FilledTriangle,
+            1 => Self::FilledRectangle,
+            2 => Self::TexturedRectangle,
+            _ => unreachable!()
+        }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Mesh<'a> {
-    // pub vertices: &'a [Vertex],
-    pub indices: &'a [u32],
+pub struct Indices<'a>(&'a [u32]);
+
+impl std::ops::Deref for Indices<'_> {
+    type Target = [u32];
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
 }
 
-impl From<ShapeKind> for Mesh<'_> {
+impl From<ShapeKind> for Indices<'_> {
     fn from(kind: ShapeKind) -> Self {
         match kind {
             ShapeKind::FilledTriangle => Self::triangle(),
@@ -97,39 +82,34 @@ impl From<ShapeKind> for Mesh<'_> {
     }
 }
 
-impl Mesh<'_> {
+impl Indices<'_> {
     fn rectangle() -> Self {
-        Self {
-            // vertices: &[
-            //     Vertex { position: Vector2 { x: -1.0, y:  1.0 }, uv: Vector2 { x: 0.0, y: 0.0 } },
-            //     Vertex { position: Vector2 { x: -1.0, y: -1.0 }, uv: Vector2 { x: 0.0, y: 1.0 } },
-            //     Vertex { position: Vector2 { x:  1.0, y: -1.0 }, uv: Vector2 { x: 1.0, y: 1.0 } },
-            //     Vertex { position: Vector2 { x:  1.0, y:  1.0 }, uv: Vector2 { x: 1.0, y: 0.0 } },
-            //     ],
-            indices: &[0, 1, 2, 2, 3, 0],
-        }
+        Self(&[0, 1, 2, 2, 3, 0])
     }
 
     fn triangle() -> Self {
-        Self {
-            // vertices: &[
-            //     Vertex { position: Vector2 { x:  0.0, y:  1.0 }, uv: Vector2 { x: 0.5, y: 0.0 } },
-            //     Vertex { position: Vector2 { x: -1.0, y: -1.0 }, uv: Vector2 { x: 0.0, y: 1.0 } },
-            //     Vertex { position: Vector2 { x:  1.0, y: -1.0 }, uv: Vector2 { x: 1.0, y: 1.0 } },
-            //     ],
-            indices: &[4, 1, 2],
-        }
+        Self(&[4, 1, 2])
     }
 }
+
+// pub struct Vertices<'a>(&'a [Vector2<f32>]);
+
+// #[repr(C)]
+// struct Uniform {
+//     kind: u32,
+//     dimension: Size<f32>,
+//     position: Vector2<f32>,
+//     radius: f32,
+//     transform: Matrix<Vector4<f32>, 4>,
+// }
 
 #[derive(Debug, Clone)]
 pub struct Shape {
     pub dimensions: Size<u32>,
     pub color: Rgb<u8>,
     pub cached_color: Option<Rgb<u8>>,
-    pub src: Option<PathBuf>,
-    pub kind: ShapeKind,
-    pub transform: Transform,
+    pub kind: u32,
+    pub transform: Matrix<Vector4<f32>, 4>,
 }
 
 impl Shape {
@@ -138,73 +118,47 @@ impl Shape {
             dimensions: size.into(),
             color,
             cached_color: Some(color),
-            src: None,
-            kind,
-            transform: Transform::IDENTITY,
+            kind: kind as u32,
+            transform: Matrix::IDENTITY,
         }
     }
 
-    pub fn textured(src: PathBuf, kind: ShapeKind) -> Self {
+    pub fn textured(kind: ShapeKind) -> Self {
         Self {
             dimensions: Size::new(500, 500),
             color: Rgb::WHITE,
             cached_color: None,
-            src: Some(src),
-            kind,
-            transform: Transform::IDENTITY,
+            kind: kind as u32,
+            transform: Matrix::IDENTITY,
         }
     }
 
-    pub fn image_data(&self) -> Color<Rgba<u8>, u8> {
-        if let Some(ref src) = self.src {
-            image_reader(src)
-        } else {
-            self.color.into()
-        }
+    pub fn transform<F: FnMut(&mut Matrix<Vector4<f32>, 4>)>(&mut self, mut f: F) {
+        f(&mut self.transform)
     }
-
-    pub fn set_translate(&mut self, t: Vector2<f32>) {
-        self.transform.set(|mat| mat.translate(t.x, t.y));
-    }
-
-    pub fn scale(&mut self, size: Size<u32>) {
-        let ws: Size<f32> = size.into();
-        let s = Size::<f32>::from(self.dimensions) / ws;
-        self.transform.set(|mat| mat.scale(s.width, s.height));
-    }
-
-    // pub fn v_buffer(&self, node_id: NodeId, device: &wgpu::Device) -> Buffer<Vertex> {
-    //     let vertices = Mesh::from(self.kind).vertices;
-    //     Buffer::v(device, cast_slice(vertices), node_id)
-    // }
 
     pub fn i_buffer(&self, node_id: NodeId, device: &wgpu::Device) -> Buffer<Vec<u32>> {
-        let indices = Mesh::from(self.kind).indices;
-        Buffer::i(device, cast_slice(indices), node_id)
+        let kind = ShapeKind::from(self.kind);
+        let indices = &Indices::from(kind);
+        Buffer::i(device, cast_slice(indices), node_id.to_string())
     }
 
-    pub fn u_buffer(&self, node_id: NodeId, device: &wgpu::Device) -> Buffer<Transform> {
-        Buffer::u(device, self.transform.as_slice(), node_id)
+    pub fn u_buffer(&self, node_id: NodeId, device: &wgpu::Device) -> Buffer<Matrix<Vector4<f32>, 4>> {
+        Buffer::u(device, cast_slice(self.transform.data()), node_id.to_string())
     }
 
-    pub fn pos(&self, size: Size<u32>) -> Vector2<u32> {
-        let ws: Size<f32> = size.into();
-        let x = (self.transform[3].x / 2.0 + 0.5) * ws.width;
-        let y = (0.5 - self.transform[3].y / 2.0) * ws.height;
-        Vector2::new(x as u32, y as u32)
-    }
+    pub fn is_hovered(&self, cursor: &Cursor, center: Vector2<u32>) -> bool {
+        let x = center.x as f32;
+        let y = center.y as f32;
 
-    pub fn is_hovered(&self, cursor: &Cursor, center: Vector2<u32>, size: Size<u32>) -> bool {
-        let ws: Size<f32> = size.into();
-        let x_cursor = ((cursor.hover.pos.x / ws.width) - 0.5) * 2.0;
-        let y_cursor = (0.5 - (cursor.hover.pos.y / ws.height)) * 2.0;
+        let x_cursor = cursor.hover.pos.x;
+        let y_cursor = cursor.hover.pos.y;
 
-        let x = (center.x as f32 / ws.width - 0.5) * 2.0;
-        let y = (0.5 - center.y as f32 / ws.height) * 2.0;
-        let Size { width, height } = Size::<f32>::from(self.dimensions) / ws;
+        let width = self.dimensions.width as f32 / 2.0;
+        let height = self.dimensions.height as f32 / 2.0;
 
-        let angled = if self.kind.is_triangle() {
-            let c_tangen = tan(x - x_cursor, y + height - y_cursor);
+        let angled = if ShapeKind::from(self.kind).is_triangle() {
+            let c_tangen = tan(x_cursor - x, y_cursor - y + height);
             let t_tangen = tan(width / 2.0, height);
             (t_tangen - c_tangen).is_sign_negative()
         } else { true };
@@ -214,9 +168,7 @@ impl Shape {
             && angled
     }
 
-    pub fn set_color<F: FnOnce(&mut Rgb<u8>)>(&mut self, f: F) {
-        f(&mut self.color);
-    }
+    pub fn set_color<F: FnOnce(&mut Rgb<u8>)>(&mut self, f: F) { f(&mut self.color) }
 
     pub fn revert_color(&mut self) -> bool {
         if let Some(cached) = self.cached_color {
@@ -225,13 +177,19 @@ impl Shape {
         } else { false }
     }
 
-    pub fn set_position(&mut self, cursor: &Cursor, size: Size<u32>) {
-        let ws = Size::<f32>::from(size);
-        let x = (cursor.hover.pos.x / ws.width - 0.5) * 2.0;
-        let y = (0.5 - cursor.hover.pos.y / ws.height) * 2.0;
-        let t = Vector2 { x, y };
-
-        self.set_translate(t);
+    pub fn set_position(
+        &mut self,
+        cursor: &Cursor,
+        node_id: NodeId,
+        layout: &mut LayoutCtx
+    ) {
+        let delta = cursor.hover.pos - cursor.click.delta;
+        if let Some(center) = layout.get_mut_position(node_id) {
+            *center = delta.into();
+        }
+        let x = (delta.x / (self.dimensions.width as f32 / self.transform[0].x) - 0.5) * 2.0;
+        let y = (0.5 - delta.y / (self.dimensions.height as f32 / self.transform[1].y)) * 2.0;
+        self.transform(|mat| mat.translate(x, y));
     }
 }
 

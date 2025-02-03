@@ -11,10 +11,12 @@ pub use {
     vstack::*,
     hstack::*,
 };
-use std::sync::atomic::{AtomicU64, Ordering};
-use crate::{
-    callback::CALLBACKS, color::Rgb, context::LayoutCtx, shapes::{Shape, ShapeKind}, storage::WidgetStorage
-};
+use std::{path::PathBuf, sync::atomic::{AtomicU64, Ordering}};
+use crate::storage::WidgetStorage;
+use crate::shapes::{Shape, ShapeKind};
+use crate::context::LayoutCtx;
+use crate::color::Rgb;
+use crate::callback::CALLBACKS;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeId(pub u64);
@@ -38,6 +40,8 @@ pub trait View {
     fn id(&self) -> NodeId;
     fn shape(&self) -> Shape;
     fn children(&self) -> Option<&[AnyView]>;
+    fn img_src(&self) -> Option<&PathBuf>;
+
     fn layout(&self, cx: &mut LayoutCtx);
     fn padding(&self) -> u32;
     fn spacing(&self) -> u32;
@@ -45,6 +49,9 @@ pub trait View {
     fn insert_into(&self, storage: &mut WidgetStorage) {
         let id = self.id();
         let mut shape = self.shape();
+        if let Some(src) = self.img_src() {
+            storage.img_src.insert(id, src.clone());
+        }
         if storage.layout.get_parent(&id).is_none() {
             shape.color = Rgb::GRAY;
             shape.cached_color.replace(Rgb::GRAY);
@@ -73,6 +80,8 @@ impl View for DynView {
     fn shape(&self) -> Shape { self.0.shape() }
 
     fn children(&self) -> Option<&[AnyView]> { self.0.children() }
+
+    fn img_src(&self) -> Option<&PathBuf> { self.0.img_src() }
 
     fn layout(&self, cx: &mut LayoutCtx) { self.0.layout(cx); }
 
@@ -103,9 +112,7 @@ impl TestTriangleWidget {
         Self { id }
     }
 
-    fn id(&self) -> NodeId {
-        self.id
-    }
+    fn id(&self) -> NodeId { self.id }
 
     fn shape(&self) -> Shape {
         Shape::filled(Rgb::RED, ShapeKind::FilledTriangle, (500, 500))
@@ -116,10 +123,10 @@ impl TestTriangleWidget {
         self
     }
 
-    pub fn on_click<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
-        self
-    }
+    // pub fn on_click<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+    //     CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
+    //     self
+    // }
 
     pub fn on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
@@ -128,17 +135,13 @@ impl TestTriangleWidget {
 }
 
 impl View for TestTriangleWidget {
-    fn id(&self) -> NodeId {
-        self.id()
-    }
+    fn id(&self) -> NodeId { self.id() }
 
-    fn children(&self) -> Option<&[Box<dyn View>]> {
-        None
-    }
+    fn children(&self) -> Option<&[Box<dyn View>]> { None }
 
-    fn shape(&self) -> Shape {
-        self.shape()
-    }
+    fn shape(&self) -> Shape { self.shape() }
+
+    fn img_src(&self) -> Option<&PathBuf> { None }
 
     fn layout(&self, cx: &mut LayoutCtx) {
         let dimensions = self.shape().dimensions / 2;
@@ -153,12 +156,10 @@ impl View for TestTriangleWidget {
 
     fn padding(&self) -> u32 { 0 }
 
-    fn spacing(&self) -> u32 { 20 }
+    fn spacing(&self) -> u32 { 0 }
 }
 
 impl IntoView for TestTriangleWidget {
     type V = Self;
-    fn into_view(self) -> Self::V {
-        self
-    }
+    fn into_view(self) -> Self::V { self }
 }

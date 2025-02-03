@@ -49,6 +49,7 @@ pub struct MouseState {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MouseClick {
     pub pos: Vector2<f32>,
+    pub delta: Vector2<f32>,
     pub obj: Option<NodeId>,
 }
 
@@ -80,6 +81,7 @@ impl Cursor {
             },
             click: MouseClick {
                 pos: Vector2::default(),
+                delta: Vector2::default(),
                 obj: None,
             },
         }
@@ -172,6 +174,10 @@ impl LayoutCtx {
 
     pub fn insert_pos(&mut self, node_id: NodeId, pos: Vector2<u32>) {
         self.positions.insert(node_id, Vector2::new(pos.x, pos.y));
+    }
+
+    pub fn get_mut_position(&mut self, node_id: NodeId) -> Option<&mut Vector2<u32>> {
+        self.positions.get_mut(&node_id)
     }
 
     pub fn get_position(&self, node_id: &NodeId) -> Option<&Vector2<u32>> {

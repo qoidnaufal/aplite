@@ -1,7 +1,8 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use math::{Size, Vector2};
 use crate::context::{Cursor, LayoutCtx, MouseAction};
-use crate::renderer::{Gfx, Renderer};
+use crate::renderer::{image_reader, Gfx, Renderer};
 use crate::view::NodeId;
 use crate::shapes::Shape;
 use crate::callback::CALLBACKS;
@@ -16,6 +17,7 @@ pub fn cast_slice<SRC: Sized, DST: Sized>(src: &[SRC]) -> &[DST] {
 pub struct WidgetStorage {
     pub nodes: Vec<NodeId>,
     pub shapes: HashMap<NodeId, Shape>,
+    pub img_src: HashMap<NodeId, PathBuf>,
     pub layout: LayoutCtx,
     pending_update: Vec<NodeId>,
 }
@@ -25,6 +27,7 @@ impl WidgetStorage {
         Self {
             nodes: Vec::new(),
             shapes: HashMap::new(),
+            img_src: HashMap::new(),
             layout: LayoutCtx::new(),
             pending_update: Vec::new(),
         }
@@ -55,19 +58,20 @@ impl WidgetStorage {
         bg_layout: &wgpu::BindGroupLayout,
         scenes: &mut HashMap<NodeId, Gfx>,
     ) {
-        self.nodes.iter().for_each(|node_id| {
-            if let Some(shape) = self.shapes.get(node_id) {
-                let gfx = Gfx::new(device, queue, bg_layout, shape, *node_id);
-                scenes.insert(*node_id, gfx);
-            }
+        self.shapes.iter().for_each(|(node_id, shape)| {
+            let color = if let Some(src) = self.img_src.get(node_id) {
+                image_reader(src)
+            } else { shape.color.into() };
+            let gfx = Gfx::new(device, queue, bg_layout, color, shape, *node_id);
+            scenes.insert(*node_id, gfx);
         });
     }
 
-    pub fn detect_hover(&self, cursor: &mut Cursor, size: Size<u32>) {
+    pub fn detect_hover(&self, cursor: &mut Cursor) {
         // let start = std::time::Instant::now();
         let hovered = self.shapes.iter().filter_map(|(id, shape)| {
             let pos = self.layout.get_position(id).copied().unwrap();
-            if shape.is_hovered(cursor, pos, size) {
+            if shape.is_hovered(cursor, pos) {
                 Some(id)
             } else { None }
         }).min();
@@ -82,7 +86,7 @@ impl WidgetStorage {
         }
     }
 
-    pub fn handle_hover(&mut self, cursor: &mut Cursor, size: Size<u32>) {
+    pub fn handle_hover(&mut self, cursor: &mut Cursor) {
         if cursor.is_hovering_same_obj() && cursor.click.obj.is_none() {
             return;
         }
@@ -101,8 +105,7 @@ impl WidgetStorage {
                 if cursor.is_dragging(*hover_id) {
                     if let Some(on_drag) = callbacks.on_drag.get_mut(hover_id) {
                         on_drag(shape);
-                        shape.set_position(cursor, size);
-                        self.layout.insert_pos(*hover_id, shape.pos(size));
+                        shape.set_position(cursor, *hover_id, &mut self.layout);
                     }
                 }
             });
@@ -110,8 +113,10 @@ impl WidgetStorage {
         }
     }
 
-    pub fn handle_click(&mut self, cursor: &Cursor) {
+    pub fn handle_click(&mut self, cursor: &mut Cursor) {
         if let Some(ref click_id) = cursor.click.obj {
+            let center = *self.layout.get_position(click_id).unwrap();
+            cursor.click.delta = cursor.click.pos - Vector2::<f32>::from(center);
             let shape = self.shapes.get_mut(click_id).unwrap();
             CALLBACKS.with_borrow_mut(|callbacks| {
                 if let Some(on_click) = callbacks.on_click.get_mut(click_id) {
@@ -138,18 +143,21 @@ impl WidgetStorage {
 
         self.nodes.iter().for_each(|node_id| {
             let shape = self.shapes.get_mut(node_id).unwrap();
-            shape.scale(size);
+            let s = Size::<f32>::from(shape.dimensions) / ws;
             let center: Vector2<f32> = self
                 .layout
                 .get_position(node_id)
                 .copied()
                 .unwrap()
                 .into();
-            let translate = Vector2 {
+            let t = Vector2 {
                 x: (center.x / ws.width - 0.5) * 2.0,
                 y: (0.5 - center.y / ws.height) * 2.0,
             };
-            shape.set_translate(translate);
+            shape.transform(|mat| {
+                mat.scale(s.width, s.height);
+                mat.translate(t.x, t.y);
+            });
             self.pending_update.push(*node_id);
         });
     }

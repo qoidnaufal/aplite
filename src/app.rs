@@ -10,55 +10,38 @@ use crate::renderer::Gpu;
 use crate::error::Error;
 use crate::IntoView;
 
-struct Stats<const N: usize> {
-    counter: usize,
-    render_time: [std::time::Duration; N]
+struct Stats {
+    counter: u32,
+    time: std::time::Duration,
 }
 
-impl<const N: usize> Stats<N> {
+impl Stats {
     fn new() -> Self {
         Self {
             counter: 0,
-            render_time: [std::time::Duration::from_micros(0); N],
+            time: std::time::Duration::from_nanos(0),
         }
     }
 
-    fn push(&mut self, d: std::time::Duration) {
-        let idx = self.counter;
-        self[idx] = d;
-        self.counter = (self.counter + 1) % N;
+    fn inc(&mut self, d: std::time::Duration) {
+        self.time += d;
+        self.counter += 1;
     }
 }
 
-impl<const N: usize> Drop for Stats<N> {
+impl Drop for Stats {
     fn drop(&mut self) {
-        let divisor = if self.counter == 0 { N } else { self.counter };
-        let avg = self.render_time[..self.counter]
-            .iter()
-            .sum::<std::time::Duration>() / divisor as u32;
+        let avg = self.time / self.counter;
         eprintln!("average update time: {avg:?}");
-    }
-}
-
-impl<const N: usize> std::ops::Index<usize> for Stats<N> {
-    type Output = std::time::Duration;
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.render_time[index]
-    }
-}
-
-impl<const N: usize> std::ops::IndexMut<usize> for Stats<N> {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.render_time[index]
     }
 }
 
 pub struct App<'a> {
     pub renderer: Option<Renderer<'a>>,
     pub window: Option<Window>,
-    pub widgets: WidgetStorage,
+    pub storage: WidgetStorage,
     pub cursor: Cursor,
-    stats: Stats<50>,
+    stats: Stats,
 }
 
 impl App<'_> {
@@ -66,7 +49,7 @@ impl App<'_> {
         Self {
             renderer: None,
             window: None,
-            widgets: WidgetStorage::new(),
+            storage: WidgetStorage::new(),
             cursor: Cursor::new(),
             stats: Stats::new(),
         }
@@ -77,7 +60,7 @@ impl App<'_> {
     }
 
     fn resize(&mut self, size: Size<u32>) {
-        self.renderer.as_mut().unwrap().resize(&mut self.widgets, size);
+        self.renderer.as_mut().unwrap().resize(size);
     }
 
     fn id(&self) -> winit::window::WindowId {
@@ -87,15 +70,15 @@ impl App<'_> {
 
     fn update(&mut self) {
         let renderer = self.renderer.as_mut().unwrap();
-        self.widgets.submit_update(renderer);
+        self.storage.submit_update(renderer);
     }
 
     fn render(&mut self) -> Result<(), Error> {
-        self.renderer.as_mut().unwrap().render(&self.widgets.nodes)
+        self.renderer.as_mut().unwrap().render(&self.storage.nodes)
     }
 
     pub fn add_widget(&mut self, node: impl IntoView) {
-        self.widgets.insert(node);
+        self.storage.insert(node);
     }
 }
 
@@ -106,12 +89,12 @@ impl<'a> ApplicationHandler for App<'a> {
 
         let gpu = Gpu::request(&window).unwrap();
         let renderer: Renderer<'a> = unsafe {
-            std::mem::transmute(Renderer::new(gpu, &mut self.widgets))
+            std::mem::transmute(Renderer::new(gpu, &mut self.storage))
         };
         self.window = Some(window);
         self.renderer = Some(renderer);
 
-        // eprintln!("{:?}", self.widgets.layout);
+        // eprintln!("{:?}", self.storage.layout);
     }
 
     fn window_event(
@@ -124,13 +107,14 @@ impl<'a> ApplicationHandler for App<'a> {
         if self.id() == window_id {
             match event {
                 WindowEvent::CloseRequested => {
+                    eprintln!();
                     event_loop.exit();
                 }
                 WindowEvent::RedrawRequested => {
                     let start = std::time::Instant::now();
                     self.update();
                     let elapsed = start.elapsed();
-                    self.stats.push(elapsed);
+                    self.stats.inc(elapsed);
 
                     match self.render() {
                         Ok(_) => {},
@@ -159,16 +143,16 @@ impl<'a> ApplicationHandler for App<'a> {
                 }
                 WindowEvent::MouseInput { state: action, button, .. } => {
                     self.cursor.set_click_state(action.into(), button.into());
-                    self.widgets.handle_click(&self.cursor);
-                    if self.widgets.has_changed() {
+                    self.storage.handle_click(&mut self.cursor);
+                    if self.storage.has_changed() {
                         self.request_redraw();
                     }
                 }
                 WindowEvent::CursorMoved { position, .. } => {
                     self.cursor.hover.pos = Vector2::new(position.x as _, position.y as _);
-                    self.widgets.detect_hover(&mut self.cursor, size);
-                    self.widgets.handle_hover(&mut self.cursor, size);
-                    if self.widgets.has_changed() {
+                    self.storage.detect_hover(&mut self.cursor);
+                    self.storage.handle_hover(&mut self.cursor);
+                    if self.storage.has_changed() {
                         self.request_redraw();
                     }
                 }

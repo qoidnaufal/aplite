@@ -1,6 +1,6 @@
 use math::{Size, Vector2};
 
-use crate::callback::CALLBACKS;
+// use crate::callback::CALLBACKS;
 use crate::context::LayoutCtx;
 use crate::Rgb;
 use crate::shapes::{Shape, ShapeKind};
@@ -60,17 +60,13 @@ impl VStack {
 }
 
 impl View for VStack {
-    fn id(&self) -> NodeId {
-        self.id()
-    }
+    fn id(&self) -> NodeId { self.id() }
 
-    fn children(&self) -> Option<&[AnyView]> {
-        Some(&self.children)
-    }
+    fn children(&self) -> Option<&[AnyView]> { Some(&self.children) }
 
-    fn shape(&self) -> Shape {
-        self.shape()
-    }
+    fn shape(&self) -> Shape { self.shape() }
+
+    fn img_src(&self) -> Option<&std::path::PathBuf> { None }
 
     fn layout(&self, cx: &mut LayoutCtx) {
         let dimensions = self.shape().dimensions / 2;
@@ -116,7 +112,5 @@ impl View for VStack {
 
 impl IntoView for VStack {
     type V = Self;
-    fn into_view(self) -> Self::V {
-        self
-    }
+    fn into_view(self) -> Self::V { self }
 }

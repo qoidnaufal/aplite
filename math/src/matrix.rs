@@ -107,7 +107,7 @@ impl<Vector, const N: usize> IndexMut<usize> for Matrix<Vector, N> {
 }
 
 impl Matrix<Vector4<f32>, 4> {
-    pub const IDENTITIY: Self = Self {
+    pub const IDENTITY: Self = Self {
         data: [
             Vector4 { x: 1.0, y: 0.0, z: 0.0, w: 0.0 },
             Vector4 { x: 0.0, y: 1.0, z: 0.0, w: 0.0 },

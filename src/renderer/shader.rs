@@ -1,9 +1,4 @@
 pub const SHADER: &str = r"
-    // struct VertexInput {
-    //     @location(0) position: vec2<f32>,
-    //     @location(1) uv: vec2<f32>,
-    // };
-
     struct VertexOutput {
         @builtin(position) position: vec4<f32>,
         @location(0) uv: vec2<f32>,
@@ -14,8 +9,9 @@ pub const SHADER: &str = r"
     };
 
     @group(0) @binding(0) var<uniform> transform: Transform;
+    @group(1) @binding(0) var<uniform> screen: mat4x4<f32>;
 
-    const vertices = array<vec2<f32>, 5>(
+    const verts = array<vec2<f32>, 5>(
         vec2<f32>(-1.0,  1.0),
         vec2<f32>(-1.0, -1.0),
         vec2<f32>( 1.0, -1.0),
@@ -35,7 +31,7 @@ pub const SHADER: &str = r"
     fn vs_main(@builtin(vertex_index) idx: u32) -> VertexOutput {
         var out: VertexOutput;
         out.uv = uv_table[idx];
-        out.position = vec4<f32>(transform.mat * vec4<f32>(vertices[idx], 1.0, 1.0));
+        out.position = vec4<f32>(screen * transform.mat * vec4<f32>(verts[idx], 1.0, 1.0));
         return out;
     }
 
@@ -48,6 +44,7 @@ pub const SHADER: &str = r"
     }
 ";
 
+// TODO: go learn sdf dumbass!!!
 pub const _SDF_SHADER: &str = r"
     struct VertexOutput {
         @builtin(position) position: vec4<f32>,

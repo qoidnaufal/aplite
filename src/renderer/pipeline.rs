@@ -3,7 +3,7 @@ use super::SHADER;
 pub fn pipeline(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
-    bg_layout: &wgpu::BindGroupLayout,
+    bind_group_layouts: &[&wgpu::BindGroupLayout],
 ) -> wgpu::RenderPipeline {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("shader"), source: wgpu::ShaderSource::Wgsl(SHADER.into())
@@ -11,7 +11,7 @@ pub fn pipeline(
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("pipeline layout"),
-        bind_group_layouts: &[bg_layout],
+        bind_group_layouts,
         push_constant_ranges: &[],
     });
 
@@ -52,8 +52,10 @@ pub fn pipeline(
     })
 }
 
-
-pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+pub fn bind_group_layout(
+    device: &wgpu::Device,
+    // etnries: &[wgpu::BindGroupLayoutEntry]
+) -> wgpu::BindGroupLayout {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("bind group layout"),
         entries: &[
@@ -93,6 +95,7 @@ pub fn bind_group(
     view: &wgpu::TextureView,
     sampler: &wgpu::Sampler,
     uniform: &wgpu::Buffer,
+    // entries: &[wgpu::BindGroupEntry],
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("bind group"),

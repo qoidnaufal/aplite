@@ -1,5 +1,5 @@
 use math::{Size, Vector2};
-use crate::callback::CALLBACKS;
+// use crate::callback::CALLBACKS;
 use crate::context::LayoutCtx;
 use crate::Rgb;
 use crate::shapes::{Shape, ShapeKind};
@@ -21,9 +21,7 @@ impl HStack {
         Self { id, children }
     }
 
-    fn id(&self) -> NodeId {
-        self.id
-    }
+    fn id(&self) -> NodeId { self.id }
 
     fn shape(&self) -> Shape {
         let mut size = Size::new(0, 0);
@@ -58,17 +56,13 @@ impl HStack {
 }
 
 impl View for HStack {
-    fn id(&self) -> NodeId {
-        self.id()
-    }
+    fn id(&self) -> NodeId { self.id() }
 
-    fn children(&self) -> Option<&[AnyView]> {
-        Some(&self.children)
-    }
+    fn children(&self) -> Option<&[AnyView]> { Some(&self.children) }
 
-    fn shape(&self) -> Shape {
-        self.shape()
-    }
+    fn shape(&self) -> Shape { self.shape() }
+
+    fn img_src(&self) -> Option<&std::path::PathBuf> { None }
 
     fn layout(&self, cx: &mut LayoutCtx) {
         let dimensions = self.shape().dimensions / 2;
@@ -114,7 +108,5 @@ impl View for HStack {
 
 impl IntoView for HStack {
     type V = Self;
-    fn into_view(self) -> Self::V {
-        self
-    }
+    fn into_view(self) -> Self::V { self }
 }
