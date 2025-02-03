@@ -1,9 +1,8 @@
 use std::marker::PhantomData;
 
-use math::{Matrix, Size, Vector4};
+use util::{cast_slice, Matrix, Size, Vector4};
 use wgpu::util::DeviceExt;
 
-use crate::storage::cast_slice;
 use crate::{Color, NodeId, Rgba};
 use crate::shapes::Shape;
 use super::TextureData;
@@ -72,7 +71,7 @@ impl<T> Buffer<T> {
 }
 
 pub struct Gfx {
-    pub i: Buffer<Vec<u32>>,
+    pub i: Buffer<u32>,
     pub u: Buffer<Matrix<Vector4<f32>, 4>>,
     pub t: TextureData,
     pub bg: wgpu::BindGroup,

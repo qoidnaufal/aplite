@@ -1,4 +1,4 @@
-use math::Size;
+use util::Size;
 use winit::window::Window;
 
 use crate::error::Error;
@@ -8,7 +8,6 @@ pub struct Gpu<'a> {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
-    pub id: winit::window::WindowId,
 }
 
 #[cfg(all(not(target_os = "macos"), unix))]
@@ -69,7 +68,6 @@ impl<'a> Gpu<'a> {
             device,
             queue,
             config,
-            id: window.id(),
         })
     }
 

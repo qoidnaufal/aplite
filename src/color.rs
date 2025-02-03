@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use math::Size;
+use util::Size;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Color<Container, T> {

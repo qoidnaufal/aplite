@@ -3,7 +3,7 @@ mod image;
 mod vstack;
 mod hstack;
 
-use math::Vector2;
+use util::Vector2;
 
 pub use {
     button::*,

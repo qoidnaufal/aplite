@@ -1,17 +1,13 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
-use math::{Size, Vector2};
+use util::{Size, Vector2};
+
 use crate::context::{Cursor, LayoutCtx, MouseAction};
 use crate::renderer::{image_reader, Gfx, Renderer};
 use crate::view::NodeId;
 use crate::shapes::Shape;
 use crate::callback::CALLBACKS;
 use crate::{IntoView, View};
-
-pub fn cast_slice<SRC: Sized, DST: Sized>(src: &[SRC]) -> &[DST] {
-    let len = size_of_val::<[SRC]>(src) / size_of::<DST>();
-    unsafe { core::slice::from_raw_parts(src.as_ptr() as *const DST, len) }
-}
 
 #[derive(Debug)]
 pub struct WidgetStorage {
@@ -56,14 +52,14 @@ impl WidgetStorage {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         bg_layout: &wgpu::BindGroupLayout,
-        scenes: &mut HashMap<NodeId, Gfx>,
+        graphics: &mut HashMap<NodeId, Gfx>,
     ) {
         self.shapes.iter().for_each(|(node_id, shape)| {
             let color = if let Some(src) = self.img_src.get(node_id) {
                 image_reader(src)
             } else { shape.color.into() };
             let gfx = Gfx::new(device, queue, bg_layout, color, shape, *node_id);
-            scenes.insert(*node_id, gfx);
+            graphics.insert(*node_id, gfx);
         });
     }
 

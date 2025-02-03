@@ -871,8 +871,8 @@ name = "learn_wgpu"
 version = "0.1.0"
 dependencies = [
  "image",
- "math",
  "pollster",
+ "util",
  "wgpu",
  "winit",
 ]
@@ -965,10 +965,6 @@ checksum = "62bb907fe88d54d8d9ce32a3cceab4218ed2f6b7d35617cafe9adf84e43919cb"
 dependencies = [
  "libc",
 ]
-
-[[package]]
-name = "math"
-version = "0.1.0"
 
 [[package]]
 name = "maybe-rayon"
@@ -2155,6 +2151,10 @@ name = "unicode-xid"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
+
+[[package]]
+name = "util"
+version = "0.1.0"
 
 [[package]]
 name = "v_frame"

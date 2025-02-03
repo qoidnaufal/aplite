@@ -1,8 +1,9 @@
-use math::Vector2;
+use util::Vector2;
 
-use crate::{
-    callback::CALLBACKS, color::Rgb, context::LayoutCtx, shapes::{Shape, ShapeKind}
-};
+use crate::shapes::{Shape, ShapeKind};
+use crate::context::LayoutCtx;
+use crate::color::Rgb;
+use crate::callback::CALLBACKS;
 use super::{AnyView, IntoView, NodeId, View};
 
 pub fn button() -> Button { Button::new() }

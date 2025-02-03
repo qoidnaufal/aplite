@@ -1,7 +1,10 @@
-use winit::window::Window;
+use std::collections::HashMap;
+use std::mem::MaybeUninit;
+
+use winit::window::{Window, WindowId};
 use winit::event::WindowEvent;
 use winit::application::ApplicationHandler;
-use math::{Size, Vector2};
+use util::{Size, Vector2};
 
 use crate::context::Cursor;
 use crate::renderer::Renderer;
@@ -37,44 +40,43 @@ impl Drop for Stats {
 }
 
 pub struct App<'a> {
-    pub renderer: Option<Renderer<'a>>,
-    pub window: Option<Window>,
+    pub renderer: MaybeUninit<Renderer<'a>>,
     pub storage: WidgetStorage,
     pub cursor: Cursor,
+    window: HashMap<WindowId, Window>,
     stats: Stats,
 }
 
 impl App<'_> {
     pub fn new() -> Self {
         Self {
-            renderer: None,
-            window: None,
+            renderer: MaybeUninit::uninit(),
+            window: HashMap::new(),
             storage: WidgetStorage::new(),
             cursor: Cursor::new(),
             stats: Stats::new(),
         }
     }
 
-    fn request_redraw(&self) {
-        self.window.as_ref().unwrap().request_redraw();
+    fn request_redraw(&self, window_id: winit::window::WindowId) {
+        if let Some(window) = self.window.get(&window_id) {
+            window.request_redraw();
+        }
     }
 
     fn resize(&mut self, size: Size<u32>) {
-        self.renderer.as_mut().unwrap().resize(size);
-    }
-
-    fn id(&self) -> winit::window::WindowId {
-        let gfx = self.renderer.as_ref().unwrap();
-        gfx.gpu.id
+        unsafe { self.renderer.assume_init_mut().resize(size) }
     }
 
     fn update(&mut self) {
-        let renderer = self.renderer.as_mut().unwrap();
-        self.storage.submit_update(renderer);
+        unsafe {
+            let renderer = self.renderer.assume_init_mut();
+            self.storage.submit_update(renderer);
+        }
     }
 
     fn render(&mut self) -> Result<(), Error> {
-        self.renderer.as_mut().unwrap().render(&self.storage.nodes)
+        unsafe { self.renderer.assume_init_mut().render(&self.storage.nodes) }
     }
 
     pub fn add_widget(&mut self, node: impl IntoView) {
@@ -87,12 +89,11 @@ impl<'a> ApplicationHandler for App<'a> {
         let window = event_loop.create_window(Window::default_attributes()).unwrap();
         window.set_title("My App");
 
-        let gpu = Gpu::request(&window).unwrap();
         let renderer: Renderer<'a> = unsafe {
-            std::mem::transmute(Renderer::new(gpu, &mut self.storage))
+            std::mem::transmute(Renderer::new(&window, &mut self.storage))
         };
-        self.window = Some(window);
-        self.renderer = Some(renderer);
+        self.window.insert(window.id(), window);
+        self.renderer.write(renderer);
 
         // eprintln!("{:?}", self.storage.layout);
     }
@@ -103,61 +104,59 @@ impl<'a> ApplicationHandler for App<'a> {
         window_id: winit::window::WindowId,
         event: WindowEvent,
     ) {
-        let size = self.renderer.as_ref().unwrap().gpu.size();
-        if self.id() == window_id {
-            match event {
-                WindowEvent::CloseRequested => {
-                    eprintln!();
-                    event_loop.exit();
-                }
-                WindowEvent::RedrawRequested => {
-                    let start = std::time::Instant::now();
-                    self.update();
-                    let elapsed = start.elapsed();
-                    self.stats.inc(elapsed);
-
-                    match self.render() {
-                        Ok(_) => {},
-                        Err(Error::SurfaceRendering(surface_err)) => {
-                            match surface_err {
-                                wgpu::SurfaceError::Outdated
-                                | wgpu::SurfaceError::Lost => {
-                                    eprintln!("surface lost / outdated");
-                                    self.resize(size);
-                                },
-                                wgpu::SurfaceError::OutOfMemory
-                                | wgpu::SurfaceError::Other => {
-                                    eprintln!("Out of Memory / other error");
-                                    event_loop.exit();
-                                },
-                                wgpu::SurfaceError::Timeout => {
-                                    eprintln!("Surface Timeout")
-                                },
-                            }
-                        }
-                        Err(_) => panic!()
-                    }
-                }
-                WindowEvent::Resized(new_size) => {
-                    self.resize(Size::new(new_size.width, new_size.height));
-                }
-                WindowEvent::MouseInput { state: action, button, .. } => {
-                    self.cursor.set_click_state(action.into(), button.into());
-                    self.storage.handle_click(&mut self.cursor);
-                    if self.storage.has_changed() {
-                        self.request_redraw();
-                    }
-                }
-                WindowEvent::CursorMoved { position, .. } => {
-                    self.cursor.hover.pos = Vector2::new(position.x as _, position.y as _);
-                    self.storage.detect_hover(&mut self.cursor);
-                    self.storage.handle_hover(&mut self.cursor);
-                    if self.storage.has_changed() {
-                        self.request_redraw();
-                    }
-                }
-                _ => {}
+        let size = unsafe { self.renderer.assume_init_mut().gpu.size() };
+        match event {
+            WindowEvent::CloseRequested => {
+                eprintln!();
+                event_loop.exit();
             }
+            WindowEvent::RedrawRequested => {
+                let start = std::time::Instant::now();
+                self.update();
+                let elapsed = start.elapsed();
+                self.stats.inc(elapsed);
+
+                match self.render() {
+                    Ok(_) => {},
+                    Err(Error::SurfaceRendering(surface_err)) => {
+                        match surface_err {
+                            wgpu::SurfaceError::Outdated
+                            | wgpu::SurfaceError::Lost => {
+                                eprintln!("surface lost / outdated");
+                                self.resize(size);
+                            },
+                            wgpu::SurfaceError::OutOfMemory
+                            | wgpu::SurfaceError::Other => {
+                                eprintln!("Out of Memory / other error");
+                                event_loop.exit();
+                            },
+                            wgpu::SurfaceError::Timeout => {
+                                eprintln!("Surface Timeout")
+                            },
+                        }
+                    }
+                    Err(_) => panic!()
+                }
+            }
+            WindowEvent::Resized(new_size) => {
+                self.resize(Size::new(new_size.width, new_size.height));
+            }
+            WindowEvent::MouseInput { state: action, button, .. } => {
+                self.cursor.set_click_state(action.into(), button.into());
+                self.storage.handle_click(&mut self.cursor);
+                if self.storage.has_changed() {
+                    self.request_redraw(window_id);
+                }
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                self.cursor.hover.pos = Vector2::new(position.x as _, position.y as _);
+                self.storage.detect_hover(&mut self.cursor);
+                self.storage.handle_hover(&mut self.cursor);
+                if self.storage.has_changed() {
+                    self.request_redraw(window_id);
+                }
+            }
+            _ => {}
         }
     }
 }

@@ -6,16 +6,17 @@ mod texture;
 
 use std::collections::HashMap;
 use buffer::Screen;
-use math::Size;
+use util::{cast_slice, Size};
 
 pub use buffer::{Gfx, Buffer};
 pub use pipeline::{bind_group_layout, bind_group, pipeline};
 pub use gpu::Gpu;
 pub use shader::SHADER;
 pub use texture::{TextureData, image_reader};
+use winit::window::Window;
 
 use crate::shapes::Shape;
-use crate::storage::{cast_slice, WidgetStorage};
+use crate::storage::WidgetStorage;
 use crate::error::Error;
 use crate::NodeId;
 
@@ -23,11 +24,12 @@ pub struct Renderer<'a> {
     pub gpu: Gpu<'a>,
     pipeline: wgpu::RenderPipeline,
     screen: Screen,
-    pub scenes: HashMap<NodeId, Gfx>,
+    pub graphics: HashMap<NodeId, Gfx>,
 }
 
 impl<'a> Renderer<'a> {
-    pub fn new(gpu: Gpu<'a>, widgets: &mut WidgetStorage) -> Self {
+    pub fn new(window: &'a Window, widgets: &mut WidgetStorage) -> Self {
+        let gpu = Gpu::request(window).unwrap();
         gpu.configure();
 
         let screen = Screen::new(&gpu.device, gpu.size());
@@ -35,15 +37,15 @@ impl<'a> Renderer<'a> {
         let screen_bg_layout = Screen::bind_group_layout(&gpu.device);
         let pipeline = pipeline(&gpu.device, gpu.config.format, &[&bg_layout, &screen_bg_layout]);
 
-        let mut scenes = HashMap::default();
+        let mut graphics = HashMap::default();
         widgets.layout(gpu.size());
-        widgets.prepare(&gpu.device, &gpu.queue, &bg_layout, &mut scenes);
+        widgets.prepare(&gpu.device, &gpu.queue, &bg_layout, &mut graphics);
 
         Self {
             gpu,
             pipeline,
             screen,
-            scenes,
+            graphics,
         }
     }
 
@@ -69,7 +71,7 @@ impl<'a> Renderer<'a> {
     }
 
     pub fn update(&mut self, id: &NodeId, shape: &Shape) {
-        if let Some(gfx) = self.scenes.get_mut(id) {
+        if let Some(gfx) = self.graphics.get_mut(id) {
             gfx.t.update_color(&self.gpu.queue, shape.color);
             gfx.u.update(&self.gpu.device, &self.gpu.queue, cast_slice(shape.transform.data()));
         }
@@ -88,7 +90,7 @@ impl<'a> Renderer<'a> {
             &view,
             &self.pipeline,
             nodes,
-            &self.scenes,
+            &self.graphics,
             &self.screen,
         );
 

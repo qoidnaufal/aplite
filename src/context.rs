@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use math::Vector2;
+use util::Vector2;
 use crate::NodeId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

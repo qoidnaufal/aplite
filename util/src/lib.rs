@@ -16,3 +16,8 @@ pub fn cos(x: f32, y: f32) -> f32 {
     let hyp = (x*x + y*y).sqrt();
     (x / hyp).abs()
 }
+
+pub fn cast_slice<SRC: Sized, DST: Sized>(src: &[SRC]) -> &[DST] {
+    let len = src.len() * size_of::<SRC>();
+    unsafe { core::slice::from_raw_parts(src.as_ptr() as *const DST, len) }
+}

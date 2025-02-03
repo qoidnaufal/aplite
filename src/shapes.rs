@@ -1,8 +1,7 @@
-use math::{tan, Matrix, Size, Vector2, Vector4};
+use util::{cast_slice, tan, Matrix, Size, Vector2, Vector4};
 use crate::context::{Cursor, LayoutCtx};
 use crate::renderer::Buffer;
 use crate::color::Rgb;
-use crate::storage::cast_slice;
 use crate::NodeId;
 
 // #[repr(C)]
@@ -137,7 +136,7 @@ impl Shape {
         f(&mut self.transform)
     }
 
-    pub fn i_buffer(&self, node_id: NodeId, device: &wgpu::Device) -> Buffer<Vec<u32>> {
+    pub fn i_buffer(&self, node_id: NodeId, device: &wgpu::Device) -> Buffer<u32> {
         let kind = ShapeKind::from(self.kind);
         let indices = &Indices::from(kind);
         Buffer::i(device, cast_slice(indices), node_id.to_string())

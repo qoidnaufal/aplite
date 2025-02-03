@@ -4,18 +4,18 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace]
-members = [ "math", "pollster" , "vertex_renderer"]
+members = [ "util", "pollster" , "vertex_renderer"]
 
 [dependencies]
 winit.workspace = true
 image.workspace = true
-math.workspace = true
+util.workspace = true
 pollster.workspace = true
 wgpu.workspace = true
 
 [workspace.dependencies]
 winit = "0.30.7"
 image = { version = "0.25.5", features = ["png", "jpeg"] }
-math = { path = "./math" }
+util = { path = "./util" }
 pollster = { path = "./pollster" }
 wgpu = "24.0.1"
