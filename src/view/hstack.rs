@@ -1,6 +1,6 @@
-use util::{Size, Vector2};
-// use crate::callback::CALLBACKS;
-use crate::context::LayoutCtx;
+use util::Size;
+use crate::callback::CALLBACKS;
+use crate::storage::WidgetStorage;
 use crate::Rgb;
 use crate::shapes::{Shape, ShapeKind};
 use super::{AnyView, IntoView, NodeId, View};
@@ -44,10 +44,10 @@ impl HStack {
     //     self
     // }
 
-    // pub fn on_click<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
-    //     CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
-    //     self
-    // }
+    pub fn _on_click<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
+        self
+    }
 
     // pub fn on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
     //     CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
@@ -64,41 +64,38 @@ impl View for HStack {
 
     fn img_src(&self) -> Option<&std::path::PathBuf> { None }
 
-    fn layout(&self, cx: &mut LayoutCtx) {
-        let dimensions = self.shape().dimensions / 2;
-        if cx.get_parent(&self.id()).is_some() {
-            let next_pos = cx.next_child_pos() + Vector2::new(dimensions.width, dimensions.height);
-            cx.insert_pos(self.id(), next_pos);
-        } else {
-            let next_pos = cx.next_pos() + Vector2::new(dimensions.width, dimensions.height);
-            cx.insert_pos(self.id(), next_pos);
-        }
+    fn layout(&self, cx: &mut WidgetStorage, shape: &mut Shape) {
+        cx.layout.align_horizontally();
+        cx.layout.assign_position(shape);
+        // let half = self.shape().dimensions / 2;
+        // let current_pos = if cx.get_parent(&self.id()).is_some() {
+        //     cx.layout.next_child_pos()
+        // } else {
+        //     cx.layout.next_pos()
+        // };
+        // shape.pos = current_pos + half;
 
-        let current_pos = *cx.get_position(&self.id()).unwrap();
-        cx.set_next_child_pos(|pos| {
-            pos.x = current_pos.x - dimensions.width + self.padding();
-            pos.y = current_pos.y - dimensions.height + self.padding();
-        });
+        // cx.layout.set_next_child_pos(|pos| {
+        //     pos.x = current_pos.x + self.padding();
+        //     pos.y = current_pos.y + self.padding();
+        // });
 
-        self.children.iter().for_each(|child| {
-            cx.insert_parent(child.id(), self.id());
-            cx.insert_children(self.id(), child.id());
-            child.layout(cx);
-            cx.set_next_child_pos(|pos| {
-                pos.x += child.shape().dimensions.width + self.spacing();
-            });
-        });
+        // self.children.iter().for_each(|child| {
+        //     cx.layout.set_next_child_pos(|pos| {
+        //         pos.x += child.shape().dimensions.width + self.spacing();
+        //     });
+        // });
 
-        if cx.get_parent(&self.id()).is_some() {
-            cx.set_next_child_pos(|pos| {
-                pos.x = current_pos.x - dimensions.width;
-                pos.y = current_pos.y - dimensions.height;
-            });
-        } else {
-            cx.set_next_pos(|pos| {
-                pos.y += self.shape().dimensions.height;
-            });
-        }
+        // if cx.get_parent(&self.id()).is_some() {
+        //     cx.layout.set_next_child_pos(|pos| {
+        //         pos.x = current_pos.x;
+        //         pos.y = current_pos.y;
+        //     });
+        // } else {
+        //     cx.layout.set_next_pos(|pos| {
+        //         pos.y += shape.dimensions.height;
+        //     });
+        // }
     }
 
     fn padding(&self) -> u32 { 20 }

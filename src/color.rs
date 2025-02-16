@@ -60,6 +60,7 @@ impl From<Rgba<u8>> for Color<Rgba<u8>, u8> {
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Rgb<T> {
     pub r: T,
@@ -108,6 +109,17 @@ impl From<Rgb<u8>> for wgpu::Color {
     }
 }
 
+impl From<Rgba<f32>> for Rgb<u8> {
+    fn from(rgba_f32: Rgba<f32>) -> Self {
+        let rgba_u8: Rgba<u8> = rgba_f32.into();
+        Self {
+            r: rgba_u8.r,
+            g: rgba_u8.g,
+            b: rgba_u8.b,
+        }
+    }
+}
+
 impl PartialEq for Rgb<u8> {
     fn eq(&self, other: &Self) -> bool {
         self.r == other.r
@@ -124,12 +136,32 @@ impl PartialEq for Rgb<f32> {
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Rgba<T> {
     pub r: T,
     pub g: T,
     pub b: T,
     pub a: T,
+}
+
+impl From<Rgba<u8>> for u32 {
+    fn from(rgba: Rgba<u8>) -> Self {
+        (rgba.r as u32) << 24
+        | (rgba.g as u32) << 16
+        | (rgba.b as u32) << 8
+        | rgba.a as u32
+    }
+}
+
+impl From<u32> for Rgba<u8> {
+    fn from(num: u32) -> Self {
+        let r = (num >> 24) as u8;
+        let g = ((num >> 16) & 0xFF) as u8;
+        let b = ((num >> 8) & 0xFF) as u8;
+        let a = (num & 0xFF) as u8;
+        Self { r, g, b, a }
+    }
 }
 
 impl From<Rgba<u8>> for Rgba<f32> {
@@ -151,6 +183,24 @@ impl From<Rgba<f32>> for Rgba<u8> {
             b: (val.b * u8::MAX as f32) as u8,
             a: (val.a * u8::MAX as f32) as u8,
         }
+    }
+}
+
+impl From<Rgb<u8>> for Rgba<u8> {
+    fn from(value: Rgb<u8>) -> Self {
+        Self {
+            r: value.r,
+            g: value.g,
+            b: value.b,
+            a: u8::MAX,
+        }
+    }
+}
+
+impl From<Rgb<u8>> for Rgba<f32> {
+    fn from(value: Rgb<u8>) -> Self {
+        let rgba: Rgba<u8> = value.into();
+        rgba.into()
     }
 }
 

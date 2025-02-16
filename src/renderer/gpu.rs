@@ -1,27 +1,27 @@
+use std::sync::Arc;
+
 use util::Size;
 use winit::window::Window;
 
 use crate::error::Error;
 
-pub struct Gpu<'a> {
-    pub surface: wgpu::Surface<'a>,
+pub struct Gpu {
+    pub surface: wgpu::Surface<'static>,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
 }
 
-#[cfg(all(not(target_os = "macos"), unix))]
 fn backend() -> wgpu::Backends {
-    wgpu::Backends::GL
+    #[cfg(all(unix, not(target_os = "macos")))]
+    return wgpu::Backends::GL;
+
+    #[cfg(target_os = "macos")]
+    return wgpu::Backends::METAL;
 }
 
-#[cfg(target_os = "macos")]
-fn backend() -> wgpu::Backends {
-    wgpu::Backends::METAL
-}
-
-impl<'a> Gpu<'a> {
-    pub fn request(window: &'a Window) -> Result<Self, Error> {
+impl Gpu {
+    pub fn request(window: Arc<Window>) -> Result<Self, Error> {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: backend(),
@@ -31,16 +31,15 @@ impl<'a> Gpu<'a> {
 
         let (adapter, device, queue) = pollster::block_on(async {
             let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
-                force_fallback_adapter: false,
                 compatible_surface: Some(&surface),
+                ..Default::default()
             }).await.ok_or(Error::NoAdapterFound)?;
             let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor {
-                label: None,
-                required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
-                memory_hints: Default::default(),
-            }, None).await?;
+                    required_features: wgpu::Features::empty(),
+                    ..Default::default()
+                },
+                None
+            ).await?;
 
             Ok::<(wgpu::Adapter, wgpu::Device, wgpu::Queue), Error>((adapter, device, queue))
         })?;

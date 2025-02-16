@@ -4,53 +4,67 @@ mod shader;
 mod pipeline;
 mod texture;
 
-use std::collections::HashMap;
-use buffer::Screen;
-use util::{cast_slice, Size};
+use std::sync::Arc;
+use winit::window::Window;
+use util::Size;
 
-pub use buffer::{Gfx, Buffer};
-pub use pipeline::{bind_group_layout, bind_group, pipeline};
+pub use buffer::{Gfx, Uniform};
+pub use pipeline::pipeline;
 pub use gpu::Gpu;
 pub use shader::SHADER;
 pub use texture::{TextureData, image_reader};
-use winit::window::Window;
 
-use crate::shapes::Shape;
 use crate::storage::WidgetStorage;
 use crate::error::Error;
-use crate::NodeId;
+use crate::{IntoView, View};
 
-pub struct Renderer<'a> {
-    pub gpu: Gpu<'a>,
+pub struct Renderer {
+    pub gpu: Gpu,
+    pub gfx: Gfx,
     pipeline: wgpu::RenderPipeline,
-    screen: Screen,
-    pub graphics: HashMap<NodeId, Gfx>,
+    uniform: Uniform,
+    textures: Vec<TextureData>,
+    indices: wgpu::Buffer,
 }
 
-impl<'a> Renderer<'a> {
-    pub fn new(window: &'a Window, widgets: &mut WidgetStorage) -> Self {
+impl Renderer {
+    pub fn new<F, IV>(
+        window: Arc<Window>,
+        storage: &mut WidgetStorage,
+        view_fn: F
+    ) -> Self
+    where
+        F: Fn() -> IV + 'static,
+        IV: IntoView + 'static,
+    {
         let gpu = Gpu::request(window).unwrap();
         gpu.configure();
 
-        let screen = Screen::new(&gpu.device, gpu.size());
-        let bg_layout = bind_group_layout(&gpu.device);
-        let screen_bg_layout = Screen::bind_group_layout(&gpu.device);
-        let pipeline = pipeline(&gpu.device, gpu.config.format, &[&bg_layout, &screen_bg_layout]);
+        let mut gfx = Gfx::new(&gpu.device);
+        let mut textures = Vec::new();
+        let uniform = Uniform::new(&gpu.device, gpu.size());
+        let pipeline = pipeline(&gpu, &[
+            &Uniform::bind_group_layout(&gpu.device),
+            &Gfx::bind_group_layout(&gpu.device),
+            &TextureData::bind_group_layout(&gpu.device),
+        ]);
 
-        let mut graphics = HashMap::default();
-        widgets.layout(gpu.size());
-        widgets.prepare(&gpu.device, &gpu.queue, &bg_layout, &mut graphics);
+        view_fn().into_view().prepare(storage, &gpu, &mut gfx, &mut textures);
+        gfx.write(&gpu.device, &gpu.queue);
+        let indices = gfx.indices(&gpu.device);
 
         Self {
             gpu,
+            gfx,
             pipeline,
-            screen,
-            graphics,
+            uniform,
+            textures,
+            indices
         }
     }
 
     pub fn resize(&mut self, size: Size<u32>) {
-        let prev_size: Size<f32> = self.screen.initial_size.into();
+        let prev_size: Size<f32> = self.uniform.initial_size.into();
         let new_size: Size<f32> = size.into();
         let s = prev_size / new_size;
 
@@ -60,24 +74,22 @@ impl<'a> Renderer<'a> {
             self.gpu.configure();
         }
 
-        self.screen.update(
-            &self.gpu.device,
-            &self.gpu.queue,
-            |mat| {
-                mat.scale(s.width, s.height);
-                mat.translate(s.width - 1.0, 1.0 - s.height);
-            }
-        );
+        self.uniform.update(|mat| {
+            mat.scale(s.width, s.height);
+            mat.translate(s.width - 1.0, 1.0 - s.height);
+        });
+        self.uniform.write(&self.gpu.device, &self.gpu.queue);
     }
 
-    pub fn update(&mut self, id: &NodeId, shape: &Shape) {
-        if let Some(gfx) = self.graphics.get_mut(id) {
-            gfx.t.update_color(&self.gpu.queue, shape.color);
-            gfx.u.update(&self.gpu.device, &self.gpu.queue, cast_slice(shape.transform.data()));
+    pub fn update(&mut self, index: usize) {
+        self.gfx.write(&self.gpu.device, &self.gpu.queue);
+        if let Some(texture_data) = self.textures.get(index) {
+            let shape = &self.gfx.shapes.data[index];
+            texture_data.update_color(&self.gpu.queue, shape.color.into());
         }
     }
 
-    pub fn render(&mut self, nodes: &[NodeId]) -> Result<(), Error> {
+    pub fn render(&mut self) -> Result<(), Error> {
         let output = self.gpu.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
@@ -89,9 +101,10 @@ impl<'a> Renderer<'a> {
             &mut encoder,
             &view,
             &self.pipeline,
-            nodes,
-            &self.graphics,
-            &self.screen,
+            &self.gfx,
+            &self.uniform,
+            &self.textures,
+            &self.indices,
         );
 
         self.gpu.queue.submit(std::iter::once(encoder.finish()));
@@ -105,9 +118,10 @@ fn encode(
     encoder: &mut wgpu::CommandEncoder,
     view: &wgpu::TextureView,
     pipeline: &wgpu::RenderPipeline,
-    nodes: &[NodeId],
-    scenes: &HashMap<NodeId, Gfx>,
-    screen: &Screen,
+    gfx: &Gfx,
+    uniform: &Uniform,
+    textures: &Vec<TextureData>,
+    indices: &wgpu::Buffer,
 ) {
     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("render pass"),
@@ -123,12 +137,26 @@ fn encode(
         timestamp_writes: None,
         occlusion_query_set: None,
     });
+
     pass.set_pipeline(pipeline);
-    pass.set_bind_group(1, &screen.bind_group, &[]);
-    for node_id in nodes {
-        let gfx = &scenes[node_id];
-        pass.set_bind_group(0, &gfx.bg, &[]);
-        pass.set_index_buffer(gfx.i.slice(), wgpu::IndexFormat::Uint32);
-        pass.draw_indexed(0..gfx.i.count, 0, 0..1);
+    pass.set_bind_group(0, &uniform.bind_group, &[]);
+    pass.set_bind_group(1, &gfx.bind_group, &[]);
+    pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
+
+    let instance_len = gfx.shapes.len();
+    let mut idx_offset: u32 = 0;
+    let mut instace_offset: u32 = 0; 
+
+    for i in 0..instance_len {
+        let texture_data = &textures[i];
+        let shape = &gfx.shapes.data[i];
+        let idx_len = shape.indices().len() as u32;
+
+        // FIXME: texture handling using storage / array
+        pass.set_bind_group(2, &texture_data.bind_group, &[]);
+        pass.draw_indexed(idx_offset..idx_offset + idx_len, 0, instace_offset..instace_offset + 1);
+
+        idx_offset += idx_len;
+        instace_offset += 1;
     }
 }

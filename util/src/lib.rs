@@ -8,13 +8,10 @@ pub use vector3::Vector3;
 pub use size::Size;
 pub use matrix::{Matrix, Vector4};
 
+pub type Matrix4x4 = Matrix<Vector4<f32>, 4>;
+
 pub fn tan(x: f32, y: f32) -> f32 {
     (y / x).abs()
-}
-
-pub fn cos(x: f32, y: f32) -> f32 {
-    let hyp = (x*x + y*y).sqrt();
-    (x / hyp).abs()
 }
 
 pub fn cast_slice<SRC: Sized, DST: Sized>(src: &[SRC]) -> &[DST] {

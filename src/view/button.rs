@@ -1,9 +1,7 @@
-use util::Vector2;
-
 use crate::shapes::{Shape, ShapeKind};
-use crate::context::LayoutCtx;
 use crate::color::Rgb;
 use crate::callback::CALLBACKS;
+use crate::storage::WidgetStorage;
 use super::{AnyView, IntoView, NodeId, View};
 
 pub fn button() -> Button { Button::new() }
@@ -44,15 +42,15 @@ impl View for Button {
 
     fn img_src(&self) -> Option<&std::path::PathBuf> { None }
 
-    fn layout(&self, cx: &mut LayoutCtx) {
-        let dimensions = self.shape().dimensions / 2;
-        if cx.get_parent(&self.id()).is_some() {
-            let next_pos = cx.next_child_pos() + Vector2::new(dimensions.width, dimensions.height);
-            cx.insert_pos(self.id(), next_pos);
-        } else {
-            let next_pos = cx.next_pos() + Vector2::new(dimensions.width, dimensions.height);
-            cx.insert_pos(self.id(), next_pos);
-        }
+    fn layout(&self, cx: &mut WidgetStorage, shape: &mut Shape) {
+        cx.layout.assign_position(shape);
+        // let half = self.shape().dimensions / 2;
+        // let current_pos = if cx.get_parent(&self.id()).is_some() {
+        //     cx.layout.next_child_pos()
+        // } else {
+        //     cx.layout.next_pos()
+        // };
+        // shape.pos = current_pos + half;
     }
 
     fn padding(&self) -> u32 { 0 }

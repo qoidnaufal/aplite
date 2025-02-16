@@ -1,18 +1,18 @@
 use std::path::Path;
-use std::io::{BufReader, Read};
+use std::io::Read;
 use std::fs::File;
 
 use image::GenericImageView;
 
-use crate::renderer::bind_group;
 use crate::color::{Color, Rgb};
 use crate::Rgba;
 
+use super::Gpu;
+
 pub fn image_reader<P: AsRef<Path>>(path: P) -> Color<Rgba<u8>, u8> {
-    let file = File::open(path).unwrap();
-    let mut reader = BufReader::new(file);
+    let mut file = File::open(path).unwrap();
     let mut buf = Vec::new();
-    let len = reader.read_to_end(&mut buf).unwrap();
+    let len = file.read_to_end(&mut buf).unwrap();
     let image = image::load_from_memory(&buf[..len]).unwrap();
 
     Color::new(image.dimensions(), &image.to_rgba8())
@@ -21,16 +21,14 @@ pub fn image_reader<P: AsRef<Path>>(path: P) -> Color<Rgba<u8>, u8> {
 #[derive(Debug)]
 pub struct TextureData {
     texture: wgpu::Texture,
-    view: wgpu::TextureView,
-    sampler: wgpu::Sampler,
+    pub bind_group: wgpu::BindGroup,
 }
 
 impl TextureData {
-    pub fn new(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        data: Color<Rgba<u8>, u8>,
-    ) -> Self {
+    pub fn new(gpu: &Gpu, data: Color<Rgba<u8>, u8>) -> Self {
+        let device = &gpu.device;
+        let queue = &gpu.queue;
+
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("texture"),
             size: wgpu::Extent3d {
@@ -43,24 +41,50 @@ impl TextureData {
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8UnormSrgb,
             usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_DST
-                | wgpu::TextureUsages::COPY_SRC,
+                // | wgpu::TextureUsages::STORAGE_BINDING
+                | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = sampler(device);
+        let bind_group = Self::bind_group(device, &view);
+
         submit_texture(queue, texture.as_image_copy(), data);
 
-        Self { texture, view, sampler }
+        Self { texture, bind_group }
+    }
+
+    pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("texture bind group layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                }
+            ],
+        })
     }
 
     pub fn bind_group(
-        &self,
         device: &wgpu::Device,
-        bg_layout: &wgpu::BindGroupLayout,
-        uniform: &wgpu::Buffer,
+        view: &wgpu::TextureView,
     ) -> wgpu::BindGroup {
-        bind_group(device, bg_layout, &self.view, &self.sampler, uniform)
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("texture bind group"),
+            layout: &Self::bind_group_layout(device),
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(view),
+                }
+            ],
+        })
     }
 
     pub fn update_color(&self, queue: &wgpu::Queue, new_color: Rgb<u8>) {
@@ -87,16 +111,4 @@ fn submit_texture(
             depth_or_array_layers: 1,
         }
     );
-}
-
-fn sampler(device: &wgpu::Device) -> wgpu::Sampler {
-    device.create_sampler(&wgpu::SamplerDescriptor {
-        address_mode_u: wgpu::AddressMode::ClampToEdge,
-        address_mode_v: wgpu::AddressMode::ClampToEdge,
-        address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Nearest,
-        mipmap_filter: wgpu::FilterMode::Nearest,
-        ..Default::default()
-    })
 }

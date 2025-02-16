@@ -1,19 +1,18 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
-use util::{Size, Vector2};
+use util::Vector2;
 
 use crate::context::{Cursor, LayoutCtx, MouseAction};
-use crate::renderer::{image_reader, Gfx, Renderer};
+use crate::renderer::{Gfx, Renderer};
 use crate::view::NodeId;
-use crate::shapes::Shape;
 use crate::callback::CALLBACKS;
-use crate::{IntoView, View};
+use crate::Rgb;
 
 #[derive(Debug)]
 pub struct WidgetStorage {
     pub nodes: Vec<NodeId>,
-    pub shapes: HashMap<NodeId, Shape>,
-    pub img_src: HashMap<NodeId, PathBuf>,
+    pub children: HashMap<NodeId, Vec<NodeId>>,
+    pub parent: HashMap<NodeId, NodeId>,
+    pub cached_color: HashMap<NodeId, Rgb<u8>>,
     pub layout: LayoutCtx,
     pending_update: Vec<NodeId>,
 }
@@ -22,18 +21,24 @@ impl WidgetStorage {
     pub fn new() -> Self {
         Self {
             nodes: Vec::new(),
-            shapes: HashMap::new(),
-            img_src: HashMap::new(),
+            children: HashMap::new(),
+            parent: HashMap::new(),
+            cached_color: HashMap::new(),
             layout: LayoutCtx::new(),
             pending_update: Vec::new(),
         }
     }
 
-    pub fn insert(&mut self, node: impl IntoView) -> &mut Self {
-        let node = node.into_view();
-        node.layout(&mut self.layout);
-        node.insert_into(self);
-        self
+    pub fn insert_children(&mut self, node_id: NodeId, child_id: NodeId) {
+        if let Some(child_vec) = self.children.get_mut(&node_id) {
+            child_vec.push(child_id);
+        } else {
+            self.children.insert(node_id, vec![child_id]);
+        }
+    }
+
+    pub fn insert_parent(&mut self, node_id: NodeId, parent_id: NodeId) {
+        self.parent.insert(node_id, parent_id);
     }
 
     pub fn has_changed(&self) -> bool {
@@ -42,33 +47,17 @@ impl WidgetStorage {
 
     pub fn submit_update(&mut self, renderer: &mut Renderer) {
         while let Some(ref change_id) = self.pending_update.pop() {
-            let shape = self.shapes.get(change_id).unwrap();
-            renderer.update(change_id, shape);
+            let index = self.nodes.iter().position(|node_id| node_id == change_id).unwrap();
+            renderer.update(index);
         }
     }
 
-    pub fn prepare(
-        &self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        bg_layout: &wgpu::BindGroupLayout,
-        graphics: &mut HashMap<NodeId, Gfx>,
-    ) {
-        self.shapes.iter().for_each(|(node_id, shape)| {
-            let color = if let Some(src) = self.img_src.get(node_id) {
-                image_reader(src)
-            } else { shape.color.into() };
-            let gfx = Gfx::new(device, queue, bg_layout, color, shape, *node_id);
-            graphics.insert(*node_id, gfx);
-        });
-    }
-
-    pub fn detect_hover(&self, cursor: &mut Cursor) {
+    pub fn detect_hover(&self, cursor: &mut Cursor, gfx: &Gfx) {
         // let start = std::time::Instant::now();
-        let hovered = self.shapes.iter().filter_map(|(id, shape)| {
-            let pos = self.layout.get_position(id).copied().unwrap();
-            if shape.is_hovered(cursor, pos) {
-                Some(id)
+        let hovered = self.nodes.iter().enumerate().filter_map(|(idx, node_id)| {
+            let shape = &gfx.shapes.data[idx];
+            if shape.is_hovered(cursor) {
+                Some(node_id)
             } else { None }
         }).min();
         // eprintln!("{:?}", start.elapsed());
@@ -82,38 +71,43 @@ impl WidgetStorage {
         }
     }
 
-    pub fn handle_hover(&mut self, cursor: &mut Cursor) {
+    pub fn handle_hover(&mut self, cursor: &mut Cursor, gfx: &mut Gfx) {
         if cursor.is_hovering_same_obj() && cursor.click.obj.is_none() {
             return;
         }
         if let Some(ref prev_id) = cursor.hover.prev.take() {
-            let shape = self.shapes.get_mut(prev_id).unwrap();
-            if shape.revert_color() {
+            if let Some(cached_color) = self.cached_color.get(prev_id) {
+                let idx = self.nodes.iter().position(|node_id| node_id == prev_id).unwrap();
+                gfx.shapes.update(idx, |shape| shape.revert_color(*cached_color));
                 self.pending_update.push(*prev_id);
             }
         }
         if let Some(ref hover_id) = cursor.hover.curr {
-            let shape = self.shapes.get_mut(hover_id).unwrap();
-            CALLBACKS.with_borrow_mut(|callbacks| {
-                if let Some(on_hover) = callbacks.on_hover.get_mut(hover_id) {
-                    on_hover(shape);
-                }
-                if cursor.is_dragging(*hover_id) {
-                    if let Some(on_drag) = callbacks.on_drag.get_mut(hover_id) {
-                        on_drag(shape);
-                        shape.set_position(cursor, *hover_id, &mut self.layout);
+            let idx = self.nodes.iter().position(|node_id| node_id == hover_id).unwrap();
+            gfx.shapes.update(idx, |shape| {
+                CALLBACKS.with_borrow_mut(|callbacks| {
+                    if let Some(on_hover) = callbacks.on_hover.get_mut(hover_id) {
+                        on_hover(shape);
                     }
-                }
+                    if cursor.is_dragging(*hover_id) {
+                        if let Some(on_drag) = callbacks.on_drag.get_mut(hover_id) {
+                            on_drag(shape);
+                            gfx.transforms.update(idx, |transform| {
+                                shape.set_position(cursor, transform);
+                            });
+                        }
+                    }
+                });
             });
             self.pending_update.push(*hover_id);
         }
     }
 
-    pub fn handle_click(&mut self, cursor: &mut Cursor) {
+    pub fn handle_click(&mut self, cursor: &mut Cursor, gfx: &mut Gfx) {
         if let Some(ref click_id) = cursor.click.obj {
-            let center = *self.layout.get_position(click_id).unwrap();
-            cursor.click.delta = cursor.click.pos - Vector2::<f32>::from(center);
-            let shape = self.shapes.get_mut(click_id).unwrap();
+            let idx = self.nodes.iter().position(|node_id| node_id == click_id).unwrap();
+            let shape = gfx.shapes.data.get_mut(idx).unwrap();
+            cursor.click.delta = cursor.click.pos - Vector2::<f32>::from(shape.pos);
             CALLBACKS.with_borrow_mut(|callbacks| {
                 if let Some(on_click) = callbacks.on_click.get_mut(click_id) {
                     on_click(shape);
@@ -123,7 +117,8 @@ impl WidgetStorage {
         }
         if cursor.state.action == MouseAction::Released {
             if let Some(ref hover_id) = cursor.hover.curr {
-                let shape = self.shapes.get_mut(hover_id).unwrap();
+                let idx = self.nodes.iter().position(|node_id| node_id == hover_id).unwrap();
+                let shape = gfx.shapes.data.get_mut(idx).unwrap();
                 CALLBACKS.with_borrow_mut(|callbacks| {
                     if let Some(on_hover) = callbacks.on_hover.get_mut(hover_id) {
                         on_hover(shape);
@@ -132,30 +127,6 @@ impl WidgetStorage {
                 });
             }
         }
-    }
-
-    pub fn layout(&mut self, size: Size<u32>) {
-        let ws: Size<f32> = size.into();
-
-        self.nodes.iter().for_each(|node_id| {
-            let shape = self.shapes.get_mut(node_id).unwrap();
-            let s = Size::<f32>::from(shape.dimensions) / ws;
-            let center: Vector2<f32> = self
-                .layout
-                .get_position(node_id)
-                .copied()
-                .unwrap()
-                .into();
-            let t = Vector2 {
-                x: (center.x / ws.width - 0.5) * 2.0,
-                y: (0.5 - center.y / ws.height) * 2.0,
-            };
-            shape.transform(|mat| {
-                mat.scale(s.width, s.height);
-                mat.translate(t.x, t.y);
-            });
-            self.pending_update.push(*node_id);
-        });
     }
 }
 

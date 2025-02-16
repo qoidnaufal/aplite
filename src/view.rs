@@ -3,18 +3,17 @@ mod image;
 mod vstack;
 mod hstack;
 
-use util::Vector2;
-
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::path::PathBuf;
 pub use {
     button::*,
     image::*,
     vstack::*,
     hstack::*,
 };
-use std::{path::PathBuf, sync::atomic::{AtomicU64, Ordering}};
-use crate::storage::WidgetStorage;
+
+use crate::{renderer::{image_reader, Gfx, Gpu, TextureData}, storage::WidgetStorage};
 use crate::shapes::{Shape, ShapeKind};
-use crate::context::LayoutCtx;
 use crate::color::Rgb;
 use crate::callback::CALLBACKS;
 
@@ -42,26 +41,61 @@ pub trait View {
     fn children(&self) -> Option<&[AnyView]>;
     fn img_src(&self) -> Option<&PathBuf>;
 
-    fn layout(&self, cx: &mut LayoutCtx);
+    fn layout(&self, cx: &mut WidgetStorage, shape: &mut Shape);
     fn padding(&self) -> u32;
     fn spacing(&self) -> u32;
 
-    fn insert_into(&self, storage: &mut WidgetStorage) {
-        let id = self.id();
+    fn prepare(
+        &self,
+        storage: &mut WidgetStorage,
+        gpu: &Gpu,
+        gfx: &mut Gfx,
+        textures: &mut Vec<TextureData>,
+    ) {
+        let node_id = self.id();
         let mut shape = self.shape();
-        if let Some(src) = self.img_src() {
-            storage.img_src.insert(id, src.clone());
-        }
-        if storage.layout.get_parent(&id).is_none() {
-            shape.color = Rgb::GRAY;
-            shape.cached_color.replace(Rgb::GRAY);
-        }
-        storage.nodes.push(id);
-        storage.shapes.insert(id, shape);
+        let color = if let Some(src) = self.img_src() {
+            image_reader(src)
+        } else {
+            let rgb: Rgb<u8> = shape.color.into();
+            storage.cached_color.insert(node_id, rgb);
+            rgb.into()
+        };
+
+        // local to render space
+        // let x = (shape.pos.x / ws.width - 0.5) * 2.0;
+        // let y = (0.5 - shape.pos.y / ws.height) * 2.0;
+
+        self.layout(storage, &mut shape);
+        let half = shape.dimensions / 2;
+        let current_pos = shape.pos;
+
+        storage.nodes.push(node_id);
+        gfx.push(shape, gpu.size());
+        textures.push(TextureData::new(&gpu, color));
+
         if let Some(children) = self.children() {
-            children.iter().for_each(|child| {
-                child.insert_into(storage);
+            let current_alignment = storage.layout.current_alignment();
+            storage.layout.set_next_pos(|pos| {
+                pos.x = current_pos.x - half.width + self.padding();
+                pos.y = current_pos.y - half.height + self.padding();
             });
+
+            children.iter().for_each(|child| {
+                storage.insert_children(node_id, child.id());
+                storage.insert_parent(child.id(), node_id);
+                child.prepare(storage, gpu, gfx, textures);
+
+                let is_vertical = storage.layout.is_aligned_vertically();
+                storage.layout.set_next_pos(|pos| {
+                    if is_vertical {
+                        pos.y += child.shape().dimensions.height + self.spacing();
+                    } else {
+                        pos.x += child.shape().dimensions.width + self.spacing();
+                    }
+                });
+            });
+            storage.layout.set_alignment(current_alignment);
         }
     }
 }
@@ -83,7 +117,9 @@ impl View for DynView {
 
     fn img_src(&self) -> Option<&PathBuf> { self.0.img_src() }
 
-    fn layout(&self, cx: &mut LayoutCtx) { self.0.layout(cx); }
+    fn layout(&self, cx: &mut WidgetStorage, shape: &mut Shape) {
+        self.0.layout(cx, shape);
+    }
 
     fn padding(&self) -> u32 { self.0.padding() }
 
@@ -143,15 +179,15 @@ impl View for TestTriangleWidget {
 
     fn img_src(&self) -> Option<&PathBuf> { None }
 
-    fn layout(&self, cx: &mut LayoutCtx) {
-        let dimensions = self.shape().dimensions / 2;
-        if cx.get_parent(&self.id()).is_some() {
-            let next_pos = cx.next_child_pos() + Vector2::new(dimensions.width, dimensions.height);
-            cx.insert_pos(self.id(), next_pos);
-        } else {
-            let next_pos = cx.next_pos() + Vector2::new(dimensions.width, dimensions.height);
-            cx.insert_pos(self.id(), next_pos);
-        }
+    fn layout(&self, cx: &mut WidgetStorage, shape: &mut Shape) {
+        cx.layout.assign_position(shape);
+        // let half = self.shape().dimensions / 2;
+        // let current_pos = if cx.get_parent(&self.id()).is_some() {
+        //     cx.layout.next_child_pos()
+        // } else {
+        //     cx.layout.next_pos()
+        // };
+        // shape.pos = current_pos + half;
     }
 
     fn padding(&self) -> u32 { 0 }

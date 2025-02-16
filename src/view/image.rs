@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
-use util::Vector2;
 
-use crate::{callback::CALLBACKS, context::LayoutCtx, shapes::{Shape, ShapeKind}};
-// use crate::callback::CALLBACKS;
+use crate::storage::WidgetStorage;
+use crate::shapes::{Shape, ShapeKind};
+use crate::callback::CALLBACKS;
 use super::{AnyView, IntoView, NodeId, View};
 
 pub fn image<P: AsRef<Path>>(src: P) -> Image {
@@ -28,7 +28,7 @@ impl Image {
         Shape::textured(ShapeKind::TexturedRectangle)
     }
 
-    pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+    pub fn _on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
         self
     }
@@ -38,7 +38,7 @@ impl Image {
     //     self
     // }
 
-    pub fn on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+    pub fn _on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
         self
     }
@@ -53,15 +53,15 @@ impl View for Image {
 
     fn img_src(&self) -> Option<&PathBuf> { Some(&self.src) }
 
-    fn layout(&self, cx: &mut LayoutCtx) {
-        let dimensions = self.shape().dimensions / 2;
-        if cx.get_parent(&self.id()).is_some() {
-            let next_pos = cx.next_child_pos() + Vector2::new(dimensions.width, dimensions.height);
-            cx.insert_pos(self.id(), next_pos);
-        } else {
-            let next_pos = cx.next_pos() + Vector2::new(dimensions.width, dimensions.height);
-            cx.insert_pos(self.id(), next_pos);
-        }
+    fn layout(&self, cx: &mut WidgetStorage, shape: &mut Shape) {
+        cx.layout.assign_position(shape);
+        // let half = self.shape().dimensions / 2;
+        // let current_pos = if cx.get_parent(&self.id()).is_some() {
+        //     cx.layout.next_child_pos()
+        // } else {
+        //     cx.layout.next_pos()
+        // };
+        // shape.pos = current_pos + half;
     }
 
     fn padding(&self) -> u32 { 0 }

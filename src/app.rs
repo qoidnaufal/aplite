@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::mem::MaybeUninit;
+use std::sync::Arc;
 
+use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowId};
 use winit::event::WindowEvent;
 use winit::application::ApplicationHandler;
@@ -9,9 +11,20 @@ use util::{Size, Vector2};
 use crate::context::Cursor;
 use crate::renderer::Renderer;
 use crate::storage::WidgetStorage;
-use crate::renderer::Gpu;
 use crate::error::Error;
 use crate::IntoView;
+
+pub fn launch<F, IV>(f: F) -> Result<(), Error>
+where
+    F: Fn() -> IV + 'static,
+    IV: IntoView + 'static,
+{
+    let event_loop = EventLoop::new()?;
+    let mut app = App::new(f);
+    event_loop.run_app(&mut app)?;
+
+    Ok(())
+}
 
 struct Stats {
     counter: u32,
@@ -39,22 +52,28 @@ impl Drop for Stats {
     }
 }
 
-pub struct App<'a> {
-    pub renderer: MaybeUninit<Renderer<'a>>,
-    pub storage: WidgetStorage,
-    pub cursor: Cursor,
-    window: HashMap<WindowId, Window>,
+struct App<F> {
+    renderer: MaybeUninit<Renderer>,
+    storage: WidgetStorage,
+    cursor: Cursor,
+    window: HashMap<WindowId, Arc<Window>>,
     stats: Stats,
+    view_fn: Option<F>,
 }
 
-impl App<'_> {
-    pub fn new() -> Self {
+impl<F, IV> App<F>
+where
+    F: Fn() -> IV + 'static,
+    IV: IntoView + 'static,
+{
+    pub fn new(view_fn: F) -> Self {
         Self {
             renderer: MaybeUninit::uninit(),
             window: HashMap::new(),
             storage: WidgetStorage::new(),
             cursor: Cursor::new(),
             stats: Stats::new(),
+            view_fn: Some(view_fn),
         }
     }
 
@@ -69,33 +88,38 @@ impl App<'_> {
     }
 
     fn update(&mut self) {
-        unsafe {
-            let renderer = self.renderer.assume_init_mut();
-            self.storage.submit_update(renderer);
-        }
+        let renderer = unsafe { self.renderer.assume_init_mut() };
+        self.storage.submit_update(renderer);
     }
 
     fn render(&mut self) -> Result<(), Error> {
-        unsafe { self.renderer.assume_init_mut().render(&self.storage.nodes) }
-    }
-
-    pub fn add_widget(&mut self, node: impl IntoView) {
-        self.storage.insert(node);
+        unsafe { self.renderer.assume_init_mut().render() }
     }
 }
 
-impl<'a> ApplicationHandler for App<'a> {
+fn create_window(event_loop: &winit::event_loop::ActiveEventLoop) -> Arc<Window> {
+    let window = event_loop.create_window(Default::default()).unwrap();
+    window.set_title("My App");
+    Arc::new(window)
+}
+
+impl<F, IV> ApplicationHandler for App<F>
+where
+    F: Fn() -> IV + 'static,
+    IV: IntoView + 'static,
+{
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let window = event_loop.create_window(Window::default_attributes()).unwrap();
-        window.set_title("My App");
-
-        let renderer: Renderer<'a> = unsafe {
-            std::mem::transmute(Renderer::new(&window, &mut self.storage))
-        };
-        self.window.insert(window.id(), window);
-        self.renderer.write(renderer);
-
-        // eprintln!("{:?}", self.storage.layout);
+        if let Some(view_fn) = self.view_fn.take() {
+            let window = create_window(event_loop);
+            let renderer = Renderer::new(window.clone(), &mut self.storage, view_fn);
+            self.window.insert(window.id(), window);
+            self.renderer.write(renderer);
+        }
+        // eprintln!("{:?}", self.storage.nodes);
+        // self.storage.children.iter().for_each(|(node_id, vec)| {
+        //     eprintln!("{node_id:?} | {vec:?}")
+        // });
+        // eprintln!("{:#?}", unsafe { &self.renderer.assume_init_ref().gfx.shapes.data });
     }
 
     fn window_event(
@@ -142,16 +166,18 @@ impl<'a> ApplicationHandler for App<'a> {
                 self.resize(Size::new(new_size.width, new_size.height));
             }
             WindowEvent::MouseInput { state: action, button, .. } => {
+                let gfx = unsafe { &mut self.renderer.assume_init_mut().gfx };
                 self.cursor.set_click_state(action.into(), button.into());
-                self.storage.handle_click(&mut self.cursor);
+                self.storage.handle_click(&mut self.cursor, gfx);
                 if self.storage.has_changed() {
                     self.request_redraw(window_id);
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
+                let gfx = unsafe { &mut self.renderer.assume_init_mut().gfx };
                 self.cursor.hover.pos = Vector2::new(position.x as _, position.y as _);
-                self.storage.detect_hover(&mut self.cursor);
-                self.storage.handle_hover(&mut self.cursor);
+                self.storage.detect_hover(&mut self.cursor, gfx);
+                self.storage.handle_hover(&mut self.cursor, gfx);
                 if self.storage.has_changed() {
                     self.request_redraw(window_id);
                 }

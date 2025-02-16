@@ -1,6 +1,5 @@
-use std::collections::HashMap;
 use util::Vector2;
-use crate::NodeId;
+use crate::{shapes::Shape, NodeId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseAction {
@@ -114,79 +113,52 @@ impl Cursor {
     }
 }
 
-#[derive(Clone, PartialEq)]
-pub struct LayoutCtx {
-    next_pos: Vector2<u32>,
-    next_child_pos: Vector2<u32>,
-    // coordinate of the center of the shape
-    positions: HashMap<NodeId, Vector2<u32>>,
-    parent: HashMap<NodeId, NodeId>,
-    children: HashMap<NodeId, Vec<NodeId>>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Alignment {
+    Vertical,
+    Horizontal,
 }
 
-impl std::fmt::Debug for LayoutCtx {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.positions.iter().try_for_each(|(node_id, pos)| {
-            writeln!(f, "Pos | {node_id:?} | {pos:?}")
-        })?;
-        self.parent.iter().try_for_each(|(child_id, parent_id)| {
-            writeln!(f, "Parent | {child_id:?} | {parent_id:?}")
-        })?;
-        self.children.iter().try_for_each(|(parent_id, children)| {
-            writeln!(f, "Children | {parent_id:?} | {children:?}")
-        })?;
-        Ok(())
-    }
+#[derive(Debug, Clone, PartialEq)]
+pub struct LayoutCtx {
+    next_pos: Vector2<u32>,
+    alignment: Alignment,
 }
 
 impl LayoutCtx {
     pub fn new() -> Self {
         Self {
             next_pos: Vector2::new(0, 0),
-            next_child_pos: Vector2::new(0, 0),
-            positions: HashMap::new(),
-            parent: HashMap::new(),
-            children: HashMap::new(),
+            alignment: Alignment::Vertical,
         }
     }
 
-    pub fn set_next_child_pos<F: FnMut(&mut Vector2<u32>)>(&mut self, mut f: F) {
-        f(&mut self.next_child_pos);
+    pub fn current_alignment(&self) -> Alignment {
+        self.alignment
     }
 
-    pub fn next_child_pos(&self) -> Vector2<u32> { self.next_child_pos }
-
-    pub fn get_parent(&self, node_id: &NodeId) -> Option<&NodeId> {
-        self.parent.get(node_id)
+    pub fn set_alignment(&mut self, alignment: Alignment) {
+        self.alignment = alignment
     }
 
-    pub fn insert_parent(&mut self, node_id: NodeId, parent_id: NodeId) {
-        self.parent.insert(node_id, parent_id);
+    pub fn is_aligned_vertically(&self) -> bool {
+        matches!(self.alignment, Alignment::Vertical)
     }
 
-    pub fn insert_children(&mut self, node_id: NodeId, child_id: NodeId) {
-        if let Some(children) = self.children.get_mut(&node_id) {
-            children.push(child_id);
-        } else {
-            self.children.insert(node_id, vec![child_id]);
-        }
+    pub fn align_vertically(&mut self) {
+        self.alignment = Alignment::Vertical;
     }
 
-    pub fn insert_pos(&mut self, node_id: NodeId, pos: Vector2<u32>) {
-        self.positions.insert(node_id, Vector2::new(pos.x, pos.y));
+    pub fn align_horizontally(&mut self) {
+        self.alignment = Alignment::Horizontal;
     }
-
-    pub fn get_mut_position(&mut self, node_id: NodeId) -> Option<&mut Vector2<u32>> {
-        self.positions.get_mut(&node_id)
-    }
-
-    pub fn get_position(&self, node_id: &NodeId) -> Option<&Vector2<u32>> {
-        self.positions.get(node_id)
-    }
-
-    pub fn next_pos(&self) -> Vector2<u32> { self.next_pos }
 
     pub fn set_next_pos<F: FnMut(&mut Vector2<u32>)>(&mut self, mut f: F) {
         f(&mut self.next_pos);
+    }
+
+    pub fn assign_position(&mut self, shape: &mut Shape) {
+        let half = shape.dimensions / 2;
+        shape.pos = self.next_pos + half;
     }
 }

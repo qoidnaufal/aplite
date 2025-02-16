@@ -1,4 +1,4 @@
-use crate::Vector3;
+use crate::{Size, Vector3};
 
 #[derive(Clone, Copy)]
 pub struct Vector2<T> {
@@ -61,6 +61,18 @@ where T:
         Self {
             x: self.x + rhs.x,
             y: self.y + rhs.y
+        }
+    }
+}
+
+impl<T> std::ops::Add<Size<T>> for Vector2<T>
+where T: std::ops::Add<T, Output = T>
+{
+    type Output = Self;
+    fn add(self, rhs: Size<T>) -> Self::Output {
+        Self {
+            x: self.x + rhs.width,
+            y: self.y + rhs.height,
         }
     }
 }

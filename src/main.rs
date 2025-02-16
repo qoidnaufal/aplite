@@ -9,12 +9,11 @@ mod signal;
 mod storage;
 mod view;
 
-use app::App;
+use app::launch;
 use color::*;
 use shapes::Shape;
 use signal::Signal;
 use view::*;
-use winit::event_loop::EventLoop;
 
 use error::Error;
 
@@ -80,25 +79,26 @@ fn root() -> impl IntoView {
     )
 }
 
-// fn dummy() -> impl IntoView {
-//     let hover = move |shape: &mut Shape| { shape.set_color(|color| *color = Rgb::BLUE) };
-//     let drag = move |shape: &mut Shape| {
-//         shape.set_color(|color| *color = Rgb::GREEN);
-//     };
-//     vstack(
-//         [
-//             TestTriangleWidget::new().on_hover(hover).on_drag(drag).into_any(),
-//             button().on_hover(hover).into_any(),
-//             button().on_hover(hover).into_any(),
-//         ]
-//     )
-// }
+fn dummy() -> impl IntoView {
+    let hover = move |shape: &mut Shape| { shape.set_color(|color| *color = Rgb::BLUE) };
+    let drag = move |shape: &mut Shape| {
+        shape.set_color(|color| *color = Rgb::GREEN);
+    };
+    TestTriangleWidget::new().on_hover(hover).on_drag(drag)
+    // image("assets/image1.jpg")
+    // vstack(
+    //     [
+    //         // TestTriangleWidget::new().on_hover(hover).on_drag(drag).into_any(),
+    //         button().on_hover(hover).into_any(),
+    //         button().on_hover(hover).into_any(),
+    //     ]
+    // )
+}
 
 fn main() -> Result<(), Error> {
-    let event_loop = EventLoop::new()?;
-    let mut app = App::new();
-    app.add_widget(root);
-
-    event_loop.run_app(&mut app)?;
-    Ok(())
+    let mut args = std::env::args().into_iter();
+    match args.nth(1) {
+        Some(arg) if arg == "dummy" => launch(dummy),
+        _ => launch(root)
+    }
 }
