@@ -23,6 +23,7 @@ pub struct Renderer {
     pub gfx: Gfx,
     screen: Screen,
     pipeline: wgpu::RenderPipeline,
+    pseudo_texture: TextureData,
     indices: wgpu::Buffer,
     instances: wgpu::Buffer,
 }
@@ -43,6 +44,10 @@ impl Renderer {
         let mut gfx = Gfx::new(&gpu.device);
         let mut screen = Screen::new(&gpu.device, gpu.size());
 
+        // this is important to avoid creating texture for every shape
+        let pseudo_color = Rgb::WHITE;
+        let pseudo_texture = TextureData::new(&gpu, pseudo_color.into());
+
         view_fn().into_view().prepare(storage, &gpu, &mut gfx);
         gfx.write(&gpu.device, &gpu.queue);
         screen.write(&gpu.device, &gpu.queue);
@@ -62,11 +67,12 @@ impl Renderer {
             pipeline,
             indices,
             instances,
+            pseudo_texture,
         }
     }
 
     pub fn resize(&mut self, size: Size<u32>) {
-        let prev_size: Size<f32> = self.screen.initial_size.into();
+        let prev_size: Size<f32> = self.screen.initial_size().into();
         let new_size: Size<f32> = size.into();
         let s = prev_size / new_size;
 
@@ -99,64 +105,50 @@ impl Renderer {
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("render encoder") });
 
-        encode(
-            &mut encoder,
-            &view,
-            &self.pipeline,
-            &self.gfx,
-            &self.screen,
-            &self.indices,
-            &self.instances,
-        );
+        self.encode(&mut encoder, &view);
 
         self.gpu.queue.submit(std::iter::once(encoder.finish()));
         output.present();
 
         Ok(())
     }
-}
 
-fn encode(
-    encoder: &mut wgpu::CommandEncoder,
-    view: &wgpu::TextureView,
-    pipeline: &wgpu::RenderPipeline,
-    gfx: &Gfx,
-    screen: &Screen,
-    indices: &wgpu::Buffer,
-    instances: &wgpu::Buffer,
-) {
-    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("render pass"),
-        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view,
-            resolve_target: None,
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(Rgb::DARK_GRAY.into()),
-                store: wgpu::StoreOp::Store,
+    fn encode(&self, encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView) {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("render pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(Rgb::BLACK.into()),
+                    store: wgpu::StoreOp::Store,
+                }
+            })],
+            ..Default::default()
+        });
+
+        pass.set_pipeline(&self.pipeline);
+        pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
+        pass.set_vertex_buffer(0, self.instances.slice(..));
+        pass.set_bind_group(0, &self.screen.bind_group, &[]);
+        pass.set_bind_group(1, &self.gfx.bind_group, &[]);
+        pass.set_bind_group(2, &self.pseudo_texture.bind_group, &[]);
+
+        let mut idx_offset: u32 = 0;
+
+        for i in 0..self.gfx.count() {
+            let shape = &self.gfx.shapes.data[i];
+            let idx_len = shape.indices().len() as u32;
+            let draw_offset = i as u32;
+
+            // FIXME: bundle the texture into an atlas or something
+            if shape.texture_id > -1 {
+                let texture_data = &self.gfx.textures[shape.texture_id as usize];
+                pass.set_bind_group(2, &texture_data.bind_group, &[]);
             }
-        })],
-        ..Default::default()
-    });
+            pass.draw_indexed(idx_offset..idx_offset + idx_len, 0, draw_offset..draw_offset + 1);
 
-    pass.set_pipeline(pipeline);
-    pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
-    pass.set_vertex_buffer(0, instances.slice(..));
-    pass.set_bind_group(0, &screen.bind_group, &[]);
-    pass.set_bind_group(1, &gfx.bind_group, &[]);
-
-    let mut draw_offset: u32 = 0;
-    let mut idx_offset: u32 = 0;
-
-    for i in 0..gfx.count() {
-        let texture_data = &gfx.textures[i];
-        let shape = &gfx.shapes.data[i];
-        let idx_len = shape.indices().len() as u32;
-
-        // FIXME: bundle the texture into an atlas or something
-        pass.set_bind_group(2, &texture_data.bind_group, &[]);
-        pass.draw_indexed(idx_offset..idx_offset + idx_len, 0, draw_offset..draw_offset + 1);
-
-        draw_offset += 1;
-        idx_offset += idx_len;
+            idx_offset += idx_len;
+        }
     }
 }

@@ -15,6 +15,6 @@ pub fn tan(x: f32, y: f32) -> f32 {
 }
 
 pub fn cast_slice<SRC: Sized, DST: Sized>(src: &[SRC]) -> &[DST] {
-    let len = src.len() * size_of::<SRC>();
+    let len = size_of_val(src);
     unsafe { core::slice::from_raw_parts(src.as_ptr() as *const DST, len) }
 }

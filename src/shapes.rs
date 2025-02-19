@@ -6,6 +6,7 @@ use crate::color::Rgb;
 pub enum ShapeKind {
     FilledTriangle,
     FilledRectangle,
+    FilledCircle,
     TexturedRectangle,
 }
 
@@ -18,7 +19,8 @@ impl From<u32> for ShapeKind {
         match num {
             0 => Self::FilledTriangle,
             1 => Self::FilledRectangle,
-            2 => Self::TexturedRectangle,
+            2 => Self::FilledCircle,
+            3 => Self::TexturedRectangle,
             _ => unreachable!()
         }
     }
@@ -39,6 +41,7 @@ impl From<ShapeKind> for Indices<'_> {
         match kind {
             ShapeKind::FilledTriangle => Self::triangle(),
             ShapeKind::FilledRectangle => Self::rectangle(),
+            ShapeKind::FilledCircle => Self::rectangle(),
             ShapeKind::TexturedRectangle => Self::rectangle(),
         }
     }
@@ -56,31 +59,44 @@ impl Indices<'_> {
 
 // pub struct Vertices<'a>(&'a [Vector2<f32>]);
 
+// must be aligned to 4
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct Shape {
     pub pos: Vector2<u32>,
-    pub dimensions: Size<u32>,
+    pub dims: Size<u32>,
     pub color: Rgb<f32>,
+    pub texture_id: i32,
     pub kind: u32,
+    pub radius: f32,
+    pub rotate: f32,
+    pub transform: u32,
 }
 
 impl Shape {
     pub fn filled(color: Rgb<u8>, kind : ShapeKind, size: impl Into<Size<u32>>) -> Self {
         Self {
             pos: Vector2::default(),
-            dimensions: size.into(),
+            dims: size.into(),
             color: color.into(),
+            texture_id: -1,
             kind: kind as u32,
+            radius: 0.0,
+            rotate: 0.0,
+            transform: 0,
         }
     }
 
     pub fn textured(kind: ShapeKind) -> Self {
         Self {
             pos: Vector2::default(),
-            dimensions: Size::new(500, 500),
+            dims: Size::new(500, 500),
             color: Rgb::WHITE.into(),
+            texture_id: 0,
             kind: kind as u32,
+            radius: 0.0,
+            rotate: 0.0,
+            transform: 0,
         }
     }
 
@@ -94,8 +110,8 @@ impl Shape {
         self.color = rgb.into();
     }
 
-    pub fn revert_color(&mut self, cached_color: Rgb<u8>) {
-        self.color = cached_color.into();
+    pub fn revert_color(&mut self, cached_color: Rgb<f32>) {
+        self.color = cached_color;
     }
 
     pub fn get_transform(&self, window_size: Size<u32>) -> Matrix4x4 {
@@ -103,7 +119,7 @@ impl Shape {
         let ws: Size<f32> = window_size.into();
         let x = (self.pos.x as f32 / ws.width - 0.5) * 2.0;
         let y = (0.5 - self.pos.y as f32 / ws.height) * 2.0;
-        let d: Size<f32> = self.dimensions.into();
+        let d: Size<f32> = self.dims.into();
         let scale = d / ws;
         matrix.transform(x, y, scale.width, scale.height);
         matrix
@@ -116,8 +132,8 @@ impl Shape {
         let x_cursor = cursor.hover.pos.x;
         let y_cursor = cursor.hover.pos.y;
 
-        let width = self.dimensions.width as f32 / 2.0;
-        let height = self.dimensions.height as f32 / 2.0;
+        let width = self.dims.width as f32 / 2.0;
+        let height = self.dims.height as f32 / 2.0;
 
         let angled = if ShapeKind::from(self.kind).is_triangle() {
             let c_tangen = tan(x_cursor - x, y_cursor - y + height);
@@ -137,8 +153,8 @@ impl Shape {
     ) {
         let delta = cursor.hover.pos - cursor.click.delta;
         self.pos = delta.into();
-        let x = (delta.x / (self.dimensions.width as f32 / transform[0].x) - 0.5) * 2.0;
-        let y = (0.5 - delta.y / (self.dimensions.height as f32 / transform[1].y)) * 2.0;
+        let x = (delta.x / (self.dims.width as f32 / transform[0].x) - 0.5) * 2.0;
+        let y = (0.5 - delta.y / (self.dims.height as f32 / transform[1].y)) * 2.0;
         transform.translate(x, y);
     }
 }

@@ -1,8 +1,7 @@
 use util::Size;
 
 use crate::callback::CALLBACKS;
-use crate::context::Alignment;
-use crate::storage::WidgetStorage;
+use crate::context::{Alignment, LayoutCtx};
 use crate::Rgb;
 use crate::shapes::{Shape, ShapeKind};
 
@@ -32,7 +31,7 @@ impl VStack {
         let mut size = Size::new(0, 0);
         if !self.children.is_empty() {
             self.children.iter().for_each(|child| {
-                let child_size = child.shape().dimensions;
+                let child_size = child.shape().dims;
                 size.height += child_size.height;
                 size.width = size.width.max(child_size.width + self.padding() * 2);
             });
@@ -69,9 +68,9 @@ impl View for VStack {
 
     fn img_src(&self) -> Option<&std::path::PathBuf> { None }
 
-    fn layout(&self, cx: &mut WidgetStorage, shape: &mut Shape) {
-        cx.layout.align_vertically();
-        cx.layout.assign_position(shape);
+    fn layout(&self, cx: &mut LayoutCtx, shape: &mut Shape) {
+        cx.align_vertically();
+        cx.assign_position(shape);
     }
 
     fn padding(&self) -> u32 { 20 }

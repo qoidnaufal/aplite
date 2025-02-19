@@ -1,7 +1,6 @@
-use crate::context::Alignment;
+use crate::context::{Alignment, LayoutCtx};
 use crate::shapes::{Shape, ShapeKind};
 use crate::callback::CALLBACKS;
-use crate::storage::WidgetStorage;
 use crate::Rgb;
 use super::{AnyView, IntoView, NodeId, View};
 
@@ -43,15 +42,8 @@ impl View for Button {
 
     fn img_src(&self) -> Option<&std::path::PathBuf> { None }
 
-    fn layout(&self, cx: &mut WidgetStorage, shape: &mut Shape) {
-        cx.layout.assign_position(shape);
-        // let half = self.shape().dimensions / 2;
-        // let current_pos = if cx.get_parent(&self.id()).is_some() {
-        //     cx.layout.next_child_pos()
-        // } else {
-        //     cx.layout.next_pos()
-        // };
-        // shape.pos = current_pos + half;
+    fn layout(&self, cx: &mut LayoutCtx, shape: &mut Shape) {
+        cx.assign_position(shape);
     }
 
     fn padding(&self) -> u32 { 0 }

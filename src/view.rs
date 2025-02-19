@@ -12,10 +12,11 @@ pub use {
     hstack::*,
 };
 
-use crate::context::Alignment;
-use crate::{renderer::{image_reader, Gfx, Gpu, TextureData}, storage::WidgetStorage};
+use crate::context::{Alignment, LayoutCtx};
+use crate::storage::WidgetStorage;
+use crate::renderer::{image_reader, Gfx, Gpu, TextureData};
 use crate::shapes::{Shape, ShapeKind};
-use crate::color::Rgb;
+use crate::Rgb;
 use crate::callback::CALLBACKS;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -42,7 +43,7 @@ pub trait View {
     fn children(&self) -> Option<&[AnyView]>;
     fn img_src(&self) -> Option<&PathBuf>;
 
-    fn layout(&self, cx: &mut WidgetStorage, shape: &mut Shape);
+    fn layout(&self, cx: &mut LayoutCtx, shape: &mut Shape);
     fn padding(&self) -> u32;
     fn spacing(&self) -> u32;
     fn alignment(&self) -> Alignment;
@@ -55,21 +56,19 @@ pub trait View {
     ) {
         let node_id = self.id();
         let mut shape = self.shape();
-        let color = if let Some(src) = self.img_src() {
-            image_reader(src)
+        if let Some(src) = self.img_src() {
+            let color = image_reader(src);
+            gfx.push_texture(TextureData::new(gpu, color), &mut shape);
         } else {
-            let rgb: Rgb<u8> = shape.color.into();
-            storage.cached_color.insert(node_id, rgb);
-            rgb.into()
+            storage.cached_color.insert(node_id, shape.color);
         };
 
-        self.layout(storage, &mut shape);
-        let half = shape.dimensions / 2;
+        self.layout(&mut storage.layout, &mut shape);
+        let half = shape.dims / 2;
         let current_pos = shape.pos;
 
         storage.nodes.push(node_id);
         gfx.push(shape, gpu.size());
-        gfx.textures.push(TextureData::new(&gpu, color));
 
         if let Some(children) = self.children() {
             storage.layout.insert_alignment(node_id, self.alignment());
@@ -78,6 +77,7 @@ pub trait View {
                 pos.y = current_pos.y - half.height + self.padding();
             });
             storage.layout.set_spacing(self.spacing());
+            storage.layout.set_padding(self.padding());
 
             children.iter().for_each(|child| {
                 storage.insert_children(node_id, child.id());
@@ -86,18 +86,7 @@ pub trait View {
             });
 
             if let Some(parent_id) = storage.get_parent(node_id) {
-                let parent_alignment = storage.layout.get_parent_alignemt(*parent_id).unwrap();
-                storage.layout.set_alignment(*parent_alignment);
-                let is_aligned_vertically = storage.layout.is_aligned_vertically();
-                storage.layout.set_next_pos(|pos| {
-                    if is_aligned_vertically {
-                        pos.x = current_pos.x - half.width;
-                        pos.y = current_pos.y + half.height + self.padding();
-                    } else {
-                        pos.y = current_pos.y - half.height;
-                        pos.x = current_pos.x + half.width + self.padding();
-                    }
-                });
+                storage.layout.reset_to_parent(*parent_id, current_pos, half);
             }
         }
 
@@ -121,7 +110,7 @@ impl View for DynView {
 
     fn img_src(&self) -> Option<&PathBuf> { self.0.img_src() }
 
-    fn layout(&self, cx: &mut WidgetStorage, shape: &mut Shape) {
+    fn layout(&self, cx: &mut LayoutCtx, shape: &mut Shape) {
         self.0.layout(cx, shape);
     }
 
@@ -185,15 +174,8 @@ impl View for TestTriangleWidget {
 
     fn img_src(&self) -> Option<&PathBuf> { None }
 
-    fn layout(&self, cx: &mut WidgetStorage, shape: &mut Shape) {
-        cx.layout.assign_position(shape);
-        // let half = self.shape().dimensions / 2;
-        // let current_pos = if cx.get_parent(&self.id()).is_some() {
-        //     cx.layout.next_child_pos()
-        // } else {
-        //     cx.layout.next_pos()
-        // };
-        // shape.pos = current_pos + half;
+    fn layout(&self, cx: &mut LayoutCtx, shape: &mut Shape) {
+        cx.assign_position(shape);
     }
 
     fn padding(&self) -> u32 { 0 }
@@ -204,6 +186,63 @@ impl View for TestTriangleWidget {
 }
 
 impl IntoView for TestTriangleWidget {
+    type V = Self;
+    fn into_view(self) -> Self::V { self }
+}
+
+pub struct TestCircleWidget {
+    id: NodeId,
+}
+
+impl TestCircleWidget {
+    pub fn new() -> Self {
+        let id = NodeId::new();
+        Self { id }
+    }
+
+    fn id(&self) -> NodeId { self.id }
+
+    fn shape(&self) -> Shape {
+        Shape::filled(Rgb::RED, ShapeKind::FilledCircle, (500, 500))
+    }
+
+    pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
+        self
+    }
+
+    // pub fn on_click<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+    //     CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
+    //     self
+    // }
+
+    pub fn on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
+        self
+    }
+}
+
+impl View for TestCircleWidget {
+    fn id(&self) -> NodeId { self.id() }
+
+    fn children(&self) -> Option<&[Box<dyn View>]> { None }
+
+    fn shape(&self) -> Shape { self.shape() }
+
+    fn img_src(&self) -> Option<&PathBuf> { None }
+
+    fn layout(&self, cx: &mut LayoutCtx, shape: &mut Shape) {
+        cx.assign_position(shape);
+    }
+
+    fn padding(&self) -> u32 { 0 }
+
+    fn spacing(&self) -> u32 { 0 }
+
+    fn alignment(&self) -> Alignment { Alignment::Vertical }
+}
+
+impl IntoView for TestCircleWidget {
     type V = Self;
     fn into_view(self) -> Self::V { self }
 }

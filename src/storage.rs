@@ -12,7 +12,7 @@ pub struct WidgetStorage {
     pub nodes: Vec<NodeId>,
     pub children: HashMap<NodeId, Vec<NodeId>>,
     pub parent: HashMap<NodeId, NodeId>,
-    pub cached_color: HashMap<NodeId, Rgb<u8>>,
+    pub cached_color: HashMap<NodeId, Rgb<f32>>,
     pub layout: LayoutCtx,
     pending_update: Vec<NodeId>,
 }
@@ -96,6 +96,7 @@ impl WidgetStorage {
                     if cursor.is_dragging(*hover_id) {
                         if let Some(on_drag) = callbacks.on_drag.get_mut(hover_id) {
                             on_drag(shape);
+                            // shape.set_position(cursor);
                             gfx.transforms.update(idx, |transform| {
                                 shape.set_position(cursor, transform);
                             });

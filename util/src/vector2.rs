@@ -1,5 +1,6 @@
 use crate::{Size, Vector3};
 
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Vector2<T> {
     pub x: T,

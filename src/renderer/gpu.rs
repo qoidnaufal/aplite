@@ -48,7 +48,7 @@ impl Gpu {
         let format = surface_capabilites
             .formats
             .iter()
-            .find(|f| f.is_srgb())
+            .find(|f| matches!(f, wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Rgba8UnormSrgb))
             .copied()
             .unwrap_or(surface_capabilites.formats[0]);
         let config = wgpu::SurfaceConfiguration {
@@ -56,8 +56,8 @@ impl Gpu {
             format,
             width: size.width,
             height: size.height,
-            present_mode: surface_capabilites.present_modes[0],
-            alpha_mode: surface_capabilites.alpha_modes[0],
+            present_mode: wgpu::PresentMode::Fifo,
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
             desired_maximum_frame_latency: 2,
             view_formats: vec![],
         };

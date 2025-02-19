@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use util::Vector2;
+use util::{Size, Vector2};
 use crate::{shapes::Shape, NodeId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -124,59 +124,49 @@ pub enum Alignment {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LayoutCtx {
     next_pos: Vector2<u32>,
-    alignment: HashMap<NodeId, Alignment>,
-    current_alignment: Alignment,
+    alignment_storage: HashMap<NodeId, Alignment>,
+    alignment: Alignment,
     spacing: u32,
+    padding: u32,
 }
 
 impl LayoutCtx {
     pub fn new() -> Self {
         Self {
             next_pos: Vector2::new(0, 0),
-            alignment: HashMap::new(),
-            current_alignment: Alignment::Vertical,
+            alignment_storage: HashMap::new(),
+            alignment: Alignment::Vertical,
             spacing: 0,
+            padding: 0,
         }
     }
 
     pub fn insert_alignment(&mut self, node_id: NodeId, alignment: Alignment) {
-        self.alignment.insert(node_id, alignment);
+        self.alignment_storage.insert(node_id, alignment);
     }
 
-    pub fn get_parent_alignemt(&self, parent_id: NodeId) -> Option<&Alignment> {
-        self.alignment.get(&parent_id)
-    }
-
-    pub fn current_alignment(&self) -> Alignment {
-        self.current_alignment
-    }
-
-    pub fn set_alignment(&mut self, alignment: Alignment) {
-        self.current_alignment = alignment
-    }
-
-    pub fn is_aligned_vertically(&self) -> bool {
-        matches!(self.current_alignment, Alignment::Vertical)
+    fn is_aligned_vertically(&self) -> bool {
+        matches!(self.alignment, Alignment::Vertical)
     }
 
     pub fn align_vertically(&mut self) {
-        self.current_alignment = Alignment::Vertical;
+        self.alignment = Alignment::Vertical;
     }
 
     pub fn align_horizontally(&mut self) {
-        self.current_alignment = Alignment::Horizontal;
+        self.alignment = Alignment::Horizontal;
     }
 
     pub fn set_next_pos<F: FnMut(&mut Vector2<u32>)>(&mut self, mut f: F) {
         f(&mut self.next_pos);
     }
 
-    pub fn set_spacing(&mut self, spacing: u32) {
-        self.spacing = spacing;
-    }
+    pub fn set_spacing(&mut self, spacing: u32) { self.spacing = spacing }
+
+    pub fn set_padding(&mut self, padding: u32) { self.padding = padding }
 
     pub fn assign_position(&mut self, shape: &mut Shape) {
-        let half = shape.dimensions / 2;
+        let half = shape.dims / 2;
         shape.pos = self.next_pos + half;
 
         let is_aligned_vertically = self.is_aligned_vertically();
@@ -186,6 +176,22 @@ impl LayoutCtx {
                 next_pos.y = shape.pos.y + half.height + spacing;
             } else {
                 next_pos.x = shape.pos.x + half.width + spacing;
+            }
+        });
+    }
+
+    pub fn reset_to_parent(&mut self, parent_id: NodeId, current_pos: Vector2<u32>, half: Size<u32>) {
+        let parent_alignment = self.alignment_storage[&parent_id];
+        self.alignment = parent_alignment;
+        let is_aligned_vertically = self.is_aligned_vertically();
+        let padding = self.padding;
+        self.set_next_pos(|pos| {
+            if is_aligned_vertically {
+                pos.x = current_pos.x - half.width;
+                pos.y = current_pos.y + half.height + padding;
+            } else {
+                pos.y = current_pos.y - half.height;
+                pos.x = current_pos.x + half.width + padding;
             }
         });
     }

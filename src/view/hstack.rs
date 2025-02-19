@@ -1,7 +1,6 @@
 use util::Size;
 use crate::callback::CALLBACKS;
-use crate::context::Alignment;
-use crate::storage::WidgetStorage;
+use crate::context::{Alignment, LayoutCtx};
 use crate::Rgb;
 use crate::shapes::{Shape, ShapeKind};
 use super::{AnyView, IntoView, NodeId, View};
@@ -28,7 +27,7 @@ impl HStack {
         let mut size = Size::new(0, 0);
         if !self.children.is_empty() {
             self.children.iter().for_each(|child| {
-                let child_size = child.shape().dimensions;
+                let child_size = child.shape().dims;
                 size.width += child_size.width;
                 size.height = size.height.max(child_size.height + self.padding() * 2);
             });
@@ -65,9 +64,9 @@ impl View for HStack {
 
     fn img_src(&self) -> Option<&std::path::PathBuf> { None }
 
-    fn layout(&self, cx: &mut WidgetStorage, shape: &mut Shape) {
-        cx.layout.align_horizontally();
-        cx.layout.assign_position(shape);
+    fn layout(&self, cx: &mut LayoutCtx, shape: &mut Shape) {
+        cx.align_horizontally();
+        cx.assign_position(shape);
     }
 
     fn padding(&self) -> u32 { 20 }

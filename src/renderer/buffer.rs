@@ -1,4 +1,4 @@
-use util::{cast_slice, Matrix, Matrix4x4, Size};
+use util::{cast_slice, Matrix4x4, Size};
 
 use crate::shapes::Shape;
 
@@ -42,7 +42,7 @@ impl<T> Buffer<T> {
     fn storage_bind_group_layout_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
         wgpu::BindGroupLayoutEntry {
             binding,
-            visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
             ty: wgpu::BindingType::Buffer {
                 ty: wgpu::BufferBindingType::Storage { read_only: true },
                 has_dynamic_offset: false,
@@ -128,11 +128,18 @@ impl Gfx {
         self.shapes.len()
     }
 
-    pub fn push(&mut self, shape: Shape, window_size: Size<u32>) {
+    pub fn push(&mut self, mut shape: Shape, window_size: Size<u32>) {
         let transform = shape.get_transform(window_size);
-        self.indices.extend_from_slice(&*shape.indices());
+        shape.transform = self.transforms.len() as u32;
+        self.indices.extend_from_slice(&shape.indices());
         self.transforms.push(transform);
         self.shapes.push(shape);
+    }
+
+    pub fn push_texture(&mut self, texture_data: TextureData, shape: &mut Shape) {
+        let texture_id = self.textures.len() as i32;
+        shape.texture_id = texture_id;
+        self.textures.push(texture_data);
     }
 
     pub fn indices(&self, device: &wgpu::Device) -> wgpu::Buffer {
@@ -147,7 +154,7 @@ impl Gfx {
 
     pub fn instance(&self,device: &wgpu::Device) -> wgpu::Buffer {
         use wgpu::util::DeviceExt;
-        let instance_data = (0..self.count() as u32).into_iter().collect::<Vec<_>>();
+        let instance_data = (0..self.count() as u32).collect::<Vec<_>>();
         
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("instance buffer"),
@@ -164,7 +171,7 @@ impl Gfx {
                 wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Uint32,
                     offset: 0,
-                    shader_location: 1,
+                    shader_location: 2,
                 }
             ],
         }
@@ -206,14 +213,14 @@ impl Gfx {
 }
 
 pub struct Screen {
-    pub initial_size: Size<u32>,
+    initial_size: Size<u32>,
     pub buffer: Buffer<Matrix4x4>,
     pub bind_group: wgpu::BindGroup,
 }
 
 impl Screen {
     pub fn new(device: &wgpu::Device, initial_size: Size<u32>) -> Self {
-        let transform = Matrix::IDENTITY;
+        let transform = Matrix4x4::IDENTITY;
         let mut buffer = Buffer::uniform(device, "screen");
         buffer.push(transform);
         let bind_group = Self::bind_group(device, &buffer);
@@ -226,6 +233,10 @@ impl Screen {
 
     pub fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
         self.buffer.write(device, queue);
+    }
+
+    pub fn initial_size(&self) -> Size<u32> {
+        self.initial_size
     }
 
     pub fn update<F: FnMut(&mut Matrix4x4)>(&mut self, f: F) {

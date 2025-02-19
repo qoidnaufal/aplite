@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::context::Alignment;
-use crate::storage::WidgetStorage;
+use crate::context::{Alignment, LayoutCtx};
 use crate::shapes::{Shape, ShapeKind};
 use crate::callback::CALLBACKS;
 use super::{AnyView, IntoView, NodeId, View};
@@ -29,10 +28,10 @@ impl Image {
         Shape::textured(ShapeKind::TexturedRectangle)
     }
 
-    pub fn _on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
-        self
-    }
+    // pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+    //     CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
+    //     self
+    // }
 
     // pub fn on_click<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
     //     CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
@@ -54,15 +53,8 @@ impl View for Image {
 
     fn img_src(&self) -> Option<&PathBuf> { Some(&self.src) }
 
-    fn layout(&self, cx: &mut WidgetStorage, shape: &mut Shape) {
-        cx.layout.assign_position(shape);
-        // let half = self.shape().dimensions / 2;
-        // let current_pos = if cx.get_parent(&self.id()).is_some() {
-        //     cx.layout.next_child_pos()
-        // } else {
-        //     cx.layout.next_pos()
-        // };
-        // shape.pos = current_pos + half;
+    fn layout(&self, cx: &mut LayoutCtx, shape: &mut Shape) {
+        cx.assign_position(shape);
     }
 
     fn padding(&self) -> u32 { 0 }

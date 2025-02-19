@@ -100,6 +100,7 @@ where
 fn create_window(event_loop: &winit::event_loop::ActiveEventLoop) -> Arc<Window> {
     let window = event_loop.create_window(Default::default()).unwrap();
     window.set_title("My App");
+    window.set_transparent(true);
     Arc::new(window)
 }
 
