@@ -75,7 +75,18 @@ impl Rgb<u8> {
     pub const BLUE: Self = Self { r: 0, g: 0, b: 255 };
     pub const WHITE: Self = Self { r: 255, g: 255, b: 255 };
     pub const YELLOW: Self = Self { r: 255, g: 255, b: 0 };
-    pub const GRAY: Self = Self { r: 56, g: 57, b: 58 };
+    pub const DARK_GRAY: Self = Self { r: 30, g: 30, b: 30 };
+}
+
+impl From<Rgb<u8>> for wgpu::Color {
+    fn from(rgb8: Rgb<u8>) -> Self {
+        Self {
+            r: rgb8.r as f64 / u8::MAX as f64,
+            g: rgb8.g as f64 / u8::MAX as f64,
+            b: rgb8.b as f64 / u8::MAX as f64,
+            a: 1.0,
+        }
+    }
 }
 
 impl From<Rgb<u8>> for Rgb<f32> {
@@ -94,17 +105,6 @@ impl From<Rgb<f32>> for Rgb<u8> {
             r: (val.r * u8::MAX as f32) as u8,
             g: (val.g * u8::MAX as f32) as u8,
             b: (val.b * u8::MAX as f32) as u8,
-        }
-    }
-}
-
-impl From<Rgb<u8>> for wgpu::Color {
-    fn from(rgb: Rgb<u8>) -> Self {
-        Self {
-            r: rgb.r as f64 / u8::MAX as f64,
-            g: rgb.g as f64 / u8::MAX as f64,
-            b: rgb.b as f64 / u8::MAX as f64,
-            a: 1.0,
         }
     }
 }
@@ -143,6 +143,16 @@ pub struct Rgba<T> {
     pub g: T,
     pub b: T,
     pub a: T,
+}
+
+impl Rgba<u8> {
+    pub const BLACK: Self = Self { r: 0, g: 0, b: 0, a: 255 };
+    pub const RED: Self = Self { r: 255, g: 0, b: 0, a: 255 };
+    pub const GREEN: Self = Self { r: 0, g: 255, b: 0, a: 255 };
+    pub const BLUE: Self = Self { r: 0, g: 0, b: 255, a: 255 };
+    pub const WHITE: Self = Self { r: 255, g: 255, b: 255, a: 255 };
+    pub const YELLOW: Self = Self { r: 255, g: 255, b: 0, a: 255 };
+    pub const DARK_GRAY: Self = Self { r: 30, g: 30, b: 30, a: 255 };
 }
 
 impl From<Rgba<u8>> for u32 {

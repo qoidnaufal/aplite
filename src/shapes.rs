@@ -63,7 +63,6 @@ pub struct Shape {
     pub dimensions: Size<u32>,
     pub color: Rgb<f32>,
     pub kind: u32,
-    pub transform: u32,
 }
 
 impl Shape {
@@ -73,7 +72,6 @@ impl Shape {
             dimensions: size.into(),
             color: color.into(),
             kind: kind as u32,
-            transform: 0,
         }
     }
 
@@ -83,7 +81,6 @@ impl Shape {
             dimensions: Size::new(500, 500),
             color: Rgb::WHITE.into(),
             kind: kind as u32,
-            transform: 0,
         }
     }
 

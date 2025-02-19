@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use util::Vector2;
 use crate::{shapes::Shape, NodeId};
 
@@ -122,43 +124,69 @@ pub enum Alignment {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LayoutCtx {
     next_pos: Vector2<u32>,
-    alignment: Alignment,
+    alignment: HashMap<NodeId, Alignment>,
+    current_alignment: Alignment,
+    spacing: u32,
 }
 
 impl LayoutCtx {
     pub fn new() -> Self {
         Self {
             next_pos: Vector2::new(0, 0),
-            alignment: Alignment::Vertical,
+            alignment: HashMap::new(),
+            current_alignment: Alignment::Vertical,
+            spacing: 0,
         }
     }
 
+    pub fn insert_alignment(&mut self, node_id: NodeId, alignment: Alignment) {
+        self.alignment.insert(node_id, alignment);
+    }
+
+    pub fn get_parent_alignemt(&self, parent_id: NodeId) -> Option<&Alignment> {
+        self.alignment.get(&parent_id)
+    }
+
     pub fn current_alignment(&self) -> Alignment {
-        self.alignment
+        self.current_alignment
     }
 
     pub fn set_alignment(&mut self, alignment: Alignment) {
-        self.alignment = alignment
+        self.current_alignment = alignment
     }
 
     pub fn is_aligned_vertically(&self) -> bool {
-        matches!(self.alignment, Alignment::Vertical)
+        matches!(self.current_alignment, Alignment::Vertical)
     }
 
     pub fn align_vertically(&mut self) {
-        self.alignment = Alignment::Vertical;
+        self.current_alignment = Alignment::Vertical;
     }
 
     pub fn align_horizontally(&mut self) {
-        self.alignment = Alignment::Horizontal;
+        self.current_alignment = Alignment::Horizontal;
     }
 
     pub fn set_next_pos<F: FnMut(&mut Vector2<u32>)>(&mut self, mut f: F) {
         f(&mut self.next_pos);
     }
 
+    pub fn set_spacing(&mut self, spacing: u32) {
+        self.spacing = spacing;
+    }
+
     pub fn assign_position(&mut self, shape: &mut Shape) {
         let half = shape.dimensions / 2;
         shape.pos = self.next_pos + half;
+
+        let is_aligned_vertically = self.is_aligned_vertically();
+        let spacing = self.spacing;
+        self.set_next_pos(|next_pos| {
+            if is_aligned_vertically {
+                next_pos.y = shape.pos.y + half.height + spacing;
+            } else {
+                next_pos.x = shape.pos.x + half.width + spacing;
+            }
+        });
     }
 }

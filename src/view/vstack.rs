@@ -1,6 +1,7 @@
 use util::Size;
 
 use crate::callback::CALLBACKS;
+use crate::context::Alignment;
 use crate::storage::WidgetStorage;
 use crate::Rgb;
 use crate::shapes::{Shape, ShapeKind};
@@ -40,23 +41,23 @@ impl VStack {
         } else {
             size = (1, 1).into();
         }
-        Shape::filled(Rgb::YELLOW, ShapeKind::FilledRectangle, size)
+        Shape::filled(Rgb::DARK_GRAY, ShapeKind::FilledRectangle, size)
     }
 
-    // pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
-    //     CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
-    //     self
-    // }
-
-    pub fn _on_click<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
+    pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
         self
     }
 
-    // pub fn on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
-    //     CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
+    // pub fn on_click<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+    //     CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
     //     self
     // }
+
+    pub fn on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
+        self
+    }
 }
 
 impl View for VStack {
@@ -71,40 +72,13 @@ impl View for VStack {
     fn layout(&self, cx: &mut WidgetStorage, shape: &mut Shape) {
         cx.layout.align_vertically();
         cx.layout.assign_position(shape);
-        // let half = shape.dimensions / 2;
-        // let current_pos = if cx.get_parent(&self.id()).is_some() {
-        //     cx.layout.next_child_pos()
-        // } else {
-        //     cx.layout.next_pos()
-        // };
-        // shape.pos = current_pos + half;
-
-        // cx.layout.set_next_child_pos(|pos| {
-        //     pos.x = current_pos.x + self.padding();
-        //     pos.y = current_pos.y + self.padding();
-        // });
-
-        // self.children.iter().for_each(|child| {
-        //     cx.layout.set_next_child_pos(|pos| {
-        //         pos.y += child.shape().dimensions.height + self.spacing();
-        //     });
-        // });
-
-        // if cx.get_parent(&self.id()).is_some() {
-        //     cx.layout.set_next_child_pos(|pos| {
-        //         pos.x = current_pos.x;
-        //         pos.y = current_pos.y;
-        //     });
-        // } else {
-        //     cx.layout.set_next_pos(|pos| {
-        //         pos.y += shape.dimensions.height;
-        //     });
-        // }
     }
 
     fn padding(&self) -> u32 { 20 }
 
     fn spacing(&self) -> u32 { 20 }
+
+    fn alignment(&self) -> Alignment { Alignment::Vertical }
 }
 
 impl IntoView for VStack {

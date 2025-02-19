@@ -1,5 +1,6 @@
 use std::ops::Deref;
 
+#[repr(C)]
 #[derive(Debug,Clone, Copy)]
 pub struct Size<T> {
     pub width: T,

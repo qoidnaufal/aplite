@@ -2,6 +2,7 @@ use super::{Gpu, SHADER};
 
 pub fn pipeline(
     gpu: &Gpu,
+    buffers: &[wgpu::VertexBufferLayout<'_>],
     bind_group_layouts: &[&wgpu::BindGroupLayout],
 ) -> wgpu::RenderPipeline {
     let device = &gpu.device;
@@ -24,7 +25,7 @@ pub fn pipeline(
             module: &shader,
             entry_point: Some("vs_main"),
             compilation_options: wgpu::PipelineCompilationOptions::default(),
-            buffers: &[],
+            buffers,
         },
         primitive: wgpu::PrimitiveState {
             topology: wgpu::PrimitiveTopology::TriangleList,

@@ -41,6 +41,10 @@ impl WidgetStorage {
         self.parent.insert(node_id, parent_id);
     }
 
+    pub fn get_parent(&self, node_id: NodeId) -> Option<&NodeId> {
+        self.parent.get(&node_id)
+    }
+
     pub fn has_changed(&self) -> bool {
         !self.pending_update.is_empty()
     }

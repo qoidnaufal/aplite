@@ -62,7 +62,7 @@ fn root() -> impl IntoView {
                     image("assets/image2.jpg").into_any(),
                     TestTriangleWidget::new().on_hover(hover).into_any(),
                 ]
-            ).into_any(),
+            ).on_drag(drag).into_any(),
             hstack(
                 [
                     button().on_click(shift_right).on_hover(hover).into_any(),
@@ -76,7 +76,7 @@ fn root() -> impl IntoView {
                 .on_hover(hover)
                 .into_any(),
         ]
-    )
+    ).on_drag(drag)
 }
 
 fn dummy() -> impl IntoView {
@@ -84,15 +84,35 @@ fn dummy() -> impl IntoView {
     let drag = move |shape: &mut Shape| {
         shape.set_color(|color| *color = Rgb::GREEN);
     };
-    TestTriangleWidget::new().on_hover(hover).on_drag(drag)
-    // image("assets/image1.jpg")
+    // TestTriangleWidget::new().on_hover(hover).on_drag(drag)
+
     // vstack(
     //     [
-    //         // TestTriangleWidget::new().on_hover(hover).on_drag(drag).into_any(),
+    //         TestTriangleWidget::new().on_hover(hover).on_drag(drag).into_any(),
+    //     ]
+    // ).on_hover(hover).on_drag(drag)
+
+    vstack(
+        [
+            hstack(
+                [
+                    button().on_hover(hover).into_any(),
+                    button().on_hover(hover).into_any(),
+                    button().on_hover(hover).into_any(),
+                ]
+            ).into_any(),
+            image("assets/image1.jpg").on_drag(drag).into_any(),
+        ]
+    ).on_hover(hover).on_drag(drag)
+
+    
+    // vstack(
+    //     [
+    //         TestTriangleWidget::new().on_hover(hover).on_drag(drag).into_any(),
     //         button().on_hover(hover).into_any(),
     //         button().on_hover(hover).into_any(),
     //     ]
-    // )
+    // ).on_drag(drag)
 }
 
 fn main() -> Result<(), Error> {

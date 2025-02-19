@@ -12,6 +12,7 @@ pub use {
     hstack::*,
 };
 
+use crate::context::Alignment;
 use crate::{renderer::{image_reader, Gfx, Gpu, TextureData}, storage::WidgetStorage};
 use crate::shapes::{Shape, ShapeKind};
 use crate::color::Rgb;
@@ -44,13 +45,13 @@ pub trait View {
     fn layout(&self, cx: &mut WidgetStorage, shape: &mut Shape);
     fn padding(&self) -> u32;
     fn spacing(&self) -> u32;
+    fn alignment(&self) -> Alignment;
 
     fn prepare(
         &self,
         storage: &mut WidgetStorage,
         gpu: &Gpu,
         gfx: &mut Gfx,
-        textures: &mut Vec<TextureData>,
     ) {
         let node_id = self.id();
         let mut shape = self.shape();
@@ -62,41 +63,44 @@ pub trait View {
             rgb.into()
         };
 
-        // local to render space
-        // let x = (shape.pos.x / ws.width - 0.5) * 2.0;
-        // let y = (0.5 - shape.pos.y / ws.height) * 2.0;
-
         self.layout(storage, &mut shape);
         let half = shape.dimensions / 2;
         let current_pos = shape.pos;
 
         storage.nodes.push(node_id);
         gfx.push(shape, gpu.size());
-        textures.push(TextureData::new(&gpu, color));
+        gfx.textures.push(TextureData::new(&gpu, color));
 
         if let Some(children) = self.children() {
-            let current_alignment = storage.layout.current_alignment();
+            storage.layout.insert_alignment(node_id, self.alignment());
             storage.layout.set_next_pos(|pos| {
                 pos.x = current_pos.x - half.width + self.padding();
                 pos.y = current_pos.y - half.height + self.padding();
             });
+            storage.layout.set_spacing(self.spacing());
 
             children.iter().for_each(|child| {
                 storage.insert_children(node_id, child.id());
                 storage.insert_parent(child.id(), node_id);
-                child.prepare(storage, gpu, gfx, textures);
+                child.prepare(storage, gpu, gfx);
+            });
 
-                let is_vertical = storage.layout.is_aligned_vertically();
+            if let Some(parent_id) = storage.get_parent(node_id) {
+                let parent_alignment = storage.layout.get_parent_alignemt(*parent_id).unwrap();
+                storage.layout.set_alignment(*parent_alignment);
+                let is_aligned_vertically = storage.layout.is_aligned_vertically();
                 storage.layout.set_next_pos(|pos| {
-                    if is_vertical {
-                        pos.y += child.shape().dimensions.height + self.spacing();
+                    if is_aligned_vertically {
+                        pos.x = current_pos.x - half.width;
+                        pos.y = current_pos.y + half.height + self.padding();
                     } else {
-                        pos.x += child.shape().dimensions.width + self.spacing();
+                        pos.y = current_pos.y - half.height;
+                        pos.x = current_pos.x + half.width + self.padding();
                     }
                 });
-            });
-            storage.layout.set_alignment(current_alignment);
+            }
         }
+
     }
 }
 
@@ -124,6 +128,8 @@ impl View for DynView {
     fn padding(&self) -> u32 { self.0.padding() }
 
     fn spacing(&self) -> u32 { self.0.spacing() }
+
+    fn alignment(&self) -> Alignment { self.0.alignment() }
 }
 
 impl<F, IV> IntoView for F
@@ -193,6 +199,8 @@ impl View for TestTriangleWidget {
     fn padding(&self) -> u32 { 0 }
 
     fn spacing(&self) -> u32 { 0 }
+
+    fn alignment(&self) -> Alignment { Alignment::Vertical }
 }
 
 impl IntoView for TestTriangleWidget {

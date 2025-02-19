@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use crate::context::Alignment;
 use crate::storage::WidgetStorage;
 use crate::shapes::{Shape, ShapeKind};
 use crate::callback::CALLBACKS;
@@ -38,7 +39,7 @@ impl Image {
     //     self
     // }
 
-    pub fn _on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+    pub fn on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
         self
     }
@@ -67,6 +68,8 @@ impl View for Image {
     fn padding(&self) -> u32 { 0 }
 
     fn spacing(&self) -> u32 { 0 }
+
+    fn alignment(&self) -> Alignment { Alignment::Vertical }
 }
 
 impl IntoView for Image {

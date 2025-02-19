@@ -1,7 +1,8 @@
+use crate::context::Alignment;
 use crate::shapes::{Shape, ShapeKind};
-use crate::color::Rgb;
 use crate::callback::CALLBACKS;
 use crate::storage::WidgetStorage;
+use crate::Rgb;
 use super::{AnyView, IntoView, NodeId, View};
 
 pub fn button() -> Button { Button::new() }
@@ -56,6 +57,8 @@ impl View for Button {
     fn padding(&self) -> u32 { 0 }
 
     fn spacing(&self) -> u32 { 0 }
+
+    fn alignment(&self) -> Alignment { Alignment::Vertical }
 }
 
 impl IntoView for Button {

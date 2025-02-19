@@ -2,6 +2,8 @@ use util::{cast_slice, Matrix, Matrix4x4, Size};
 
 use crate::shapes::Shape;
 
+use super::TextureData;
+
 const INITIAL_CAPACITY: u64 = 1024 * 4;
 
 #[derive(Debug)]
@@ -85,10 +87,6 @@ impl<T> Buffer<T> {
         realloc
     }
 
-    // pub fn slice<'a, R: RangeBounds<u64>>(&'a self, range: R) -> wgpu::BufferSlice<'a> {
-    //     self.buffer.slice(range)
-    // }
-
     pub fn push(&mut self, data: T) {
         self.data.push(data);
     }
@@ -106,6 +104,7 @@ pub struct Gfx {
     pub shapes: Buffer<Shape>,
     pub transforms: Buffer<Matrix4x4>,
     pub bind_group: wgpu::BindGroup,
+    pub textures: Vec<TextureData>,
     indices: Vec<u32>,
 }
 
@@ -114,6 +113,7 @@ impl Gfx {
         device: &wgpu::Device,
     ) -> Self {
         let indices = vec![];
+        let textures = vec![];
         let shapes = Buffer::<Shape>::storage(device, "shapes");
         let transforms = Buffer::<Matrix4x4>::storage(device, "transforms");
         let bind_group = Self::bind_group(device, &[
@@ -121,29 +121,53 @@ impl Gfx {
             transforms.bind_group_entry(1),
         ]);
 
-        Self { indices, shapes, transforms, bind_group }
+        Self { shapes, transforms, bind_group, indices, textures }
     }
 
-    pub fn push(&mut self, mut shape: Shape, window_size: Size<u32>) {
-        let transform_idx = self.transforms.data.len() as u32;
+    pub fn count(&self) -> usize {
+        self.shapes.len()
+    }
+
+    pub fn push(&mut self, shape: Shape, window_size: Size<u32>) {
         let transform = shape.get_transform(window_size);
-        shape.transform = transform_idx;
         self.indices.extend_from_slice(&*shape.indices());
-        self.shapes.push(shape);
         self.transforms.push(transform);
+        self.shapes.push(shape);
     }
-
-    // pub fn total_indices_len(&self) -> usize {
-    //     self.indices.len()
-    // }
 
     pub fn indices(&self, device: &wgpu::Device) -> wgpu::Buffer {
         use wgpu::util::DeviceExt;
+        
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("indices buffer"),
             contents: cast_slice(&self.indices),
             usage: wgpu::BufferUsages::INDEX,
         })
+    }
+
+    pub fn instance(&self,device: &wgpu::Device) -> wgpu::Buffer {
+        use wgpu::util::DeviceExt;
+        let instance_data = (0..self.count() as u32).into_iter().collect::<Vec<_>>();
+        
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("instance buffer"),
+            contents: cast_slice(&instance_data),
+            usage: wgpu::BufferUsages::VERTEX,
+        })
+    }
+
+    pub fn instance_desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        wgpu::VertexBufferLayout {
+            array_stride: size_of::<u32>() as u64,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Uint32,
+                    offset: 0,
+                    shader_location: 1,
+                }
+            ],
+        }
     }
 
     pub fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
@@ -181,32 +205,31 @@ impl Gfx {
     }
 }
 
-pub struct Uniform {
+pub struct Screen {
     pub initial_size: Size<u32>,
-    pub screen: Buffer<Matrix4x4>,
+    pub buffer: Buffer<Matrix4x4>,
     pub bind_group: wgpu::BindGroup,
 }
 
-impl Uniform {
+impl Screen {
     pub fn new(device: &wgpu::Device, initial_size: Size<u32>) -> Self {
         let transform = Matrix::IDENTITY;
-        let mut screen = Buffer::uniform(device, "screen");
-        screen.push(transform);
-        let sampler = sampler(device);
-        let bind_group = Self::bind_group(device, &screen, &sampler);
+        let mut buffer = Buffer::uniform(device, "screen");
+        buffer.push(transform);
+        let bind_group = Self::bind_group(device, &buffer);
         Self {
             initial_size,
-            screen,
+            buffer,
             bind_group
         }
     }
 
     pub fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        self.screen.write(device, queue);
+        self.buffer.write(device, queue);
     }
 
     pub fn update<F: FnMut(&mut Matrix4x4)>(&mut self, f: F) {
-        self.screen.update(0, f);
+        self.buffer.update(0, f);
     }
 
     pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
@@ -214,43 +237,20 @@ impl Uniform {
             label: Some("screen bind group layout"),
             entries: &[
                 Buffer::<Matrix4x4>::uniform_bind_group_layout_entry(0),
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                }
             ],
         })
     }
 
     pub fn bind_group(
         device: &wgpu::Device,
-        screen: &Buffer<Matrix4x4>,
-        sampler: &wgpu::Sampler
+        buffer: &Buffer<Matrix4x4>,
     ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("screen bind group"),
             layout: &Self::bind_group_layout(device),
             entries: &[
-                screen.bind_group_entry(0),
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(sampler),
-                }
+                buffer.bind_group_entry(0),
             ],
         })
     }
-}
-
-fn sampler(device: &wgpu::Device) -> wgpu::Sampler {
-    device.create_sampler(&wgpu::SamplerDescriptor {
-        address_mode_u: wgpu::AddressMode::ClampToEdge,
-        address_mode_v: wgpu::AddressMode::ClampToEdge,
-        address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Nearest,
-        mipmap_filter: wgpu::FilterMode::Nearest,
-        ..Default::default()
-    })
 }
