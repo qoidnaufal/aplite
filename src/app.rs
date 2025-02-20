@@ -48,7 +48,7 @@ impl Stats {
 impl Drop for Stats {
     fn drop(&mut self) {
         let avg = self.time / self.counter;
-        eprintln!("average update time: {avg:?}");
+        println!("average render time: {avg:?}");
     }
 }
 
@@ -136,11 +136,9 @@ where
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
-                let start = std::time::Instant::now();
                 self.update();
-                let elapsed = start.elapsed();
-                self.stats.inc(elapsed);
 
+                let start = std::time::Instant::now();
                 match self.render() {
                     Ok(_) => {},
                     Err(Error::SurfaceRendering(surface_err)) => {
@@ -162,6 +160,8 @@ where
                     }
                     Err(_) => panic!()
                 }
+                let elapsed = start.elapsed();
+                self.stats.inc(elapsed);
             }
             WindowEvent::Resized(new_size) => {
                 self.resize(Size::new(new_size.width, new_size.height));

@@ -89,12 +89,12 @@ impl Renderer {
         self.screen.write(&self.gpu.device, &self.gpu.queue);
     }
 
-    pub fn update(&mut self, index: usize) {
+    pub fn update(&mut self) {
         self.gfx.write(&self.gpu.device, &self.gpu.queue);
-        if let Some(texture_data) = self.gfx.textures.get(index) {
-            let shape = &self.gfx.shapes.data[index];
-            texture_data.update_color(&self.gpu.queue, shape.color.into());
-        }
+        // if let Some(texture_data) = self.gfx.textures.get(index) {
+        //     let shape = &self.gfx.shapes.data[index];
+        //     texture_data.update_color(&self.gpu.queue, shape.color.into());
+        // }
     }
 
     pub fn render(&mut self) -> Result<(), Error> {

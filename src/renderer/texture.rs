@@ -4,18 +4,18 @@ use std::fs::File;
 
 use image::GenericImageView;
 
-use crate::color::{Color, Rgb};
+use crate::color::{Pixel, Rgb};
 use crate::Rgba;
 
 use super::Gpu;
 
-pub fn image_reader<P: AsRef<Path>>(path: P) -> Color<Rgba<u8>, u8> {
+pub fn image_reader<P: AsRef<Path>>(path: P) -> Pixel<Rgba<u8>> {
     let mut file = File::open(path).unwrap();
     let mut buf = Vec::new();
     let len = file.read_to_end(&mut buf).unwrap();
     let image = image::load_from_memory(&buf[..len]).unwrap();
 
-    Color::new(image.dimensions(), &image.to_rgba8())
+    Pixel::new(image.dimensions(), &image.to_rgba8())
 }
 
 #[derive(Debug)]
@@ -25,15 +25,15 @@ pub struct TextureData {
 }
 
 impl TextureData {
-    pub fn new(gpu: &Gpu, data: Color<Rgba<u8>, u8>) -> Self {
+    pub fn new(gpu: &Gpu, pixel: Pixel<Rgba<u8>>) -> Self {
         let device = &gpu.device;
         let queue = &gpu.queue;
 
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("texture"),
             size: wgpu::Extent3d {
-                width: data.dimensions().width,
-                height: data.dimensions().height,
+                width: pixel.dimensions().width,
+                height: pixel.dimensions().height,
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -47,7 +47,7 @@ impl TextureData {
         let sampler = sampler(device);
         let bind_group = Self::bind_group(device, &view, &sampler);
 
-        submit_texture(queue, texture.as_image_copy(), data);
+        submit_texture(queue, texture.as_image_copy(), pixel);
 
         Self { texture, bind_group }
     }
@@ -97,27 +97,27 @@ impl TextureData {
         })
     }
 
-    pub fn update_color(&self, queue: &wgpu::Queue, new_color: Rgb<u8>) {
-        submit_texture(queue, self.texture.as_image_copy(), new_color.into());
-    }
+    // pub fn update_texture(&self, queue: &wgpu::Queue, new_color: Rgb<u8>) {
+    //     submit_texture(queue, self.texture.as_image_copy(), new_color.into());
+    // }
 }
 
 fn submit_texture(
     queue: &wgpu::Queue,
     texture: wgpu::TexelCopyTextureInfo,
-    data: Color<Rgba<u8>, u8>
+    pixel: Pixel<Rgba<u8>>
 ) {
     queue.write_texture(
         texture,
-        &data,
+        &pixel,
         wgpu::TexelCopyBufferLayout {
             offset: 0,
-            bytes_per_row: Some(4 * data.dimensions().width),
-            rows_per_image: Some(data.dimensions().height),
+            bytes_per_row: Some(4 * pixel.dimensions().width),
+            rows_per_image: Some(pixel.dimensions().height),
         },
         wgpu::Extent3d {
-            width: data.dimensions().width,
-            height: data.dimensions().height,
+            width: pixel.dimensions().width,
+            height: pixel.dimensions().height,
             depth_or_array_layers: 1,
         }
     );

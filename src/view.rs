@@ -37,6 +37,12 @@ impl std::fmt::Display for NodeId {
 
 pub type AnyView = Box<dyn View>;
 
+impl std::fmt::Debug for AnyView {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.id())
+    }
+}
+
 pub trait View {
     fn id(&self) -> NodeId;
     fn shape(&self) -> Shape;
@@ -57,8 +63,10 @@ pub trait View {
         let node_id = self.id();
         let mut shape = self.shape();
         if let Some(src) = self.img_src() {
-            let color = image_reader(src);
-            gfx.push_texture(TextureData::new(gpu, color), &mut shape);
+            let pixel = image_reader(src);
+            // let aspect_ratio = pixel.aspect_ratio();
+            // shape.dims.width = (shape.dims.width as f32 * aspect_ratio) as u32;
+            gfx.push_texture(TextureData::new(gpu, pixel), &mut shape);
         } else {
             storage.cached_color.insert(node_id, shape.color);
         };

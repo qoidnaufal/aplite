@@ -3,13 +3,13 @@ use std::marker::PhantomData;
 use util::Size;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Color<Container, T> {
+pub struct Pixel<Container> {
     dimensions: Size<u32>,
-    data: Vec<T>,
+    data: Vec<u8>,
     _phatom: PhantomData<Container>,
 }
 
-impl Color<Rgba<u8>, u8> {
+impl Pixel<Rgba<u8>> {
     pub fn new(dimensions: impl Into<Size<u32>>, data: &[u8]) -> Self {
         Self {
             dimensions: dimensions.into(),
@@ -18,19 +18,23 @@ impl Color<Rgba<u8>, u8> {
         }
     }
 
+    pub fn aspect_ratio(&self) -> f32 {
+        self.dimensions.width as f32 / self.dimensions.height as f32
+    }
+
     pub fn dimensions(&self) -> Size<u32> {
         self.dimensions
     }
 }
 
-impl<T> std::ops::Deref for Color<Rgba<T>, T> {
-    type Target = Vec<T>;
+impl std::ops::Deref for Pixel<Rgba<u8>> {
+    type Target = Vec<u8>;
     fn deref(&self) -> &Self::Target {
         &self.data
     }
 }
 
-impl From<Rgb<u8>> for Color<Rgb<u8>, u8> {
+impl From<Rgb<u8>> for Pixel<Rgb<u8>> {
     fn from(rgb: Rgb<u8>) -> Self {
         Self {
             dimensions: Size::new(1, 1),
@@ -40,7 +44,7 @@ impl From<Rgb<u8>> for Color<Rgb<u8>, u8> {
     }
 }
 
-impl From<Rgb<u8>> for Color<Rgba<u8>, u8> {
+impl From<Rgb<u8>> for Pixel<Rgba<u8>> {
     fn from(rgb: Rgb<u8>) -> Self {
         Self {
             dimensions: Size::new(1, 1),
@@ -50,7 +54,7 @@ impl From<Rgb<u8>> for Color<Rgba<u8>, u8> {
     }
 }
 
-impl From<Rgba<u8>> for Color<Rgba<u8>, u8> {
+impl From<Rgba<u8>> for Pixel<Rgba<u8>> {
     fn from(rgba: Rgba<u8>) -> Self {
         Self {
             dimensions: Size::new(1, 1),

@@ -50,10 +50,11 @@ impl WidgetStorage {
     }
 
     pub fn submit_update(&mut self, renderer: &mut Renderer) {
-        while let Some(ref change_id) = self.pending_update.pop() {
-            let index = self.nodes.iter().position(|node_id| node_id == change_id).unwrap();
-            renderer.update(index);
-        }
+        self.pending_update.clear();
+        // while let Some(ref change_id) = self.pending_update.pop() {
+        //     let index = self.nodes.iter().position(|node_id| node_id == change_id).unwrap();
+        // }
+        renderer.update();
     }
 
     pub fn detect_hover(&self, cursor: &mut Cursor, gfx: &Gfx) {
