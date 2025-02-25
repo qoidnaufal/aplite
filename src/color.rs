@@ -161,10 +161,10 @@ impl Rgba<u8> {
 
 impl From<Rgba<u8>> for u32 {
     fn from(rgba: Rgba<u8>) -> Self {
-        (rgba.r as u32) << 24
-        | (rgba.g as u32) << 16
-        | (rgba.b as u32) << 8
-        | rgba.a as u32
+        ((rgba.r as u32) << 24)
+        | ((rgba.g as u32) << 16)
+        | ((rgba.b as u32) << 8)
+        | (rgba.a as u32)
     }
 }
 

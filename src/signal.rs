@@ -45,3 +45,4 @@ impl<T: Clone> SignalWrite<T> {
     }
 }
 
+pub struct SignalRuntime {}

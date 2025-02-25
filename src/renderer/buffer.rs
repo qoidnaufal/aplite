@@ -1,6 +1,6 @@
 use util::{cast_slice, Matrix4x4, Size};
 
-use crate::shapes::Shape;
+use crate::shapes::{Shape, ShapeConfig, ShapeKind};
 
 use super::TextureData;
 
@@ -128,17 +128,18 @@ impl Gfx {
         self.shapes.len()
     }
 
-    pub fn push(&mut self, mut shape: Shape, window_size: Size<u32>) {
-        let transform = shape.get_transform(window_size);
-        shape.transform = self.transforms.len() as u32;
+    pub fn push(&mut self, config: &ShapeConfig, window_size: Size<u32>, kind: ShapeKind) {
+        let transform = config.get_transform(window_size);
+        let transform_id = self.transforms.len() as u32;
+        let shape = Shape::new(config, transform_id, kind);
         self.indices.extend_from_slice(&shape.indices());
         self.transforms.push(transform);
         self.shapes.push(shape);
     }
 
-    pub fn push_texture(&mut self, texture_data: TextureData, shape: &mut Shape) {
+    pub fn push_texture(&mut self, texture_data: TextureData, config: &mut ShapeConfig) {
         let texture_id = self.textures.len() as i32;
-        shape.texture_id = texture_id;
+        config.texture_id = texture_id;
         self.textures.push(texture_data);
     }
 

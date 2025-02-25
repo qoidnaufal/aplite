@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use util::{Size, Vector2};
-use crate::{shapes::Shape, NodeId};
+use crate::{shapes::ShapeConfig, NodeId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseAction {
@@ -68,8 +68,8 @@ pub struct Cursor {
     pub click: MouseClick,
 }
 
-impl Cursor {
-    pub fn new() -> Self {
+impl Default for Cursor {
+    fn default() -> Self {
         Self {
             hover: MouseHover {
                 pos: Vector2::default(),
@@ -86,6 +86,12 @@ impl Cursor {
                 obj: None,
             },
         }
+    }
+}
+
+impl Cursor {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     fn set_state(&mut self, action: MouseAction, button: MouseButton) {
@@ -130,8 +136,8 @@ pub struct LayoutCtx {
     padding: u32,
 }
 
-impl LayoutCtx {
-    pub fn new() -> Self {
+impl Default for LayoutCtx {
+    fn default() -> Self {
         Self {
             next_pos: Vector2::new(0, 0),
             alignment_storage: HashMap::new(),
@@ -139,6 +145,12 @@ impl LayoutCtx {
             spacing: 0,
             padding: 0,
         }
+    }
+}
+
+impl LayoutCtx {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn insert_alignment(&mut self, node_id: NodeId, alignment: Alignment) {
@@ -165,22 +177,27 @@ impl LayoutCtx {
 
     pub fn set_padding(&mut self, padding: u32) { self.padding = padding }
 
-    pub fn assign_position(&mut self, shape: &mut Shape) {
-        let half = shape.dims / 2;
-        shape.pos = self.next_pos + half;
+    pub fn assign_position(&mut self, config: &mut ShapeConfig) {
+        let half = config.dims / 2;
+        config.pos = self.next_pos + half;
 
         let is_aligned_vertically = self.is_aligned_vertically();
         let spacing = self.spacing;
         self.set_next_pos(|next_pos| {
             if is_aligned_vertically {
-                next_pos.y = shape.pos.y + half.height + spacing;
+                next_pos.y = config.pos.y + half.height + spacing;
             } else {
-                next_pos.x = shape.pos.x + half.width + spacing;
+                next_pos.x = config.pos.x + half.width + spacing;
             }
         });
     }
 
-    pub fn reset_to_parent(&mut self, parent_id: NodeId, current_pos: Vector2<u32>, half: Size<u32>) {
+    pub fn reset_to_parent(
+        &mut self,
+        parent_id: NodeId,
+        current_pos: Vector2<u32>,
+        half: Size<u32>
+    ) {
         let parent_alignment = self.alignment_storage[&parent_id];
         self.alignment = parent_alignment;
         let is_aligned_vertically = self.is_aligned_vertically();

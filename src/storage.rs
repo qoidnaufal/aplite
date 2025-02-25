@@ -3,30 +3,36 @@ use util::Vector2;
 
 use crate::context::{Cursor, LayoutCtx, MouseAction};
 use crate::renderer::{Gfx, Renderer};
+use crate::shapes::ShapeConfig;
 use crate::view::NodeId;
 use crate::callback::CALLBACKS;
-use crate::Rgb;
 
 #[derive(Debug)]
 pub struct WidgetStorage {
     pub nodes: Vec<NodeId>,
     pub children: HashMap<NodeId, Vec<NodeId>>,
     pub parent: HashMap<NodeId, NodeId>,
-    pub cached_color: HashMap<NodeId, Rgb<f32>>,
+    pub configs: HashMap<NodeId, ShapeConfig>,
     pub layout: LayoutCtx,
     pending_update: Vec<NodeId>,
 }
 
-impl WidgetStorage {
-    pub fn new() -> Self {
+impl Default for WidgetStorage {
+    fn default() -> Self {
         Self {
             nodes: Vec::new(),
             children: HashMap::new(),
             parent: HashMap::new(),
-            cached_color: HashMap::new(),
+            configs: HashMap::new(),
             layout: LayoutCtx::new(),
             pending_update: Vec::new(),
         }
+    }
+}
+
+impl WidgetStorage {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn insert_children(&mut self, node_id: NodeId, child_id: NodeId) {
@@ -43,6 +49,14 @@ impl WidgetStorage {
 
     pub fn get_parent(&self, node_id: NodeId) -> Option<&NodeId> {
         self.parent.get(&node_id)
+    }
+
+    // fn get_children(&self, node_id: NodeId) -> Option<&Vec<NodeId>> {
+    //     self.children.get(&node_id)
+    // }
+
+    pub fn is_root(&self, node_id: NodeId) -> bool {
+        self.parent.get(&node_id).is_none()
     }
 
     pub fn has_changed(&self) -> bool {
@@ -81,9 +95,10 @@ impl WidgetStorage {
             return;
         }
         if let Some(ref prev_id) = cursor.hover.prev.take() {
-            if let Some(cached_color) = self.cached_color.get(prev_id) {
+            // FIXME: use cached color from ShapeConfig
+            if let Some(config) = self.configs.get(prev_id) {
                 let idx = self.nodes.iter().position(|node_id| node_id == prev_id).unwrap();
-                gfx.shapes.update(idx, |shape| shape.revert_color(*cached_color));
+                gfx.shapes.update(idx, |shape| shape.revert_color(config.color.into()));
                 self.pending_update.push(*prev_id);
             }
         }
@@ -98,7 +113,7 @@ impl WidgetStorage {
                         if let Some(on_drag) = callbacks.on_drag.get_mut(hover_id) {
                             on_drag(shape);
                             // shape.set_position(cursor);
-                            gfx.transforms.update(idx, |transform| {
+                            gfx.transforms.update(shape.transform as usize, |transform| {
                                 shape.set_position(cursor, transform);
                             });
                         }

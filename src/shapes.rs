@@ -4,23 +4,23 @@ use crate::color::Rgb;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShapeKind {
-    FilledTriangle,
-    FilledRectangle,
-    FilledCircle,
-    TexturedRectangle,
+    Triangle,
+    Rect,
+    RoundedRect,
+    Circle,
 }
 
 impl ShapeKind {
-    pub fn is_triangle(&self) -> bool { matches!(self, Self::FilledTriangle) }
+    pub fn is_triangle(&self) -> bool { matches!(self, Self::Triangle) }
 }
 
 impl From<u32> for ShapeKind {
     fn from(num: u32) -> Self {
         match num {
-            0 => Self::FilledTriangle,
-            1 => Self::FilledRectangle,
-            2 => Self::FilledCircle,
-            3 => Self::TexturedRectangle,
+            0 => Self::Triangle,
+            1 => Self::Rect,
+            2 => Self::RoundedRect,
+            3 => Self::Circle,
             _ => unreachable!()
         }
     }
@@ -39,10 +39,10 @@ impl std::ops::Deref for Indices<'_> {
 impl From<ShapeKind> for Indices<'_> {
     fn from(kind: ShapeKind) -> Self {
         match kind {
-            ShapeKind::FilledTriangle => Self::triangle(),
-            ShapeKind::FilledRectangle => Self::rectangle(),
-            ShapeKind::FilledCircle => Self::rectangle(),
-            ShapeKind::TexturedRectangle => Self::rectangle(),
+            ShapeKind::Triangle => Self::triangle(),
+            ShapeKind::Rect => Self::rectangle(),
+            ShapeKind::RoundedRect => Self::rectangle(),
+            ShapeKind::Circle => Self::rectangle(),
         }
     }
 }
@@ -59,6 +59,50 @@ impl Indices<'_> {
 
 // pub struct Vertices<'a>(&'a [Vector2<f32>]);
 
+#[derive(Debug, Clone, Copy)]
+pub struct ShapeConfig {
+    pub pos: Vector2<u32>,
+    pub dims: Size<u32>,
+    pub color: Rgb<u8>,
+    pub texture_id: i32,
+}
+
+impl Default for ShapeConfig {
+    fn default() -> Self {
+        Self {
+            pos: Default::default(),
+            dims: Size::new(1, 1),
+            color: Rgb::WHITE,
+            texture_id: -1,
+        }
+    }
+}
+
+impl ShapeConfig {
+    pub fn new<S: Into<Size<u32>>>(dims: S, color: Rgb<u8>) -> Self {
+        Self {
+            dims: dims.into(),
+            color,
+            ..Default::default()
+        }
+    }
+
+    pub fn adjust_ratio(&mut self, aspect_ratio: f32) {
+        self.dims.width = (self.dims.height as f32 * aspect_ratio) as u32;
+    }
+
+    pub fn get_transform(&self, window_size: Size<u32>) -> Matrix4x4 {
+        let mut matrix = Matrix4x4::IDENTITY;
+        let ws: Size<f32> = window_size.into();
+        let x = (self.pos.x as f32 / ws.width - 0.5) * 2.0;
+        let y = (0.5 - self.pos.y as f32 / ws.height) * 2.0;
+        let d: Size<f32> = self.dims.into();
+        let scale = d / ws;
+        matrix.transform(x, y, scale.width, scale.height);
+        matrix
+    }
+}
+
 // must be aligned to 4
 #[repr(C)]
 #[derive(Debug, Clone)]
@@ -74,6 +118,19 @@ pub struct Shape {
 }
 
 impl Shape {
+    pub fn new(config: &ShapeConfig, transform: u32, kind: ShapeKind) -> Self {
+        Self {
+            pos: config.pos,
+            dims: config.dims,
+            color: config.color.into(),
+            texture_id: config.texture_id,
+            kind: kind as u32,
+            radius: 0.,
+            rotate: 0.,
+            transform,
+        }
+    }
+
     pub fn filled(color: Rgb<u8>, kind : ShapeKind, size: impl Into<Size<u32>>) -> Self {
         Self {
             pos: Vector2::default(),

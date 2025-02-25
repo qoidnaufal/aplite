@@ -92,6 +92,12 @@ where
         self.storage.submit_update(renderer);
     }
 
+    fn detect_update(&self, window_id: winit::window::WindowId) {
+        if self.storage.has_changed() {
+            self.request_redraw(window_id);
+        }
+    }
+
     fn render(&mut self) -> Result<(), Error> {
         unsafe { self.renderer.assume_init_mut().render() }
     }
@@ -116,11 +122,11 @@ where
             self.window.insert(window.id(), window);
             self.renderer.write(renderer);
         }
-        // eprintln!("{:?}", self.storage.nodes);
+        // eprintln!("{} | {:?}", self.storage.nodes.len(), self.storage.nodes);
         // self.storage.children.iter().for_each(|(node_id, vec)| {
         //     eprintln!("{node_id:?} | {vec:?}")
         // });
-        // eprintln!("{:#?}", unsafe { &self.renderer.assume_init_ref().gfx.shapes.data });
+        // eprintln!("{:#?}", unsafe { self.renderer.assume_init_ref().gfx.shapes.data.len() });
     }
 
     fn window_event(
@@ -170,21 +176,16 @@ where
                 let gfx = unsafe { &mut self.renderer.assume_init_mut().gfx };
                 self.cursor.set_click_state(action.into(), button.into());
                 self.storage.handle_click(&mut self.cursor, gfx);
-                if self.storage.has_changed() {
-                    self.request_redraw(window_id);
-                }
             }
             WindowEvent::CursorMoved { position, .. } => {
                 let gfx = unsafe { &mut self.renderer.assume_init_mut().gfx };
                 self.cursor.hover.pos = Vector2::new(position.x as _, position.y as _);
                 self.storage.detect_hover(&mut self.cursor, gfx);
                 self.storage.handle_hover(&mut self.cursor, gfx);
-                if self.storage.has_changed() {
-                    self.request_redraw(window_id);
-                }
             }
             _ => {}
         }
+        self.detect_update(window_id);
     }
 }
 

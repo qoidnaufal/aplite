@@ -85,9 +85,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let d = sdCircle(p, 0.49);
 
     let texture_mask = textureSample(t, s, in.uv);
-    let color = vec4<f32>(shape.color - sign(d) * shape.color, 1.0);
-    let color_mask = select(vec4<f32>(shape.color, 1.0), color, shape.kind == 2);
+    let sdf_color = vec4<f32>(shape.color - sign(d) * shape.color, 1.0);
 
+    let color_mask = select(vec4<f32>(shape.color, 1.0), sdf_color, shape.kind == 3);
     return select(color_mask, texture_mask, shape.texture_id > -1);
 }
 ";

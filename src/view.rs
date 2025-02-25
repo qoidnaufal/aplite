@@ -3,21 +3,23 @@ mod image;
 mod vstack;
 mod hstack;
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::path::PathBuf;
+
+use crate::context::{Alignment, LayoutCtx};
+use crate::storage::WidgetStorage;
+use crate::renderer::{Gfx, Gpu};
+use crate::shapes::{Shape, ShapeConfig, ShapeKind};
+use crate::Rgb;
+use crate::callback::CALLBACKS;
+
 pub use {
     button::*,
     image::*,
     vstack::*,
     hstack::*,
 };
-
-use crate::context::{Alignment, LayoutCtx};
-use crate::storage::WidgetStorage;
-use crate::renderer::{image_reader, Gfx, Gpu, TextureData};
-use crate::shapes::{Shape, ShapeKind};
-use crate::Rgb;
-use crate::callback::CALLBACKS;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeId(pub u64);
@@ -43,40 +45,50 @@ impl std::fmt::Debug for AnyView {
     }
 }
 
+pub type Configs = HashMap<NodeId, ShapeConfig>;
+
 pub trait View {
     fn id(&self) -> NodeId;
-    fn shape(&self) -> Shape;
+    fn config(&self, gpu: &Gpu, gfx: &mut Gfx, configs: &mut Configs);
     fn children(&self) -> Option<&[AnyView]>;
     fn img_src(&self) -> Option<&PathBuf>;
+    fn shape_kind(&self) -> ShapeKind;
 
-    fn layout(&self, cx: &mut LayoutCtx, shape: &mut Shape);
+    fn build_tree(&self, storage: &mut WidgetStorage) {
+        // storage.nodes.push(self.id());
+        if let Some(children) = self.children() {
+            children.iter().for_each(|child| {
+                storage.insert_children(self.id(), child.id());
+                storage.insert_parent(child.id(), self.id());
+                child.build_tree(storage);
+            });
+        }
+    }
+
+    fn layout(&self, cx: &mut LayoutCtx, shape: &mut ShapeConfig);
     fn padding(&self) -> u32;
     fn spacing(&self) -> u32;
     fn alignment(&self) -> Alignment;
 
     fn prepare(
         &self,
-        storage: &mut WidgetStorage,
         gpu: &Gpu,
         gfx: &mut Gfx,
+        storage: &mut WidgetStorage,
     ) {
         let node_id = self.id();
-        let mut shape = self.shape();
-        if let Some(src) = self.img_src() {
-            let pixel = image_reader(src);
-            // let aspect_ratio = pixel.aspect_ratio();
-            // shape.dims.width = (shape.dims.width as f32 * aspect_ratio) as u32;
-            gfx.push_texture(TextureData::new(gpu, pixel), &mut shape);
-        } else {
-            storage.cached_color.insert(node_id, shape.color);
-        };
-
-        self.layout(&mut storage.layout, &mut shape);
-        let half = shape.dims / 2;
-        let current_pos = shape.pos;
+        if storage.is_root(node_id) {
+            self.build_tree(storage);
+            // image widget need to consider the aspect ratio
+            self.config(gpu, gfx, &mut storage.configs);
+        }
+        let config = storage.configs.get_mut(&node_id).unwrap();
+        self.layout(&mut storage.layout, config);
+        let half = config.dims / 2;
+        let current_pos = config.pos;
 
         storage.nodes.push(node_id);
-        gfx.push(shape, gpu.size());
+        gfx.push(config, gpu.size(), self.shape_kind());
 
         if let Some(children) = self.children() {
             storage.layout.insert_alignment(node_id, self.alignment());
@@ -88,9 +100,7 @@ pub trait View {
             storage.layout.set_padding(self.padding());
 
             children.iter().for_each(|child| {
-                storage.insert_children(node_id, child.id());
-                storage.insert_parent(child.id(), node_id);
-                child.prepare(storage, gpu, gfx);
+                child.prepare(gpu, gfx, storage);
             });
 
             if let Some(parent_id) = storage.get_parent(node_id) {
@@ -112,14 +122,18 @@ pub struct DynView(AnyView);
 impl View for DynView {
     fn id(&self) -> NodeId { self.0.id() }
 
-    fn shape(&self) -> Shape { self.0.shape() }
+    fn config(&self, gpu: &Gpu, gfx: &mut Gfx, configs: &mut Configs) {
+        self.0.config(gpu, gfx, configs)
+    }
 
     fn children(&self) -> Option<&[AnyView]> { self.0.children() }
 
     fn img_src(&self) -> Option<&PathBuf> { self.0.img_src() }
 
-    fn layout(&self, cx: &mut LayoutCtx, shape: &mut Shape) {
-        self.0.layout(cx, shape);
+    fn shape_kind(&self) -> ShapeKind { self.0.shape_kind() }
+
+    fn layout(&self, cx: &mut LayoutCtx, config: &mut ShapeConfig) {
+        self.0.layout(cx, config);
     }
 
     fn padding(&self) -> u32 { self.0.padding() }
@@ -153,8 +167,9 @@ impl TestTriangleWidget {
 
     fn id(&self) -> NodeId { self.id }
 
-    fn shape(&self) -> Shape {
-        Shape::filled(Rgb::RED, ShapeKind::FilledTriangle, (500, 500))
+    fn config(&self, _gpu: &Gpu, _gfx: &mut Gfx, configs: &mut Configs) {
+        let config = ShapeConfig::new((300, 300), Rgb::RED);
+        configs.insert(self.id, config);
     }
 
     pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
@@ -178,12 +193,16 @@ impl View for TestTriangleWidget {
 
     fn children(&self) -> Option<&[Box<dyn View>]> { None }
 
-    fn shape(&self) -> Shape { self.shape() }
+    fn config(&self, gpu: &Gpu, gfx: &mut Gfx, configs: &mut Configs) {
+        self.config(gpu, gfx, configs);
+    }
 
     fn img_src(&self) -> Option<&PathBuf> { None }
 
-    fn layout(&self, cx: &mut LayoutCtx, shape: &mut Shape) {
-        cx.assign_position(shape);
+    fn shape_kind(&self) -> ShapeKind { ShapeKind::Triangle }
+
+    fn layout(&self, cx: &mut LayoutCtx, config: &mut ShapeConfig) {
+        cx.assign_position(config);
     }
 
     fn padding(&self) -> u32 { 0 }
@@ -210,8 +229,10 @@ impl TestCircleWidget {
 
     fn id(&self) -> NodeId { self.id }
 
-    fn shape(&self) -> Shape {
-        Shape::filled(Rgb::RED, ShapeKind::FilledCircle, (500, 500))
+    fn config(&self, _gpu: &Gpu, _gfx: &mut Gfx, configs: &mut Configs) {
+        let config = ShapeConfig::new((300, 300), Rgb::RED);
+        configs.insert(self.id, config);
+        // Shape::filled(Rgb::RED, ShapeKind::Circle, (500, 500))
     }
 
     pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
@@ -235,12 +256,16 @@ impl View for TestCircleWidget {
 
     fn children(&self) -> Option<&[Box<dyn View>]> { None }
 
-    fn shape(&self) -> Shape { self.shape() }
+    fn config(&self, gpu: &Gpu, gfx: &mut Gfx, configs: &mut Configs) {
+        self.config(gpu, gfx, configs);
+    }
 
     fn img_src(&self) -> Option<&PathBuf> { None }
 
-    fn layout(&self, cx: &mut LayoutCtx, shape: &mut Shape) {
-        cx.assign_position(shape);
+    fn shape_kind(&self) -> ShapeKind { ShapeKind::Circle }
+
+    fn layout(&self, cx: &mut LayoutCtx, config: &mut ShapeConfig) {
+        cx.assign_position(config);
     }
 
     fn padding(&self) -> u32 { 0 }

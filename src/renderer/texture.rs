@@ -1,15 +1,15 @@
-use std::path::Path;
+use std::path::PathBuf;
 use std::io::Read;
 use std::fs::File;
 
 use image::GenericImageView;
 
-use crate::color::{Pixel, Rgb};
+use crate::color::Pixel;
 use crate::Rgba;
 
 use super::Gpu;
 
-pub fn image_reader<P: AsRef<Path>>(path: P) -> Pixel<Rgba<u8>> {
+pub fn image_reader(path: &PathBuf) -> Pixel<Rgba<u8>> {
     let mut file = File::open(path).unwrap();
     let mut buf = Vec::new();
     let len = file.read_to_end(&mut buf).unwrap();

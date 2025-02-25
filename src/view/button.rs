@@ -1,8 +1,9 @@
 use crate::context::{Alignment, LayoutCtx};
-use crate::shapes::{Shape, ShapeKind};
+use crate::renderer::{Gfx, Gpu};
+use crate::shapes::{Shape, ShapeConfig, ShapeKind};
 use crate::callback::CALLBACKS;
 use crate::Rgb;
-use super::{AnyView, IntoView, NodeId, View};
+use super::{AnyView, Configs, IntoView, NodeId, View};
 
 pub fn button() -> Button { Button::new() }
 
@@ -18,8 +19,10 @@ impl Button {
 
     fn id(&self) -> NodeId { self.id }
 
-    fn shape(&self) -> Shape {
-        Shape::filled(Rgb::RED, ShapeKind::FilledRectangle, (120, 40))
+    fn config(&self, _gpu: &Gpu, _gfx: &mut Gfx, configs: &mut Configs) {
+        let config = ShapeConfig::new((120, 40), Rgb::RED);
+        configs.insert(self.id, config);
+        // Shape::filled(Rgb::RED, ShapeKind::RoundedRect, (120, 40))
     }
 
     pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
@@ -38,12 +41,16 @@ impl View for Button {
 
     fn children(&self) -> Option<&[AnyView]> { None }
 
-    fn shape(&self) -> Shape { self.shape() }
+    fn config(&self, gpu: &Gpu, gfx: &mut Gfx, configs: &mut Configs) {
+        self.config(gpu, gfx, configs);
+    }
 
     fn img_src(&self) -> Option<&std::path::PathBuf> { None }
 
-    fn layout(&self, cx: &mut LayoutCtx, shape: &mut Shape) {
-        cx.assign_position(shape);
+    fn shape_kind(&self) -> ShapeKind { ShapeKind::RoundedRect }
+
+    fn layout(&self, cx: &mut LayoutCtx, config: &mut ShapeConfig) {
+        cx.assign_position(config);
     }
 
     fn padding(&self) -> u32 { 0 }

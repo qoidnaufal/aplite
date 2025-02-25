@@ -1,25 +1,22 @@
 use std::ops::Deref;
 
 #[repr(C)]
-#[derive(Debug,Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Size<T> {
     pub width: T,
     pub height: T,
 }
 
-impl<T> Size<T>
-where T:
-    Default
-    + std::ops::Add<T, Output = T>
-    + std::ops::AddAssign
-    + std::ops::Sub<T, Output = T>
-    + std::ops::SubAssign
-    + std::ops::Mul<T, Output = T>
-    + std::ops::MulAssign
-    + std::ops::Div<T, Output = T>
-    + std::ops::DivAssign
-    + Copy
-{
+impl<T: Default> Default for Size<T> {
+    fn default() -> Self {
+        Self {
+            width: T::default(),
+            height: T::default(),
+        }
+    }
+}
+
+impl<T> Size<T> {
     pub fn new(width: T, height: T) -> Self {
         Self { width, height }
     }

@@ -48,7 +48,7 @@ impl Renderer {
         let pseudo_color = Rgb::WHITE;
         let pseudo_texture = TextureData::new(&gpu, pseudo_color.into());
 
-        view_fn().into_view().prepare(storage, &gpu, &mut gfx);
+        view_fn().into_view().prepare(&gpu, &mut gfx, storage);
         gfx.write(&gpu.device, &gpu.queue);
         screen.write(&gpu.device, &gpu.queue);
 
