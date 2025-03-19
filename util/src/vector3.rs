@@ -1,5 +1,6 @@
 use crate::Vector2;
 
+#[repr(C, align(16))]
 #[derive(Debug, Clone, Copy)]
 pub struct Vector3<T> {
     pub x: T,
@@ -7,37 +8,13 @@ pub struct Vector3<T> {
     pub z: T
 }
 
-impl<T> Default for Vector3<T>
-where T:
-    Default
-    + std::ops::Add<T, Output = T>
-    + std::ops::AddAssign
-    + std::ops::Sub<T, Output = T>
-    + std::ops::SubAssign
-    + std::ops::Mul<T, Output = T>
-    + std::ops::MulAssign
-    + std::ops::Div<T, Output = T>
-    + std::ops::DivAssign
-    + Copy
-{
+impl<T: Default> Default for Vector3<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T> Vector3<T>
-where T:
-    Default
-    + std::ops::Add<T, Output = T>
-    + std::ops::AddAssign
-    + std::ops::Sub<T, Output = T>
-    + std::ops::SubAssign
-    + std::ops::Mul<T, Output = T>
-    + std::ops::MulAssign
-    + std::ops::Div<T, Output = T>
-    + std::ops::DivAssign
-    + Copy
-{
+impl<T: Default> Vector3<T> {
     pub fn new() -> Self {
         Self {
             x: T::default(),

@@ -7,16 +7,19 @@ pub fn pipeline(
 ) -> wgpu::RenderPipeline {
     let device = &gpu.device;
     let format = gpu.config.format;
-
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("shader"), source: wgpu::ShaderSource::Wgsl(SHADER.into())
     });
-
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("pipeline layout"),
         bind_group_layouts,
         push_constant_ranges: &[],
     });
+    let blend_comp = wgpu::BlendComponent {
+        operation: wgpu::BlendOperation::Add,
+        src_factor: wgpu::BlendFactor::SrcAlpha,
+        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+    };
 
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("render pipeline"),
@@ -45,7 +48,10 @@ pub fn pipeline(
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             targets: &[Some(wgpu::ColorTargetState {
                 format,
-                blend: Some(wgpu::BlendState::REPLACE),
+                blend: Some(wgpu::BlendState {
+                    color: blend_comp,
+                    alpha: blend_comp,
+                }),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
         }),

@@ -1,8 +1,8 @@
 use util::{cast_slice, Matrix4x4, Size};
 
-use crate::shapes::{Shape, ShapeConfig, ShapeKind};
+use crate::{shapes::Shape, storage::WidgetStorage, NodeId, Pixel, Rgba};
 
-use super::TextureData;
+use super::{Gpu, TextureData};
 
 const INITIAL_CAPACITY: u64 = 1024 * 4;
 
@@ -10,7 +10,6 @@ const INITIAL_CAPACITY: u64 = 1024 * 4;
 pub struct Buffer<T> {
     pub buffer: wgpu::Buffer,
     pub data: Vec<T>,
-    usage: wgpu::BufferUsages,
     label: String,
 }
 
@@ -23,7 +22,12 @@ impl<T> Buffer<T> {
         Self::new(device, wgpu::BufferUsages::STORAGE, INITIAL_CAPACITY, label)
     }
 
-    fn new(device: &wgpu::Device, usage: wgpu::BufferUsages, capacity: u64, label: &str) -> Self {
+    fn new(
+        device: &wgpu::Device,
+        usage: wgpu::BufferUsages,
+        capacity: u64,
+        label: &str
+    ) -> Self {
         let size = size_of::<T>() as u64 * capacity;
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(label),
@@ -33,7 +37,6 @@ impl<T> Buffer<T> {
         });
         Self {
             buffer,
-            usage,
             label: label.to_string(),
             data: vec![],
         }
@@ -73,13 +76,14 @@ impl<T> Buffer<T> {
     }
 
     pub fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> bool {
+        let usage = self.buffer.usage();
         let data_size = self.data.len() * size_of::<T>();
         let realloc = data_size as u64 > self.buffer.size();
         if realloc {
             self.buffer = device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(self.label.as_str()),
                 size: self.buffer.size().next_power_of_two(),
-                usage: self.usage | wgpu::BufferUsages::COPY_DST,
+                usage,
                 mapped_at_creation: false,
             });
         }
@@ -128,19 +132,34 @@ impl Gfx {
         self.shapes.len()
     }
 
-    pub fn push(&mut self, config: &ShapeConfig, window_size: Size<u32>, kind: ShapeKind) {
-        let transform = config.get_transform(window_size);
+    pub fn register(
+        &mut self,
+        storage: &mut WidgetStorage,
+        node_id: NodeId,
+        mut shape: Shape,
+        window_size: Size<u32>
+    ) {
+        let transform = shape.get_transform(window_size);
         let transform_id = self.transforms.len() as u32;
-        let shape = Shape::new(config, transform_id, kind);
+        shape.transform = transform_id;
+        storage.loc.insert(node_id, self.shapes.len());
         self.indices.extend_from_slice(&shape.indices());
         self.transforms.push(transform);
         self.shapes.push(shape);
     }
 
-    pub fn push_texture(&mut self, texture_data: TextureData, config: &mut ShapeConfig) {
-        let texture_id = self.textures.len() as i32;
-        config.texture_id = texture_id;
-        self.textures.push(texture_data);
+    pub fn push_texture(
+        &mut self,
+        gpu: &Gpu,
+        maybe_pixel: Option<&Pixel<Rgba<u8>>>,
+        shape: &mut Shape
+    ) {
+        if let Some(pixel) = maybe_pixel {
+            let texture_id = self.textures.len() as i32;
+            shape.texture_id = texture_id;
+            let texture_data = TextureData::new(gpu, pixel);
+            self.textures.push(texture_data);
+        }
     }
 
     pub fn indices(&self, device: &wgpu::Device) -> wgpu::Buffer {
@@ -155,11 +174,10 @@ impl Gfx {
 
     pub fn instance(&self,device: &wgpu::Device) -> wgpu::Buffer {
         use wgpu::util::DeviceExt;
-        let instance_data = (0..self.count() as u32).collect::<Vec<_>>();
         
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("instance buffer"),
-            contents: cast_slice(&instance_data),
+            contents: cast_slice(&(0..self.count() as u32).collect::<Vec<_>>()),
             usage: wgpu::BufferUsages::VERTEX,
         })
     }
@@ -214,9 +232,9 @@ impl Gfx {
 }
 
 pub struct Screen {
-    initial_size: Size<u32>,
-    pub buffer: Buffer<Matrix4x4>,
+    buffer: Buffer<Matrix4x4>,
     pub bind_group: wgpu::BindGroup,
+    initial_size: Size<u32>,
 }
 
 impl Screen {

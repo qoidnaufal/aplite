@@ -14,11 +14,10 @@ struct Screen {
 struct Shape {
     pos: vec2<u32>,
     dims: vec2<u32>,
-    color: vec3<f32>,
+    color: vec4<f32>,
     texture_id: i32,
     kind: u32,
     radius: f32,
-    rotate: f32,
     transform: u32,
 };
 
@@ -61,8 +60,10 @@ fn vs_main(
     let shape = shapes[instance.index];
     let screen_transform = screen.transform;
     let shape_transform = transforms[shape.transform];
-    let r = rotate(shape.rotate, vertices[v_idx]);
-    let verts = vec4<f32>(r, 0.0, 1.0);
+    let verts = vec4<f32>(vertices[v_idx], 0.0, 1.0);
+
+    // let r = rotate(shape.rotate, vertices[v_idx]);
+    // let verts = vec4<f32>(r, 0.0, 1.0);
 
     var out: VertexOutput;
     out.uv = uv_table[v_idx];
@@ -81,13 +82,13 @@ fn sdCircle(p: vec2<f32>, r: f32) -> f32 {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let shape = shapes[in.index];
-    let p = in.uv - vec2<f32>(0.5, 0.5);
-    let d = sdCircle(p, 0.49);
+    let color = shape.color;
+    let d = sdCircle(in.uv - vec2<f32>(0.5, 0.5), 0.49);
 
     let texture_mask = textureSample(t, s, in.uv);
-    let sdf_color = vec4<f32>(shape.color - sign(d) * shape.color, 1.0);
+    let sdf_color = vec4<f32>(color.rgb - sign(d) * color.rgb, color.a - sign(d));
 
-    let color_mask = select(vec4<f32>(shape.color, 1.0), sdf_color, shape.kind == 3);
+    let color_mask = select(color, sdf_color, shape.kind == 3);
     return select(color_mask, texture_mask, shape.texture_id > -1);
 }
 ";

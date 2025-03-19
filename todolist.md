@@ -15,6 +15,8 @@
 [X] | 20250126 | fixed hover detection to the topmost object<br>
 [X] | 20250128 | fixed layouting algorithm<br>
 [X] | 20250216 | improve render performance (CPU side) -> use storage buffer<br>
+[_] | ........ | back to shape!!!<br>
+[_] | ........ | current storage is highly inefficient<br>
 [_] | ........ | rework `IntoView` & `View` plus storage, i think it's too redundant<br>
 [_] | ........ | rework layout traversing especially in shape size<br>
 [_] | ........ | improve render performance (CPU side) -> reduce draw calls<br>

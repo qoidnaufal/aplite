@@ -60,7 +60,7 @@ fn root() -> impl IntoView {
                 [
                     image("assets/image1.jpg").into_any(),
                     image("assets/image2.jpg").on_drag(drag).into_any(),
-                    TestCircleWidget::new().on_hover(hover).into_any(),
+                    TestTriangleWidget::new().on_hover(hover).into_any(),
                 ]
             ).on_drag(drag).into_any(),
             hstack(
@@ -76,7 +76,7 @@ fn root() -> impl IntoView {
                     TestCircleWidget::new().on_hover(hover).into_any(),
                 ]
             ).into_any(),
-            TestTriangleWidget::new()
+            TestCircleWidget::new()
                 .on_drag(drag)
                 .on_hover(hover)
                 .into_any(),

@@ -9,8 +9,8 @@ use crate::Rgba;
 
 use super::Gpu;
 
-pub fn image_reader(path: &PathBuf) -> Pixel<Rgba<u8>> {
-    let mut file = File::open(path).unwrap();
+pub fn image_reader<P: Into<PathBuf>>(path: P) -> Pixel<Rgba<u8>> {
+    let mut file = File::open(path.into()).unwrap();
     let mut buf = Vec::new();
     let len = file.read_to_end(&mut buf).unwrap();
     let image = image::load_from_memory(&buf[..len]).unwrap();
@@ -25,7 +25,7 @@ pub struct TextureData {
 }
 
 impl TextureData {
-    pub fn new(gpu: &Gpu, pixel: Pixel<Rgba<u8>>) -> Self {
+    pub fn new(gpu: &Gpu, pixel: &Pixel<Rgba<u8>>) -> Self {
         let device = &gpu.device;
         let queue = &gpu.queue;
 
@@ -105,11 +105,11 @@ impl TextureData {
 fn submit_texture(
     queue: &wgpu::Queue,
     texture: wgpu::TexelCopyTextureInfo,
-    pixel: Pixel<Rgba<u8>>
+    pixel: &Pixel<Rgba<u8>>
 ) {
     queue.write_texture(
         texture,
-        &pixel,
+        pixel,
         wgpu::TexelCopyBufferLayout {
             offset: 0,
             bytes_per_row: Some(4 * pixel.dimensions().width),

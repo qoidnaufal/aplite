@@ -3,16 +3,17 @@ use util::Vector2;
 
 use crate::context::{Cursor, LayoutCtx, MouseAction};
 use crate::renderer::{Gfx, Renderer};
-use crate::shapes::ShapeConfig;
 use crate::view::NodeId;
 use crate::callback::CALLBACKS;
+use crate::Rgba;
 
 #[derive(Debug)]
 pub struct WidgetStorage {
     pub nodes: Vec<NodeId>,
     pub children: HashMap<NodeId, Vec<NodeId>>,
     pub parent: HashMap<NodeId, NodeId>,
-    pub configs: HashMap<NodeId, ShapeConfig>,
+    pub loc: HashMap<NodeId, usize>,
+    pub cached_color: HashMap<NodeId, Rgba<u8>>,
     pub layout: LayoutCtx,
     pending_update: Vec<NodeId>,
 }
@@ -23,7 +24,8 @@ impl Default for WidgetStorage {
             nodes: Vec::new(),
             children: HashMap::new(),
             parent: HashMap::new(),
-            configs: HashMap::new(),
+            loc: HashMap::new(),
+            cached_color: HashMap::new(),
             layout: LayoutCtx::new(),
             pending_update: Vec::new(),
         }
@@ -36,11 +38,11 @@ impl WidgetStorage {
     }
 
     pub fn insert_children(&mut self, node_id: NodeId, child_id: NodeId) {
-        if let Some(child_vec) = self.children.get_mut(&node_id) {
-            child_vec.push(child_id);
-        } else {
-            self.children.insert(node_id, vec![child_id]);
-        }
+        self
+            .children
+            .entry(node_id)
+            .or_insert(vec![child_id])
+            .push(child_id);
     }
 
     pub fn insert_parent(&mut self, node_id: NodeId, parent_id: NodeId) {
@@ -96,9 +98,9 @@ impl WidgetStorage {
         }
         if let Some(ref prev_id) = cursor.hover.prev.take() {
             // FIXME: use cached color from ShapeConfig
-            if let Some(config) = self.configs.get(prev_id) {
+            if let Some(cached) = self.cached_color.get(prev_id) {
                 let idx = self.nodes.iter().position(|node_id| node_id == prev_id).unwrap();
-                gfx.shapes.update(idx, |shape| shape.revert_color(config.color.into()));
+                gfx.shapes.update(idx, |shape| shape.revert_color(*cached));
                 self.pending_update.push(*prev_id);
             }
         }

@@ -1,6 +1,7 @@
 use util::{tan, Matrix4x4, Size, Vector2};
 use crate::context::Cursor;
 use crate::color::Rgb;
+use crate::Rgba;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShapeKind {
@@ -59,79 +60,21 @@ impl Indices<'_> {
 
 // pub struct Vertices<'a>(&'a [Vector2<f32>]);
 
-#[derive(Debug, Clone, Copy)]
-pub struct ShapeConfig {
-    pub pos: Vector2<u32>,
-    pub dims: Size<u32>,
-    pub color: Rgb<u8>,
-    pub texture_id: i32,
-}
-
-impl Default for ShapeConfig {
-    fn default() -> Self {
-        Self {
-            pos: Default::default(),
-            dims: Size::new(1, 1),
-            color: Rgb::WHITE,
-            texture_id: -1,
-        }
-    }
-}
-
-impl ShapeConfig {
-    pub fn new<S: Into<Size<u32>>>(dims: S, color: Rgb<u8>) -> Self {
-        Self {
-            dims: dims.into(),
-            color,
-            ..Default::default()
-        }
-    }
-
-    pub fn adjust_ratio(&mut self, aspect_ratio: f32) {
-        self.dims.width = (self.dims.height as f32 * aspect_ratio) as u32;
-    }
-
-    pub fn get_transform(&self, window_size: Size<u32>) -> Matrix4x4 {
-        let mut matrix = Matrix4x4::IDENTITY;
-        let ws: Size<f32> = window_size.into();
-        let x = (self.pos.x as f32 / ws.width - 0.5) * 2.0;
-        let y = (0.5 - self.pos.y as f32 / ws.height) * 2.0;
-        let d: Size<f32> = self.dims.into();
-        let scale = d / ws;
-        matrix.transform(x, y, scale.width, scale.height);
-        matrix
-    }
-}
-
-// must be aligned to 4
+// FIXME: align to 4!!!
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct Shape {
     pub pos: Vector2<u32>,
     pub dims: Size<u32>,
-    pub color: Rgb<f32>,
+    pub color: Rgba<f32>,
     pub texture_id: i32,
     pub kind: u32,
     pub radius: f32,
-    pub rotate: f32,
     pub transform: u32,
 }
 
 impl Shape {
-    pub fn new(config: &ShapeConfig, transform: u32, kind: ShapeKind) -> Self {
-        Self {
-            pos: config.pos,
-            dims: config.dims,
-            color: config.color.into(),
-            texture_id: config.texture_id,
-            kind: kind as u32,
-            radius: 0.,
-            rotate: 0.,
-            transform,
-        }
-    }
-
-    pub fn filled(color: Rgb<u8>, kind : ShapeKind, size: impl Into<Size<u32>>) -> Self {
+    pub fn filled(color: Rgba<u8>, kind : ShapeKind, size: impl Into<Size<u32>>) -> Self {
         Self {
             pos: Vector2::default(),
             dims: size.into(),
@@ -139,20 +82,20 @@ impl Shape {
             texture_id: -1,
             kind: kind as u32,
             radius: 0.0,
-            rotate: 0.0,
             transform: 0,
         }
     }
 
-    pub fn textured(kind: ShapeKind) -> Self {
+    pub fn textured(kind: ShapeKind, aspect_ratio: f32) -> Self {
+        let mut dims = Size::new(300, 300);
+        dims.width = (dims.height as f32 * aspect_ratio) as u32;
         Self {
             pos: Vector2::default(),
-            dims: Size::new(500, 500),
-            color: Rgb::WHITE.into(),
+            dims,
+            color: Rgba::WHITE.into(),
             texture_id: 0,
             kind: kind as u32,
             radius: 0.0,
-            rotate: 0.0,
             transform: 0,
         }
     }
@@ -167,8 +110,8 @@ impl Shape {
         self.color = rgb.into();
     }
 
-    pub fn revert_color(&mut self, cached_color: Rgb<f32>) {
-        self.color = cached_color;
+    pub fn revert_color(&mut self, cached_color: Rgba<u8>) {
+        self.color = cached_color.into();
     }
 
     pub fn get_transform(&self, window_size: Size<u32>) -> Matrix4x4 {

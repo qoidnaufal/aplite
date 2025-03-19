@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use util::{Size, Vector2};
-use crate::{shapes::ShapeConfig, NodeId};
+use crate::{shapes::Shape, NodeId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseAction {
@@ -177,17 +177,17 @@ impl LayoutCtx {
 
     pub fn set_padding(&mut self, padding: u32) { self.padding = padding }
 
-    pub fn assign_position(&mut self, config: &mut ShapeConfig) {
-        let half = config.dims / 2;
-        config.pos = self.next_pos + half;
+    pub fn assign_position(&mut self, shape: &mut Shape) {
+        let half = shape.dims / 2;
+        shape.pos = self.next_pos + half;
 
         let is_aligned_vertically = self.is_aligned_vertically();
         let spacing = self.spacing;
         self.set_next_pos(|next_pos| {
             if is_aligned_vertically {
-                next_pos.y = config.pos.y + half.height + spacing;
+                next_pos.y = shape.pos.y + half.height + spacing;
             } else {
-                next_pos.x = config.pos.x + half.width + spacing;
+                next_pos.x = shape.pos.x + half.width + spacing;
             }
         });
     }

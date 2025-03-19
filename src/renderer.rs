@@ -45,8 +45,7 @@ impl Renderer {
         let mut screen = Screen::new(&gpu.device, gpu.size());
 
         // this is important to avoid creating texture for every shape
-        let pseudo_color = Rgb::WHITE;
-        let pseudo_texture = TextureData::new(&gpu, pseudo_color.into());
+        let pseudo_texture = TextureData::new(&gpu, &Rgb::WHITE.into());
 
         view_fn().into_view().prepare(&gpu, &mut gfx, storage);
         gfx.write(&gpu.device, &gpu.queue);
