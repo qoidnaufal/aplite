@@ -1,5 +1,5 @@
 use crate::context::{Alignment, LayoutCtx};
-use crate::shapes::{Shape, ShapeKind};
+use crate::shapes::{Attributes, Shape, ShapeKind};
 use crate::callback::CALLBACKS;
 use crate::{Pixel, Rgba};
 use super::{AnyView, IntoView, NodeId, View};
@@ -16,12 +16,6 @@ impl Button {
         Self { id }
     }
 
-    fn id(&self) -> NodeId { self.id }
-
-    fn shape(&self) -> Shape {
-        Shape::filled(Rgba::RED, ShapeKind::RoundedRect, (120, 40))
-    }
-
     pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
         self
@@ -34,16 +28,22 @@ impl Button {
 }
 
 impl View for Button {
-    fn id(&self) -> NodeId { self.id() }
+    fn id(&self) -> NodeId { self.id }
 
     fn children(&self) -> Option<&[AnyView]> { None }
 
-    fn shape(&self) -> Shape { self.shape() }
+    fn shape(&self) -> Shape {
+        Shape::filled(Rgba::RED, ShapeKind::RoundedRect)
+    }
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
-    fn layout(&self, cx: &mut LayoutCtx, shape: &mut Shape) {
-        cx.assign_position(shape);
+    fn layout(&self, cx: &mut LayoutCtx, attr: &mut Attributes) {
+        cx.assign_position(attr);
+    }
+
+    fn attribs(&self) -> Attributes {
+        Attributes::new((120, 40))
     }
 
     fn padding(&self) -> u32 { 0 }

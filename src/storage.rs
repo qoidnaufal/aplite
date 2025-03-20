@@ -3,6 +3,7 @@ use util::Vector2;
 
 use crate::context::{Cursor, LayoutCtx, MouseAction};
 use crate::renderer::{Gfx, Renderer};
+use crate::shapes::Attributes;
 use crate::view::NodeId;
 use crate::callback::CALLBACKS;
 use crate::Rgba;
@@ -12,7 +13,7 @@ pub struct WidgetStorage {
     pub nodes: Vec<NodeId>,
     pub children: HashMap<NodeId, Vec<NodeId>>,
     pub parent: HashMap<NodeId, NodeId>,
-    pub loc: HashMap<NodeId, usize>,
+    pub attribs: HashMap<NodeId, Attributes>,
     pub cached_color: HashMap<NodeId, Rgba<u8>>,
     pub layout: LayoutCtx,
     pending_update: Vec<NodeId>,
@@ -24,7 +25,7 @@ impl Default for WidgetStorage {
             nodes: Vec::new(),
             children: HashMap::new(),
             parent: HashMap::new(),
-            loc: HashMap::new(),
+            attribs: HashMap::new(),
             cached_color: HashMap::new(),
             layout: LayoutCtx::new(),
             pending_update: Vec::new(),
@@ -67,9 +68,6 @@ impl WidgetStorage {
 
     pub fn submit_update(&mut self, renderer: &mut Renderer) {
         self.pending_update.clear();
-        // while let Some(ref change_id) = self.pending_update.pop() {
-        //     let index = self.nodes.iter().position(|node_id| node_id == change_id).unwrap();
-        // }
         renderer.update();
     }
 
@@ -77,7 +75,8 @@ impl WidgetStorage {
         // let start = std::time::Instant::now();
         let hovered = self.nodes.iter().enumerate().filter_map(|(idx, node_id)| {
             let shape = &gfx.shapes.data[idx];
-            if shape.is_hovered(cursor) {
+            let ref attr = self.attribs[node_id];
+            if shape.is_hovered(cursor, attr) {
                 Some(node_id)
             } else { None }
         }).min();
@@ -97,7 +96,6 @@ impl WidgetStorage {
             return;
         }
         if let Some(ref prev_id) = cursor.hover.prev.take() {
-            // FIXME: use cached color from ShapeConfig
             if let Some(cached) = self.cached_color.get(prev_id) {
                 let idx = self.nodes.iter().position(|node_id| node_id == prev_id).unwrap();
                 gfx.shapes.update(idx, |shape| shape.revert_color(*cached));
@@ -114,10 +112,11 @@ impl WidgetStorage {
                     if cursor.is_dragging(*hover_id) {
                         if let Some(on_drag) = callbacks.on_drag.get_mut(hover_id) {
                             on_drag(shape);
-                            // shape.set_position(cursor);
-                            gfx.transforms.update(shape.transform as usize, |transform| {
-                                shape.set_position(cursor, transform);
-                            });
+                            if let Some(attribs) = self.attribs.get_mut(hover_id) {
+                                gfx.transforms.update(shape.transform as usize, |transform| {
+                                    attribs.set_position(cursor, transform);
+                                });
+                            }
                         }
                     }
                 });
@@ -130,7 +129,8 @@ impl WidgetStorage {
         if let Some(ref click_id) = cursor.click.obj {
             let idx = self.nodes.iter().position(|node_id| node_id == click_id).unwrap();
             let shape = gfx.shapes.data.get_mut(idx).unwrap();
-            cursor.click.delta = cursor.click.pos - Vector2::<f32>::from(shape.pos);
+            let attr = self.attribs.get(click_id).unwrap();
+            cursor.click.delta = cursor.click.pos - Vector2::<f32>::from(attr.pos);
             CALLBACKS.with_borrow_mut(|callbacks| {
                 if let Some(on_click) = callbacks.on_click.get_mut(click_id) {
                     on_click(shape);

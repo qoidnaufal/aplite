@@ -60,12 +60,63 @@ impl Indices<'_> {
 
 // pub struct Vertices<'a>(&'a [Vector2<f32>]);
 
-// FIXME: align to 4!!!
+#[derive(Debug, Clone, Default)]
+pub struct Attributes {
+    pub pos: Vector2<u32>,
+    pub dims: Size<u32>,
+}
+
+impl Attributes {
+    pub fn new(dims: impl Into<Size<u32>>) -> Self {
+        Self {
+            pos: Vector2::default(),
+            dims: dims.into(),
+        }
+    }
+
+    pub fn new_with_pos(
+        dims: impl Into<Size<u32>>,
+        pos: impl Into<Vector2<u32>>
+    ) -> Self {
+        Self {
+            pos: pos.into(),
+            dims: dims.into(),
+        }
+    }
+
+    // FIXME: maybe accuracy is important?
+    pub fn adjust_ratio(&mut self, aspect_ratio: f32) {
+        self.dims.width = (self.dims.height as f32 * aspect_ratio) as u32;
+    }
+
+    pub fn get_transform(&self, window_size: Size<u32>) -> Matrix4x4 {
+        let mut matrix = Matrix4x4::IDENTITY;
+        let ws: Size<f32> = window_size.into();
+        let x = (self.pos.x as f32 / ws.width - 0.5) * 2.0;
+        let y = (0.5 - self.pos.y as f32 / ws.height) * 2.0;
+        let d: Size<f32> = self.dims.into();
+        let scale = d / ws;
+        matrix.transform(x, y, scale.width, scale.height);
+        matrix
+    }
+
+    pub fn set_position(
+        &mut self,
+        cursor: &Cursor,
+        transform: &mut Matrix4x4,
+    ) {
+        let delta = cursor.hover.pos - cursor.click.delta;
+        self.pos = delta.into();
+        let x = (delta.x / (self.dims.width as f32 / transform[0].x) - 0.5) * 2.0;
+        let y = (0.5 - delta.y / (self.dims.height as f32 / transform[1].y)) * 2.0;
+        transform.translate(x, y);
+    }
+}
+
+// size must align to 4!!!
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct Shape {
-    pub pos: Vector2<u32>,
-    pub dims: Size<u32>,
     pub color: Rgba<f32>,
     pub texture_id: i32,
     pub kind: u32,
@@ -74,10 +125,8 @@ pub struct Shape {
 }
 
 impl Shape {
-    pub fn filled(color: Rgba<u8>, kind : ShapeKind, size: impl Into<Size<u32>>) -> Self {
+    pub fn filled(color: Rgba<u8>, kind : ShapeKind) -> Self {
         Self {
-            pos: Vector2::default(),
-            dims: size.into(),
             color: color.into(),
             texture_id: -1,
             kind: kind as u32,
@@ -86,12 +135,8 @@ impl Shape {
         }
     }
 
-    pub fn textured(kind: ShapeKind, aspect_ratio: f32) -> Self {
-        let mut dims = Size::new(300, 300);
-        dims.width = (dims.height as f32 * aspect_ratio) as u32;
+    pub fn textured(kind: ShapeKind) -> Self {
         Self {
-            pos: Vector2::default(),
-            dims,
             color: Rgba::WHITE.into(),
             texture_id: 0,
             kind: kind as u32,
@@ -114,26 +159,16 @@ impl Shape {
         self.color = cached_color.into();
     }
 
-    pub fn get_transform(&self, window_size: Size<u32>) -> Matrix4x4 {
-        let mut matrix = Matrix4x4::IDENTITY;
-        let ws: Size<f32> = window_size.into();
-        let x = (self.pos.x as f32 / ws.width - 0.5) * 2.0;
-        let y = (0.5 - self.pos.y as f32 / ws.height) * 2.0;
-        let d: Size<f32> = self.dims.into();
-        let scale = d / ws;
-        matrix.transform(x, y, scale.width, scale.height);
-        matrix
-    }
 
-    pub fn is_hovered(&self, cursor: &Cursor) -> bool {
-        let x = self.pos.x as f32;
-        let y = self.pos.y as f32;
+    pub fn is_hovered(&self, cursor: &Cursor, attr: &Attributes) -> bool {
+        let x = attr.pos.x as f32;
+        let y = attr.pos.y as f32;
 
         let x_cursor = cursor.hover.pos.x;
         let y_cursor = cursor.hover.pos.y;
 
-        let width = self.dims.width as f32 / 2.0;
-        let height = self.dims.height as f32 / 2.0;
+        let width = attr.dims.width as f32 / 2.0;
+        let height = attr.dims.height as f32 / 2.0;
 
         let angled = if ShapeKind::from(self.kind).is_triangle() {
             let c_tangen = tan(x_cursor - x, y_cursor - y + height);
@@ -144,18 +179,6 @@ impl Shape {
         (y - height..y + height).contains(&y_cursor)
             && (x - width..x + width).contains(&x_cursor)
             && angled
-    }
-
-    pub fn set_position(
-        &mut self,
-        cursor: &Cursor,
-        transform: &mut Matrix4x4,
-    ) {
-        let delta = cursor.hover.pos - cursor.click.delta;
-        self.pos = delta.into();
-        let x = (delta.x / (self.dims.width as f32 / transform[0].x) - 0.5) * 2.0;
-        let y = (0.5 - delta.y / (self.dims.height as f32 / transform[1].y)) * 2.0;
-        transform.translate(x, y);
     }
 }
 

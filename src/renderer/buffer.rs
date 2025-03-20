@@ -1,6 +1,6 @@
 use util::{cast_slice, Matrix4x4, Size};
 
-use crate::{shapes::Shape, storage::WidgetStorage, NodeId, Pixel, Rgba};
+use crate::{shapes::{Attributes, Shape}, Pixel, Rgba};
 
 use super::{Gpu, TextureData};
 
@@ -134,15 +134,13 @@ impl Gfx {
 
     pub fn register(
         &mut self,
-        storage: &mut WidgetStorage,
-        node_id: NodeId,
         mut shape: Shape,
+        attr: &Attributes,
         window_size: Size<u32>
     ) {
-        let transform = shape.get_transform(window_size);
+        let transform = attr.get_transform(window_size);
         let transform_id = self.transforms.len() as u32;
         shape.transform = transform_id;
-        storage.loc.insert(node_id, self.shapes.len());
         self.indices.extend_from_slice(&shape.indices());
         self.transforms.push(transform);
         self.shapes.push(shape);

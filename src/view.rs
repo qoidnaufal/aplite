@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::context::{Alignment, LayoutCtx};
 use crate::storage::WidgetStorage;
 use crate::renderer::{Gfx, Gpu};
-use crate::shapes::{Shape, ShapeKind};
+use crate::shapes::{Attributes, Shape, ShapeKind};
 use crate::{Pixel, Rgba};
 use crate::callback::CALLBACKS;
 
@@ -49,10 +49,11 @@ pub trait View {
     fn children(&self) -> Option<&[AnyView]>;
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>>;
 
-    fn layout(&self, cx: &mut LayoutCtx, shape: &mut Shape);
     fn padding(&self) -> u32;
     fn spacing(&self) -> u32;
     fn alignment(&self) -> Alignment;
+    fn attribs(&self) -> Attributes;
+    fn layout(&self, cx: &mut LayoutCtx, attribs: &mut Attributes);
 
     fn build_tree(&self, storage: &mut WidgetStorage) {
         if let Some(children) = self.children() {
@@ -73,12 +74,15 @@ pub trait View {
         let node_id = self.id();
         if storage.is_root(node_id) { self.build_tree(storage) }
         let mut shape = self.shape();
-        self.layout(&mut storage.layout, &mut shape);
-        let half = shape.dims / 2;
-        let current_pos = shape.pos;
+        let mut attr = self.attribs();
+        self.layout(&mut storage.layout, &mut attr);
+        let half = attr.dims / 2;
+        let current_pos = attr.pos;
         storage.nodes.push(node_id);
+        storage.cached_color.insert(node_id, shape.color.into());
         gfx.push_texture(gpu, self.pixel(), &mut shape);
-        gfx.register(storage, node_id, shape, gpu.size());
+        gfx.register(shape, &attr, gpu.size());
+        storage.attribs.insert(node_id, attr);
 
         if let Some(children) = self.children() {
             storage.layout.insert_alignment(node_id, self.alignment());
@@ -120,8 +124,12 @@ impl View for DynView {
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { self.0.pixel() }
 
-    fn layout(&self, cx: &mut LayoutCtx, shape: &mut Shape) {
-        self.0.layout(cx, shape);
+    fn layout(&self, cx: &mut LayoutCtx, attr: &mut Attributes) {
+        self.0.layout(cx, attr);
+    }
+
+    fn attribs(&self) -> Attributes {
+        self.0.attribs()
     }
 
     fn padding(&self) -> u32 { self.0.padding() }
@@ -153,12 +161,6 @@ impl TestTriangleWidget {
         Self { id }
     }
 
-    fn id(&self) -> NodeId { self.id }
-
-    fn shape(&self) -> Shape {
-        Shape::filled(Rgba::RED, ShapeKind::Triangle, (300, 300))
-    }
-
     pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
         self
@@ -176,16 +178,22 @@ impl TestTriangleWidget {
 }
 
 impl View for TestTriangleWidget {
-    fn id(&self) -> NodeId { self.id() }
+    fn id(&self) -> NodeId { self.id }
 
     fn children(&self) -> Option<&[Box<dyn View>]> { None }
 
-    fn shape(&self) -> Shape { self.shape() }
+    fn shape(&self) -> Shape {
+        Shape::filled(Rgba::RED, ShapeKind::Triangle)
+    }
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
-    fn layout(&self, cx: &mut LayoutCtx, shape: &mut Shape) {
-        cx.assign_position(shape);
+    fn layout(&self, cx: &mut LayoutCtx, attr: &mut Attributes) {
+        cx.assign_position(attr);
+    }
+
+    fn attribs(&self) -> Attributes {
+        Attributes::new((300, 300))
     }
 
     fn padding(&self) -> u32 { 0 }
@@ -210,12 +218,6 @@ impl TestCircleWidget {
         Self { id }
     }
 
-    fn id(&self) -> NodeId { self.id }
-
-    fn shape(&self) -> Shape {
-        Shape::filled(Rgba::RED, ShapeKind::Circle, (300, 300))
-    }
-
     pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
         self
@@ -233,18 +235,22 @@ impl TestCircleWidget {
 }
 
 impl View for TestCircleWidget {
-    fn id(&self) -> NodeId { self.id() }
+    fn id(&self) -> NodeId { self.id }
 
     fn children(&self) -> Option<&[Box<dyn View>]> { None }
 
     fn shape(&self) -> Shape {
-        self.shape()
+        Shape::filled(Rgba::RED, ShapeKind::Circle)
     }
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
-    fn layout(&self, cx: &mut LayoutCtx, shape: &mut Shape) {
-        cx.assign_position(shape);
+    fn layout(&self, cx: &mut LayoutCtx, attr: &mut Attributes) {
+        cx.assign_position(attr);
+    }
+
+    fn attribs(&self) -> Attributes {
+        Attributes::new((300, 300))
     }
 
     fn padding(&self) -> u32 { 0 }

@@ -72,7 +72,7 @@ fn root() -> impl IntoView {
                             button().on_click(dec).on_hover(hover).into_any(),
                             button().on_click(inc).on_hover(hover).into_any(),
                         ]
-                    ).on_hover(hover).on_drag(drag).into_any(),
+                    ).on_drag(drag).into_any(),
                     TestCircleWidget::new().on_hover(hover).into_any(),
                 ]
             ).into_any(),

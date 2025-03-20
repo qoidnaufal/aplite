@@ -12,8 +12,6 @@ struct Screen {
 @group(0) @binding(0) var<uniform> screen: Screen;
 
 struct Shape {
-    pos: vec2<u32>,
-    dims: vec2<u32>,
     color: vec4<f32>,
     texture_id: i32,
     kind: u32,
