@@ -113,40 +113,96 @@ impl Attributes {
     }
 }
 
+pub struct Style {
+    color: Rgba<u8>,
+    dims: Size<u32>,
+    kind: ShapeKind,
+    radius: f32,
+    rotate: f32,
+    stroke: f32,
+}
+
+impl Style {
+    pub fn new(
+        color: Rgba<u8>,
+        dims: impl Into<Size<u32>>,
+        kind: ShapeKind,
+    ) -> Self {
+        Self {
+            color,
+            dims: dims.into(),
+            kind,
+            radius: 0.0,
+            rotate: 0.0,
+            stroke: 0.0,
+        }
+    }
+
+    pub fn set_color(&mut self, color: impl Into<Rgba<u8>>) {
+        self.color = color.into();
+    }
+
+    pub fn get_dimensions(&self) -> Size<u32> {
+        self.dims
+    }
+
+    pub fn set_dimensions(&mut self, size: impl Into<Size<u32>>) {
+        self.dims = size.into();
+    }
+
+    pub fn set_kind(&mut self, kind: ShapeKind) {
+        self.kind = kind;
+    }
+
+    pub fn set_radius(&mut self, radius: f32) {
+        self.radius = radius;
+    }
+
+    pub fn set_rotation(&mut self, rotate: f32) {
+        self.rotate = rotate;
+    }
+
+    pub fn set_stroke(&mut self, stroke: f32) {
+        self.stroke = stroke;
+    }
+}
+
 // size must align to 4!!!
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct Shape {
     pub color: Rgba<f32>,
-    pub texture_id: i32,
     kind: u32,
     radius: f32,
-    pub transform: u32,
+    rotate: f32,
+    stroke: f32,
+    pub texture_id: i32,
+    pub transform_id: u32,
 }
 
 impl Shape {
-    pub fn filled(color: Rgba<u8>, kind : ShapeKind) -> Self {
+    pub fn filled(style: &Style) -> Self {
         Self {
-            color: color.into(),
+            color: style.color.into(),
+            kind: style.kind as u32,
+            radius: style.radius,
+            rotate: style.rotate,
+            stroke: style.stroke,
             texture_id: -1,
-            kind: kind as u32,
-            radius: 0.0,
-            transform: 0,
+            transform_id: 0,
         }
     }
 
-    pub fn textured(kind: ShapeKind) -> Self {
+    pub fn textured(style: &Style) -> Self {
         Self {
-            color: Rgba::WHITE.into(),
+            color: style.color.into(),
+            kind: style.kind as u32,
+            radius: style.radius,
+            rotate: style.rotate,
+            stroke: style.stroke,
             texture_id: 0,
-            kind: kind as u32,
-            radius: 0.0,
-            transform: 0,
+            transform_id: 0,
         }
-    }
-
-    pub fn set_radius(&mut self, radius: f32) {
-        self.radius = radius;
     }
 
     pub fn indices<'a>(&self) -> Indices<'a> {

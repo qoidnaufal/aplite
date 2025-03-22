@@ -1,7 +1,6 @@
 use util::{cast_slice, Matrix4x4, Size};
 
 use crate::{shapes::{Attributes, Shape}, Pixel, Rgba};
-
 use super::{Gpu, TextureData};
 
 const INITIAL_CAPACITY: u64 = 1024 * 4;
@@ -113,9 +112,7 @@ pub struct Gfx {
 }
 
 impl Gfx {
-    pub fn new(
-        device: &wgpu::Device,
-    ) -> Self {
+    pub fn new(device: &wgpu::Device) -> Self {
         let indices = vec![];
         let textures = vec![];
         let shapes = Buffer::<Shape>::storage(device, "shapes");
@@ -140,7 +137,7 @@ impl Gfx {
     ) {
         let transform = attr.get_transform(window_size);
         let transform_id = self.transforms.len() as u32;
-        shape.transform = transform_id;
+        shape.transform_id = transform_id;
         self.indices.extend_from_slice(&shape.indices());
         self.transforms.push(transform);
         self.shapes.push(shape);

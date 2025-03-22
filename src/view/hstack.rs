@@ -1,8 +1,7 @@
-use util::Size;
 use crate::callback::CALLBACKS;
 use crate::context::{Alignment, LayoutCtx};
 use crate::{Pixel, Rgba};
-use crate::shapes::{Attributes, Shape, ShapeKind};
+use crate::shapes::{Attributes, Shape, ShapeKind, Style};
 use super::{AnyView, IntoView, NodeId, View};
 
 pub fn hstack(child_nodes: impl IntoIterator<Item = AnyView>) -> HStack {
@@ -12,13 +11,20 @@ pub fn hstack(child_nodes: impl IntoIterator<Item = AnyView>) -> HStack {
 pub struct HStack {
     id: NodeId,
     children: Vec<AnyView>,
+    style: Style,
 }
 
 impl HStack {
     fn new(child_nodes: impl IntoIterator<Item = AnyView>) -> Self {
         let id = NodeId::new();
         let children = child_nodes.into_iter().collect();
-        Self { id, children }
+        let style = Style::new(Rgba::YELLOW, (0, 0), ShapeKind::Rect);
+        Self { id, children, style }
+    }
+
+    pub fn style<F: FnMut(&mut Style)>(mut self, mut f: F) -> Self {
+        f(&mut self.style);
+        self
     }
 
     // pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
@@ -42,9 +48,7 @@ impl View for HStack {
 
     fn children(&self) -> Option<&[AnyView]> { Some(&self.children) }
 
-    fn shape(&self) -> Shape {
-        Shape::filled(Rgba::YELLOW, ShapeKind::Rect)
-    }
+    fn shape(&self) -> Shape { Shape::filled(&self.style) }
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
@@ -54,7 +58,7 @@ impl View for HStack {
     }
 
     fn attribs(&self) -> Attributes {
-        let mut size = Size::new(0, 0);
+        let mut size = self.style.get_dimensions();
         if !self.children.is_empty() {
             self.children.iter().for_each(|child| {
                 let child_attr = child.attribs();

@@ -1,5 +1,5 @@
 use crate::context::{Alignment, LayoutCtx};
-use crate::shapes::{Attributes, Shape, ShapeKind};
+use crate::shapes::{Attributes, Shape, ShapeKind, Style};
 use crate::callback::CALLBACKS;
 use crate::{Pixel, Rgba};
 use super::{AnyView, IntoView, NodeId, View};
@@ -8,18 +8,18 @@ pub fn button() -> Button { Button::new() }
 
 pub struct Button {
     id: NodeId,
-    shape: Shape,
+    style: Style,
 }
 
 impl Button {
     fn new() -> Self {
         let id = NodeId::new();
-        let shape = Shape::filled(Rgba::RED, ShapeKind::RoundedRect);
-        Self { id, shape }
+        let style = Style::new(Rgba::RED, (120, 40), ShapeKind::RoundedRect);
+        Self { id, style }
     }
 
-    pub fn style<F: FnMut(&mut Shape)>(mut self, mut f: F) -> Self {
-        f(&mut self.shape);
+    pub fn style<F: FnMut(&mut Style)>(mut self, mut f: F) -> Self {
+        f(&mut self.style);
         self
     }
 
@@ -40,7 +40,7 @@ impl View for Button {
     fn children(&self) -> Option<&[AnyView]> { None }
 
     fn shape(&self) -> Shape {
-        self.shape.clone()
+        Shape::filled(&self.style)
     }
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
@@ -50,7 +50,7 @@ impl View for Button {
     }
 
     fn attribs(&self) -> Attributes {
-        Attributes::new((120, 40))
+        Attributes::new(self.style.get_dimensions())
     }
 
     fn padding(&self) -> u32 { 0 }

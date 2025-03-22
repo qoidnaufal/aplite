@@ -7,10 +7,12 @@ struct Screen {
 
 struct Shape {
     color: vec4<f32>,
-    texture_id: i32,
     kind: u32,
     radius: f32,
-    transform: u32,
+    rotate: f32,
+    stroke: f32,
+    texture_id: i32,
+    transform_id: u32,
 };
 
 @group(1) @binding(0) var<storage> shapes: array<Shape>;
@@ -52,19 +54,18 @@ struct VertexOutput {
 
 @vertex
 fn vs_main(
-    @builtin(vertex_index) v_idx: u32,
+    @builtin(vertex_index) v: u32,
     instance: Instance,
 ) -> VertexOutput {
     let shape = shapes[instance.index];
     let screen_transform = screen.transform;
-    let shape_transform = transforms[shape.transform];
-    let verts = vec4<f32>(vertices[v_idx], 0.0, 1.0);
+    let shape_transform = transforms[shape.transform_id];
 
-    // let r = rotate(shape.rotate, vertices[v_idx]);
-    // let verts = vec4<f32>(r, 0.0, 1.0);
+    let pos = rotate(shape.rotate, vertices[v]);
+    let verts = vec4<f32>(pos, 0.0, 1.0);
 
     var out: VertexOutput;
-    out.uv = uv_table[v_idx];
+    out.uv = uv_table[v];
     out.index = instance.index;
     out.position = vec4<f32>(screen_transform * shape_transform * verts);
     return out;
@@ -83,7 +84,7 @@ fn sdRoundedBox(p: vec2<f32>, b: vec2<f32>, r: f32) -> f32 {
 }
 
 fn sdf(uv: vec2<f32>, shape: Shape) -> f32 {
-    // let transform = transforms[shape.transform];
+    // let transform = transforms[shape.transform_id];
     // let size = vec2<f32>(transform[0].x, transform[1].y);
     switch shape.kind {
         case 0u: {

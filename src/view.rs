@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::context::{Alignment, LayoutCtx};
 use crate::storage::WidgetStorage;
 use crate::renderer::{Gfx, Gpu};
-use crate::shapes::{Attributes, Shape, ShapeKind};
+use crate::shapes::{Attributes, Shape, ShapeKind, Style};
 use crate::{Pixel, Rgba};
 use crate::callback::CALLBACKS;
 
@@ -153,12 +153,19 @@ where
 
 pub struct TestTriangleWidget {
     id: NodeId,
+    style: Style,
 }
 
 impl TestTriangleWidget {
     pub fn new() -> Self {
         let id = NodeId::new();
-        Self { id }
+        let style = Style::new(Rgba::RED, (300, 300), ShapeKind::Triangle);
+        Self { id, style }
+    }
+
+    pub fn style<F: FnMut(&mut Style)>(mut self, mut f: F) -> Self {
+        f(&mut self.style);
+        self
     }
 
     pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
@@ -182,9 +189,7 @@ impl View for TestTriangleWidget {
 
     fn children(&self) -> Option<&[Box<dyn View>]> { None }
 
-    fn shape(&self) -> Shape {
-        Shape::filled(Rgba::RED, ShapeKind::Triangle)
-    }
+    fn shape(&self) -> Shape { Shape::filled(&self.style) }
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
@@ -193,7 +198,7 @@ impl View for TestTriangleWidget {
     }
 
     fn attribs(&self) -> Attributes {
-        Attributes::new((300, 300))
+        Attributes::new(self.style.get_dimensions())
     }
 
     fn padding(&self) -> u32 { 0 }
@@ -210,12 +215,19 @@ impl IntoView for TestTriangleWidget {
 
 pub struct TestCircleWidget {
     id: NodeId,
+    style: Style,
 }
 
 impl TestCircleWidget {
     pub fn new() -> Self {
         let id = NodeId::new();
-        Self { id }
+        let style = Style::new(Rgba::RED, (300, 300), ShapeKind::Circle);
+        Self { id, style }
+    }
+
+    pub fn style<F: FnMut(&mut Style)>(mut self, mut f: F) -> Self {
+        f(&mut self.style);
+        self
     }
 
     pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
@@ -239,9 +251,7 @@ impl View for TestCircleWidget {
 
     fn children(&self) -> Option<&[Box<dyn View>]> { None }
 
-    fn shape(&self) -> Shape {
-        Shape::filled(Rgba::RED, ShapeKind::Circle)
-    }
+    fn shape(&self) -> Shape { Shape::filled(&self.style) }
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
@@ -250,7 +260,7 @@ impl View for TestCircleWidget {
     }
 
     fn attribs(&self) -> Attributes {
-        Attributes::new((300, 300))
+        Attributes::new(self.style.get_dimensions())
     }
 
     fn padding(&self) -> u32 { 0 }

@@ -64,7 +64,7 @@ impl From<Rgba<u8>> for Pixel<Rgba<u8>> {
     }
 }
 
-#[repr(C)]
+#[repr(C, align(16))]
 #[derive(Debug, Clone, Copy)]
 pub struct Rgb<T> {
     pub r: T,
@@ -140,7 +140,7 @@ impl PartialEq for Rgb<f32> {
     }
 }
 
-#[repr(C)]
+#[repr(C, align(16))]
 #[derive(Debug, Clone, Copy)]
 pub struct Rgba<T> {
     pub r: T,
@@ -157,6 +157,10 @@ impl Rgba<u8> {
     pub const WHITE: Self = Self { r: 255, g: 255, b: 255, a: 255 };
     pub const YELLOW: Self = Self { r: 255, g: 255, b: 0, a: 255 };
     pub const DARK_GRAY: Self = Self { r: 30, g: 30, b: 30, a: 255 };
+
+    pub fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self { r, g, b, a }
+    }
 }
 
 impl From<Rgba<u8>> for u32 {

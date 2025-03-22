@@ -54,50 +54,46 @@ fn root() -> impl IntoView {
         shape.set_color(|color| *color = Rgb::GREEN);
     };
 
-    vstack(
-        [
-            hstack(
-                [
-                    image("assets/image1.jpg").into_any(),
-                    image("assets/image2.jpg").on_drag(drag).into_any(),
-                    TestTriangleWidget::new().on_hover(hover).into_any(),
-                ]
-            ).on_drag(drag).into_any(),
-            hstack(
-                [
-                    vstack(
-                        [
-                            button()
-                                .style(|shape| shape.set_radius(0.5))
-                                .on_click(shift_right)
-                                .on_hover(hover)
-                                .into_any(),
-                            button()
-                                .style(|shape| shape.set_radius(0.5))
-                                .on_click(shift_left)
-                                .on_hover(hover)
-                                .into_any(),
-                            button()
-                                .style(|shape| shape.set_radius(0.5))
-                                .on_click(dec)
-                                .on_hover(hover)
-                                .into_any(),
-                            button()
-                                .style(|shape| shape.set_radius(0.5))
-                                .on_click(inc)
-                                .on_hover(hover)
-                                .into_any(),
-                        ]
-                    ).on_drag(drag).into_any(),
-                    TestCircleWidget::new().on_hover(hover).into_any(),
-                ]
-            ).into_any(),
-            TestCircleWidget::new()
+    vstack([
+        hstack([
+            image("assets/image1.jpg").into_any(),
+            image("assets/image2.jpg").on_drag(drag).into_any(),
+            TestTriangleWidget::new().on_hover(hover).into_any(),
+        ]).on_drag(drag)
+            .into_any(),
+        hstack([
+            vstack([
+                button()
+                    .style(|style| style.set_radius(0.5))
+                    .on_click(shift_right)
+                    .on_hover(hover)
+                    .into_any(),
+                button()
+                    .style(|style| style.set_radius(0.5))
+                    .on_click(shift_left)
+                    .on_hover(hover)
+                    .into_any(),
+                button()
+                    .style(|style| style.set_radius(0.5))
+                    .on_click(dec)
+                    .on_hover(hover)
+                    .into_any(),
+                button()
+                    .style(|style| style.set_radius(0.5))
+                    .on_click(inc)
+                    .on_hover(hover)
+                    .into_any(),
+            ]).style(|style| style.set_color(Rgba::new(69, 72, 183, 255)))
                 .on_drag(drag)
-                .on_hover(hover)
                 .into_any(),
-        ]
-    )
+            TestCircleWidget::new().on_hover(hover).into_any(),
+        ]).into_any(),
+        TestCircleWidget::new()
+            .style(|style| style.set_color(Rgba::new(169, 72, 43, 255)))
+            .on_drag(drag)
+            .on_hover(hover)
+            .into_any(),
+    ])
 }
 
 fn dummy() -> impl IntoView {

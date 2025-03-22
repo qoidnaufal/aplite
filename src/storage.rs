@@ -108,11 +108,13 @@ impl WidgetStorage {
                 CALLBACKS.with_borrow_mut(|callbacks| {
                     callbacks.handle_hover(hover_id, shape);
                     if cursor.is_dragging(*hover_id) {
-                        callbacks.handle_drag(hover_id, shape);
-                        if let Some(attribs) = self.attribs.get_mut(hover_id) {
-                            gfx.transforms.update(shape.transform as usize, |transform| {
-                                attribs.set_position(cursor, transform);
-                            });
+                        if let Some(on_drag) = callbacks.on_drag.get_mut(hover_id) {
+                            on_drag(shape);
+                            if let Some(attribs) = self.attribs.get_mut(hover_id) {
+                                gfx.transforms.update(shape.transform_id as usize, |transform| {
+                                    attribs.set_position(cursor, transform);
+                                });
+                            }
                         }
                     }
                 });

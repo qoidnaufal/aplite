@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::context::{Alignment, LayoutCtx};
 use crate::renderer::image_reader;
-use crate::shapes::{Attributes, Shape, ShapeKind};
+use crate::shapes::{Attributes, Shape, ShapeKind, Style};
 use crate::callback::CALLBACKS;
 use crate::{Pixel, Rgba};
 use super::{AnyView, IntoView, NodeId, View};
@@ -14,13 +14,20 @@ pub fn image<P: Into<PathBuf>>(src: P) -> Image {
 pub struct Image {
     id: NodeId,
     data: Pixel<Rgba<u8>>,
+    style: Style,
 }
 
 impl Image {
     fn new<P: Into<PathBuf>>(path: P) -> Self {
         let id = NodeId::new();
         let data = image_reader(path);
-        Self { id, data }
+        let style = Style::new(Rgba::WHITE, (300, 300), ShapeKind::Rect);
+        Self { id, data, style }
+    }
+
+    pub fn style<F: FnMut(&mut Style)>(mut self, mut f: F) -> Self {
+        f(&mut self.style);
+        self
     }
 
     // pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
@@ -44,9 +51,7 @@ impl View for Image {
 
     fn children(&self) -> Option<&[AnyView]> { None }
 
-    fn shape(&self) -> Shape {
-        Shape::textured(ShapeKind::Rect)
-    }
+    fn shape(&self) -> Shape { Shape::textured(&self.style) }
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { Some(&self.data) }
 
@@ -55,7 +60,7 @@ impl View for Image {
     }
 
     fn attribs(&self) -> Attributes {
-        let mut attr = Attributes::new((300, 300));
+        let mut attr = Attributes::new(self.style.get_dimensions());
         attr.adjust_ratio(self.data.aspect_ratio());
         attr
     }
