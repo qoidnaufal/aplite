@@ -7,10 +7,10 @@ edition = "2024"
 members = [ "util", "pollster", "slotmap"]
 
 [dependencies]
-winit = "0.30.9"
-image = { version = "0.25.5", features = ["png", "jpeg"] }
 util.workspace = true
 pollster.workspace = true
+winit = "0.30.9"
+image = { version = "0.25.5", features = ["png", "jpeg"] }
 wgpu = "24.0.3"
 
 [workspace.dependencies]

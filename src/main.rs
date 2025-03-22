@@ -67,10 +67,26 @@ fn root() -> impl IntoView {
                 [
                     vstack(
                         [
-                            button().on_click(shift_right).on_hover(hover).into_any(),
-                            button().on_click(shift_left).on_hover(hover).into_any(),
-                            button().on_click(dec).on_hover(hover).into_any(),
-                            button().on_click(inc).on_hover(hover).into_any(),
+                            button()
+                                .style(|shape| shape.set_radius(0.5))
+                                .on_click(shift_right)
+                                .on_hover(hover)
+                                .into_any(),
+                            button()
+                                .style(|shape| shape.set_radius(0.5))
+                                .on_click(shift_left)
+                                .on_hover(hover)
+                                .into_any(),
+                            button()
+                                .style(|shape| shape.set_radius(0.5))
+                                .on_click(dec)
+                                .on_hover(hover)
+                                .into_any(),
+                            button()
+                                .style(|shape| shape.set_radius(0.5))
+                                .on_click(inc)
+                                .on_hover(hover)
+                                .into_any(),
                         ]
                     ).on_drag(drag).into_any(),
                     TestCircleWidget::new().on_hover(hover).into_any(),

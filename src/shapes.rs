@@ -5,10 +5,10 @@ use crate::Rgba;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShapeKind {
-    Triangle,
+    Circle,
     Rect,
     RoundedRect,
-    Circle,
+    Triangle,
 }
 
 impl ShapeKind {
@@ -18,10 +18,10 @@ impl ShapeKind {
 impl From<u32> for ShapeKind {
     fn from(num: u32) -> Self {
         match num {
-            0 => Self::Triangle,
+            0 => Self::Circle,
             1 => Self::Rect,
             2 => Self::RoundedRect,
-            3 => Self::Circle,
+            3 => Self::Triangle,
             _ => unreachable!()
         }
     }
@@ -40,10 +40,10 @@ impl std::ops::Deref for Indices<'_> {
 impl From<ShapeKind> for Indices<'_> {
     fn from(kind: ShapeKind) -> Self {
         match kind {
-            ShapeKind::Triangle => Self::triangle(),
+            ShapeKind::Circle => Self::rectangle(),
             ShapeKind::Rect => Self::rectangle(),
             ShapeKind::RoundedRect => Self::rectangle(),
-            ShapeKind::Circle => Self::rectangle(),
+            ShapeKind::Triangle => Self::triangle(),
         }
     }
 }
@@ -119,8 +119,8 @@ impl Attributes {
 pub struct Shape {
     pub color: Rgba<f32>,
     pub texture_id: i32,
-    pub kind: u32,
-    pub radius: f32,
+    kind: u32,
+    radius: f32,
     pub transform: u32,
 }
 
@@ -143,6 +143,10 @@ impl Shape {
             radius: 0.0,
             transform: 0,
         }
+    }
+
+    pub fn set_radius(&mut self, radius: f32) {
+        self.radius = radius;
     }
 
     pub fn indices<'a>(&self) -> Indices<'a> {

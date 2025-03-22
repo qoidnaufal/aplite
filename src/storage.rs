@@ -75,7 +75,7 @@ impl WidgetStorage {
         // let start = std::time::Instant::now();
         let hovered = self.nodes.iter().enumerate().filter_map(|(idx, node_id)| {
             let shape = &gfx.shapes.data[idx];
-            let ref attr = self.attribs[node_id];
+            let attr = &self.attribs[node_id];
             if shape.is_hovered(cursor, attr) {
                 Some(node_id)
             } else { None }
@@ -106,17 +106,13 @@ impl WidgetStorage {
             let idx = self.nodes.iter().position(|node_id| node_id == hover_id).unwrap();
             gfx.shapes.update(idx, |shape| {
                 CALLBACKS.with_borrow_mut(|callbacks| {
-                    if let Some(on_hover) = callbacks.on_hover.get_mut(hover_id) {
-                        on_hover(shape);
-                    }
+                    callbacks.handle_hover(hover_id, shape);
                     if cursor.is_dragging(*hover_id) {
-                        if let Some(on_drag) = callbacks.on_drag.get_mut(hover_id) {
-                            on_drag(shape);
-                            if let Some(attribs) = self.attribs.get_mut(hover_id) {
-                                gfx.transforms.update(shape.transform as usize, |transform| {
-                                    attribs.set_position(cursor, transform);
-                                });
-                            }
+                        callbacks.handle_drag(hover_id, shape);
+                        if let Some(attribs) = self.attribs.get_mut(hover_id) {
+                            gfx.transforms.update(shape.transform as usize, |transform| {
+                                attribs.set_position(cursor, transform);
+                            });
                         }
                     }
                 });
@@ -129,13 +125,11 @@ impl WidgetStorage {
         if let Some(ref click_id) = cursor.click.obj {
             let idx = self.nodes.iter().position(|node_id| node_id == click_id).unwrap();
             let shape = gfx.shapes.data.get_mut(idx).unwrap();
-            let attr = self.attribs.get(click_id).unwrap();
+            let attr = &self.attribs[click_id];
             cursor.click.delta = cursor.click.pos - Vector2::<f32>::from(attr.pos);
             CALLBACKS.with_borrow_mut(|callbacks| {
-                if let Some(on_click) = callbacks.on_click.get_mut(click_id) {
-                    on_click(shape);
-                    self.pending_update.push(*click_id);
-                }
+                callbacks.handle_click(click_id, shape);
+                self.pending_update.push(*click_id);
             });
         }
         if cursor.state.action == MouseAction::Released {
@@ -143,10 +137,8 @@ impl WidgetStorage {
                 let idx = self.nodes.iter().position(|node_id| node_id == hover_id).unwrap();
                 let shape = gfx.shapes.data.get_mut(idx).unwrap();
                 CALLBACKS.with_borrow_mut(|callbacks| {
-                    if let Some(on_hover) = callbacks.on_hover.get_mut(hover_id) {
-                        on_hover(shape);
-                        self.pending_update.push(*hover_id);
-                    }
+                    callbacks.handle_hover(hover_id, shape);
+                    self.pending_update.push(*hover_id);
                 });
             }
         }

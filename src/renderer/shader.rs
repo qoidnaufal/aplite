@@ -1,10 +1,4 @@
 pub const SHADER: &str = r"
-struct VertexOutput {
-    @builtin(position) position: vec4<f32>,
-    @location(0) @interpolate(flat) index: u32,
-    @location(1) uv: vec2<f32>,
-};
-
 struct Screen {
     transform: mat4x4<f32>,
 };
@@ -50,6 +44,12 @@ struct Instance {
     @location(2) index: u32,
 };
 
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) @interpolate(flat) index: u32,
+    @location(1) uv: vec2<f32>,
+};
+
 @vertex
 fn vs_main(
     @builtin(vertex_index) v_idx: u32,
@@ -77,16 +77,51 @@ fn sdCircle(p: vec2<f32>, r: f32) -> f32 {
     return length(p) - r;
 }
 
+fn sdRoundedBox(p: vec2<f32>, b: vec2<f32>, r: f32) -> f32 {
+    let d = abs(p) - b + vec2<f32>(r);
+    return min(max(d.x, d.y), 0.0) + length(max(d, vec2f(0.0, 0.0))) - r;
+}
+
+fn sdf(uv: vec2<f32>, shape: Shape) -> f32 {
+    // let transform = transforms[shape.transform];
+    // let size = vec2<f32>(transform[0].x, transform[1].y);
+    switch shape.kind {
+        case 0u: {
+            let p = uv - vec2<f32>(0.5, 0.5);
+            return sdCircle(p, 0.5);
+        }
+        case 1u: { return 0.0; }
+        case 2u: {
+            let p = uv - vec2<f32>(0.5, 0.5);
+            let b = vec2<f32>(0.5, 0.5);
+            return sdRoundedBox(p, b, shape.radius);
+        }
+        case 3u: { return 0.0; }
+        default: { return 0.0; }
+    }
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let shape = shapes[in.index];
-    let color = shape.color;
-    let d = sdCircle(in.uv - vec2<f32>(0.5, 0.5), 0.49);
+    let shape_color = shape.color;
+
+    let d = sdf(in.uv, shape);
+    let sdf_color = vec4<f32>(
+        shape_color.rgb - sign(d) * shape_color.rgb,
+        shape_color.a - sign(d)
+    );
+
+    var color_mask: vec4<f32>;
+    switch shape.kind {
+        case 0u: { color_mask = sdf_color; }
+        case 1u: { color_mask = shape_color; }
+        case 2u: { color_mask = sdf_color; }
+        case 3u: { color_mask = shape_color; }
+        default: { color_mask = shape_color; }
+    }
 
     let texture_mask = textureSample(t, s, in.uv);
-    let sdf_color = vec4<f32>(color.rgb - sign(d) * color.rgb, color.a - sign(d));
-
-    let color_mask = select(color, sdf_color, shape.kind == 3);
     return select(color_mask, texture_mask, shape.texture_id > -1);
 }
 ";

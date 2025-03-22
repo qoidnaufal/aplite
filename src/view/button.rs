@@ -8,12 +8,19 @@ pub fn button() -> Button { Button::new() }
 
 pub struct Button {
     id: NodeId,
+    shape: Shape,
 }
 
 impl Button {
     fn new() -> Self {
         let id = NodeId::new();
-        Self { id }
+        let shape = Shape::filled(Rgba::RED, ShapeKind::RoundedRect);
+        Self { id, shape }
+    }
+
+    pub fn style<F: FnMut(&mut Shape)>(mut self, mut f: F) -> Self {
+        f(&mut self.shape);
+        self
     }
 
     pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
@@ -33,7 +40,7 @@ impl View for Button {
     fn children(&self) -> Option<&[AnyView]> { None }
 
     fn shape(&self) -> Shape {
-        Shape::filled(Rgba::RED, ShapeKind::RoundedRect)
+        self.shape.clone()
     }
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }

@@ -170,7 +170,7 @@ impl Gfx {
         })
     }
 
-    pub fn instance(&self,device: &wgpu::Device) -> wgpu::Buffer {
+    pub fn instances(&self,device: &wgpu::Device) -> wgpu::Buffer {
         use wgpu::util::DeviceExt;
         
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

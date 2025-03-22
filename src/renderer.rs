@@ -52,7 +52,7 @@ impl Renderer {
         screen.write(&gpu.device, &gpu.queue);
 
         let indices = gfx.indices(&gpu.device);
-        let instances = gfx.instance(&gpu.device);
+        let instances = gfx.instances(&gpu.device);
         let pipeline = pipeline(&gpu, &[Gfx::instance_desc()], &[
             &Screen::bind_group_layout(&gpu.device),
             &Gfx::bind_group_layout(&gpu.device),
@@ -146,7 +146,6 @@ impl Renderer {
                 pass.set_bind_group(2, &texture_data.bind_group, &[]);
             }
             pass.draw_indexed(idx_offset..idx_offset + idx_len, 0, draw_offset..draw_offset + 1);
-
             idx_offset += idx_len;
         }
     }
