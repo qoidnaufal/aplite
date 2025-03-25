@@ -14,7 +14,7 @@ pub struct Button {
 impl Button {
     fn new() -> Self {
         let id = NodeId::new();
-        let style = Style::new(Rgba::RED, (120, 40), ShapeKind::RoundedRect);
+        let style = Style::new(Rgba::RED, (200, 50), ShapeKind::RoundedRect);
         Self { id, style }
     }
 
@@ -30,6 +30,11 @@ impl Button {
 
     pub fn on_click<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
+        self
+    }
+
+    pub fn on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
         self
     }
 }

@@ -3,7 +3,7 @@ use std::ops::{Index, IndexMut};
 use crate::{Vector2, Vector3};
 
 #[repr(C, align(16))]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Vector4<T> {
     pub x: T,
     pub y: T,

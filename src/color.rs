@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use util::Size;
+use util::{Size, Vector4};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pixel<Container> {
@@ -64,7 +64,6 @@ impl From<Rgba<u8>> for Pixel<Rgba<u8>> {
     }
 }
 
-#[repr(C, align(16))]
 #[derive(Debug, Clone, Copy)]
 pub struct Rgb<T> {
     pub r: T,
@@ -140,7 +139,6 @@ impl PartialEq for Rgb<f32> {
     }
 }
 
-#[repr(C, align(16))]
 #[derive(Debug, Clone, Copy)]
 pub struct Rgba<T> {
     pub r: T,
@@ -200,6 +198,39 @@ impl From<Rgba<f32>> for Rgba<u8> {
             g: (val.g * u8::MAX as f32) as u8,
             b: (val.b * u8::MAX as f32) as u8,
             a: (val.a * u8::MAX as f32) as u8,
+        }
+    }
+}
+
+impl From<Vector4<f32>> for Rgba<u8> {
+    fn from(vec4f: Vector4<f32>) -> Self {
+        Self {
+            r: (vec4f.x * 255.0) as u8,
+            g: (vec4f.y * 255.0) as u8,
+            b: (vec4f.z * 255.0) as u8,
+            a: (vec4f.w * 255.0) as u8,
+        }
+    }
+}
+
+impl From<Rgba<u8>> for Vector4<f32> {
+    fn from(rgba: Rgba<u8>) -> Self {
+        Self {
+            x: rgba.r as f32 / u8::MAX as f32,
+            y: rgba.g as f32 / u8::MAX as f32,
+            z: rgba.b as f32 / u8::MAX as f32,
+            w: rgba.a as f32 / u8::MAX as f32,
+        }
+    }
+}
+
+impl From<Rgba<f32>> for Vector4<f32> {
+    fn from(rgba: Rgba<f32>) -> Self {
+        Self {
+            x: rgba.r,
+            y: rgba.g,
+            z: rgba.b,
+            w: rgba.a,
         }
     }
 }

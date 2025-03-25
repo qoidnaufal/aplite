@@ -79,7 +79,7 @@ pub trait View {
         let half = attr.dims / 2;
         let current_pos = attr.pos;
         storage.nodes.push(node_id);
-        storage.cached_color.insert(node_id, shape.color.into());
+        storage.cached_color.insert(node_id, shape.rgba_u8());
         gfx.push_texture(gpu, self.pixel(), &mut shape);
         gfx.register(shape, &attr, gpu.size());
         storage.attribs.insert(node_id, attr);
@@ -163,10 +163,10 @@ impl TestTriangleWidget {
         Self { id, style }
     }
 
-    pub fn style<F: FnMut(&mut Style)>(mut self, mut f: F) -> Self {
-        f(&mut self.style);
-        self
-    }
+    // pub fn style<F: FnMut(&mut Style)>(mut self, mut f: F) -> Self {
+    //     f(&mut self.style);
+    //     self
+    // }
 
     pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));

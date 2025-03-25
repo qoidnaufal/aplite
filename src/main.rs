@@ -49,9 +49,9 @@ fn root() -> impl IntoView {
         shape.set_color(|color| color.r += 150);
     };
 
-    let hover = move |shape: &mut Shape| { shape.set_color(|color| *color = Rgb::BLUE) };
+    let hover = move |shape: &mut Shape| { shape.set_color(|color| *color = Rgba::BLUE) };
     let drag = move |shape: &mut Shape| {
-        shape.set_color(|color| *color = Rgb::GREEN);
+        shape.set_color(|color| *color = Rgba::GREEN);
     };
 
     vstack([
@@ -64,32 +64,46 @@ fn root() -> impl IntoView {
         hstack([
             vstack([
                 button()
-                    .style(|style| style.set_radius(0.5))
+                    .style(|style| {
+                        style.set_stroke(0.02);
+                        style.set_radius(|r| {
+                            r.set_top_left(0.025);
+                            r.set_bot_left(0.025);
+                            r.set_bot_right(0.0);
+                            r.set_top_right(0.0);
+                        });
+                    })
                     .on_click(shift_right)
                     .on_hover(hover)
                     .into_any(),
                 button()
-                    .style(|style| style.set_radius(0.5))
+                    .style(|style| style.set_stroke(0.02))
                     .on_click(shift_left)
                     .on_hover(hover)
                     .into_any(),
                 button()
-                    .style(|style| style.set_radius(0.5))
+                    .style(|style| style.set_stroke(0.025))
                     .on_click(dec)
                     .on_hover(hover)
                     .into_any(),
                 button()
-                    .style(|style| style.set_radius(0.5))
+                    // .style(|style| style.set_stroke(0.2))
                     .on_click(inc)
                     .on_hover(hover)
                     .into_any(),
-            ]).style(|style| style.set_color(Rgba::new(69, 72, 183, 255)))
+            ]).style(|style| style.set_fill(Rgba::new(69, 72, 183, 255)))
                 .on_drag(drag)
                 .into_any(),
-            TestCircleWidget::new().on_hover(hover).into_any(),
+            TestCircleWidget::new()
+                .style(|style| style.set_stroke(0.02))
+                .on_hover(hover)
+                .into_any(),
         ]).into_any(),
         TestCircleWidget::new()
-            .style(|style| style.set_color(Rgba::new(169, 72, 43, 255)))
+            .style(|style| {
+                style.set_fill(Rgba::new(169, 72, 43, 255));
+                style.set_stroke(0.02);
+            })
             .on_drag(drag)
             .on_hover(hover)
             .into_any(),
@@ -97,12 +111,22 @@ fn root() -> impl IntoView {
 }
 
 fn dummy() -> impl IntoView {
-    let hover = move |shape: &mut Shape| { shape.set_color(|color| *color = Rgb::BLUE) };
+    let hover = move |shape: &mut Shape| {
+        shape.set_color(|color| *color = Rgba::BLUE);
+    };
     let drag = move |shape: &mut Shape| {
-        shape.set_color(|color| *color = Rgb::GREEN);
+        shape.set_color(|color| *color = Rgba::GREEN);
     };
 
-    TestCircleWidget::new().on_hover(hover).on_drag(drag)
+    button()
+        .style(|style| {
+            style.set_dimensions((500, 200));
+            style.set_outline(Rgba::WHITE);
+            style.set_stroke(0.1);
+            style.set_radius(|r| r.set_all(0.15));
+        })
+        .on_hover(hover)
+        .on_drag(drag)
 }
 
 fn main() -> Result<(), Error> {

@@ -25,10 +25,10 @@ impl Image {
         Self { id, data, style }
     }
 
-    pub fn style<F: FnMut(&mut Style)>(mut self, mut f: F) -> Self {
-        f(&mut self.style);
-        self
-    }
+    // pub fn style<F: FnMut(&mut Style)>(mut self, mut f: F) -> Self {
+    //     f(&mut self.style);
+    //     self
+    // }
 
     // pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
     //     CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
