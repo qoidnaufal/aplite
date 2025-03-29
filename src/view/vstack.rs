@@ -1,7 +1,7 @@
 use crate::callback::CALLBACKS;
 use crate::context::{Alignment, LayoutCtx};
 use crate::{Pixel, Rgba};
-use crate::shapes::{Attributes, Shape, ShapeKind, Style};
+use crate::element::{Attributes, Element, Shape, Style};
 
 use super::{AnyView, IntoView, NodeId, View};
 
@@ -19,7 +19,7 @@ impl VStack {
     fn new(child_nodes: impl IntoIterator<Item = AnyView>) -> Self {
         let id = NodeId::new();
         let children = child_nodes.into_iter().collect();
-        let style = Style::new(Rgba::DARK_GRAY, (0, 0), ShapeKind::Rect);
+        let style = Style::new(Rgba::DARK_GRAY, (0, 0), Shape::Rect);
         Self { id, children, style }
     }
 
@@ -38,7 +38,7 @@ impl VStack {
     //     self
     // }
 
-    pub fn on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+    pub fn on_drag<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
         self
     }
@@ -49,7 +49,7 @@ impl View for VStack {
 
     fn children(&self) -> Option<&[AnyView]> { Some(&self.children) }
 
-    fn shape(&self) -> Shape { Shape::filled(&self.style) }
+    fn element(&self) -> Element { Element::filled(&self.style) }
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
@@ -58,11 +58,11 @@ impl View for VStack {
         cx.assign_position(attr);
     }
 
-    fn attribs(&self) -> Attributes {
+    fn attributes(&self) -> Attributes {
         let mut size = self.style.get_dimensions();
         if !self.children.is_empty() {
             self.children.iter().for_each(|child| {
-                let child_attr = child.attribs();
+                let child_attr = child.attributes();
                 let child_size = child_attr.dims;
                 size.height += child_size.height;
                 size.width = size.width.max(child_size.width + self.padding() * 2);

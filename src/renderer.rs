@@ -14,7 +14,7 @@ pub use gpu::Gpu;
 pub use shader::SHADER;
 pub use texture::{TextureData, image_reader};
 
-use crate::storage::WidgetStorage;
+use crate::tree::WidgetTree;
 use crate::error::Error;
 use crate::{IntoView, Rgb, View};
 
@@ -31,7 +31,7 @@ pub struct Renderer {
 impl Renderer {
     pub fn new<F, IV>(
         window: Arc<Window>,
-        storage: &mut WidgetStorage,
+        tree: &mut WidgetTree,
         view_fn: F
     ) -> Self
     where
@@ -44,10 +44,10 @@ impl Renderer {
         let mut gfx = Gfx::new(&gpu.device);
         let mut screen = Screen::new(&gpu.device, gpu.size());
 
-        // this is important to avoid creating texture for every shape
+        // this is important to avoid creating texture for every element
         let pseudo_texture = TextureData::new(&gpu, &Rgb::WHITE.into());
 
-        view_fn().into_view().prepare(&gpu, &mut gfx, storage);
+        view_fn().into_view().prepare(&gpu, &mut gfx, tree);
         gfx.write(&gpu.device, &gpu.queue);
         screen.write(&gpu.device, &gpu.queue);
 
@@ -70,30 +70,27 @@ impl Renderer {
         }
     }
 
-    pub fn resize(&mut self, size: Size<u32>) {
-        let prev_size: Size<f32> = self.screen.initial_size().into();
-        let new_size: Size<f32> = size.into();
-        let s = prev_size / new_size;
+    pub fn resize(&mut self, new_size: Size<u32>) {
+        let ps: Size<f32> = self.screen.initial_size().into();
+        let ns: Size<f32> = new_size.into();
+        let scale = ps / ns;
 
-        if size.width > 0 && size.height > 0 {
-            self.gpu.config.width = size.width;
-            self.gpu.config.height = size.height;
+        if new_size.width > 0 && new_size.height > 0 {
+            self.gpu.config.width = new_size.width;
+            self.gpu.config.height = new_size.height;
             self.gpu.configure();
         }
 
-        self.screen.update(|mat| {
-            mat.scale(s.width, s.height);
-            mat.translate(s.width - 1.0, 1.0 - s.height);
+        self.screen.update_transform(|mat| {
+            mat.scale(scale.width, scale.height);
+            mat.translate(scale.width - 1.0, 1.0 - scale.height);
         });
-        self.screen.write(&self.gpu.device, &self.gpu.queue);
+        // self.screen.update_size(|s| *s = new_size);
     }
 
     pub fn update(&mut self) {
+        self.screen.write(&self.gpu.device, &self.gpu.queue);
         self.gfx.write(&self.gpu.device, &self.gpu.queue);
-        // if let Some(texture_data) = self.gfx.textures.get(index) {
-        //     let shape = &self.gfx.shapes.data[index];
-        //     texture_data.update_color(&self.gpu.queue, shape.color.into());
-        // }
     }
 
     pub fn render(&mut self) -> Result<(), Error> {
@@ -136,13 +133,13 @@ impl Renderer {
         let mut idx_offset: u32 = 0;
 
         for i in 0..self.gfx.count() {
-            let shape = &self.gfx.shapes.data[i];
-            let idx_len = shape.indices().len() as u32;
+            let element = &self.gfx.element.data[i];
+            let idx_len = element.indices().len() as u32;
             let draw_offset = i as u32;
 
             // FIXME: bundle the texture into an atlas or something
-            if shape.texture_id > -1 {
-                let texture_data = &self.gfx.textures[shape.texture_id as usize];
+            if element.texture_id > -1 {
+                let texture_data = &self.gfx.textures[element.texture_id as usize];
                 pass.set_bind_group(2, &texture_data.bind_group, &[]);
             }
             pass.draw_indexed(idx_offset..idx_offset + idx_len, 0, draw_offset..draw_offset + 1);

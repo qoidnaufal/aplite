@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::context::{Alignment, LayoutCtx};
 use crate::renderer::image_reader;
-use crate::shapes::{Attributes, Shape, ShapeKind, Style};
+use crate::element::{Attributes, Element, Shape, Style};
 use crate::callback::CALLBACKS;
 use crate::{Pixel, Rgba};
 use super::{AnyView, IntoView, NodeId, View};
@@ -21,7 +21,7 @@ impl Image {
     fn new<P: Into<PathBuf>>(path: P) -> Self {
         let id = NodeId::new();
         let data = image_reader(path);
-        let style = Style::new(Rgba::WHITE, (300, 300), ShapeKind::Rect);
+        let style = Style::new(Rgba::WHITE, (300, 300), Shape::Rect);
         Self { id, data, style }
     }
 
@@ -40,7 +40,7 @@ impl Image {
     //     self
     // }
 
-    pub fn on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+    pub fn on_drag<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
         self
     }
@@ -51,7 +51,7 @@ impl View for Image {
 
     fn children(&self) -> Option<&[AnyView]> { None }
 
-    fn shape(&self) -> Shape { Shape::textured(&self.style) }
+    fn element(&self) -> Element { Element::textured(&self.style) }
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { Some(&self.data) }
 
@@ -59,7 +59,7 @@ impl View for Image {
         cx.assign_position(attr);
     }
 
-    fn attribs(&self) -> Attributes {
+    fn attributes(&self) -> Attributes {
         let mut attr = Attributes::new(self.style.get_dimensions());
         attr.adjust_ratio(self.data.aspect_ratio());
         attr

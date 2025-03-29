@@ -17,7 +17,7 @@ impl<T: Default> Default for Size<T> {
 }
 
 impl<T> Size<T> {
-    pub fn new(width: T, height: T) -> Self {
+    pub const fn new(width: T, height: T) -> Self {
         Self { width, height }
     }
 }

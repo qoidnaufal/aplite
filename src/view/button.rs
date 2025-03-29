@@ -1,5 +1,5 @@
 use crate::context::{Alignment, LayoutCtx};
-use crate::shapes::{Attributes, Shape, ShapeKind, Style};
+use crate::element::{Attributes, Element, Shape, Style};
 use crate::callback::CALLBACKS;
 use crate::{Pixel, Rgba};
 use super::{AnyView, IntoView, NodeId, View};
@@ -14,7 +14,7 @@ pub struct Button {
 impl Button {
     fn new() -> Self {
         let id = NodeId::new();
-        let style = Style::new(Rgba::RED, (200, 50), ShapeKind::RoundedRect);
+        let style = Style::new(Rgba::RED, (200, 50), Shape::RoundedRect);
         Self { id, style }
     }
 
@@ -23,17 +23,17 @@ impl Button {
         self
     }
 
-    pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+    pub fn on_hover<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
         self
     }
 
-    pub fn on_click<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+    pub fn on_click<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
         self
     }
 
-    pub fn on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+    pub fn on_drag<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
         self
     }
@@ -44,8 +44,8 @@ impl View for Button {
 
     fn children(&self) -> Option<&[AnyView]> { None }
 
-    fn shape(&self) -> Shape {
-        Shape::filled(&self.style)
+    fn element(&self) -> Element {
+        Element::filled(&self.style)
     }
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
@@ -54,7 +54,7 @@ impl View for Button {
         cx.assign_position(attr);
     }
 
-    fn attribs(&self) -> Attributes {
+    fn attributes(&self) -> Attributes {
         Attributes::new(self.style.get_dimensions())
     }
 

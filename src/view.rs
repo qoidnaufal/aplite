@@ -6,9 +6,9 @@ mod hstack;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::context::{Alignment, LayoutCtx};
-use crate::storage::WidgetStorage;
+use crate::tree::WidgetTree;
 use crate::renderer::{Gfx, Gpu};
-use crate::shapes::{Attributes, Shape, ShapeKind, Style};
+use crate::element::{Attributes, Element, Shape, Style};
 use crate::{Pixel, Rgba};
 use crate::callback::CALLBACKS;
 
@@ -45,22 +45,22 @@ impl std::fmt::Debug for AnyView {
 
 pub trait View {
     fn id(&self) -> NodeId;
-    fn shape(&self) -> Shape;
+    fn element(&self) -> Element;
     fn children(&self) -> Option<&[AnyView]>;
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>>;
 
     fn padding(&self) -> u32;
     fn spacing(&self) -> u32;
     fn alignment(&self) -> Alignment;
-    fn attribs(&self) -> Attributes;
+    fn attributes(&self) -> Attributes;
     fn layout(&self, cx: &mut LayoutCtx, attribs: &mut Attributes);
 
-    fn build_tree(&self, storage: &mut WidgetStorage) {
+    fn build_tree(&self, tree: &mut WidgetTree) {
         if let Some(children) = self.children() {
             children.iter().for_each(|child| {
-                storage.insert_children(self.id(), child.id());
-                storage.insert_parent(child.id(), self.id());
-                child.build_tree(storage);
+                tree.insert_children(self.id(), child.id());
+                tree.insert_parent(child.id(), self.id());
+                child.build_tree(tree);
             });
         }
     }
@@ -69,36 +69,36 @@ pub trait View {
         &self,
         gpu: &Gpu,
         gfx: &mut Gfx,
-        storage: &mut WidgetStorage,
+        tree: &mut WidgetTree,
     ) {
         let node_id = self.id();
-        if storage.is_root(node_id) { self.build_tree(storage) }
-        let mut shape = self.shape();
-        let mut attr = self.attribs();
-        self.layout(&mut storage.layout, &mut attr);
+        if tree.is_root(node_id) { self.build_tree(tree) }
+        let mut element = self.element();
+        let mut attr = self.attributes();
+        self.layout(&mut tree.layout, &mut attr);
         let half = attr.dims / 2;
         let current_pos = attr.pos;
-        storage.nodes.push(node_id);
-        storage.cached_color.insert(node_id, shape.rgba_u8());
-        gfx.push_texture(gpu, self.pixel(), &mut shape);
-        gfx.register(shape, &attr, gpu.size());
-        storage.attribs.insert(node_id, attr);
+        tree.nodes.push(node_id);
+        tree.cached_color.insert(node_id, element.rgba_u8());
+        gfx.push_texture(gpu, self.pixel(), &mut element);
+        gfx.register(element, &attr, gpu.size());
+        tree.attribs.insert(node_id, attr);
 
         if let Some(children) = self.children() {
-            storage.layout.insert_alignment(node_id, self.alignment());
-            storage.layout.set_next_pos(|pos| {
+            tree.layout.insert_alignment(node_id, self.alignment());
+            tree.layout.set_next_pos(|pos| {
                 pos.x = current_pos.x - half.width + self.padding();
                 pos.y = current_pos.y - half.height + self.padding();
             });
-            storage.layout.set_spacing(self.spacing());
-            storage.layout.set_padding(self.padding());
+            tree.layout.set_spacing(self.spacing());
+            tree.layout.set_padding(self.padding());
 
             children.iter().for_each(|child| {
-                child.prepare(gpu, gfx, storage);
+                child.prepare(gpu, gfx, tree);
             });
 
-            if let Some(parent_id) = storage.get_parent(node_id) {
-                storage.layout.reset_to_parent(*parent_id, current_pos, half);
+            if let Some(parent_id) = tree.get_parent(node_id) {
+                tree.layout.reset_to_parent(*parent_id, current_pos, half);
             }
         }
 
@@ -116,8 +116,8 @@ pub struct DynView(AnyView);
 impl View for DynView {
     fn id(&self) -> NodeId { self.0.id() }
 
-    fn shape(&self) -> Shape {
-        self.0.shape()
+    fn element(&self) -> Element {
+        self.0.element()
     }
 
     fn children(&self) -> Option<&[AnyView]> { self.0.children() }
@@ -128,8 +128,8 @@ impl View for DynView {
         self.0.layout(cx, attr);
     }
 
-    fn attribs(&self) -> Attributes {
-        self.0.attribs()
+    fn attributes(&self) -> Attributes {
+        self.0.attributes()
     }
 
     fn padding(&self) -> u32 { self.0.padding() }
@@ -159,16 +159,16 @@ pub struct TestTriangleWidget {
 impl TestTriangleWidget {
     pub fn new() -> Self {
         let id = NodeId::new();
-        let style = Style::new(Rgba::RED, (300, 300), ShapeKind::Triangle);
+        let style = Style::new(Rgba::RED, (300, 300), Shape::Triangle);
         Self { id, style }
     }
 
-    // pub fn style<F: FnMut(&mut Style)>(mut self, mut f: F) -> Self {
-    //     f(&mut self.style);
-    //     self
-    // }
+    pub fn style<F: FnMut(&mut Style)>(mut self, mut f: F) -> Self {
+        f(&mut self.style);
+        self
+    }
 
-    pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+    pub fn on_hover<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
         self
     }
@@ -189,7 +189,7 @@ impl View for TestTriangleWidget {
 
     fn children(&self) -> Option<&[Box<dyn View>]> { None }
 
-    fn shape(&self) -> Shape { Shape::filled(&self.style) }
+    fn element(&self) -> Element { Element::filled(&self.style) }
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
@@ -197,7 +197,7 @@ impl View for TestTriangleWidget {
         cx.assign_position(attr);
     }
 
-    fn attribs(&self) -> Attributes {
+    fn attributes(&self) -> Attributes {
         Attributes::new(self.style.get_dimensions())
     }
 
@@ -221,7 +221,7 @@ pub struct TestCircleWidget {
 impl TestCircleWidget {
     pub fn new() -> Self {
         let id = NodeId::new();
-        let style = Style::new(Rgba::RED, (300, 300), ShapeKind::Circle);
+        let style = Style::new(Rgba::RED, (300, 300), Shape::Circle);
         Self { id, style }
     }
 
@@ -230,7 +230,7 @@ impl TestCircleWidget {
         self
     }
 
-    pub fn on_hover<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+    pub fn on_hover<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
         self
     }
@@ -240,7 +240,7 @@ impl TestCircleWidget {
     //     self
     // }
 
-    pub fn on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
+    pub fn on_drag<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
         self
     }
@@ -251,7 +251,7 @@ impl View for TestCircleWidget {
 
     fn children(&self) -> Option<&[Box<dyn View>]> { None }
 
-    fn shape(&self) -> Shape { Shape::filled(&self.style) }
+    fn element(&self) -> Element { Element::filled(&self.style) }
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
@@ -259,7 +259,7 @@ impl View for TestCircleWidget {
         cx.assign_position(attr);
     }
 
-    fn attribs(&self) -> Attributes {
+    fn attributes(&self) -> Attributes {
         Attributes::new(self.style.get_dimensions())
     }
 

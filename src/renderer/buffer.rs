@@ -1,6 +1,6 @@
 use util::{cast_slice, Matrix4x4, Size};
 
-use crate::{shapes::{Attributes, Shape}, Pixel, Rgba};
+use crate::{element::{Attributes, Element}, Pixel, Rgba};
 use super::{Gpu, TextureData};
 
 const INITIAL_CAPACITY: u64 = 1024 * 4;
@@ -57,7 +57,7 @@ impl<T> Buffer<T> {
     fn uniform_bind_group_layout_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
         wgpu::BindGroupLayoutEntry {
             binding,
-            visibility: wgpu::ShaderStages::VERTEX,
+            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
             ty: wgpu::BindingType::Buffer {
                 ty: wgpu::BufferBindingType::Uniform,
                 has_dynamic_offset: false,
@@ -75,10 +75,10 @@ impl<T> Buffer<T> {
     }
 
     pub fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> bool {
-        let usage = self.buffer.usage();
         let data_size = self.data.len() * size_of::<T>();
         let realloc = data_size as u64 > self.buffer.size();
         if realloc {
+            let usage = self.buffer.usage();
             self.buffer = device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(self.label.as_str()),
                 size: self.buffer.size().next_power_of_two(),
@@ -104,7 +104,7 @@ impl<T> Buffer<T> {
 }
 
 pub struct Gfx {
-    pub shapes: Buffer<Shape>,
+    pub element: Buffer<Element>,
     pub transforms: Buffer<Matrix4x4>,
     pub bind_group: wgpu::BindGroup,
     pub textures: Vec<TextureData>,
@@ -115,43 +115,43 @@ impl Gfx {
     pub fn new(device: &wgpu::Device) -> Self {
         let indices = vec![];
         let textures = vec![];
-        let shapes = Buffer::<Shape>::storage(device, "shapes");
+        let element = Buffer::<Element>::storage(device, "element");
         let transforms = Buffer::<Matrix4x4>::storage(device, "transforms");
         let bind_group = Self::bind_group(device, &[
-            shapes.bind_group_entry(0),
+            element.bind_group_entry(0),
             transforms.bind_group_entry(1),
         ]);
 
-        Self { shapes, transforms, bind_group, indices, textures }
+        Self { element, transforms, bind_group, indices, textures }
     }
 
     pub fn count(&self) -> usize {
-        self.shapes.len()
+        self.element.len()
     }
 
     pub fn register(
         &mut self,
-        mut shape: Shape,
+        mut element: Element,
         attr: &Attributes,
         window_size: Size<u32>
     ) {
         let transform = attr.get_transform(window_size);
         let transform_id = self.transforms.len() as u32;
-        shape.transform_id = transform_id;
-        self.indices.extend_from_slice(&shape.indices());
+        element.transform_id = transform_id;
+        self.indices.extend_from_slice(&element.indices());
         self.transforms.push(transform);
-        self.shapes.push(shape);
+        self.element.push(element);
     }
 
     pub fn push_texture(
         &mut self,
         gpu: &Gpu,
         maybe_pixel: Option<&Pixel<Rgba<u8>>>,
-        shape: &mut Shape
+        element: &mut Element
     ) {
         if let Some(pixel) = maybe_pixel {
             let texture_id = self.textures.len() as i32;
-            shape.texture_id = texture_id;
+            element.texture_id = texture_id;
             let texture_data = TextureData::new(gpu, pixel);
             self.textures.push(texture_data);
         }
@@ -193,12 +193,12 @@ impl Gfx {
 
     pub fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
         let mut realloc = false;
-        realloc |= self.shapes.write(device, queue);
+        realloc |= self.element.write(device, queue);
         realloc |= self.transforms.write(device, queue);
 
         if realloc {
             self.bind_group = Self::bind_group(device, &[
-                self.shapes.bind_group_entry(0),
+                self.element.bind_group_entry(0),
                 self.transforms.bind_group_entry(1),
             ]);
         }
@@ -208,7 +208,7 @@ impl Gfx {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("gfx bind group layout"),
             entries: &[
-                Buffer::<Shape>::storage_bind_group_layout_entry(0),
+                Buffer::<Element>::storage_bind_group_layout_entry(0),
                 Buffer::<Matrix4x4>::storage_bind_group_layout_entry(1),
             ],
         })
@@ -226,55 +226,66 @@ impl Gfx {
     }
 }
 
+// const DEFAULT_SCREEN_SIZE: Size<u32> = Size::new(1600, 1200);
+
 pub struct Screen {
-    buffer: Buffer<Matrix4x4>,
+    transform: Buffer<Matrix4x4>,
+    size: Buffer<Size<u32>>,
     pub bind_group: wgpu::BindGroup,
-    initial_size: Size<u32>,
 }
 
 impl Screen {
     pub fn new(device: &wgpu::Device, initial_size: Size<u32>) -> Self {
-        let transform = Matrix4x4::IDENTITY;
-        let mut buffer = Buffer::uniform(device, "screen");
-        buffer.push(transform);
-        let bind_group = Self::bind_group(device, &buffer);
+        let mut transform = Buffer::uniform(device, "screen_transform");
+        let mut size = Buffer::uniform(device, "screen_size");
+        transform.push(Matrix4x4::IDENTITY);
+        size.push(initial_size);
+        let bind_group = Self::bind_group(device, &transform, &size);
         Self {
-            initial_size,
-            buffer,
-            bind_group
+            size,
+            transform,
+            bind_group,
         }
     }
 
     pub fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        self.buffer.write(device, queue);
+        self.transform.write(device, queue);
+        self.size.write(device, queue);
     }
 
     pub fn initial_size(&self) -> Size<u32> {
-        self.initial_size
+        self.size.data[0]
     }
 
-    pub fn update<F: FnMut(&mut Matrix4x4)>(&mut self, f: F) {
-        self.buffer.update(0, f);
+    pub fn update_transform<F: FnMut(&mut Matrix4x4)>(&mut self, f: F) {
+        self.transform.update(0, f);
     }
+
+    // pub fn update_size<F: FnMut(&mut Size<u32>)>(&mut self, f: F) {
+    //     self.size.update(0, f);
+    // }
 
     pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("screen bind group layout"),
             entries: &[
                 Buffer::<Matrix4x4>::uniform_bind_group_layout_entry(0),
+                Buffer::<Size<u32>>::uniform_bind_group_layout_entry(1),
             ],
         })
     }
 
     pub fn bind_group(
         device: &wgpu::Device,
-        buffer: &Buffer<Matrix4x4>,
+        transform: &Buffer<Matrix4x4>,
+        size: &Buffer<Size<u32>>,
     ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("screen bind group"),
             layout: &Self::bind_group_layout(device),
             entries: &[
-                buffer.bind_group_entry(0),
+                transform.bind_group_entry(0),
+                size.bind_group_entry(1),
             ],
         })
     }

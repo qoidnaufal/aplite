@@ -3,20 +3,20 @@ use crate::context::Cursor;
 use crate::Rgba;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ShapeKind {
+pub enum Shape {
     Circle,
     Rect,
     RoundedRect,
     Triangle,
 }
 
-impl ShapeKind {
+impl Shape {
     fn is_triangle(&self) -> bool { matches!(self, Self::Triangle) }
 
     fn is_rounded_rect(&self) -> bool { matches!(self, Self::RoundedRect) }
 }
 
-impl From<u32> for ShapeKind {
+impl From<u32> for Shape {
     fn from(num: u32) -> Self {
         match num {
             0 => Self::Circle,
@@ -38,13 +38,13 @@ impl std::ops::Deref for Indices<'_> {
     }
 }
 
-impl From<ShapeKind> for Indices<'_> {
-    fn from(kind: ShapeKind) -> Self {
-        match kind {
-            ShapeKind::Circle => Self::rectangle(),
-            ShapeKind::Rect => Self::rectangle(),
-            ShapeKind::RoundedRect => Self::rectangle(),
-            ShapeKind::Triangle => Self::triangle(),
+impl From<Shape> for Indices<'_> {
+    fn from(shape: Shape) -> Self {
+        match shape {
+            Shape::Circle => Self::rectangle(),
+            Shape::Rect => Self::rectangle(),
+            Shape::RoundedRect => Self::rectangle(),
+            Shape::Triangle => Self::triangle(),
         }
     }
 }
@@ -116,14 +116,14 @@ impl Attributes {
 
 #[repr(C, align(16))]
 #[derive(Debug, Clone, Copy)]
-pub struct Radius {
+pub struct Corners {
     top_left: f32,
     bot_left: f32,
     bot_right: f32,
     top_right: f32,
 }
 
-impl From<f32> for Radius {
+impl From<f32> for Corners {
     fn from(val: f32) -> Self {
         Self {
             top_left: val,
@@ -134,12 +134,19 @@ impl From<f32> for Radius {
     }
 }
 
-impl Radius {
+impl Corners {
     pub fn new_homogen(r: f32) -> Self {
         r.into()
     }
 
-    pub fn set_all(&mut self, r: f32) {
+    pub fn set_all(&mut self, tl: f32, bl: f32, br: f32, tr: f32) {
+        self.top_left = tl;
+        self.bot_left = bl;
+        self.bot_right = br;
+        self.top_right = tr;
+    }
+
+    pub fn set_each(&mut self, r: f32) {
         self.top_left = r;
         self.bot_left = r;
         self.bot_right = r;
@@ -167,8 +174,8 @@ pub struct Style {
     color: Rgba<u8>,
     outline: Rgba<u8>,
     dims: Size<u32>,
-    kind: ShapeKind,
-    radius: Radius,
+    shape: Shape,
+    corners: Corners,
     rotate: f32,
     stroke: f32,
 }
@@ -177,14 +184,14 @@ impl Style {
     pub fn new(
         color: Rgba<u8>,
         dims: impl Into<Size<u32>>,
-        kind: ShapeKind,
+        shape: Shape,
     ) -> Self {
         Self {
             color,
             outline: Rgba::BLACK,
             dims: dims.into(),
-            kind,
-            radius: if kind.is_rounded_rect() { 0.025.into() } else { 0.0.into() },
+            shape,
+            corners: if shape.is_rounded_rect() { 0.025.into() } else { 0.0.into() },
             rotate: 0.0,
             stroke: 0.0,
         }
@@ -206,12 +213,12 @@ impl Style {
         self.dims = size.into();
     }
 
-    pub fn set_kind(&mut self, kind: ShapeKind) {
-        self.kind = kind;
+    pub fn set_shape(&mut self, shape: Shape) {
+        self.shape = shape;
     }
 
-    pub fn set_radius<F: FnMut(&mut Radius)>(&mut self, mut f: F) {
-        f(&mut self.radius);
+    pub fn set_corners<F: FnMut(&mut Corners)>(&mut self, mut f: F) {
+        f(&mut self.corners);
     }
 
     pub fn set_rotation(&mut self, rotate: f32) {
@@ -225,24 +232,24 @@ impl Style {
 
 #[repr(C)]
 #[derive(Debug, Clone)]
-pub struct Shape {
+pub struct Element {
     color: Rgba<f32>,
     outline: Rgba<f32>,
-    radius: Radius,
-    kind: u32,
+    corners: Corners,
+    shape: u32,
     rotate: f32,
     stroke: f32,
     pub texture_id: i32,
     pub transform_id: u32,
 }
 
-impl Shape {
+impl Element {
     pub fn filled(style: &Style) -> Self {
         Self {
             color: style.color.into(),
             outline: style.outline.into(),
-            kind: style.kind as u32,
-            radius: style.radius,
+            shape: style.shape as u32,
+            corners: style.corners,
             rotate: style.rotate,
             stroke: style.stroke,
             texture_id: -1,
@@ -254,8 +261,8 @@ impl Shape {
         Self {
             color: style.color.into(),
             outline: style.outline.into(),
-            kind: style.kind as u32,
-            radius: style.radius,
+            shape: style.shape as u32,
+            corners: style.corners,
             rotate: style.rotate,
             stroke: style.stroke,
             texture_id: 0,
@@ -264,7 +271,7 @@ impl Shape {
     }
 
     pub fn indices<'a>(&self) -> Indices<'a> {
-        Indices::from(ShapeKind::from(self.kind))
+        Indices::from(Shape::from(self.shape))
     }
 
     pub fn rgba_u8(&self) -> Rgba<u8> {
@@ -292,7 +299,7 @@ impl Shape {
         let width = attr.dims.width as f32 / 2.0;
         let height = attr.dims.height as f32 / 2.0;
 
-        let angled = if ShapeKind::from(self.kind).is_triangle() {
+        let angled = if Shape::from(self.shape).is_triangle() {
             let c_tangen = tan(x_cursor - x, y_cursor - y + height);
             let t_tangen = tan(width / 2.0, height);
             (t_tangen - c_tangen).is_sign_negative()

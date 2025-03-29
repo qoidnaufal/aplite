@@ -10,7 +10,7 @@ use util::{Size, Vector2};
 
 use crate::context::Cursor;
 use crate::renderer::Renderer;
-use crate::storage::WidgetStorage;
+use crate::tree::WidgetTree;
 use crate::error::Error;
 use crate::IntoView;
 
@@ -54,7 +54,7 @@ impl Drop for Stats {
 
 struct App<F> {
     renderer: MaybeUninit<Renderer>,
-    storage: WidgetStorage,
+    tree: WidgetTree,
     cursor: Cursor,
     window: HashMap<WindowId, Arc<Window>>,
     stats: Stats,
@@ -70,7 +70,7 @@ where
         Self {
             renderer: MaybeUninit::uninit(),
             window: HashMap::new(),
-            storage: WidgetStorage::new(),
+            tree: WidgetTree::new(),
             cursor: Cursor::new(),
             stats: Stats::new(),
             view_fn: Some(view_fn),
@@ -83,17 +83,17 @@ where
         }
     }
 
-    fn resize(&mut self, size: Size<u32>) {
-        unsafe { self.renderer.assume_init_mut().resize(size) }
+    fn resize(&mut self, size: impl Into<Size<u32>>) {
+        unsafe { self.renderer.assume_init_mut().resize(size.into()) }
     }
 
     fn update(&mut self) {
         let renderer = unsafe { self.renderer.assume_init_mut() };
-        self.storage.submit_update(renderer);
+        self.tree.submit_update(renderer);
     }
 
     fn detect_update(&self, window_id: winit::window::WindowId) {
-        if self.storage.has_changed() {
+        if self.tree.has_changed() {
             self.request_redraw(window_id);
         }
     }
@@ -118,15 +118,10 @@ where
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         if let Some(view_fn) = self.view_fn.take() {
             let window = create_window(event_loop);
-            let renderer = Renderer::new(window.clone(), &mut self.storage, view_fn);
+            let renderer = Renderer::new(window.clone(), &mut self.tree, view_fn);
             self.window.insert(window.id(), window);
             self.renderer.write(renderer);
         }
-        // eprintln!("{} | {:?}", self.storage.nodes.len(), self.storage.nodes);
-        // self.storage.children.iter().for_each(|(node_id, vec)| {
-        //     eprintln!("{node_id:?} | {vec:?}")
-        // });
-        // eprintln!("{:#?}", unsafe { self.renderer.assume_init_ref().gfx.shapes.data.len() });
     }
 
     fn window_event(
@@ -170,18 +165,18 @@ where
                 self.stats.inc(elapsed);
             }
             WindowEvent::Resized(new_size) => {
-                self.resize(Size::new(new_size.width, new_size.height));
+                self.resize((new_size.width, new_size.height));
             }
             WindowEvent::MouseInput { state: action, button, .. } => {
                 let gfx = unsafe { &mut self.renderer.assume_init_mut().gfx };
                 self.cursor.set_click_state(action.into(), button.into());
-                self.storage.handle_click(&mut self.cursor, gfx);
+                self.tree.handle_click(&mut self.cursor, gfx);
             }
             WindowEvent::CursorMoved { position, .. } => {
                 let gfx = unsafe { &mut self.renderer.assume_init_mut().gfx };
                 self.cursor.hover.pos = Vector2::new(position.x as _, position.y as _);
-                self.storage.detect_hover(&mut self.cursor, gfx);
-                self.storage.handle_hover(&mut self.cursor, gfx);
+                self.tree.detect_hover(&mut self.cursor, gfx);
+                self.tree.handle_hover(&mut self.cursor, gfx);
             }
             _ => {}
         }

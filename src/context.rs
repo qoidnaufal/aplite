@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use util::{Size, Vector2};
-use crate::{shapes::Attributes, NodeId};
+use crate::{element::Attributes, NodeId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseAction {

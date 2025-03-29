@@ -3,13 +3,13 @@ use util::Vector2;
 
 use crate::context::{Cursor, LayoutCtx, MouseAction};
 use crate::renderer::{Gfx, Renderer};
-use crate::shapes::Attributes;
+use crate::element::Attributes;
 use crate::view::NodeId;
 use crate::callback::CALLBACKS;
 use crate::Rgba;
 
 #[derive(Debug)]
-pub struct WidgetStorage {
+pub struct WidgetTree {
     pub nodes: Vec<NodeId>,
     pub children: HashMap<NodeId, Vec<NodeId>>,
     pub parent: HashMap<NodeId, NodeId>,
@@ -19,7 +19,7 @@ pub struct WidgetStorage {
     pending_update: Vec<NodeId>,
 }
 
-impl Default for WidgetStorage {
+impl Default for WidgetTree {
     fn default() -> Self {
         Self {
             nodes: Vec::new(),
@@ -33,7 +33,7 @@ impl Default for WidgetStorage {
     }
 }
 
-impl WidgetStorage {
+impl WidgetTree {
     pub fn new() -> Self {
         Self::default()
     }
@@ -74,9 +74,9 @@ impl WidgetStorage {
     pub fn detect_hover(&self, cursor: &mut Cursor, gfx: &Gfx) {
         // let start = std::time::Instant::now();
         let hovered = self.nodes.iter().enumerate().filter_map(|(idx, node_id)| {
-            let shape = &gfx.shapes.data[idx];
+            let element = &gfx.element.data[idx];
             let attr = &self.attribs[node_id];
-            if shape.is_hovered(cursor, attr) {
+            if element.is_hovered(cursor, attr) {
                 Some(node_id)
             } else { None }
         }).min();
@@ -98,20 +98,20 @@ impl WidgetStorage {
         if let Some(ref prev_id) = cursor.hover.prev.take() {
             if let Some(cached) = self.cached_color.get(prev_id) {
                 let idx = self.nodes.iter().position(|node_id| node_id == prev_id).unwrap();
-                gfx.shapes.update(idx, |shape| shape.revert_color(*cached));
+                gfx.element.update(idx, |element| element.revert_color(*cached));
                 self.pending_update.push(*prev_id);
             }
         }
         if let Some(ref hover_id) = cursor.hover.curr {
             let idx = self.nodes.iter().position(|node_id| node_id == hover_id).unwrap();
-            gfx.shapes.update(idx, |shape| {
+            gfx.element.update(idx, |element| {
                 CALLBACKS.with_borrow_mut(|callbacks| {
-                    callbacks.handle_hover(hover_id, shape);
+                    callbacks.handle_hover(hover_id, element);
                     if cursor.is_dragging(*hover_id) {
                         if let Some(on_drag) = callbacks.on_drag.get_mut(hover_id) {
-                            on_drag(shape);
+                            on_drag(element);
                             if let Some(attribs) = self.attribs.get_mut(hover_id) {
-                                gfx.transforms.update(shape.transform_id as usize, |transform| {
+                                gfx.transforms.update(element.transform_id as usize, |transform| {
                                     attribs.set_position(cursor, transform);
                                 });
                             }
@@ -126,20 +126,20 @@ impl WidgetStorage {
     pub fn handle_click(&mut self, cursor: &mut Cursor, gfx: &mut Gfx) {
         if let Some(ref click_id) = cursor.click.obj {
             let idx = self.nodes.iter().position(|node_id| node_id == click_id).unwrap();
-            let shape = gfx.shapes.data.get_mut(idx).unwrap();
+            let element = gfx.element.data.get_mut(idx).unwrap();
             let attr = &self.attribs[click_id];
             cursor.click.delta = cursor.click.pos - Vector2::<f32>::from(attr.pos);
             CALLBACKS.with_borrow_mut(|callbacks| {
-                callbacks.handle_click(click_id, shape);
+                callbacks.handle_click(click_id, element);
                 self.pending_update.push(*click_id);
             });
         }
         if cursor.state.action == MouseAction::Released {
             if let Some(ref hover_id) = cursor.hover.curr {
                 let idx = self.nodes.iter().position(|node_id| node_id == hover_id).unwrap();
-                let shape = gfx.shapes.data.get_mut(idx).unwrap();
+                let element = gfx.element.data.get_mut(idx).unwrap();
                 CALLBACKS.with_borrow_mut(|callbacks| {
-                    callbacks.handle_hover(hover_id, shape);
+                    callbacks.handle_hover(hover_id, element);
                     self.pending_update.push(*hover_id);
                 });
             }
