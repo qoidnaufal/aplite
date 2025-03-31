@@ -171,38 +171,38 @@ impl Corners {
 }
 
 pub struct Style {
-    color: Rgba<u8>,
-    outline: Rgba<u8>,
+    fill_color: Rgba<u8>,
+    stroke_color: Rgba<u8>,
     dims: Size<u32>,
     shape: Shape,
     corners: Corners,
     rotate: f32,
-    stroke: f32,
+    stroke_width: f32,
 }
 
 impl Style {
     pub fn new(
-        color: Rgba<u8>,
+        fill_color: Rgba<u8>,
         dims: impl Into<Size<u32>>,
         shape: Shape,
     ) -> Self {
         Self {
-            color,
-            outline: Rgba::BLACK,
+            fill_color,
+            stroke_color: Rgba::BLACK,
             dims: dims.into(),
             shape,
             corners: if shape.is_rounded_rect() { 0.025.into() } else { 0.0.into() },
             rotate: 0.0,
-            stroke: 0.0,
+            stroke_width: 0.0,
         }
     }
 
-    pub fn set_fill(&mut self, color: impl Into<Rgba<u8>>) {
-        self.color = color.into();
+    pub fn set_fill_color(&mut self, color: impl Into<Rgba<u8>>) {
+        self.fill_color = color.into();
     }
 
-    pub fn set_outline(&mut self, color: impl Into<Rgba<u8>>) {
-        self.outline = color.into();
+    pub fn set_stroke_color(&mut self, color: impl Into<Rgba<u8>>) {
+        self.stroke_color = color.into();
     }
 
     pub fn get_dimensions(&self) -> Size<u32> {
@@ -225,20 +225,20 @@ impl Style {
         self.rotate = rotate;
     }
 
-    pub fn set_stroke(&mut self, stroke: f32) {
-        self.stroke = stroke;
+    pub fn set_stroke_width(&mut self, stroke: f32) {
+        self.stroke_width = stroke;
     }
 }
 
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct Element {
-    color: Rgba<f32>,
-    outline: Rgba<f32>,
+    fill_color: Rgba<f32>,
+    stroke_color: Rgba<f32>,
     corners: Corners,
     shape: u32,
     rotate: f32,
-    stroke: f32,
+    stroke_width: f32,
     pub texture_id: i32,
     pub transform_id: u32,
 }
@@ -246,12 +246,12 @@ pub struct Element {
 impl Element {
     pub fn filled(style: &Style) -> Self {
         Self {
-            color: style.color.into(),
-            outline: style.outline.into(),
+            fill_color: style.fill_color.into(),
+            stroke_color: style.stroke_color.into(),
             shape: style.shape as u32,
             corners: style.corners,
             rotate: style.rotate,
-            stroke: style.stroke,
+            stroke_width: style.stroke_width,
             texture_id: -1,
             transform_id: 0,
         }
@@ -259,12 +259,12 @@ impl Element {
 
     pub fn textured(style: &Style) -> Self {
         Self {
-            color: style.color.into(),
-            outline: style.outline.into(),
+            fill_color: style.fill_color.into(),
+            stroke_color: style.stroke_color.into(),
             shape: style.shape as u32,
             corners: style.corners,
             rotate: style.rotate,
-            stroke: style.stroke,
+            stroke_width: style.stroke_width,
             texture_id: 0,
             transform_id: 0,
         }
@@ -275,21 +275,24 @@ impl Element {
     }
 
     pub fn rgba_u8(&self) -> Rgba<u8> {
-        self.color.into()
+        self.fill_color.into()
     }
 
-    pub fn set_color<F: FnOnce(&mut Rgba<u8>)>(&mut self, f: F) {
-        let mut rgba = self.color.into();
+    pub fn set_fill_color<F: FnOnce(&mut Rgba<u8>)>(&mut self, f: F) {
+        let mut rgba = self.fill_color.into();
         f(&mut rgba);
-        self.color = rgba.into();
+        self.fill_color = rgba.into();
     }
 
     pub fn revert_color(&mut self, cached_color: Rgba<u8>) {
-        self.color = cached_color.into();
+        self.fill_color = cached_color.into();
     }
 
 
     pub fn is_hovered(&self, cursor: &Cursor, attr: &Attributes) -> bool {
+        // let rotate = Matrix2x2::rotate(self.rotate);
+        // let pos: Vector2<f32> = attr.pos.into();
+        // let p = rotate * pos;
         let x = attr.pos.x as f32;
         let y = attr.pos.y as f32;
 

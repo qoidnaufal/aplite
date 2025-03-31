@@ -7,15 +7,36 @@ pub struct Vector2<T> {
     pub y: T,
 }
 
-impl<T: Default> Default for Vector2<T> {
+impl<T> Default for Vector2<T>
+where T:
+    Default
+    + std::ops::Mul<T, Output = T>
+    + std::ops::Add<T, Output = T>,
+{
     fn default() -> Self {
         Self::new(T::default(), T::default())
     }
 }
 
-impl<T: Default> Vector2<T> {
+impl<T> Vector2<T>
+where T:
+    Default
+    + std::ops::Mul<T, Output = T>
+    + std::ops::Add<T, Output = T>,
+{
     pub fn new(x: T, y: T) -> Self {
         Self { x, y }
+    }
+
+    pub fn dot(self, rhs: Self) -> T {
+        self.x * rhs.x + self.y * rhs.y
+    }
+
+    pub fn cross(self, rhs: Self) -> Self {
+        Self {
+            x: self.x * rhs.x,
+            y: self.y * rhs.y,
+        }
     }
 }
 
