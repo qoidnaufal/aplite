@@ -61,7 +61,7 @@ impl Indices<'_> {
 
 // pub struct Vertices<'a>(&'a [Vector2<f32>]);
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Attributes {
     pub pos: Vector2<u32>,
     pub dims: Size<u32>,

@@ -88,18 +88,18 @@ pub trait View {
             tree.layout.insert_alignment(node_id, self.alignment());
             tree.layout.insert_spacing(node_id, self.spacing());
             tree.layout.insert_padding(node_id, self.padding());
+            tree.layout.set_spacing(&node_id);
+            tree.layout.set_padding(&node_id);
             tree.layout.set_next_pos(|pos| {
                 pos.x = current_pos.x - half.width + self.padding();
                 pos.y = current_pos.y - half.height + self.padding();
             });
-            tree.layout.set_spacing(self.spacing());
-            tree.layout.set_padding(self.padding());
 
             children.iter().for_each(|child| {
                 child.prepare(gpu, gfx, tree);
             });
 
-            if let Some(parent_id) = tree.get_parent(node_id) {
+            if let Some(parent_id) = tree.get_parent(&node_id) {
                 tree.layout.reset_to_parent(*parent_id, current_pos, half);
             }
         }

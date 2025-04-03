@@ -41,11 +41,11 @@ impl Callbacks {
         }
     }
 
-    pub fn handle_drag(&mut self, node_id: &NodeId, element: &mut Element) {
-        if let Some(on_drag) = self.on_drag.get_mut(node_id) {
-            on_drag(element)
-        }
-    }
+    // pub fn handle_drag(&mut self, node_id: &NodeId, element: &mut Element) {
+    //     if let Some(on_drag) = self.on_drag.get_mut(node_id) {
+    //         on_drag(element)
+    //     }
+    // }
 
     pub fn handle_hover(&mut self, node_id: &NodeId, element: &mut Element) {
         if let Some(on_hover) = self.on_hover.get_mut(node_id) {

@@ -157,9 +157,7 @@ impl Default for LayoutCtx {
 }
 
 impl LayoutCtx {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     pub fn insert_alignment(&mut self, node_id: NodeId, alignment: Alignment) {
         self.alignment_storage.insert(node_id, alignment);
@@ -173,21 +171,12 @@ impl LayoutCtx {
         self.padding_storage.insert(node_id, padding);
     }
 
-    pub fn get_spacing(&self, node_id: &NodeId) -> u32 {
-        self.spacing_storage[node_id]
-    }
+    pub fn get_spacing(&self) -> u32 { self.spacing }
 
-    pub fn get_padding(&self, node_id: &NodeId) -> u32 {
-        self.padding_storage[node_id]
-    }
+    pub fn get_padding(&self) -> u32 { self.padding }
 
-    pub fn set_to_parent_alignment(&mut self, parent_id: &NodeId) {
-        let parent_alignment = self.alignment_storage[parent_id];
-        self.alignment = parent_alignment;
-    }
-
-    fn is_aligned_vertically(&self) -> bool {
-        matches!(self.alignment, Alignment::Vertical)
+    pub fn set_to_parent_alignment(&mut self, parent_id: NodeId) {
+        self.alignment = self.alignment_storage[&parent_id];
     }
 
     pub fn align_vertically(&mut self) {
@@ -202,23 +191,26 @@ impl LayoutCtx {
         f(&mut self.next_pos);
     }
 
-    pub fn set_spacing(&mut self, spacing: u32) { self.spacing = spacing }
+    pub fn set_spacing(&mut self, node_id: &NodeId) {
+        self.spacing = self.spacing_storage[node_id];
+    }
 
-    pub fn set_padding(&mut self, padding: u32) { self.padding = padding }
+    pub fn set_padding(&mut self, node_id: &NodeId) {
+        self.padding = self.padding_storage[node_id];
+    }
 
     pub fn assign_position(&mut self, attribs: &mut Attributes) {
         let half = attribs.dims / 2;
         attribs.pos = self.next_pos + half;
-
-        let is_aligned_vertically = self.is_aligned_vertically();
         let spacing = self.spacing;
-        self.set_next_pos(|next_pos| {
-            if is_aligned_vertically {
-                next_pos.y = attribs.pos.y + half.height + spacing;
-            } else {
-                next_pos.x = attribs.pos.x + half.width + spacing;
+        match self.alignment {
+            Alignment::Vertical => {
+                self.set_next_pos(|p| p.y = attribs.pos.y + half.height + spacing);
             }
-        });
+            Alignment::Horizontal => {
+                self.set_next_pos(|p| p.x = attribs.pos.x + half.width + spacing);
+            }
+        }
     }
 
     pub fn reset_to_parent(
@@ -227,18 +219,25 @@ impl LayoutCtx {
         current_pos: Vector2<u32>,
         half: Size<u32>
     ) {
-        let parent_alignment = self.alignment_storage[&parent_id];
-        self.alignment = parent_alignment;
-        let is_aligned_vertically = self.is_aligned_vertically();
+        self.set_to_parent_alignment(parent_id);
         let padding = self.padding;
-        self.set_next_pos(|pos| {
-            if is_aligned_vertically {
-                pos.x = current_pos.x - half.width;
-                pos.y = current_pos.y + half.height + padding;
-            } else {
-                pos.y = current_pos.y - half.height;
-                pos.x = current_pos.x + half.width + padding;
+        match self.alignment {
+            Alignment::Vertical => {
+                self.set_next_pos(|pos| {
+                    pos.x = current_pos.x - half.width;
+                    pos.y = current_pos.y + half.height + padding;
+                });
             }
-        });
+            Alignment::Horizontal => {
+                self.set_next_pos(|pos| {
+                    pos.y = current_pos.y - half.height;
+                    pos.x = current_pos.x + half.width + padding;
+                });
+            }
+        }
+    }
+
+    pub fn print_alignment(&self, node_id: &NodeId) {
+        eprintln!("{node_id:?} | {:?}", self.alignment)
     }
 }

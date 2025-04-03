@@ -52,8 +52,8 @@ impl WidgetTree {
         self.parent.insert(node_id, parent_id);
     }
 
-    pub fn get_parent(&self, node_id: NodeId) -> Option<&NodeId> {
-        self.parent.get(&node_id)
+    pub fn get_parent(&self, node_id: &NodeId) -> Option<&NodeId> {
+        self.parent.get(node_id)
     }
 
     // fn get_children(&self, node_id: NodeId) -> Option<&Vec<NodeId>> {
@@ -139,29 +139,41 @@ impl WidgetTree {
                     let delta = cursor.hover.pos - cursor.click.offset;
                     attribs.set_position(delta, transform);
                 });
+            }
+            self.handle_child_relayout(hover_id, transforms);
+        }
+    }
 
-                self.layout.set_to_parent_alignment(hover_id);
-                let spacing = self.layout.get_spacing(hover_id);
-                let padding = self.layout.get_padding(hover_id);
-                self.layout.set_spacing(spacing);
-                self.layout.set_padding(padding);
-                self.layout.set_next_pos(|next_pos| {
-                    next_pos.x = attribs.pos.x - attribs.dims.width / 2 + padding;
-                    next_pos.y = attribs.pos.y - attribs.dims.height / 2 + padding;
+    fn handle_child_relayout(
+        &mut self,
+        node_id: &NodeId,
+        transforms: &mut Buffer<Matrix4x4>,
+    ) {
+        if let Some(children) = self.children.get(node_id).cloned() {
+            let attr = self.attribs[node_id];
+            let padding = self.layout.get_padding();
+            self.layout.set_to_parent_alignment(*node_id);
+            self.layout.set_spacing(node_id);
+            self.layout.set_padding(node_id);
+            self.layout.set_next_pos(|next_pos| {
+                next_pos.x = attr.pos.x - attr.dims.width / 2 + padding;
+                next_pos.y = attr.pos.y - attr.dims.height / 2 + padding;
+            });
+
+            children.iter().for_each(|child_id| {
+                let idx = self.nodes.iter().position(|node_id| node_id == child_id).unwrap();
+                transforms.update(idx, |child_transform| {
+                    if let Some(child_attribs) = self.attribs.get_mut(child_id) {
+                        self.layout.assign_position(child_attribs);
+                        child_attribs.set_position(child_attribs.pos.into(), child_transform);
+                    }
                 });
 
-                if let Some(children) = self.children.get(hover_id) {
-                    children.iter().for_each(|child_id| {
+                self.handle_child_relayout(child_id, transforms);
+            });
 
-                        let idx = self.nodes.iter().position(|node_id| node_id == child_id).unwrap();
-                        transforms.update(idx, |child_transform| {
-                            if let Some(child_attribs) = self.attribs.get_mut(child_id) {
-                                self.layout.assign_position(child_attribs);
-                                child_attribs.set_position(child_attribs.pos.into(), child_transform);
-                            }
-                        });
-                    });
-                }
+            if let Some(parent_id) = self.get_parent(node_id) {
+                self.layout.reset_to_parent(*parent_id, attr.pos, attr.dims / 2);
             }
         }
     }

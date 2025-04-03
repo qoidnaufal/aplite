@@ -116,7 +116,8 @@ fn root() -> impl IntoView {
             TestCircleWidget::new()
                 .style(|style| {
                     style.set_stroke_width(10.);
-                    style.set_stroke_color(Rgba::GREEN);
+                    style.set_fill_color(Rgba::BLACK);
+                    style.set_stroke_color(Rgba::RED);
                 })
                 .on_hover(hover)
                 .into_any(),
