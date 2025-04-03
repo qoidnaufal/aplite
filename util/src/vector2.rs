@@ -184,6 +184,15 @@ impl<T> From<(T, T)> for Vector2<T> {
     }
 }
 
+impl<T> From<Size<T>> for Vector2<T> {
+    fn from(size: Size<T>) -> Self {
+        Self {
+            x: size.width,
+            y: size.height,
+        }
+    }
+}
+
 impl<T> PartialEq for Vector2<T>
 where T:
     PartialEq<T>

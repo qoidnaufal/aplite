@@ -122,6 +122,7 @@ fn root() -> impl IntoView {
                 .into_any(),
         ])
         .style(|style| style.set_fill_color(Rgba::new(69, 69, 69, 255)))
+        .on_drag(drag)
         .into_any(),
         TestCircleWidget::new()
             .style(|style| {

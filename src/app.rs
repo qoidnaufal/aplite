@@ -173,10 +173,10 @@ where
                 self.tree.handle_click(&mut self.cursor, gfx);
             }
             WindowEvent::CursorMoved { position, .. } => {
-                let gfx = unsafe { &mut self.renderer.assume_init_mut().gfx };
+                let renderer = unsafe { self.renderer.assume_init_mut() };
                 self.cursor.hover.pos = Vector2::new(position.x as _, position.y as _);
-                self.tree.detect_hover(&mut self.cursor, gfx);
-                self.tree.handle_hover(&mut self.cursor, gfx);
+                self.tree.detect_hover(&mut self.cursor, &mut renderer.gfx);
+                self.tree.handle_hover(&mut self.cursor, &mut renderer.gfx);
             }
             _ => {}
         }

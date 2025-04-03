@@ -93,8 +93,8 @@ impl Attributes {
     pub fn get_transform(&self, window_size: Size<u32>) -> Matrix4x4 {
         let mut matrix = Matrix4x4::IDENTITY;
         let ws: Size<f32> = window_size.into();
-        let x = (self.pos.x as f32 / ws.width - 0.5) * 2.0;
-        let y = (0.5 - self.pos.y as f32 / ws.height) * 2.0;
+        let x = self.pos.x as f32 / ws.width * 2.0 - 1.0;
+        let y = 1.0 - self.pos.y as f32 / ws.height * 2.0;
         let d: Size<f32> = self.dims.into();
         let scale = d / ws;
         matrix.transform(x, y, scale.width, scale.height);
@@ -103,13 +103,12 @@ impl Attributes {
 
     pub fn set_position(
         &mut self,
-        cursor: &Cursor,
+        new_pos: Vector2<f32>,
         transform: &mut Matrix4x4,
     ) {
-        let delta = cursor.hover.pos - cursor.click.delta;
-        self.pos = delta.into();
-        let x = (delta.x / (self.dims.width as f32 / transform[0].x) - 0.5) * 2.0;
-        let y = (0.5 - delta.y / (self.dims.height as f32 / transform[1].y)) * 2.0;
+        self.pos = new_pos.into();
+        let x = self.pos.x as f32 / (self.dims.width as f32 / transform[0].x) * 2.0 - 1.0;
+        let y = 1.0 - self.pos.y as f32 / (self.dims.height as f32 / transform[1].y) * 2.0;
         transform.translate(x, y);
     }
 }

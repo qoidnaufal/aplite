@@ -72,7 +72,7 @@ pub trait View {
         tree: &mut WidgetTree,
     ) {
         let node_id = self.id();
-        if tree.is_root(node_id) { self.build_tree(tree) }
+        if tree.is_root(&node_id) { self.build_tree(tree) }
         let mut element = self.element();
         let mut attr = self.attributes();
         self.layout(&mut tree.layout, &mut attr);
@@ -86,6 +86,8 @@ pub trait View {
 
         if let Some(children) = self.children() {
             tree.layout.insert_alignment(node_id, self.alignment());
+            tree.layout.insert_spacing(node_id, self.spacing());
+            tree.layout.insert_padding(node_id, self.padding());
             tree.layout.set_next_pos(|pos| {
                 pos.x = current_pos.x - half.width + self.padding();
                 pos.y = current_pos.y - half.height + self.padding();

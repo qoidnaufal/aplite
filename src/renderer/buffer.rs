@@ -104,7 +104,7 @@ impl<T> Buffer<T> {
 }
 
 pub struct Gfx {
-    pub element: Buffer<Element>,
+    pub elements: Buffer<Element>,
     pub transforms: Buffer<Matrix4x4>,
     pub bind_group: wgpu::BindGroup,
     pub textures: Vec<TextureData>,
@@ -122,11 +122,11 @@ impl Gfx {
             transforms.bind_group_entry(1),
         ]);
 
-        Self { element, transforms, bind_group, indices, textures }
+        Self { elements: element, transforms, bind_group, indices, textures }
     }
 
     pub fn count(&self) -> usize {
-        self.element.len()
+        self.elements.len()
     }
 
     pub fn register(
@@ -140,7 +140,7 @@ impl Gfx {
         element.transform_id = transform_id;
         self.indices.extend_from_slice(&element.indices());
         self.transforms.push(transform);
-        self.element.push(element);
+        self.elements.push(element);
     }
 
     pub fn push_texture(
@@ -193,12 +193,12 @@ impl Gfx {
 
     pub fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
         let mut realloc = false;
-        realloc |= self.element.write(device, queue);
+        realloc |= self.elements.write(device, queue);
         realloc |= self.transforms.write(device, queue);
 
         if realloc {
             self.bind_group = Self::bind_group(device, &[
-                self.element.bind_group_entry(0),
+                self.elements.bind_group_entry(0),
                 self.transforms.bind_group_entry(1),
             ]);
         }

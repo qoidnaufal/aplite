@@ -1,11 +1,11 @@
 use std::collections::HashMap;
-use util::Vector2;
+use util::{Matrix4x4, Vector2};
 
 use crate::context::{Cursor, LayoutCtx, MouseAction};
-use crate::renderer::{Gfx, Renderer};
-use crate::element::Attributes;
+use crate::renderer::{Buffer, Gfx, Renderer};
+use crate::element::{Attributes, Element};
 use crate::view::NodeId;
-use crate::callback::CALLBACKS;
+use crate::callback::{Callbacks, CALLBACKS};
 use crate::Rgba;
 
 #[derive(Debug)]
@@ -39,11 +39,13 @@ impl WidgetTree {
     }
 
     pub fn insert_children(&mut self, node_id: NodeId, child_id: NodeId) {
-        self
+        let child_vec = self
             .children
             .entry(node_id)
-            .or_insert(vec![child_id])
-            .push(child_id);
+            .or_insert(vec![child_id]);
+        if !child_vec.contains(&child_id) {
+            child_vec.push(child_id);
+        }
     }
 
     pub fn insert_parent(&mut self, node_id: NodeId, parent_id: NodeId) {
@@ -58,7 +60,7 @@ impl WidgetTree {
     //     self.children.get(&node_id)
     // }
 
-    pub fn is_root(&self, node_id: NodeId) -> bool {
+    pub fn is_root(&self, node_id: &NodeId) -> bool {
         self.parent.get(&node_id).is_none()
     }
 
@@ -74,7 +76,7 @@ impl WidgetTree {
     pub fn detect_hover(&self, cursor: &mut Cursor, gfx: &Gfx) {
         // let start = std::time::Instant::now();
         let hovered = self.nodes.iter().enumerate().filter_map(|(idx, node_id)| {
-            let element = &gfx.element.data[idx];
+            let element = &gfx.elements.data[idx];
             let attr = &self.attribs[node_id];
             if element.is_hovered(cursor, attr) {
                 Some(node_id)
@@ -98,24 +100,23 @@ impl WidgetTree {
         if let Some(ref prev_id) = cursor.hover.prev.take() {
             if let Some(cached) = self.cached_color.get(prev_id) {
                 let idx = self.nodes.iter().position(|node_id| node_id == prev_id).unwrap();
-                gfx.element.update(idx, |element| element.revert_color(*cached));
+                gfx.elements.update(idx, |element| element.revert_color(*cached));
                 self.pending_update.push(*prev_id);
             }
         }
         if let Some(ref hover_id) = cursor.hover.curr {
             let idx = self.nodes.iter().position(|node_id| node_id == hover_id).unwrap();
-            gfx.element.update(idx, |element| {
+            gfx.elements.update(idx, |element| {
                 CALLBACKS.with_borrow_mut(|callbacks| {
                     callbacks.handle_hover(hover_id, element);
                     if cursor.is_dragging(*hover_id) {
-                        if let Some(on_drag) = callbacks.on_drag.get_mut(hover_id) {
-                            on_drag(element);
-                            if let Some(attribs) = self.attribs.get_mut(hover_id) {
-                                gfx.transforms.update(element.transform_id as usize, |transform| {
-                                    attribs.set_position(cursor, transform);
-                                });
-                            }
-                        }
+                        self.handle_drag(
+                            hover_id,
+                            cursor,
+                            callbacks,
+                            element,
+                            &mut gfx.transforms,
+                        );
                     }
                 });
             });
@@ -123,12 +124,54 @@ impl WidgetTree {
         }
     }
 
+    fn handle_drag(
+        &mut self,
+        hover_id: &NodeId,
+        cursor: &Cursor,
+        callbacks: &mut Callbacks,
+        element: &mut Element,
+        transforms: &mut Buffer<Matrix4x4>,
+    ) {
+        if let Some(on_drag) = callbacks.on_drag.get_mut(hover_id) {
+            on_drag(element);
+            if let Some(attribs) = self.attribs.get_mut(hover_id) {
+                transforms.update(element.transform_id as usize, |transform| {
+                    let delta = cursor.hover.pos - cursor.click.offset;
+                    attribs.set_position(delta, transform);
+                });
+
+                self.layout.set_to_parent_alignment(hover_id);
+                let spacing = self.layout.get_spacing(hover_id);
+                let padding = self.layout.get_padding(hover_id);
+                self.layout.set_spacing(spacing);
+                self.layout.set_padding(padding);
+                self.layout.set_next_pos(|next_pos| {
+                    next_pos.x = attribs.pos.x - attribs.dims.width / 2 + padding;
+                    next_pos.y = attribs.pos.y - attribs.dims.height / 2 + padding;
+                });
+
+                if let Some(children) = self.children.get(hover_id) {
+                    children.iter().for_each(|child_id| {
+
+                        let idx = self.nodes.iter().position(|node_id| node_id == child_id).unwrap();
+                        transforms.update(idx, |child_transform| {
+                            if let Some(child_attribs) = self.attribs.get_mut(child_id) {
+                                self.layout.assign_position(child_attribs);
+                                child_attribs.set_position(child_attribs.pos.into(), child_transform);
+                            }
+                        });
+                    });
+                }
+            }
+        }
+    }
+
     pub fn handle_click(&mut self, cursor: &mut Cursor, gfx: &mut Gfx) {
         if let Some(ref click_id) = cursor.click.obj {
             let idx = self.nodes.iter().position(|node_id| node_id == click_id).unwrap();
-            let element = gfx.element.data.get_mut(idx).unwrap();
-            let attr = &self.attribs[click_id];
-            cursor.click.delta = cursor.click.pos - Vector2::<f32>::from(attr.pos);
+            let element = gfx.elements.data.get_mut(idx).unwrap();
+            let pos = self.attribs[click_id].pos;
+            cursor.click.offset = cursor.click.pos - Vector2::<f32>::from(pos);
             CALLBACKS.with_borrow_mut(|callbacks| {
                 callbacks.handle_click(click_id, element);
                 self.pending_update.push(*click_id);
@@ -137,7 +180,7 @@ impl WidgetTree {
         if cursor.state.action == MouseAction::Released {
             if let Some(ref hover_id) = cursor.hover.curr {
                 let idx = self.nodes.iter().position(|node_id| node_id == hover_id).unwrap();
-                let element = gfx.element.data.get_mut(idx).unwrap();
+                let element = gfx.elements.data.get_mut(idx).unwrap();
                 CALLBACKS.with_borrow_mut(|callbacks| {
                     callbacks.handle_hover(hover_id, element);
                     self.pending_update.push(*hover_id);

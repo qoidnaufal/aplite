@@ -8,7 +8,7 @@ use std::sync::Arc;
 use winit::window::Window;
 use util::Size;
 
-pub use buffer::{Gfx, Screen};
+pub use buffer::{Gfx, Screen, Buffer};
 pub use pipeline::pipeline;
 pub use gpu::Gpu;
 pub use shader::SHADER;
@@ -133,7 +133,7 @@ impl Renderer {
         let mut idx_offset: u32 = 0;
 
         for i in 0..self.gfx.count() {
-            let element = &self.gfx.element.data[i];
+            let element = &self.gfx.elements.data[i];
             let idx_len = element.indices().len() as u32;
             let draw_offset = i as u32;
 
