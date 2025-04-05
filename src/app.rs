@@ -8,7 +8,7 @@ use winit::event::WindowEvent;
 use winit::application::ApplicationHandler;
 use util::{Size, Vector2};
 
-use crate::context::Cursor;
+use crate::cursor::Cursor;
 use crate::renderer::Renderer;
 use crate::tree::WidgetTree;
 use crate::error::Error;
@@ -175,7 +175,7 @@ where
             WindowEvent::CursorMoved { position, .. } => {
                 let renderer = unsafe { self.renderer.assume_init_mut() };
                 self.cursor.hover.pos = Vector2::new(position.x as _, position.y as _);
-                self.tree.detect_hover(&mut self.cursor, &mut renderer.gfx);
+                self.tree.detect_hover(&mut self.cursor, &renderer.gfx);
                 self.tree.handle_hover(&mut self.cursor, &mut renderer.gfx);
             }
             _ => {}

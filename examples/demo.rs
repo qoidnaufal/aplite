@@ -2,7 +2,7 @@ use learn_wgpu::*;
 
 fn root() -> impl IntoView {
     let counter = Signal::new(0i32);
-    eprintln!("{:?} {}", counter.id(), counter.get());
+    eprintln!("{}", counter.get());
 
     let c1 = counter.clone();
     let inc = move |el: &mut Element| {
@@ -18,10 +18,10 @@ fn root() -> impl IntoView {
         el.set_fill_color(|color| color.r += 150);
     };
 
-    let hover = move |el: &mut Element| {
+    let hover = |el: &mut Element| {
         el.set_fill_color(|color| *color = Rgba::BLUE);
     };
-    let drag = move |el: &mut Element| {
+    let drag = |el: &mut Element| {
         el.set_fill_color(|color| *color = Rgba::GREEN);
     };
 
@@ -131,7 +131,7 @@ fn dummy() -> impl IntoView {
         .on_drag(drag)
 }
 
-fn main() -> Result<(), Error> {
+fn main() -> AppResult {
     let mut args = std::env::args();
     match args.nth(1) {
         Some(arg) if arg == "dummy" => launch(dummy),

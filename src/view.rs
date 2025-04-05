@@ -5,7 +5,7 @@ mod hstack;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::context::{Alignment, LayoutCtx};
+use crate::layout::{Orientation, LayoutCtx};
 use crate::tree::WidgetTree;
 use crate::renderer::{Gfx, Gpu};
 use crate::element::{Attributes, Element, Shape, Style};
@@ -23,7 +23,7 @@ pub use {
 pub struct NodeId(pub u64);
 
 impl NodeId {
-    fn new() -> Self {
+    pub fn new() -> Self {
         static NODE_ID: AtomicU64 = AtomicU64::new(0);
         Self(NODE_ID.fetch_add(1, Ordering::Relaxed))
     }
@@ -51,7 +51,7 @@ pub trait View {
 
     fn padding(&self) -> u32;
     fn spacing(&self) -> u32;
-    fn alignment(&self) -> Alignment;
+    fn orientation(&self) -> Orientation;
     fn attributes(&self) -> Attributes;
     fn layout(&self, cx: &mut LayoutCtx, attribs: &mut Attributes);
 
@@ -85,7 +85,7 @@ pub trait View {
         tree.attribs.insert(node_id, attr);
 
         if let Some(children) = self.children() {
-            tree.layout.insert_alignment(node_id, self.alignment());
+            tree.layout.insert_alignment(node_id, self.orientation());
             tree.layout.insert_spacing(node_id, self.spacing());
             tree.layout.insert_padding(node_id, self.padding());
             tree.layout.set_spacing(&node_id);
@@ -138,7 +138,7 @@ impl View for DynView {
 
     fn spacing(&self) -> u32 { self.0.spacing() }
 
-    fn alignment(&self) -> Alignment { self.0.alignment() }
+    fn orientation(&self) -> Orientation { self.0.orientation() }
 }
 
 impl<F, IV> IntoView for F
@@ -166,7 +166,6 @@ impl TestTriangleWidget {
     }
 
     pub fn style<F: FnMut(&mut Style)>(mut self, mut f: F) -> Self {
-        // need to create a subscription method to signal
         f(&mut self.style);
         self
     }
@@ -208,7 +207,7 @@ impl View for TestTriangleWidget {
 
     fn spacing(&self) -> u32 { 0 }
 
-    fn alignment(&self) -> Alignment { Alignment::Vertical }
+    fn orientation(&self) -> Orientation { Orientation::Vertical }
 }
 
 impl IntoView for TestTriangleWidget {
@@ -270,7 +269,7 @@ impl View for TestCircleWidget {
 
     fn spacing(&self) -> u32 { 0 }
 
-    fn alignment(&self) -> Alignment { Alignment::Vertical }
+    fn orientation(&self) -> Orientation { Orientation::Vertical }
 }
 
 impl IntoView for TestCircleWidget {

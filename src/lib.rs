@@ -1,8 +1,9 @@
 mod app;
 mod callback;
 mod color;
+mod cursor;
 mod error;
-mod context;
+mod layout;
 mod renderer;
 mod element;
 mod signal;
@@ -16,3 +17,4 @@ pub use signal::Signal;
 pub use view::*;
 pub use error::Error;
 
+pub type AppResult = Result<(), Error>;

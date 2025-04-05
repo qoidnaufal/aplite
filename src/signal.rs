@@ -9,7 +9,7 @@ thread_local! {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct SignalId(u64);
+pub(crate) struct SignalId(u64);
 
 impl SignalId {
     fn new() -> Self {
@@ -45,7 +45,7 @@ impl<T: Clone + 'static> Signal<T> {
         signal
     }
 
-    pub fn id(&self) -> SignalId { self.id }
+    pub(crate) fn id(&self) -> SignalId { self.id }
 
     pub fn borrow(&self) -> MutexGuard<'_, T> {
         self.value.lock().unwrap()
@@ -65,7 +65,7 @@ impl<T: Clone + 'static> Signal<T> {
 unsafe impl<T> Send for Signal<T> {}
 unsafe impl<T> Sync for Signal<T> {}
 
-pub struct AnySignal {
+pub(crate) struct AnySignal {
     id: SignalId,
     value: Arc<dyn Any>,
 }
@@ -125,7 +125,7 @@ impl SignalRuntime {
         self.storage.insert(id, signal.into());
     }
 
-    pub fn get<T: Clone + 'static>(&self, id: &SignalId) -> Option<Signal<T>> {
+    pub(crate) fn get<T: Clone + 'static>(&self, id: &SignalId) -> Option<Signal<T>> {
         self.storage.get(id).map(|any| any.into())
     }
 

@@ -1,4 +1,4 @@
-use crate::context::{Alignment, LayoutCtx};
+use crate::layout::{Orientation, LayoutCtx};
 use crate::element::{Attributes, Element, Shape, Style};
 use crate::callback::CALLBACKS;
 use crate::{Pixel, Rgba};
@@ -62,7 +62,7 @@ impl View for Button {
 
     fn spacing(&self) -> u32 { 0 }
 
-    fn alignment(&self) -> Alignment { Alignment::Vertical }
+    fn orientation(&self) -> Orientation { Orientation::Vertical }
 }
 
 impl IntoView for Button {

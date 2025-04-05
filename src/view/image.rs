@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::context::{Alignment, LayoutCtx};
+use crate::layout::{Orientation, LayoutCtx};
 use crate::renderer::image_reader;
 use crate::element::{Attributes, Element, Shape, Style};
 use crate::callback::CALLBACKS;
@@ -69,7 +69,7 @@ impl View for Image {
 
     fn spacing(&self) -> u32 { 0 }
 
-    fn alignment(&self) -> Alignment { Alignment::Vertical }
+    fn orientation(&self) -> Orientation { Orientation::Vertical }
 }
 
 impl IntoView for Image {

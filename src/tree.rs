@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use util::{Matrix4x4, Vector2};
 
-use crate::context::{Cursor, LayoutCtx, MouseAction};
+use crate::layout::LayoutCtx;
+use crate::cursor::{Cursor, MouseAction};
 use crate::renderer::{Buffer, Gfx, Renderer};
 use crate::element::{Attributes, Element};
 use crate::view::NodeId;
@@ -11,8 +12,8 @@ use crate::Rgba;
 #[derive(Debug)]
 pub struct WidgetTree {
     pub nodes: Vec<NodeId>,
-    pub children: HashMap<NodeId, Vec<NodeId>>,
-    pub parent: HashMap<NodeId, NodeId>,
+    children: HashMap<NodeId, Vec<NodeId>>,
+    parent: HashMap<NodeId, NodeId>,
     pub attribs: HashMap<NodeId, Attributes>,
     pub cached_color: HashMap<NodeId, Rgba<u8>>,
     pub layout: LayoutCtx,
@@ -34,11 +35,11 @@ impl Default for WidgetTree {
 }
 
 impl WidgetTree {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub fn insert_children(&mut self, node_id: NodeId, child_id: NodeId) {
+    pub(crate) fn insert_children(&mut self, node_id: NodeId, child_id: NodeId) {
         let child_vec = self
             .children
             .entry(node_id)
@@ -52,7 +53,7 @@ impl WidgetTree {
         self.parent.insert(node_id, parent_id);
     }
 
-    pub fn get_parent(&self, node_id: &NodeId) -> Option<&NodeId> {
+    pub(crate) fn get_parent(&self, node_id: &NodeId) -> Option<&NodeId> {
         self.parent.get(node_id)
     }
 
@@ -60,20 +61,20 @@ impl WidgetTree {
     //     self.children.get(&node_id)
     // }
 
-    pub fn is_root(&self, node_id: &NodeId) -> bool {
-        self.parent.get(&node_id).is_none()
+    pub(crate) fn is_root(&self, node_id: &NodeId) -> bool {
+        !self.parent.contains_key(&node_id)
     }
 
-    pub fn has_changed(&self) -> bool {
+    pub(crate) fn has_changed(&self) -> bool {
         !self.pending_update.is_empty()
     }
 
-    pub fn submit_update(&mut self, renderer: &mut Renderer) {
+    pub(crate) fn submit_update(&mut self, renderer: &mut Renderer) {
         self.pending_update.clear();
         renderer.update();
     }
 
-    pub fn detect_hover(&self, cursor: &mut Cursor, gfx: &Gfx) {
+    pub(crate) fn detect_hover(&self, cursor: &mut Cursor, gfx: &Gfx) {
         // let start = std::time::Instant::now();
         let hovered = self.nodes.iter().enumerate().filter_map(|(idx, node_id)| {
             let element = &gfx.elements.data[idx];
@@ -93,7 +94,7 @@ impl WidgetTree {
         }
     }
 
-    pub fn handle_hover(&mut self, cursor: &mut Cursor, gfx: &mut Gfx) {
+    pub(crate) fn handle_hover(&mut self, cursor: &mut Cursor, gfx: &mut Gfx) {
         if cursor.is_hovering_same_obj() && cursor.click.obj.is_none() {
             return;
         }
@@ -152,7 +153,7 @@ impl WidgetTree {
         if let Some(children) = self.children.get(node_id).cloned() {
             let attr = self.attribs[node_id];
             let padding = self.layout.get_padding();
-            self.layout.set_to_parent_alignment(*node_id);
+            self.layout.set_to_parent_orientation(*node_id);
             self.layout.set_spacing(node_id);
             self.layout.set_padding(node_id);
             self.layout.set_next_pos(|next_pos| {
@@ -178,7 +179,7 @@ impl WidgetTree {
         }
     }
 
-    pub fn handle_click(&mut self, cursor: &mut Cursor, gfx: &mut Gfx) {
+    pub(crate) fn handle_click(&mut self, cursor: &mut Cursor, gfx: &mut Gfx) {
         if let Some(ref click_id) = cursor.click.obj {
             let idx = self.nodes.iter().position(|node_id| node_id == click_id).unwrap();
             let element = gfx.elements.data.get_mut(idx).unwrap();

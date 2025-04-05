@@ -1,5 +1,5 @@
 use crate::callback::CALLBACKS;
-use crate::context::{Alignment, LayoutCtx};
+use crate::layout::{Orientation, LayoutCtx};
 use crate::{Pixel, Rgba};
 use crate::element::{Attributes, Element, Shape, Style};
 use super::{AnyView, IntoView, NodeId, View};
@@ -76,7 +76,7 @@ impl View for HStack {
 
     fn spacing(&self) -> u32 { 20 }
 
-    fn alignment(&self) -> Alignment { Alignment::Horizontal }
+    fn orientation(&self) -> Orientation { Orientation::Horizontal }
 }
 
 impl IntoView for HStack {

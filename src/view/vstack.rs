@@ -1,5 +1,5 @@
 use crate::callback::CALLBACKS;
-use crate::context::{Alignment, LayoutCtx};
+use crate::layout::{Orientation, LayoutCtx};
 use crate::{Pixel, Rgba};
 use crate::element::{Attributes, Element, Shape, Style};
 
@@ -77,7 +77,7 @@ impl View for VStack {
 
     fn spacing(&self) -> u32 { 20 }
 
-    fn alignment(&self) -> Alignment { Alignment::Vertical }
+    fn orientation(&self) -> Orientation { Orientation::Vertical }
 }
 
 impl IntoView for VStack {

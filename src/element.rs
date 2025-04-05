@@ -1,5 +1,6 @@
 use util::{tan, Matrix4x4, Size, Vector2};
-use crate::context::Cursor;
+use crate::layout::Alignment;
+use crate::cursor::Cursor;
 use crate::Rgba;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,7 +30,7 @@ impl From<u32> for Shape {
 }
 
 #[derive(Debug, Clone)]
-pub struct Indices<'a>(&'a [u32]);
+pub(crate) struct Indices<'a>(&'a [u32]);
 
 impl std::ops::Deref for Indices<'_> {
     type Target = [u32];
@@ -171,13 +172,16 @@ impl Corners {
 
 #[derive(Clone, Copy)]
 pub struct Style {
+    alignment: Alignment,
+    dims: Size<u32>,
     fill_color: Rgba<u8>,
     stroke_color: Rgba<u8>,
-    dims: Size<u32>,
     shape: Shape,
     corners: Corners,
     rotate: f32,
     stroke_width: f32,
+    padding: u32,
+    spacing: u32,
 }
 
 impl Style {
@@ -187,13 +191,16 @@ impl Style {
         shape: Shape,
     ) -> Self {
         Self {
+            alignment: Default::default(),
+            dims: dims.into(),
             fill_color,
             stroke_color: Rgba::BLACK,
-            dims: dims.into(),
             shape,
             corners: if shape.is_rounded_rect() { 0.025.into() } else { 0.0.into() },
             rotate: 0.0,
             stroke_width: 0.0,
+            padding: 0,
+            spacing: 0,
         }
     }
 
@@ -203,10 +210,6 @@ impl Style {
 
     pub fn set_stroke_color(&mut self, color: impl Into<Rgba<u8>>) {
         self.stroke_color = color.into();
-    }
-
-    pub fn get_dimensions(&self) -> Size<u32> {
-        self.dims
     }
 
     pub fn set_dimensions(&mut self, size: impl Into<Size<u32>>) {
@@ -227,6 +230,14 @@ impl Style {
 
     pub fn set_stroke_width(&mut self, stroke: f32) {
         self.stroke_width = stroke;
+    }
+
+    pub fn set_padding(&mut self, padding: u32) { self.padding = padding }
+
+    pub fn set_spacing(&mut self, spacing: u32) { self.spacing = spacing }
+
+    pub(crate) fn get_dimensions(&self) -> Size<u32> {
+        self.dims
     }
 }
 
@@ -270,7 +281,7 @@ impl Element {
         }
     }
 
-    pub fn indices<'a>(&self) -> Indices<'a> {
+    pub(crate) fn indices<'a>(&self) -> Indices<'a> {
         Indices::from(Shape::from(self.shape))
     }
 
@@ -284,12 +295,12 @@ impl Element {
         self.fill_color = rgba.into();
     }
 
-    pub fn revert_color(&mut self, cached_color: Rgba<u8>) {
+    pub(crate) fn revert_color(&mut self, cached_color: Rgba<u8>) {
         self.fill_color = cached_color.into();
     }
 
 
-    pub fn is_hovered(&self, cursor: &Cursor, attr: &Attributes) -> bool {
+    pub(crate) fn is_hovered(&self, cursor: &Cursor, attr: &Attributes) -> bool {
         // let rotate = Matrix2x2::rotate(self.rotate);
         // let pos: Vector2<f32> = attr.pos.into();
         // let p = rotate * pos;
