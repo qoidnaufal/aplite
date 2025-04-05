@@ -169,6 +169,7 @@ impl Corners {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct Style {
     fill_color: Rgba<u8>,
     stroke_color: Rgba<u8>,

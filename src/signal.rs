@@ -1,48 +1,135 @@
-use std::{cell::RefCell, ops::DerefMut, rc::Rc};
+use std::any::Any;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+thread_local! {
+    pub static SIGNAL_RUNTIME: RefCell<SignalRuntime> = RefCell::new(SignalRuntime::default());
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SignalId(u64);
+
+impl SignalId {
+    fn new() -> Self {
+        static SIGNAL_ID: AtomicU64 = AtomicU64::new(0);
+        Self(SIGNAL_ID.fetch_add(1, Ordering::Relaxed))
+    }
+}
 
 #[derive(Clone)]
 pub struct Signal<T> {
-    read: SignalRead<T>,
-    write: SignalWrite<T>,
+    id: SignalId,
+    value: Arc<Mutex<T>>,
 }
 
-impl<T: Clone> Signal<T> {
+impl<T> PartialEq for Signal<T>
+where
+    T: PartialEq + Eq + Clone + 'static,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.get() == other.get()
+    }
+}
+
+impl<T> Eq for Signal<T> where T: PartialEq + Eq + Clone + 'static {}
+
+impl<T: Clone + 'static> Signal<T> {
     pub fn new(value: T) -> Self {
-        let v = Rc::new(RefCell::new(value));
+        let signal = Self {
+            id: SignalId::new(),
+            value: Arc::new(Mutex::new(value)),
+        };
+        SIGNAL_RUNTIME.with_borrow_mut(|rt| rt.insert(signal.id(), &signal));
+        signal
+    }
+
+    pub fn id(&self) -> SignalId { self.id }
+
+    pub fn borrow(&self) -> MutexGuard<'_, T> {
+        self.value.lock().unwrap()
+    }
+
+    pub fn get(&self) -> T { (*self.borrow()).clone() }
+
+    pub fn set<F>(&self, f: F)
+    where
+        F: FnOnce(&mut T) + 'static,
+    {
+        f(&mut self.borrow());
+        SIGNAL_RUNTIME.with_borrow_mut(|rt| rt.push_update(self.id()))
+    }
+}
+
+unsafe impl<T> Send for Signal<T> {}
+unsafe impl<T> Sync for Signal<T> {}
+
+pub struct AnySignal {
+    id: SignalId,
+    value: Arc<dyn Any>,
+}
+
+impl AnySignal {
+    fn id(&self) -> SignalId { self.id }
+
+    fn cast<T: Clone + 'static>(&self) -> T {
+        self.value.downcast_ref::<T>().unwrap().clone()
+    }
+}
+
+impl<T: Clone + 'static> From<Signal<T>> for AnySignal {
+    fn from(signal: Signal<T>) -> Self {
         Self {
-            read: SignalRead(v.clone()),
-            write: SignalWrite(v),
+            id: signal.id(),
+            value: Arc::new(signal.get()),
         }
     }
+}
 
-    pub fn get(&self) -> T {
-        self.read.get()
-    }
-
-    pub fn set<F: FnOnce(&mut T) + 'static>(&self, f: F) {
-        self.write.set(f);
+impl<T: Clone + 'static> From<&Signal<T>> for AnySignal {
+    fn from(signal: &Signal<T>) -> Self {
+        Self {
+            id: signal.id(),
+            value: Arc::new(signal.get()),
+        }
     }
 }
 
-#[derive(Clone)]
-pub struct SignalRead<T>(Rc<RefCell<T>>);
-
-impl<T: Clone> SignalRead<T> {
-    pub fn get(&self) -> T {
-        let val = self.0.as_ref().borrow();
-        val.clone()
+impl<T: Clone + 'static> From<AnySignal> for Signal<T> {
+    fn from(any: AnySignal) -> Self {
+        Self {
+            id: any.id(),
+            value: Arc::new(Mutex::new(any.cast())),
+        }
     }
 }
 
-#[derive(Clone)]
-pub struct SignalWrite<T>(Rc<RefCell<T>>);
-
-impl<T: Clone> SignalWrite<T> {
-    pub fn set<F: FnOnce(&mut T) + 'static>(&self, f: F) {
-        let mut val = self.0.borrow_mut();
-        let v = val.deref_mut();
-        f(v)
+impl<T: Clone + 'static> From<&AnySignal> for Signal<T> {
+    fn from(any: &AnySignal) -> Self {
+        Self {
+            id: any.id(),
+            value: Arc::new(Mutex::new(any.cast())),
+        }
     }
 }
 
-pub struct SignalRuntime {}
+#[derive(Default)]
+pub struct SignalRuntime {
+    storage: HashMap<SignalId, AnySignal>,
+    updated: Vec<SignalId>,
+}
+
+impl SignalRuntime {
+    pub fn insert(&mut self, id: SignalId, signal: impl Into<AnySignal>) {
+        self.storage.insert(id, signal.into());
+    }
+
+    pub fn get<T: Clone + 'static>(&self, id: &SignalId) -> Option<Signal<T>> {
+        self.storage.get(id).map(|any| any.into())
+    }
+
+    fn push_update(&mut self, id: SignalId) {
+        self.updated.push(id);
+    }
+}

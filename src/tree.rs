@@ -192,7 +192,7 @@ impl WidgetTree {
         if cursor.state.action == MouseAction::Released {
             if let Some(ref hover_id) = cursor.hover.curr {
                 let idx = self.nodes.iter().position(|node_id| node_id == hover_id).unwrap();
-                let element = gfx.elements.data.get_mut(idx).unwrap();
+                let element = &mut gfx.elements.data[idx];
                 CALLBACKS.with_borrow_mut(|callbacks| {
                     callbacks.handle_hover(hover_id, element);
                     self.pending_update.push(*hover_id);

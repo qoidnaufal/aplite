@@ -166,6 +166,7 @@ impl TestTriangleWidget {
     }
 
     pub fn style<F: FnMut(&mut Style)>(mut self, mut f: F) -> Self {
+        // need to create a subscription method to signal
         f(&mut self.style);
         self
     }
