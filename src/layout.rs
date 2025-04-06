@@ -33,13 +33,14 @@ pub enum Orientation {
     Horizontal,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct LayoutCtx {
-    next_pos: Vector2<u32>,
+    attributes: HashMap<NodeId, Attributes>,
     orientation_storage: HashMap<NodeId, Orientation>,
     alignment_storage: HashMap<NodeId, Alignment>,
     spacing_storage: HashMap<NodeId, u32>,
     padding_storage: HashMap<NodeId, u32>,
+    next_pos: Vector2<u32>,
     orientation: Orientation,
     spacing: u32,
     padding: u32,
@@ -48,11 +49,12 @@ pub struct LayoutCtx {
 impl Default for LayoutCtx {
     fn default() -> Self {
         Self {
-            next_pos: Vector2::new(0, 0),
+            attributes: HashMap::new(),
             orientation_storage: HashMap::new(),
             alignment_storage: HashMap::new(),
             spacing_storage: HashMap::new(),
             padding_storage: HashMap::new(),
+            next_pos: Vector2::new(0, 0),
             orientation: Orientation::Vertical,
             spacing: 0,
             padding: 0,
@@ -61,73 +63,83 @@ impl Default for LayoutCtx {
 }
 
 impl LayoutCtx {
-    pub fn new() -> Self { Self::default() }
+    pub(crate) fn new() -> Self { Self::default() }
 
-    pub fn insert_alignment(&mut self, node_id: NodeId, alignment: Orientation) {
-        self.orientation_storage.insert(node_id, alignment);
+    pub(crate) fn insert_attributes(&mut self, node_id: NodeId, dims: Size<u32>) {
+        let attributes = Attributes::new(dims);
+        self.attributes.insert(node_id, attributes);
     }
 
-    pub fn insert_spacing(&mut self, node_id: NodeId, spacing: u32) {
+    pub(crate) fn get_attributes(&self, node_id: &NodeId) -> Attributes {
+        self.attributes[node_id]
+    }
+
+    pub(crate) fn get_attributes_mut(&mut self, node_id: &NodeId) -> Option<&mut Attributes> {
+        self.attributes.get_mut(node_id)
+    }
+
+    pub(crate) fn insert_orientation(&mut self, node_id: NodeId, orientation: Orientation) {
+        self.orientation_storage.insert(node_id, orientation);
+    }
+
+    pub(crate) fn insert_spacing(&mut self, node_id: NodeId, spacing: u32) {
         self.spacing_storage.insert(node_id, spacing);
     }
 
-    pub fn insert_padding(&mut self, node_id: NodeId, padding: u32) {
+    pub(crate) fn insert_padding(&mut self, node_id: NodeId, padding: u32) {
         self.padding_storage.insert(node_id, padding);
     }
 
-    pub fn get_spacing(&self) -> u32 { self.spacing }
-
-    pub fn get_padding(&self) -> u32 { self.padding }
-
-    pub fn set_to_parent_orientation(&mut self, parent_id: NodeId) {
-        self.orientation = self.orientation_storage[&parent_id];
+    pub(crate) fn set_orientation(&mut self, node_id: &NodeId) {
+        self.orientation = self.orientation_storage[node_id];
     }
 
-    fn get_parent_orientation(&self, parent_id: NodeId) -> Option<&Orientation> {
-        self.orientation_storage.get(&parent_id)
-    }
-
-    pub fn align_vertically(&mut self) {
-        self.orientation = Orientation::Vertical;
-    }
-
-    pub fn align_horizontally(&mut self) {
-        self.orientation = Orientation::Horizontal;
-    }
-
-    pub fn set_next_pos<F: FnMut(&mut Vector2<u32>)>(&mut self, mut f: F) {
+    pub(crate) fn set_next_pos<F: FnMut(&mut Vector2<u32>)>(&mut self, mut f: F) {
         f(&mut self.next_pos);
     }
 
-    pub fn set_spacing(&mut self, node_id: &NodeId) {
+    pub(crate) fn spacing(&self, node_id: &NodeId) -> u32 {
+        self.spacing_storage[node_id]
+    }
+
+    pub(crate) fn set_spacing(&mut self, node_id: &NodeId) {
         self.spacing = self.spacing_storage[node_id];
     }
 
-    pub fn set_padding(&mut self, node_id: &NodeId) {
+    pub(crate) fn padding(&self, node_id: &NodeId) -> u32 {
+        self.padding_storage[node_id]
+    }
+
+    pub(crate) fn set_padding(&mut self, node_id: &NodeId) {
         self.padding = self.padding_storage[node_id];
     }
 
-    pub fn assign_position(&mut self, attribs: &mut Attributes) {
-        let half = attribs.dims / 2;
-        attribs.pos = self.next_pos + half;
+    pub(crate) fn assign_position(&mut self, node_id: &NodeId) -> Attributes {
         let spacing = self.spacing;
-        match self.orientation {
-            Orientation::Vertical => {
-                self.set_next_pos(|p| p.y = attribs.pos.y + half.height + spacing);
-            }
-            Orientation::Horizontal => {
-                self.set_next_pos(|p| p.x = attribs.pos.x + half.width + spacing);
-            }
+        if let Some(attribs) = self.attributes.get_mut(node_id) {
+            let half = attribs.dims / 2;
+            attribs.pos = self.next_pos + half;
+            let pos = attribs.pos;
+            match self.orientation {
+                Orientation::Vertical => {
+                    self.set_next_pos(|p| p.y = pos.y + half.height + spacing);
+                }
+                Orientation::Horizontal => {
+                    self.set_next_pos(|p| p.x = pos.x + half.width + spacing);
+                }
+            };
         }
+
+        self.get_attributes(node_id)
     }
 
-    pub fn reset_to_parent(
+    pub(crate) fn reset_to_parent(
         &mut self,
         parent_id: NodeId,
         current_pos: Vector2<u32>,
         half: Size<u32>
     ) {
-        self.set_to_parent_orientation(parent_id);
+        self.set_orientation(&parent_id);
         let padding = self.padding;
         match self.orientation {
             Orientation::Vertical => {

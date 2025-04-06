@@ -2,7 +2,7 @@
 Learn the inner process of a gui, especially the gpu-rendered one.<br>
 Highly inspired by:
 - [`leptos`](https://github.com/leptos-rs/leptos)
-- [`cushy`](https://github.com/khonsulabs/cushy),
+- [`cushy`](https://github.com/khonsulabs/cushy)
 - [`floem`](https://github.com/lapce/floem)
 - [`kludgine`](https://github.com/khonsulabs/kludgine)
 - [`vger-rs`](https://github.com/audulus/vger-rs)

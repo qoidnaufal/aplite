@@ -25,8 +25,8 @@ fn root() -> impl IntoView {
         el.set_fill_color(|color| *color = Rgba::GREEN);
     };
 
-    vstack([
-        hstack([
+    stack([
+        stack([
             image("assets/image1.jpg").into_any(),
             image("assets/image2.jpg").on_drag(drag).into_any(),
             TestTriangleWidget::new()
@@ -40,10 +40,16 @@ fn root() -> impl IntoView {
                 .on_hover(hover)
                 .into_any(),
         ])
+        .style(|style| {
+            style.set_orientation(Orientation::Horizontal);
+            style.set_fill_color(Rgba::YELLOW);
+            style.set_padding(20);
+            style.set_spacing(20);
+        })
         .on_drag(drag)
         .into_any(),
-        hstack([
-            vstack([
+        stack([
+            stack([
                 button()
                     .style(|style| {
                         style.set_stroke_width(10.);
@@ -86,7 +92,11 @@ fn root() -> impl IntoView {
                     .into_any(),
             ])
             .on_drag(drag)
-            .style(|style| style.set_fill_color(Rgba::new(111, 72, 234, 255)))
+            .style(|style| {
+                style.set_fill_color(Rgba::new(111, 72, 234, 255));
+                style.set_padding(20);
+                style.set_spacing(20);
+            })
             .into_any(),
             TestCircleWidget::new()
                 .style(|style| {
@@ -97,7 +107,12 @@ fn root() -> impl IntoView {
                 .on_hover(hover)
                 .into_any(),
         ])
-        .style(|style| style.set_fill_color(Rgba::new(69, 69, 69, 255)))
+        .style(|style| {
+            style.set_fill_color(Rgba::new(69, 69, 69, 255));
+            style.set_orientation(Orientation::Horizontal);
+            style.set_padding(20);
+            style.set_spacing(20);
+        })
         .on_drag(drag)
         .into_any(),
         TestCircleWidget::new()
@@ -110,6 +125,10 @@ fn root() -> impl IntoView {
             .on_hover(hover)
             .into_any(),
     ])
+    .style(|style| {
+        style.set_padding(20);
+        style.set_spacing(20);
+    })
 }
 
 fn dummy() -> impl IntoView {

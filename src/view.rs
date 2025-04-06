@@ -1,22 +1,20 @@
 mod button;
 mod image;
-mod vstack;
-mod hstack;
+mod stack;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::layout::{Orientation, LayoutCtx};
+use crate::layout::LayoutCtx;
 use crate::tree::WidgetTree;
 use crate::renderer::{Gfx, Gpu};
 use crate::element::{Attributes, Element, Shape, Style};
-use crate::{Pixel, Rgba};
+use crate::{Orientation, Pixel, Rgba};
 use crate::callback::CALLBACKS;
 
 pub use {
     button::*,
     image::*,
-    vstack::*,
-    hstack::*,
+    stack::*,
 };
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -48,21 +46,49 @@ pub trait View {
     fn element(&self) -> Element;
     fn children(&self) -> Option<&[AnyView]>;
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>>;
-
-    fn padding(&self) -> u32;
-    fn spacing(&self) -> u32;
-    fn orientation(&self) -> Orientation;
-    fn attributes(&self) -> Attributes;
-    fn layout(&self, cx: &mut LayoutCtx, attribs: &mut Attributes);
+    fn style(&self) -> Style;
+    fn layout(&self, cx: &mut LayoutCtx) -> Attributes;
 
     fn build_tree(&self, tree: &mut WidgetTree) {
+        let node_id = self.id();
         if let Some(children) = self.children() {
             children.iter().for_each(|child| {
-                tree.insert_children(self.id(), child.id());
-                tree.insert_parent(child.id(), self.id());
+                tree.insert_children(node_id, child.id());
+                tree.insert_parent(child.id(), node_id);
                 child.build_tree(tree);
             });
         }
+    }
+
+    fn calculate_dimensions(&self, cx: &mut LayoutCtx) {
+        let style = self.style();
+        let mut size = style.dimensions();
+        if let Some(children) = self.children() {
+            children.iter().for_each(|child| {
+                child.calculate_dimensions(cx);
+                let child_size = cx.get_attributes(&child.id()).dims;
+                match style.orientation() {
+                    Orientation::Vertical => {
+                        size.height += child_size.height;
+                        size.width = size.width.max(child_size.width + style.padding() * 2);
+                    }
+                    Orientation::Horizontal => {
+                        size.height = size.height.max(child_size.height + style.padding() * 2);
+                        size.width += child_size.width - 1;
+                    }
+                }
+            });
+            let child_len = children.len() as u32;
+            match style.orientation() {
+                Orientation::Vertical => {
+                    size.height += style.padding() * 2 + style.spacing() * (child_len - 1);
+                },
+                Orientation::Horizontal => {
+                    size.width += style.padding() * 2 + style.spacing() * (child_len - 1);
+                },
+            }
+        }
+        cx.insert_attributes(self.id(), size);
     }
 
     fn prepare(
@@ -72,27 +98,24 @@ pub trait View {
         tree: &mut WidgetTree,
     ) {
         let node_id = self.id();
-        if tree.is_root(&node_id) { self.build_tree(tree) }
-        let mut element = self.element();
-        let mut attr = self.attributes();
-        self.layout(&mut tree.layout, &mut attr);
+        if tree.is_root(&node_id) {
+            self.build_tree(tree);
+            self.calculate_dimensions(&mut tree.layout);
+        }
+        let attr = self.layout(&mut tree.layout);
         let half = attr.dims / 2;
         let current_pos = attr.pos;
+        let mut element = self.element();
         tree.nodes.push(node_id);
-        tree.cached_color.insert(node_id, element.rgba_u8());
+        tree.cached_color.insert(node_id, element.fill_color());
         gfx.push_texture(gpu, self.pixel(), &mut element);
         gfx.register(element, &attr, gpu.size());
-        tree.attribs.insert(node_id, attr);
 
         if let Some(children) = self.children() {
-            tree.layout.insert_alignment(node_id, self.orientation());
-            tree.layout.insert_spacing(node_id, self.spacing());
-            tree.layout.insert_padding(node_id, self.padding());
-            tree.layout.set_spacing(&node_id);
-            tree.layout.set_padding(&node_id);
+            let padding = tree.layout.padding(&node_id);
             tree.layout.set_next_pos(|pos| {
-                pos.x = current_pos.x - half.width + self.padding();
-                pos.y = current_pos.y - half.height + self.padding();
+                pos.x = current_pos.x - half.width + padding;
+                pos.y = current_pos.y - half.height + padding;
             });
 
             children.iter().for_each(|child| {
@@ -126,19 +149,11 @@ impl View for DynView {
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { self.0.pixel() }
 
-    fn layout(&self, cx: &mut LayoutCtx, attr: &mut Attributes) {
-        self.0.layout(cx, attr);
+    fn style(&self) -> Style { self.0.style() }
+
+    fn layout(&self, cx: &mut LayoutCtx) -> Attributes {
+        self.0.layout(cx)
     }
-
-    fn attributes(&self) -> Attributes {
-        self.0.attributes()
-    }
-
-    fn padding(&self) -> u32 { self.0.padding() }
-
-    fn spacing(&self) -> u32 { self.0.spacing() }
-
-    fn orientation(&self) -> Orientation { self.0.orientation() }
 }
 
 impl<F, IV> IntoView for F
@@ -175,15 +190,15 @@ impl TestTriangleWidget {
         self
     }
 
-    // pub fn on_click<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
-    //     CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
-    //     self
-    // }
+    pub fn on_click<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
+        self
+    }
 
-    // pub fn on_drag<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
-    //     CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
-    //     self
-    // }
+    pub fn on_drag<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
+        self
+    }
 }
 
 impl View for TestTriangleWidget {
@@ -195,19 +210,12 @@ impl View for TestTriangleWidget {
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
-    fn layout(&self, cx: &mut LayoutCtx, attr: &mut Attributes) {
-        cx.assign_position(attr);
+    fn layout(&self, cx: &mut LayoutCtx) -> Attributes {
+        // cx.insert_attributes(self.id, self.style.dimensions());
+        cx.assign_position(&self.id)
     }
 
-    fn attributes(&self) -> Attributes {
-        Attributes::new(self.style.get_dimensions())
-    }
-
-    fn padding(&self) -> u32 { 0 }
-
-    fn spacing(&self) -> u32 { 0 }
-
-    fn orientation(&self) -> Orientation { Orientation::Vertical }
+    fn style(&self) -> Style { self.style }
 }
 
 impl IntoView for TestTriangleWidget {
@@ -237,10 +245,10 @@ impl TestCircleWidget {
         self
     }
 
-    // pub fn on_click<F: FnMut(&mut Shape) + 'static>(self, f: F) -> Self {
-    //     CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
-    //     self
-    // }
+    pub fn on_click<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
+        CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
+        self
+    }
 
     pub fn on_drag<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
         CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
@@ -257,19 +265,12 @@ impl View for TestCircleWidget {
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
-    fn layout(&self, cx: &mut LayoutCtx, attr: &mut Attributes) {
-        cx.assign_position(attr);
+    fn layout(&self, cx: &mut LayoutCtx) -> Attributes {
+        // cx.insert_attributes(self.id, self.style.dimensions());
+        cx.assign_position(&self.id)
     }
 
-    fn attributes(&self) -> Attributes {
-        Attributes::new(self.style.get_dimensions())
-    }
-
-    fn padding(&self) -> u32 { 0 }
-
-    fn spacing(&self) -> u32 { 0 }
-
-    fn orientation(&self) -> Orientation { Orientation::Vertical }
+    fn style(&self) -> Style { self.style }
 }
 
 impl IntoView for TestCircleWidget {

@@ -16,5 +16,6 @@ pub use element::Element;
 pub use signal::Signal;
 pub use view::*;
 pub use error::Error;
+pub use layout::{Alignment, HAlignment, VAlignment, Orientation};
 
 pub type AppResult = Result<(), Error>;

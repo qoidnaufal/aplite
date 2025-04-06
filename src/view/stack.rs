@@ -1,21 +1,26 @@
-use crate::layout::LayoutCtx;
-use crate::element::{Attributes, Element, Shape, Style};
 use crate::callback::CALLBACKS;
+use crate::layout::{Orientation, LayoutCtx};
 use crate::{Pixel, Rgba};
+use crate::element::{Attributes, Element, Shape, Style};
+
 use super::{AnyView, IntoView, NodeId, View};
 
-pub fn button() -> Button { Button::new() }
+pub fn stack(child_nodes: impl IntoIterator<Item = AnyView>) -> Stack {
+    Stack::new(child_nodes)
+}
 
-pub struct Button {
+pub struct Stack {
     id: NodeId,
+    children: Vec<Box<dyn View>>,
     style: Style,
 }
 
-impl Button {
-    fn new() -> Self {
+impl Stack {
+    fn new(child_nodes: impl IntoIterator<Item = AnyView>) -> Self {
         let id = NodeId::new();
-        let style = Style::new(Rgba::RED, (200, 50), Shape::RoundedRect);
-        Self { id, style }
+        let children = child_nodes.into_iter().collect();
+        let style = Style::new(Rgba::DARK_GRAY, (1, 1), Shape::Rect);
+        Self { id, children, style }
     }
 
     pub fn style<F: FnMut(&mut Style)>(mut self, mut f: F) -> Self {
@@ -39,25 +44,31 @@ impl Button {
     }
 }
 
-impl View for Button {
+impl View for Stack {
     fn id(&self) -> NodeId { self.id }
 
-    fn children(&self) -> Option<&[AnyView]> { None }
+    fn children(&self) -> Option<&[AnyView]> { Some(&self.children) }
 
-    fn element(&self) -> Element {
-        Element::filled(&self.style)
-    }
+    fn element(&self) -> Element { Element::filled(&self.style) }
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
     fn layout(&self, cx: &mut LayoutCtx) -> Attributes {
+        let style = self.style();
+        cx.insert_orientation(self.id, style.orientation());
+        cx.insert_spacing(self.id, style.spacing());
+        cx.insert_padding(self.id, style.padding());
+        
+        cx.set_orientation(&self.id);
+        cx.set_spacing(&self.id);
+        cx.set_padding(&self.id);
         cx.assign_position(&self.id)
     }
 
     fn style(&self) -> Style { self.style }
 }
 
-impl IntoView for Button {
+impl IntoView for Stack {
     type V = Self;
     fn into_view(self) -> Self::V { self }
 }

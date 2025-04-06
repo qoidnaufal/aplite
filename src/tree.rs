@@ -4,7 +4,7 @@ use util::{Matrix4x4, Vector2};
 use crate::layout::LayoutCtx;
 use crate::cursor::{Cursor, MouseAction};
 use crate::renderer::{Buffer, Gfx, Renderer};
-use crate::element::{Attributes, Element};
+use crate::element::Element;
 use crate::view::NodeId;
 use crate::callback::{Callbacks, CALLBACKS};
 use crate::Rgba;
@@ -14,7 +14,6 @@ pub struct WidgetTree {
     pub nodes: Vec<NodeId>,
     children: HashMap<NodeId, Vec<NodeId>>,
     parent: HashMap<NodeId, NodeId>,
-    pub attribs: HashMap<NodeId, Attributes>,
     pub cached_color: HashMap<NodeId, Rgba<u8>>,
     pub layout: LayoutCtx,
     pending_update: Vec<NodeId>,
@@ -26,7 +25,6 @@ impl Default for WidgetTree {
             nodes: Vec::new(),
             children: HashMap::new(),
             parent: HashMap::new(),
-            attribs: HashMap::new(),
             cached_color: HashMap::new(),
             layout: LayoutCtx::new(),
             pending_update: Vec::new(),
@@ -57,12 +55,8 @@ impl WidgetTree {
         self.parent.get(node_id)
     }
 
-    // fn get_children(&self, node_id: NodeId) -> Option<&Vec<NodeId>> {
-    //     self.children.get(&node_id)
-    // }
-
     pub(crate) fn is_root(&self, node_id: &NodeId) -> bool {
-        !self.parent.contains_key(&node_id)
+        !self.parent.contains_key(node_id)
     }
 
     pub(crate) fn has_changed(&self) -> bool {
@@ -78,8 +72,8 @@ impl WidgetTree {
         // let start = std::time::Instant::now();
         let hovered = self.nodes.iter().enumerate().filter_map(|(idx, node_id)| {
             let element = &gfx.elements.data[idx];
-            let attr = &self.attribs[node_id];
-            if element.is_hovered(cursor, attr) {
+            let attr = self.layout.get_attributes(node_id);
+            if element.is_hovered(cursor, &attr) {
                 Some(node_id)
             } else { None }
         }).min();
@@ -135,7 +129,7 @@ impl WidgetTree {
     ) {
         if let Some(on_drag) = callbacks.on_drag.get_mut(hover_id) {
             on_drag(element);
-            if let Some(attribs) = self.attribs.get_mut(hover_id) {
+            if let Some(attribs) = self.layout.get_attributes_mut(hover_id) {
                 transforms.update(element.transform_id as usize, |transform| {
                     let delta = cursor.hover.pos - cursor.click.offset;
                     attribs.set_position(delta, transform);
@@ -151,11 +145,11 @@ impl WidgetTree {
         transforms: &mut Buffer<Matrix4x4>,
     ) {
         if let Some(children) = self.children.get(node_id).cloned() {
-            let attr = self.attribs[node_id];
-            let padding = self.layout.get_padding();
-            self.layout.set_to_parent_orientation(*node_id);
+            let attr = self.layout.get_attributes(node_id);
+            self.layout.set_orientation(node_id);
             self.layout.set_spacing(node_id);
             self.layout.set_padding(node_id);
+            let padding = self.layout.padding(node_id);
             self.layout.set_next_pos(|next_pos| {
                 next_pos.x = attr.pos.x - attr.dims.width / 2 + padding;
                 next_pos.y = attr.pos.y - attr.dims.height / 2 + padding;
@@ -164,10 +158,10 @@ impl WidgetTree {
             children.iter().for_each(|child_id| {
                 let idx = self.nodes.iter().position(|node_id| node_id == child_id).unwrap();
                 transforms.update(idx, |child_transform| {
-                    if let Some(child_attribs) = self.attribs.get_mut(child_id) {
-                        self.layout.assign_position(child_attribs);
-                        child_attribs.set_position(child_attribs.pos.into(), child_transform);
-                    }
+                    let c_attr = self.layout.assign_position(child_id);
+                    let x = c_attr.pos.x as f32 / (c_attr.dims.width as f32 / child_transform[0].x) * 2.0 - 1.0;
+                    let y = 1.0 - c_attr.pos.y as f32 / (c_attr.dims.height as f32 / child_transform[1].y) * 2.0;
+                    child_transform.translate(x, y);
                 });
 
                 self.handle_child_relayout(child_id, transforms);
@@ -183,7 +177,7 @@ impl WidgetTree {
         if let Some(ref click_id) = cursor.click.obj {
             let idx = self.nodes.iter().position(|node_id| node_id == click_id).unwrap();
             let element = gfx.elements.data.get_mut(idx).unwrap();
-            let pos = self.attribs[click_id].pos;
+            let pos = self.layout.get_attributes(click_id).pos;
             cursor.click.offset = cursor.click.pos - Vector2::<f32>::from(pos);
             CALLBACKS.with_borrow_mut(|callbacks| {
                 callbacks.handle_click(click_id, element);

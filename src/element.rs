@@ -1,5 +1,5 @@
 use util::{tan, Matrix4x4, Size, Vector2};
-use crate::layout::Alignment;
+use crate::layout::{Alignment, Orientation};
 use crate::cursor::Cursor;
 use crate::Rgba;
 
@@ -86,7 +86,6 @@ impl Attributes {
         }
     }
 
-    // FIXME: maybe accuracy is important?
     pub fn adjust_ratio(&mut self, aspect_ratio: f32) {
         self.dims.width = (self.dims.height as f32 * aspect_ratio) as u32;
     }
@@ -173,6 +172,7 @@ impl Corners {
 #[derive(Clone, Copy)]
 pub struct Style {
     alignment: Alignment,
+    orientation: Orientation,
     dims: Size<u32>,
     fill_color: Rgba<u8>,
     stroke_color: Rgba<u8>,
@@ -192,6 +192,7 @@ impl Style {
     ) -> Self {
         Self {
             alignment: Default::default(),
+            orientation: Orientation::default(),
             dims: dims.into(),
             fill_color,
             stroke_color: Rgba::BLACK,
@@ -232,12 +233,30 @@ impl Style {
         self.stroke_width = stroke;
     }
 
+    pub(crate) fn padding(&self) -> u32 { self.padding }
+
     pub fn set_padding(&mut self, padding: u32) { self.padding = padding }
+
+    pub(crate) fn spacing(&self) -> u32 { self.spacing }
 
     pub fn set_spacing(&mut self, spacing: u32) { self.spacing = spacing }
 
-    pub(crate) fn get_dimensions(&self) -> Size<u32> {
-        self.dims
+    pub(crate) fn alignment(&self) -> Alignment { self.alignment }
+
+    pub fn set_alignment(&mut self, alignment: Alignment) {
+        self.alignment = alignment
+    }
+
+    pub(crate) fn orientation(&self) -> Orientation { self.orientation }
+
+    pub fn set_orientation(&mut self, orientation: Orientation) {
+        self.orientation = orientation
+    }
+
+    pub(crate) fn dimensions(&self) -> Size<u32> { self.dims }
+
+    pub(crate) fn adjust_ratio(&mut self, aspect_ratio: f32) {
+        self.dims.width = (self.dims.height as f32 * aspect_ratio) as u32;
     }
 }
 
@@ -285,7 +304,7 @@ impl Element {
         Indices::from(Shape::from(self.shape))
     }
 
-    pub fn rgba_u8(&self) -> Rgba<u8> {
+    pub fn fill_color(&self) -> Rgba<u8> {
         self.fill_color.into()
     }
 
