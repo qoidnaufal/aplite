@@ -1,36 +1,58 @@
 use std::collections::HashMap;
 
-use util::{Size, Vector2};
-use crate::{element::Attributes, NodeId};
+use util::{Matrix4x4, Size, Vector2};
+use crate::view::NodeId;
+use crate::style::{Alignment, Orientation};
 
-
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HAlignment {
-    Left,
-    #[default]
-    Center,
-    Right,
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Attributes {
+    pub pos: Vector2<u32>,
+    pub dims: Size<u32>,
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VAlignment {
-    Top,
-    #[default]
-    Middle,
-    Bottom,
-}
+impl Attributes {
+    pub fn new(dims: impl Into<Size<u32>>) -> Self {
+        Self {
+            pos: Vector2::default(),
+            dims: dims.into(),
+        }
+    }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Alignment {
-    horizontal: HAlignment,
-    vertical: VAlignment,
-}
+    pub fn new_with_pos(
+        dims: impl Into<Size<u32>>,
+        pos: impl Into<Vector2<u32>>
+    ) -> Self {
+        Self {
+            pos: pos.into(),
+            dims: dims.into(),
+        }
+    }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Orientation {
-    #[default]
-    Vertical,
-    Horizontal,
+    pub fn adjust_ratio(&mut self, aspect_ratio: f32) {
+        self.dims.width = (self.dims.height as f32 * aspect_ratio) as u32;
+    }
+
+    pub fn get_transform(&self, window_size: Size<u32>) -> Matrix4x4 {
+        let mut matrix = Matrix4x4::IDENTITY;
+        let ws: Size<f32> = window_size.into();
+        let x = self.pos.x as f32 / ws.width * 2.0 - 1.0;
+        let y = 1.0 - self.pos.y as f32 / ws.height * 2.0;
+        let d: Size<f32> = self.dims.into();
+        let scale = d / ws;
+        matrix.transform(x, y, scale.width, scale.height);
+        matrix
+    }
+
+    pub fn set_position(
+        &mut self,
+        new_pos: Vector2<f32>,
+        transform: &mut Matrix4x4,
+    ) {
+        self.pos = new_pos.into();
+        let x = self.pos.x as f32 / (self.dims.width as f32 / transform[0].x) * 2.0 - 1.0;
+        let y = 1.0 - self.pos.y as f32 / (self.dims.height as f32 / transform[1].y) * 2.0;
+        transform.translate(x, y);
+    }
 }
 
 #[derive(Debug, Clone)]

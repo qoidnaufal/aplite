@@ -7,7 +7,7 @@ use crate::renderer::{Buffer, Gfx, Renderer};
 use crate::element::Element;
 use crate::view::NodeId;
 use crate::callback::{Callbacks, CALLBACKS};
-use crate::Rgba;
+use crate::color::Rgba;
 
 #[derive(Debug)]
 pub struct WidgetTree {

@@ -4,9 +4,7 @@ use std::fs::File;
 
 use image::GenericImageView;
 
-use crate::color::Pixel;
-use crate::Rgba;
-
+use crate::color::{Pixel, Rgba};
 use super::Gpu;
 
 pub fn image_reader<P: Into<PathBuf>>(path: P) -> Pixel<Rgba<u8>> {

@@ -12,19 +12,7 @@ use crate::cursor::Cursor;
 use crate::renderer::Renderer;
 use crate::tree::WidgetTree;
 use crate::error::Error;
-use crate::IntoView;
-
-pub fn launch<F, IV>(f: F) -> Result<(), Error>
-where
-    F: Fn() -> IV + 'static,
-    IV: IntoView + 'static,
-{
-    let event_loop = EventLoop::new()?;
-    let mut app = App::new(f);
-    event_loop.run_app(&mut app)?;
-
-    Ok(())
-}
+use crate::view::IntoView;
 
 struct Stats {
     counter: u32,
@@ -52,7 +40,7 @@ impl Drop for Stats {
     }
 }
 
-struct App<F> {
+pub(crate) struct App<F> {
     renderer: MaybeUninit<Renderer>,
     tree: WidgetTree,
     cursor: Cursor,
@@ -66,7 +54,7 @@ where
     F: Fn() -> IV + 'static,
     IV: IntoView + 'static,
 {
-    pub fn new(view_fn: F) -> Self {
+    pub(crate) fn new(view_fn: F) -> Self {
         Self {
             renderer: MaybeUninit::uninit(),
             window: HashMap::new(),
@@ -75,6 +63,13 @@ where
             stats: Stats::new(),
             view_fn: Some(view_fn),
         }
+    }
+
+    pub(crate) fn run(mut self) -> Result<(), Error> {
+        let event_loop = EventLoop::new()?;
+        event_loop.run_app(&mut self)?;
+
+        Ok(())
     }
 
     fn request_redraw(&self, window_id: winit::window::WindowId) {

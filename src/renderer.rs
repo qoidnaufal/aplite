@@ -8,15 +8,16 @@ use std::sync::Arc;
 use winit::window::Window;
 use util::Size;
 
-pub use buffer::{Gfx, Screen, Buffer};
-pub use pipeline::pipeline;
-pub use gpu::Gpu;
-pub use shader::SHADER;
-pub use texture::{TextureData, image_reader};
+pub(crate) use buffer::{Gfx, Screen, Buffer, Indices};
+pub(crate) use pipeline::pipeline;
+pub(crate) use gpu::Gpu;
+pub(crate) use shader::SHADER;
+pub(crate) use texture::{TextureData, image_reader};
 
 use crate::tree::WidgetTree;
 use crate::error::Error;
-use crate::{IntoView, Rgb, View};
+use crate::view::{IntoView, View};
+use crate::color::Rgb;
 
 pub struct Renderer {
     pub gpu: Gpu,

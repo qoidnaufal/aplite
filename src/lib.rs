@@ -1,21 +1,41 @@
-mod app;
 mod callback;
-mod color;
-mod cursor;
-mod error;
-mod layout;
 mod renderer;
-mod element;
-mod signal;
-mod tree;
-mod view;
+mod cursor;
 
-pub use app::launch;
-pub use color::*;
-pub use element::Element;
-pub use signal::Signal;
-pub use view::*;
-pub use error::Error;
-pub use layout::{Alignment, HAlignment, VAlignment, Orientation};
+pub mod app;
+pub mod color;
+pub mod element;
+pub mod error;
+pub mod layout;
+pub mod reactive;
+pub mod style;
+pub mod tree;
+pub mod view;
 
-pub type AppResult = Result<(), Error>;
+pub mod prelude {
+    use crate::error::Error;
+    use crate::app::App;
+
+    pub use crate::reactive::{signal, Get, Set};
+    pub use crate::color::Rgba;
+    pub use crate::element::Element;
+    pub use crate::style::Orientation;
+    pub use crate::view::{
+        IntoView,
+        TestCircleWidget,
+        TestTriangleWidget,
+        stack,
+        button,
+        image
+    };
+
+    pub type AppResult = Result<(), Error>;
+
+    pub fn launch<F, IV>(f: F) -> Result<(), Error>
+    where
+        F: Fn() -> IV + 'static,
+        IV: IntoView + 'static,
+    {
+        App::new(f).run()
+    }
+}

@@ -1,7 +1,8 @@
 use crate::callback::CALLBACKS;
-use crate::layout::{Orientation, LayoutCtx};
-use crate::{Pixel, Rgba};
-use crate::element::{Attributes, Element, Shape, Style};
+use crate::layout::{Attributes, LayoutCtx};
+use crate::color::{Pixel, Rgba};
+use crate::element::Element;
+use crate::style::{Style, Shape};
 
 use super::{AnyView, IntoView, NodeId, View};
 

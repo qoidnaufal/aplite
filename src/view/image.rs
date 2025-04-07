@@ -1,10 +1,11 @@
 use std::path::PathBuf;
 
-use crate::layout::LayoutCtx;
+use crate::layout::{LayoutCtx, Attributes};
 use crate::renderer::image_reader;
-use crate::element::{Attributes, Element, Shape, Style};
+use crate::element::Element;
+use crate::style::{Shape, Style};
 use crate::callback::CALLBACKS;
-use crate::{Pixel, Rgba};
+use crate::color::{Pixel, Rgba};
 use super::{AnyView, IntoView, NodeId, View};
 
 pub fn image<P: Into<PathBuf>>(src: P) -> Image {
@@ -58,7 +59,6 @@ impl View for Image {
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { Some(&self.data) }
 
     fn layout(&self, cx: &mut LayoutCtx) -> Attributes {
-        // cx.insert_attributes(self.id, self.style.dimensions());
         cx.assign_position(&self.id)
     }
 

@@ -1,7 +1,7 @@
-use learn_wgpu::*;
+use learn_wgpu::prelude::*;
 
 fn root() -> impl IntoView {
-    let counter = Signal::new(0i32);
+    let counter = signal(0i32);
     eprintln!("{}", counter.get());
 
     let c1 = counter.clone();

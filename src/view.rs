@@ -4,11 +4,12 @@ mod stack;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::layout::LayoutCtx;
+use crate::layout::{Attributes, LayoutCtx};
+use crate::style::{Orientation, Shape, Style};
 use crate::tree::WidgetTree;
 use crate::renderer::{Gfx, Gpu};
-use crate::element::{Attributes, Element, Shape, Style};
-use crate::{Orientation, Pixel, Rgba};
+use crate::element::Element;
+use crate::color::{Pixel, Rgba};
 use crate::callback::CALLBACKS;
 
 pub use {
@@ -211,7 +212,6 @@ impl View for TestTriangleWidget {
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
     fn layout(&self, cx: &mut LayoutCtx) -> Attributes {
-        // cx.insert_attributes(self.id, self.style.dimensions());
         cx.assign_position(&self.id)
     }
 
@@ -266,7 +266,6 @@ impl View for TestCircleWidget {
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
     fn layout(&self, cx: &mut LayoutCtx) -> Attributes {
-        // cx.insert_attributes(self.id, self.style.dimensions());
         cx.assign_position(&self.id)
     }
 

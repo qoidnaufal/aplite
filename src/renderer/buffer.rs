@@ -1,6 +1,9 @@
 use util::{cast_slice, Matrix4x4, Size};
 
-use crate::{element::{Attributes, Element}, Pixel, Rgba};
+use crate::color::{Pixel, Rgba};
+use crate::style::Shape;
+use crate::layout::Attributes;
+use crate::element::Element;
 use super::{Gpu, TextureData};
 
 const INITIAL_CAPACITY: u64 = 1024 * 4;
@@ -290,3 +293,36 @@ impl Screen {
         })
     }
 }
+
+#[derive(Debug, Clone)]
+pub(crate) struct Indices<'a>(&'a [u32]);
+
+impl std::ops::Deref for Indices<'_> {
+    type Target = [u32];
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+impl From<Shape> for Indices<'_> {
+    fn from(shape: Shape) -> Self {
+        match shape {
+            Shape::Circle => Self::rectangle(),
+            Shape::Rect => Self::rectangle(),
+            Shape::RoundedRect => Self::rectangle(),
+            Shape::Triangle => Self::triangle(),
+        }
+    }
+}
+
+impl Indices<'_> {
+    pub(crate) fn rectangle() -> Self {
+        Self(&[0, 1, 2, 2, 3, 0])
+    }
+
+    pub(crate) fn triangle() -> Self {
+        Self(&[4, 1, 2])
+    }
+}
+
+// pub struct Vertices<'a>(&'a [Vector2<f32>]);

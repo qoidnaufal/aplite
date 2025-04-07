@@ -1,7 +1,9 @@
-use crate::layout::LayoutCtx;
-use crate::element::{Attributes, Element, Shape, Style};
+use crate::layout::{Attributes, LayoutCtx};
 use crate::callback::CALLBACKS;
-use crate::{Pixel, Rgba};
+use crate::style::{Shape, Style};
+use crate::element::Element;
+use crate::color::{Pixel, Rgba};
+
 use super::{AnyView, IntoView, NodeId, View};
 
 pub fn button() -> Button { Button::new() }
@@ -18,7 +20,7 @@ impl Button {
         Self { id, style }
     }
 
-    pub fn style<F: FnMut(&mut Style)>(mut self, mut f: F) -> Self {
+    pub fn style<F: FnOnce(&mut Style)>(mut self, f: F) -> Self {
         f(&mut self.style);
         self
     }
