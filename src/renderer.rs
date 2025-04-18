@@ -127,9 +127,9 @@ impl Renderer {
         pass.set_pipeline(&self.pipeline);
         pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
         pass.set_vertex_buffer(0, self.instances.slice(..));
-        pass.set_bind_group(0, &self.screen.bind_group, &[]);
-        pass.set_bind_group(1, &self.gfx.bind_group, &[]);
-        pass.set_bind_group(2, &self.pseudo_texture.bind_group, &[]);
+        pass.set_bind_group(0, &self.screen.bind_group, &[]);         // screen transform
+        pass.set_bind_group(1, &self.gfx.bind_group, &[]);            // storage buffers
+        pass.set_bind_group(2, &self.pseudo_texture.bind_group, &[]); // pseudo texture
 
         let mut idx_offset: u32 = 0;
 

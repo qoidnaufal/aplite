@@ -1,4 +1,4 @@
-use crate::layout::{Attributes, LayoutCtx};
+use crate::layout::{Attributes, Layout};
 use crate::callback::CALLBACKS;
 use crate::style::{Shape, Style};
 use crate::element::Element;
@@ -52,8 +52,8 @@ impl View for Button {
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
-    fn layout(&self, cx: &mut LayoutCtx) -> Attributes {
-        cx.assign_position(&self.id)
+    fn layout(&self, layout: &mut Layout) -> Attributes {
+        layout.assign_position(&self.id)
     }
 
     fn style(&self) -> Style { self.style }

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::layout::{LayoutCtx, Attributes};
+use crate::layout::{Layout, Attributes};
 use crate::renderer::image_reader;
 use crate::element::Element;
 use crate::style::{Shape, Style};
@@ -58,8 +58,8 @@ impl View for Image {
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { Some(&self.data) }
 
-    fn layout(&self, cx: &mut LayoutCtx) -> Attributes {
-        cx.assign_position(&self.id)
+    fn layout(&self, layout: &mut Layout) -> Attributes {
+        layout.assign_position(&self.id)
     }
 
     fn style(&self) -> Style {

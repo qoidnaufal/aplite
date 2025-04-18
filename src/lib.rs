@@ -16,7 +16,7 @@ pub mod prelude {
     use crate::error::Error;
     use crate::app::App;
 
-    pub use crate::reactive::{signal, Get, Set};
+    pub use crate::reactive::{arc_signal, signal, Get, Set};
     pub use crate::color::Rgba;
     pub use crate::element::Element;
     pub use crate::style::Orientation;

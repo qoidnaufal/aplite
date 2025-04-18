@@ -4,7 +4,7 @@ mod signal;
 use std::any::Any;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 pub use signal::*;
@@ -15,7 +15,7 @@ pub use traits::*;
 // }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct SignalId(u64);
+pub struct SignalId(u64);
 
 impl SignalId {
     fn new() -> Self {
@@ -26,31 +26,49 @@ impl SignalId {
 
 pub(crate) struct AnySignal {
     id: SignalId,
-    value: Arc<RwLock<dyn Any>>,
+    value: Rc<RefCell<dyn Any>>,
 }
 
 impl AnySignal {
     fn id(&self) -> SignalId { self.id }
 
     fn cast<T: Clone + 'static>(&self) -> T {
-        self.value.read().unwrap().downcast_ref::<T>().unwrap().clone()
+        self.value.borrow().downcast_ref::<T>().unwrap().clone()
     }
 }
 
-impl<T: Send + Sync + Clone + 'static> From<Signal<T>> for AnySignal {
+impl<T: Clone + 'static> From<Signal<T>> for AnySignal {
     fn from(signal: Signal<T>) -> Self {
         Self {
             id: signal.id(),
-            value: Arc::new(RwLock::new(signal.get())),
+            value: Rc::new(RefCell::new(signal.get())),
         }
     }
 }
 
-impl<T: Send + Sync + Clone + 'static> From<&Signal<T>> for AnySignal {
+impl<T: Clone + 'static> From<&Signal<T>> for AnySignal {
     fn from(signal: &Signal<T>) -> Self {
         Self {
             id: signal.id(),
-            value: Arc::new(RwLock::new(signal.get())),
+            value: Rc::new(RefCell::new(signal.get())),
+        }
+    }
+}
+
+impl<T: Clone + 'static> From<ArcSignal<T>> for AnySignal {
+    fn from(arc_signal: ArcSignal<T>) -> Self {
+        Self {
+            id: arc_signal.id(),
+            value: Rc::new(RefCell::new(arc_signal.get())),
+        }
+    }
+}
+
+impl<T: Clone + 'static> From<&ArcSignal<T>> for AnySignal {
+    fn from(arc_signal: &ArcSignal<T>) -> Self {
+        Self {
+            id: arc_signal.id(),
+            value: Rc::new(RefCell::new(arc_signal.get())),
         }
     }
 }

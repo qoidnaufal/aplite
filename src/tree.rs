@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use util::{Matrix4x4, Vector2};
 
-use crate::layout::LayoutCtx;
+use crate::layout::Layout;
 use crate::cursor::{Cursor, MouseAction};
 use crate::renderer::{Buffer, Gfx, Renderer};
 use crate::element::Element;
+use crate::style::Orientation;
 use crate::view::NodeId;
 use crate::callback::{Callbacks, CALLBACKS};
 use crate::color::Rgba;
@@ -15,7 +16,7 @@ pub struct WidgetTree {
     children: HashMap<NodeId, Vec<NodeId>>,
     parent: HashMap<NodeId, NodeId>,
     pub cached_color: HashMap<NodeId, Rgba<u8>>,
-    pub layout: LayoutCtx,
+    pub layout: Layout,
     pending_update: Vec<NodeId>,
 }
 
@@ -26,7 +27,7 @@ impl Default for WidgetTree {
             children: HashMap::new(),
             parent: HashMap::new(),
             cached_color: HashMap::new(),
-            layout: LayoutCtx::new(),
+            layout: Layout::new(),
             pending_update: Vec::new(),
         }
     }
@@ -149,7 +150,13 @@ impl WidgetTree {
             self.layout.set_orientation(node_id);
             self.layout.set_spacing(node_id);
             self.layout.set_padding(node_id);
-            let padding = self.layout.padding(node_id);
+            let padding = {
+                let padding = self.layout.padding(node_id);
+                match self.layout.orientation() {
+                    Orientation::Vertical => padding.top(),
+                    Orientation::Horizontal => padding.left(),
+                }
+            };
             self.layout.set_next_pos(|next_pos| {
                 next_pos.x = attr.pos.x - attr.dims.width / 2 + padding;
                 next_pos.y = attr.pos.y - attr.dims.height / 2 + padding;

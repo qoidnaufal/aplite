@@ -33,12 +33,11 @@ impl Gpu {
             let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions {
                 compatible_surface: Some(&surface),
                 ..Default::default()
-            }).await.ok_or(Error::NoAdapterFound)?;
+            }).await.map_err(Error::AdapterRequestFailed)?;
             let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor {
                     required_features: wgpu::Features::empty(),
                     ..Default::default()
                 },
-                None
             ).await?;
 
             Ok::<(wgpu::Adapter, wgpu::Device, wgpu::Queue), Error>((adapter, device, queue))

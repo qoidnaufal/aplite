@@ -1,3 +1,5 @@
+use core::panic;
+
 use util::Size;
 
 use crate::color::Rgba;
@@ -113,19 +115,64 @@ impl Corners {
     }
 }
 
+#[derive(Default, Debug, Clone, Copy)]
+pub struct Padding {
+    top: u32,
+    bottom: u32,
+    left: u32,
+    right: u32,
+}
+
+impl Padding {
+    pub(crate) fn new(top: u32, bottom: u32, left: u32, right: u32) -> Self {
+        Self { top, bottom, left, right }
+    }
+
+    pub(crate) fn vertical(&self) -> u32 { self.top + self.bottom }
+
+    pub(crate) fn horizontal(&self) -> u32 { self.left + self.right }
+
+    pub(crate) fn top(&self) -> u32 { self.top }
+
+    pub(crate) fn bottom(&self) -> u32 { self.bottom }
+
+    pub(crate) fn left(&self) -> u32 { self.left }
+
+    pub(crate) fn right(&self) -> u32 { self.right }
+
+    pub fn set_top(&mut self, value: u32) { self.top = value }
+
+    pub fn set_bottom(&mut self, value: u32) { self.bottom = value }
+
+    pub fn set_left(&mut self, value: u32) { self.left = value }
+
+    pub fn set_right(&mut self, value: u32) { self.right = value }
+
+    pub fn set_all(&mut self, value: u32) {
+        self.top = value;
+        self.bottom = value;
+        self.left = value;
+        self.right = value;
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct Style {
     alignment: Alignment,
     orientation: Orientation,
     dims: Size<u32>,
+    min_width: Option<u32>,
+    min_height: Option<u32>,
+    max_width: Option<u32>,
+    max_height: Option<u32>,
     fill_color: Rgba<u8>,
     stroke_color: Rgba<u8>,
     shape: Shape,
     corners: Corners,
+    padding: Padding,
+    spacing: u32,
     rotate: f32,
     stroke_width: f32,
-    padding: u32,
-    spacing: u32,
 }
 
 impl Style {
@@ -138,13 +185,17 @@ impl Style {
             alignment: Default::default(),
             orientation: Orientation::default(),
             dims: dims.into(),
+            min_width: None,
+            min_height: None,
+            max_width: None,
+            max_height: None,
             fill_color,
             stroke_color: Rgba::BLACK,
             shape,
             corners: if shape.is_rounded_rect() { 0.025.into() } else { 0.0.into() },
             rotate: 0.0,
             stroke_width: 0.0,
-            padding: 0,
+            padding: Padding::default(),
             spacing: 0,
         }
     }
@@ -160,6 +211,14 @@ impl Style {
     pub fn set_dimensions(&mut self, size: impl Into<Size<u32>>) {
         self.dims = size.into();
     }
+
+    pub fn set_min_width(&mut self, value: u32) { self.min_width = Some(value) }
+
+    pub fn set_min_height(&mut self, value: u32) { self.min_height = Some(value) }
+
+    pub fn set_max_width(&mut self, value: u32) { self.max_width = Some(value) }
+
+    pub fn set_max_height(&mut self, value: u32) { self.max_height = Some(value) }
 
     pub fn set_fill_color(&mut self, color: impl Into<Rgba<u8>>) {
         self.fill_color = color.into();
@@ -185,7 +244,9 @@ impl Style {
         self.stroke_width = stroke;
     }
 
-    pub fn set_padding(&mut self, padding: u32) { self.padding = padding }
+    pub fn set_padding(&mut self, f: impl FnOnce(&mut Padding)) {
+        f(&mut self.padding)
+    }
 
     pub fn set_spacing(&mut self, spacing: u32) { self.spacing = spacing }
 
@@ -201,6 +262,14 @@ impl Style {
 
     pub(crate) fn dimensions(&self) -> Size<u32> { self.dims }
 
+    pub(crate) fn min_width(&self) -> Option<u32> { self.min_width }
+
+    pub(crate) fn min_height(&self) -> Option<u32> { self.min_height }
+
+    pub(crate) fn max_width(&self) -> Option<u32> { self.max_width }
+
+    pub(crate) fn max_height(&self) -> Option<u32> { self.max_height }
+
     pub(crate) fn fill_color(&self) -> Rgba<u8> { self.fill_color }
 
     pub(crate) fn stroke_color(&self) -> Rgba<u8> { self.stroke_color }
@@ -213,7 +282,7 @@ impl Style {
 
     pub(crate) fn stroke_width(&self) -> f32 { self.stroke_width }
 
-    pub(crate) fn padding(&self) -> u32 { self.padding }
+    pub(crate) fn padding(&self) -> Padding { self.padding }
 
     pub(crate) fn spacing(&self) -> u32 { self.spacing }
 }

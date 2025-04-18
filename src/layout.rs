@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use util::{Matrix4x4, Size, Vector2};
 use crate::view::NodeId;
-use crate::style::{Alignment, Orientation};
+use crate::style::{Alignment, Orientation, Padding};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Attributes {
@@ -56,19 +56,19 @@ impl Attributes {
 }
 
 #[derive(Debug, Clone)]
-pub struct LayoutCtx {
+pub struct Layout {
     attributes: HashMap<NodeId, Attributes>,
     orientation_storage: HashMap<NodeId, Orientation>,
     alignment_storage: HashMap<NodeId, Alignment>,
     spacing_storage: HashMap<NodeId, u32>,
-    padding_storage: HashMap<NodeId, u32>,
+    padding_storage: HashMap<NodeId, Padding>,
     next_pos: Vector2<u32>,
     orientation: Orientation,
     spacing: u32,
-    padding: u32,
+    padding: Padding,
 }
 
-impl Default for LayoutCtx {
+impl Default for Layout {
     fn default() -> Self {
         Self {
             attributes: HashMap::new(),
@@ -76,15 +76,15 @@ impl Default for LayoutCtx {
             alignment_storage: HashMap::new(),
             spacing_storage: HashMap::new(),
             padding_storage: HashMap::new(),
-            next_pos: Vector2::new(0, 0),
-            orientation: Orientation::Vertical,
+            next_pos: Vector2::default(),
+            orientation: Orientation::default(),
+            padding: Padding::default(),
             spacing: 0,
-            padding: 0,
         }
     }
 }
 
-impl LayoutCtx {
+impl Layout {
     pub(crate) fn new() -> Self { Self::default() }
 
     pub(crate) fn insert_attributes(&mut self, node_id: NodeId, dims: Size<u32>) {
@@ -108,8 +108,12 @@ impl LayoutCtx {
         self.spacing_storage.insert(node_id, spacing);
     }
 
-    pub(crate) fn insert_padding(&mut self, node_id: NodeId, padding: u32) {
+    pub(crate) fn insert_padding(&mut self, node_id: NodeId, padding: Padding) {
         self.padding_storage.insert(node_id, padding);
+    }
+
+    pub(crate) fn orientation(&self) -> Orientation {
+        self.orientation
     }
 
     pub(crate) fn set_orientation(&mut self, node_id: &NodeId) {
@@ -128,7 +132,7 @@ impl LayoutCtx {
         self.spacing = self.spacing_storage[node_id];
     }
 
-    pub(crate) fn padding(&self, node_id: &NodeId) -> u32 {
+    pub(crate) fn padding(&self, node_id: &NodeId) -> Padding {
         self.padding_storage[node_id]
     }
 
@@ -162,18 +166,22 @@ impl LayoutCtx {
         half: Size<u32>
     ) {
         self.set_orientation(&parent_id);
-        let padding = self.padding;
+        self.set_spacing(&parent_id);
+        self.set_padding(&parent_id);
+        let spacing = self.spacing;
+
+        // parent orientation
         match self.orientation {
             Orientation::Vertical => {
                 self.set_next_pos(|pos| {
                     pos.x = current_pos.x - half.width;
-                    pos.y = current_pos.y + half.height + padding;
+                    pos.y = current_pos.y + half.height + spacing;
                 });
             }
             Orientation::Horizontal => {
                 self.set_next_pos(|pos| {
                     pos.y = current_pos.y - half.height;
-                    pos.x = current_pos.x + half.width + padding;
+                    pos.x = current_pos.x + half.width + spacing;
                 });
             }
         }

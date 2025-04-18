@@ -4,7 +4,7 @@ mod stack;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::layout::{Attributes, LayoutCtx};
+use crate::layout::{Attributes, Layout};
 use crate::style::{Orientation, Shape, Style};
 use crate::tree::WidgetTree;
 use crate::renderer::{Gfx, Gpu};
@@ -48,7 +48,7 @@ pub trait View {
     fn children(&self) -> Option<&[AnyView]>;
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>>;
     fn style(&self) -> Style;
-    fn layout(&self, cx: &mut LayoutCtx) -> Attributes;
+    fn layout(&self, layout: &mut Layout) -> Attributes;
 
     fn build_tree(&self, tree: &mut WidgetTree) {
         let node_id = self.id();
@@ -61,35 +61,42 @@ pub trait View {
         }
     }
 
-    fn calculate_dimensions(&self, cx: &mut LayoutCtx) {
+    fn calculate_dimensions(&self, layout: &mut Layout) {
         let style = self.style();
+        let padding = style.padding();
         let mut size = style.dimensions();
+
         if let Some(children) = self.children() {
             children.iter().for_each(|child| {
-                child.calculate_dimensions(cx);
-                let child_size = cx.get_attributes(&child.id()).dims;
+                child.calculate_dimensions(layout);
+                let child_size = layout.get_attributes(&child.id()).dims;
                 match style.orientation() {
                     Orientation::Vertical => {
                         size.height += child_size.height;
-                        size.width = size.width.max(child_size.width + style.padding() * 2);
+                        size.width = size.width.max(child_size.width + padding.horizontal());
                     }
                     Orientation::Horizontal => {
-                        size.height = size.height.max(child_size.height + style.padding() * 2);
+                        size.height = size.height.max(child_size.height + padding.vertical());
                         size.width += child_size.width - 1;
                     }
                 }
             });
             let child_len = children.len() as u32;
+            let stretch = style.spacing() * (child_len - 1);
             match style.orientation() {
                 Orientation::Vertical => {
-                    size.height += style.padding() * 2 + style.spacing() * (child_len - 1);
+                    size.height += padding.vertical() + stretch;
                 },
                 Orientation::Horizontal => {
-                    size.width += style.padding() * 2 + style.spacing() * (child_len - 1);
+                    size.width += padding.horizontal() + stretch;
                 },
             }
         }
-        cx.insert_attributes(self.id(), size);
+
+        let final_size = size
+            .max(style.min_width(), style.min_height())
+            .min(style.max_width(), style.max_height());
+        layout.insert_attributes(self.id(), final_size);
     }
 
     fn prepare(
@@ -104,7 +111,7 @@ pub trait View {
             self.calculate_dimensions(&mut tree.layout);
         }
         let attr = self.layout(&mut tree.layout);
-        let half = attr.dims / 2;
+        let current_half = attr.dims / 2;
         let current_pos = attr.pos;
         let mut element = self.element();
         tree.nodes.push(node_id);
@@ -114,9 +121,10 @@ pub trait View {
 
         if let Some(children) = self.children() {
             let padding = tree.layout.padding(&node_id);
+            // setting for the first child's position
             tree.layout.set_next_pos(|pos| {
-                pos.x = current_pos.x - half.width + padding;
-                pos.y = current_pos.y - half.height + padding;
+                pos.x = current_pos.x - current_half.width + padding.left();
+                pos.y = current_pos.y - current_half.height + padding.top();
             });
 
             children.iter().for_each(|child| {
@@ -124,7 +132,7 @@ pub trait View {
             });
 
             if let Some(parent_id) = tree.get_parent(&node_id) {
-                tree.layout.reset_to_parent(*parent_id, current_pos, half);
+                tree.layout.reset_to_parent(*parent_id, current_pos, current_half);
             }
         }
 
@@ -152,8 +160,8 @@ impl View for DynView {
 
     fn style(&self) -> Style { self.0.style() }
 
-    fn layout(&self, cx: &mut LayoutCtx) -> Attributes {
-        self.0.layout(cx)
+    fn layout(&self, layout: &mut Layout) -> Attributes {
+        self.0.layout(layout)
     }
 }
 
@@ -181,7 +189,7 @@ impl TestTriangleWidget {
         Self { id, style }
     }
 
-    pub fn style<F: FnMut(&mut Style)>(mut self, mut f: F) -> Self {
+    pub fn style<F: FnOnce(&mut Style)>(mut self, f: F) -> Self {
         f(&mut self.style);
         self
     }
@@ -211,8 +219,8 @@ impl View for TestTriangleWidget {
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
-    fn layout(&self, cx: &mut LayoutCtx) -> Attributes {
-        cx.assign_position(&self.id)
+    fn layout(&self, layout: &mut Layout) -> Attributes {
+        layout.assign_position(&self.id)
     }
 
     fn style(&self) -> Style { self.style }
@@ -265,8 +273,8 @@ impl View for TestCircleWidget {
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
-    fn layout(&self, cx: &mut LayoutCtx) -> Attributes {
-        cx.assign_position(&self.id)
+    fn layout(&self, layout: &mut Layout) -> Attributes {
+        layout.assign_position(&self.id)
     }
 
     fn style(&self) -> Style { self.style }

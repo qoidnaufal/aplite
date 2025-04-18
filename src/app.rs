@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::mem::MaybeUninit;
 use std::sync::Arc;
 
 use winit::event_loop::EventLoop;
@@ -41,7 +40,7 @@ impl Drop for Stats {
 }
 
 pub(crate) struct App<F> {
-    renderer: MaybeUninit<Renderer>,
+    renderer: Option<Renderer>,
     tree: WidgetTree,
     cursor: Cursor,
     window: HashMap<WindowId, Arc<Window>>,
@@ -56,8 +55,8 @@ where
 {
     pub(crate) fn new(view_fn: F) -> Self {
         Self {
-            renderer: MaybeUninit::uninit(),
-            window: HashMap::new(),
+            renderer: None,
+            window: HashMap::with_capacity(4),
             tree: WidgetTree::new(),
             cursor: Cursor::new(),
             stats: Stats::new(),
@@ -79,12 +78,15 @@ where
     }
 
     fn resize(&mut self, size: impl Into<Size<u32>>) {
-        unsafe { self.renderer.assume_init_mut().resize(size.into()) }
+        if let Some(renderer) = self.renderer.as_mut() {
+            renderer.resize(size.into());
+        }
     }
 
     fn update(&mut self) {
-        let renderer = unsafe { self.renderer.assume_init_mut() };
-        self.tree.submit_update(renderer);
+        if let Some(renderer) = self.renderer.as_mut() {
+            self.tree.submit_update(renderer);
+        }
     }
 
     fn detect_update(&self, window_id: winit::window::WindowId) {
@@ -94,7 +96,11 @@ where
     }
 
     fn render(&mut self) -> Result<(), Error> {
-        unsafe { self.renderer.assume_init_mut().render() }
+        if let Some(renderer) = self.renderer.as_mut() {
+            renderer.render()
+        } else {
+            Err(Error::UnitializedRenderer)
+        }
     }
 }
 
@@ -113,9 +119,8 @@ where
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         if let Some(view_fn) = self.view_fn.take() {
             let window = create_window(event_loop);
-            let renderer = Renderer::new(window.clone(), &mut self.tree, view_fn);
+            self.renderer = Some(Renderer::new(window.clone(), &mut self.tree, view_fn));
             self.window.insert(window.id(), window);
-            self.renderer.write(renderer);
         }
     }
 
@@ -125,7 +130,7 @@ where
         window_id: winit::window::WindowId,
         event: WindowEvent,
     ) {
-        let size = unsafe { self.renderer.assume_init_mut().gpu.size() };
+        let size = self.renderer.as_ref().unwrap().gpu.size();
         match event {
             WindowEvent::CloseRequested => {
                 eprintln!();
@@ -154,7 +159,7 @@ where
                             },
                         }
                     }
-                    Err(_) => panic!()
+                    Err(_) => event_loop.exit(),
                 }
                 let elapsed = start.elapsed();
                 self.stats.inc(elapsed);
@@ -163,12 +168,12 @@ where
                 self.resize((new_size.width, new_size.height));
             }
             WindowEvent::MouseInput { state: action, button, .. } => {
-                let gfx = unsafe { &mut self.renderer.assume_init_mut().gfx };
+                let gfx = &mut self.renderer.as_mut().unwrap().gfx;
                 self.cursor.set_click_state(action.into(), button.into());
                 self.tree.handle_click(&mut self.cursor, gfx);
             }
             WindowEvent::CursorMoved { position, .. } => {
-                let renderer = unsafe { self.renderer.assume_init_mut() };
+                let renderer = self.renderer.as_mut().unwrap();
                 self.cursor.hover.pos = Vector2::new(position.x as _, position.y as _);
                 self.tree.detect_hover(&mut self.cursor, &renderer.gfx);
                 self.tree.handle_hover(&mut self.cursor, &mut renderer.gfx);

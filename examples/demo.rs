@@ -25,96 +25,108 @@ fn root() -> impl IntoView {
         el.set_fill_color(|color| *color = Rgba::GREEN);
     };
 
-    stack([
+    let first_row = [
+        image("assets/image1.jpg").into_any(),
+        image("assets/image2.jpg").on_drag(drag).into_any(),
+        TestTriangleWidget::new()
+            .style(|style| {
+                if counter.get() % 2 == 0 {
+                    style.set_fill_color(Rgba::BLACK);
+                } else {
+                    style.set_fill_color(Rgba::RED);
+                };
+            })
+            .on_hover(hover)
+            .into_any(),
+    ];
+
+    let second_row = [
         stack([
-            image("assets/image1.jpg").into_any(),
-            image("assets/image2.jpg").on_drag(drag).into_any(),
-            TestTriangleWidget::new()
+            button()
                 .style(|style| {
-                    if counter.get() % 2 == 0 {
-                        style.set_fill_color(Rgba::BLACK);
-                    } else {
-                        style.set_fill_color(Rgba::RED);
-                    };
+                    style.set_stroke_width(10.);
+                    style.set_corners(|corners| {
+                        corners.set_top_left(0.025);
+                        corners.set_bot_left(0.025);
+                        corners.set_bot_right(0.0);
+                        corners.set_top_right(0.0);
+                    });
+                })
+                .on_click(inc)
+                .on_hover(hover)
+                .into_any(),
+            button()
+                .style(|style| {
+                    style.set_stroke_width(5.);
+                    style.set_corners(|r| r.set_each(0.039));
+                })
+                .on_click(dec)
+                .on_hover(hover)
+                .into_any(),
+            button()
+                .style(|style| {
+                    style.set_stroke_width(5.);
+                    style.set_corners(|corners| {
+                        corners.set_top_left(0.);
+                        corners.set_bot_left(0.03);
+                        corners.set_bot_right(0.);
+                        corners.set_top_right(0.03);
+                    });
                 })
                 .on_hover(hover)
                 .into_any(),
-        ])
-        .style(|style| {
-            style.set_orientation(Orientation::Horizontal);
-            style.set_fill_color(Rgba::YELLOW);
-            style.set_padding(20);
-            style.set_spacing(20);
-        })
-        .on_drag(drag)
-        .into_any(),
-        stack([
-            stack([
-                button()
-                    .style(|style| {
-                        style.set_stroke_width(10.);
-                        style.set_corners(|corners| {
-                            corners.set_top_left(0.025);
-                            corners.set_bot_left(0.025);
-                            corners.set_bot_right(0.0);
-                            corners.set_top_right(0.0);
-                        });
-                    })
-                    .on_click(inc)
-                    .on_hover(hover)
-                    .into_any(),
-                button()
-                    .style(|style| {
-                        style.set_stroke_width(5.);
-                        style.set_corners(|r| r.set_each(0.039));
-                    })
-                    .on_click(dec)
-                    .on_hover(hover)
-                    .into_any(),
-                button()
-                    .style(|style| {
-                        style.set_stroke_width(5.);
-                        style.set_corners(|corners| {
-                            corners.set_top_left(0.);
-                            corners.set_bot_left(0.03);
-                            corners.set_bot_right(0.);
-                            corners.set_top_right(0.03);
-                        });
-                    })
-                    .on_hover(hover)
-                    .into_any(),
-                button()
-                    .style(|style| {
-                        style.set_corners(|corners| corners.set_each(0.04));
-                        style.set_fill_color(Rgba::new(69, 172, 23, 255));
-                    })
-                    .on_hover(hover)
-                    .into_any(),
+            button()
+                .style(|style| {
+                    style.set_corners(|corners| corners.set_each(0.04));
+                    style.set_fill_color(Rgba::new(69, 172, 23, 255));
+                })
+                .on_hover(hover)
+                .into_any(),
             ])
             .on_drag(drag)
             .style(|style| {
                 style.set_fill_color(Rgba::new(111, 72, 234, 255));
-                style.set_padding(20);
-                style.set_spacing(20);
+                style.set_min_width(1000);
+                style.set_padding(|padding| padding.set_all(20));
+                style.set_spacing(40);
             })
             .into_any(),
-            TestCircleWidget::new()
-                .style(|style| {
-                    style.set_stroke_width(10.);
-                    style.set_fill_color(Rgba::BLACK);
-                    style.set_stroke_color(Rgba::RED);
-                })
-                .on_hover(hover)
-                .into_any(),
-        ])
-        .style(|style| {
-            style.set_fill_color(Rgba::new(69, 69, 69, 255));
-            style.set_orientation(Orientation::Horizontal);
-            style.set_padding(20);
-            style.set_spacing(20);
-        })
-        .on_drag(drag)
-        .into_any(),
+        TestCircleWidget::new()
+            .style(|style| {
+                style.set_stroke_width(10.);
+                style.set_fill_color(Rgba::BLACK);
+                style.set_stroke_color(Rgba::RED);
+            })
+            .on_hover(hover)
+            .into_any(),
+    ];
+
+    stack([
+        stack(first_row)
+            .style(|style| {
+                style.set_orientation(Orientation::Horizontal);
+                style.set_fill_color(Rgba::YELLOW);
+                style.set_padding(|padding| {
+                    padding.set_left(40);
+                    padding.set_right(40);
+                    padding.set_top(20);
+                    padding.set_bottom(20);
+                });
+                style.set_spacing(40);
+            })
+            .on_drag(drag)
+            .into_any(),
+        stack(second_row)
+            .style(|style| {
+                style.set_fill_color(Rgba::new(69, 69, 69, 255));
+                style.set_orientation(Orientation::Horizontal);
+                style.set_padding(|padding| {
+                    padding.set_all(30);
+                });
+                style.set_spacing(30);
+            })
+            .on_drag(drag)
+            .into_any(),
         TestCircleWidget::new()
             .style(|style| {
                 style.set_fill_color(Rgba::new(169, 72, 43, 255));
@@ -124,19 +136,29 @@ fn root() -> impl IntoView {
             .on_drag(drag)
             .on_hover(hover)
             .into_any(),
-    ])
-    .style(|style| {
-        style.set_padding(20);
-        style.set_spacing(20);
-    })
+        ])
+        .style(|style| {
+            style.set_padding(|padding| padding.set_all(20));
+            style.set_spacing(20);
+        })
 }
 
 fn dummy() -> impl IntoView {
+    let counter = signal(0i32);
+    let set_counter = counter.clone();
     let hover = move |el: &mut Element| {
-        el.set_fill_color(|color| *color = Rgba::BLUE);
+        let color = if set_counter.get() % 3 == 0 {
+            Rgba::BLUE
+        } else {
+            Rgba::YELLOW
+        };
+        el.set_fill_color(|c| *c = color);
     };
-    let drag = move |el: &mut Element| {
+    let drag = |el: &mut Element| {
         el.set_fill_color(|color| *color = Rgba::GREEN);
+    };
+    let click = move |_: &mut Element| {
+        counter.set(|num| *num += 1);
     };
 
     button()
@@ -148,6 +170,7 @@ fn dummy() -> impl IntoView {
         })
         .on_hover(hover)
         .on_drag(drag)
+        .on_click(click)
 }
 
 fn main() -> AppResult {

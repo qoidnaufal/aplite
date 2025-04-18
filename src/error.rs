@@ -1,20 +1,22 @@
 #[derive(Debug)]
 pub enum Error {
+    UnitializedRenderer,
     EventLoopCreation(winit::error::EventLoopError),
     SurfaceCreation(wgpu::CreateSurfaceError),
     SurfaceRendering(wgpu::SurfaceError),
     DeviceRequest(wgpu::RequestDeviceError),
-    NoAdapterFound,
+    AdapterRequestFailed(wgpu::RequestAdapterError),
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let err_kind = match self {
+            Self::UnitializedRenderer => "uninitialized renderer".to_string(),
             Self::EventLoopCreation(err) => err.to_string(),
             Self::SurfaceCreation(err) => err.to_string(),
             Self::SurfaceRendering(err) => err.to_string(),
             Self::DeviceRequest(err) => err.to_string(),
-            Self::NoAdapterFound => "No adapter found".to_string(),
+            Self::AdapterRequestFailed(err) => err.to_string(),
         };
 
         write!(f, "{}", err_kind)
@@ -24,11 +26,12 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Error::EventLoopCreation(err) => err.source(),
-            Error::SurfaceCreation(err) => err.source(),
-            Error::SurfaceRendering(err) => err.source(),
-            Error::DeviceRequest(err) => err.source(),
-            Error::NoAdapterFound => None,
+            Self::UnitializedRenderer => None,
+            Self::EventLoopCreation(err) => err.source(),
+            Self::SurfaceCreation(err) => err.source(),
+            Self::SurfaceRendering(err) => err.source(),
+            Self::DeviceRequest(err) => err.source(),
+            Self::AdapterRequestFailed(err) => err.source(),
         }
     }
 }
@@ -54,5 +57,11 @@ impl From<wgpu::RequestDeviceError> for Error {
 impl From<wgpu::SurfaceError> for Error {
     fn from(value: wgpu::SurfaceError) -> Self {
         Self::SurfaceRendering(value)
+    }
+}
+
+impl From<wgpu::RequestAdapterError> for Error {
+    fn from(value: wgpu::RequestAdapterError) -> Self {
+        Self::AdapterRequestFailed(value)
     }
 }

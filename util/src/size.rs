@@ -22,6 +22,37 @@ impl<T> Size<T> {
     }
 }
 
+impl<T> Size<T>
+where
+    T: PartialOrd + Ord,
+{
+    pub fn max(self, min_width: Option<T>, min_height: Option<T>) -> Self {
+        let width = if let Some(min_width) = min_width {
+            self.width.max(min_width)
+        } else { self.width };
+        let height = if let Some(min_height) = min_height {
+            self.height.max(min_height)
+        } else { self.height };
+        Self {
+            width,
+            height,
+        }
+    }
+
+    pub fn min(self, max_width: Option<T>, max_height: Option<T>) -> Self {
+        let width = if let Some(max_width) = max_width {
+            self.width.min(max_width)
+        } else { self.width };
+        let height = if let Some(max_height) = max_height {
+            self.height.min(max_height)
+        } else { self.height };
+        Self {
+            width,
+            height,
+        }
+    }
+}
+
 impl From<Size<u32>> for Size<f32> {
     fn from(value: Size<u32>) -> Self {
         Self  {
@@ -157,26 +188,26 @@ where T:
 
 impl<T: PartialEq + Eq> Eq for Size<T> {}
 
-impl<T> PartialOrd for Size<T>
-where T:
-    PartialOrd<T> + Ord + PartialEq<T> + Eq
-    + std::ops::Mul<T, Output = T>
-    + Copy
-{
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
+// impl<T> PartialOrd for Size<T>
+// where T:
+//     PartialOrd<T> + Ord + PartialEq<T> + Eq
+//     + std::ops::Mul<T, Output = T>
+//     + Copy
+// {
+//     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+//         Some(self.cmp(other))
+//     }
+// }
 
-impl<T> Ord for Size<T>
-where T:
-    PartialOrd<T> + Ord + PartialEq<T> + Eq
-    + std::ops::Mul<T, Output = T>
-    + Copy
-{
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let a = self.width * self.height;
-        let b = other.width * other.height;
-        (a).cmp(&b)
-    }
-}
+// impl<T> Ord for Size<T>
+// where T:
+//     PartialOrd<T> + Ord + PartialEq<T> + Eq
+//     + std::ops::Mul<T, Output = T>
+//     + Copy
+// {
+//     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+//         let a = self.width * self.height;
+//         let b = other.width * other.height;
+//         (a).cmp(&b)
+//     }
+// }
