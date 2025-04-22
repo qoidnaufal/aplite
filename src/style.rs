@@ -1,5 +1,3 @@
-use core::panic;
-
 use util::Size;
 
 use crate::color::Rgba;
@@ -31,7 +29,7 @@ impl From<u32> for Shape {
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HAlignment {
+pub enum HAlign {
     Left,
     #[default]
     Center,
@@ -39,7 +37,7 @@ pub enum HAlignment {
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VAlignment {
+pub enum VAlign {
     Top,
     #[default]
     Middle,
@@ -48,8 +46,8 @@ pub enum VAlignment {
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Alignment {
-    horizontal: HAlignment,
-    vertical: VAlignment,
+    pub h_align: HAlign,
+    pub v_align: VAlign,
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -156,11 +154,11 @@ impl Padding {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Style {
-    alignment: Alignment,
+    alignment: Alignment, // child alignment
     orientation: Orientation,
-    dims: Size<u32>,
+    size: Size<u32>,
     min_width: Option<u32>,
     min_height: Option<u32>,
     max_width: Option<u32>,
@@ -178,13 +176,13 @@ pub struct Style {
 impl Style {
     pub fn new(
         fill_color: Rgba<u8>,
-        dims: impl Into<Size<u32>>,
+        size: impl Into<Size<u32>>,
         shape: Shape,
     ) -> Self {
         Self {
             alignment: Default::default(),
             orientation: Orientation::default(),
-            dims: dims.into(),
+            size: size.into(),
             min_width: None,
             min_height: None,
             max_width: None,
@@ -208,8 +206,8 @@ impl Style {
         self.orientation = orientation
     }
 
-    pub fn set_dimensions(&mut self, size: impl Into<Size<u32>>) {
-        self.dims = size.into();
+    pub fn set_size(&mut self, size: impl Into<Size<u32>>) {
+        self.size = size.into();
     }
 
     pub fn set_min_width(&mut self, value: u32) { self.min_width = Some(value) }
@@ -251,7 +249,7 @@ impl Style {
     pub fn set_spacing(&mut self, spacing: u32) { self.spacing = spacing }
 
     pub(crate) fn adjust_ratio(&mut self, aspect_ratio: f32) {
-        self.dims.width = (self.dims.height as f32 * aspect_ratio) as u32;
+        self.size.width = (self.size.height as f32 * aspect_ratio) as u32;
     }
 }
 
@@ -260,7 +258,7 @@ impl Style {
 
     pub(crate) fn orientation(&self) -> Orientation { self.orientation }
 
-    pub(crate) fn dimensions(&self) -> Size<u32> { self.dims }
+    pub(crate) fn size(&self) -> Size<u32> { self.size }
 
     pub(crate) fn min_width(&self) -> Option<u32> { self.min_width }
 

@@ -55,14 +55,16 @@ impl View for Stack {
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
     fn layout(&self, layout: &mut Layout) -> Attributes {
-        let style = self.style();
-        layout.insert_orientation(self.id, style.orientation());
-        layout.insert_spacing(self.id, style.spacing());
-        layout.insert_padding(self.id, style.padding());
+        layout.insert_orientation(self.id, self.style.orientation());
+        layout.insert_alignment(self.id, self.style.alignment());
+        layout.insert_spacing(self.id, self.style.spacing());
+        layout.insert_padding(self.id, self.style.padding());
         
         layout.set_orientation(&self.id);
+        layout.set_alignment(&self.id);
         layout.set_spacing(&self.id);
         layout.set_padding(&self.id);
+
         layout.assign_position(&self.id)
     }
 

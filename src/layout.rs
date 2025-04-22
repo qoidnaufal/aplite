@@ -1,35 +1,35 @@
 use std::collections::HashMap;
 
 use util::{Matrix4x4, Size, Vector2};
-use crate::view::NodeId;
 use crate::style::{Alignment, Orientation, Padding};
+use crate::tree::NodeId;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Attributes {
     pub pos: Vector2<u32>,
-    pub dims: Size<u32>,
+    pub size: Size<u32>,
 }
 
 impl Attributes {
-    pub fn new(dims: impl Into<Size<u32>>) -> Self {
+    pub fn new(size: impl Into<Size<u32>>) -> Self {
         Self {
             pos: Vector2::default(),
-            dims: dims.into(),
+            size: size.into(),
         }
     }
 
     pub fn new_with_pos(
-        dims: impl Into<Size<u32>>,
+        size: impl Into<Size<u32>>,
         pos: impl Into<Vector2<u32>>
     ) -> Self {
         Self {
             pos: pos.into(),
-            dims: dims.into(),
+            size: size.into(),
         }
     }
 
     pub fn adjust_ratio(&mut self, aspect_ratio: f32) {
-        self.dims.width = (self.dims.height as f32 * aspect_ratio) as u32;
+        self.size.width = (self.size.height as f32 * aspect_ratio) as u32;
     }
 
     pub fn get_transform(&self, window_size: Size<u32>) -> Matrix4x4 {
@@ -37,7 +37,7 @@ impl Attributes {
         let ws: Size<f32> = window_size.into();
         let x = self.pos.x as f32 / ws.width * 2.0 - 1.0;
         let y = 1.0 - self.pos.y as f32 / ws.height * 2.0;
-        let d: Size<f32> = self.dims.into();
+        let d: Size<f32> = self.size.into();
         let scale = d / ws;
         matrix.transform(x, y, scale.width, scale.height);
         matrix
@@ -49,8 +49,8 @@ impl Attributes {
         transform: &mut Matrix4x4,
     ) {
         self.pos = new_pos.into();
-        let x = self.pos.x as f32 / (self.dims.width as f32 / transform[0].x) * 2.0 - 1.0;
-        let y = 1.0 - self.pos.y as f32 / (self.dims.height as f32 / transform[1].y) * 2.0;
+        let x = self.pos.x as f32 / (self.size.width as f32 / transform[0].x) * 2.0 - 1.0;
+        let y = 1.0 - self.pos.y as f32 / (self.size.height as f32 / transform[1].y) * 2.0;
         transform.translate(x, y);
     }
 }
@@ -64,6 +64,7 @@ pub struct Layout {
     padding_storage: HashMap<NodeId, Padding>,
     next_pos: Vector2<u32>,
     orientation: Orientation,
+    alignment: Alignment,
     spacing: u32,
     padding: Padding,
 }
@@ -78,6 +79,7 @@ impl Default for Layout {
             padding_storage: HashMap::new(),
             next_pos: Vector2::default(),
             orientation: Orientation::default(),
+            alignment: Alignment::default(),
             padding: Padding::default(),
             spacing: 0,
         }
@@ -87,9 +89,35 @@ impl Default for Layout {
 impl Layout {
     pub(crate) fn new() -> Self { Self::default() }
 
-    pub(crate) fn insert_attributes(&mut self, node_id: NodeId, dims: Size<u32>) {
-        let attributes = Attributes::new(dims);
+    pub(crate) fn insert_attributes(&mut self, node_id: NodeId, size: Size<u32>) {
+        let attributes = Attributes::new(size);
         self.attributes.insert(node_id, attributes);
+    }
+
+    pub(crate) fn insert_orientation(&mut self, node_id: NodeId, orientation: Orientation) {
+        self.orientation_storage.insert(node_id, orientation);
+    }
+
+    pub(crate) fn insert_alignment(&mut self, node_id: NodeId, alignment: Alignment) {
+        self.alignment_storage.insert(node_id, alignment);
+    }
+
+    pub(crate) fn insert_spacing(&mut self, node_id: NodeId, spacing: u32) {
+        self.spacing_storage.insert(node_id, spacing);
+    }
+
+    pub(crate) fn insert_padding(&mut self, node_id: NodeId, padding: Padding) {
+        self.padding_storage.insert(node_id, padding);
+    }
+}
+
+impl Layout {
+    pub(crate) fn alignment(&self) -> Alignment {
+        self.alignment
+    }
+
+    pub(crate) fn orientation(&self) -> Orientation {
+        self.orientation
     }
 
     pub(crate) fn get_attributes(&self, node_id: &NodeId) -> Attributes {
@@ -100,20 +128,18 @@ impl Layout {
         self.attributes.get_mut(node_id)
     }
 
-    pub(crate) fn insert_orientation(&mut self, node_id: NodeId, orientation: Orientation) {
-        self.orientation_storage.insert(node_id, orientation);
+    pub(crate) fn get_padding(&self, node_id: &NodeId) -> Padding {
+        self.padding_storage[node_id]
     }
 
-    pub(crate) fn insert_spacing(&mut self, node_id: NodeId, spacing: u32) {
-        self.spacing_storage.insert(node_id, spacing);
+    pub(crate) fn get_spacing(&self, node_id: &NodeId) -> u32 {
+        self.spacing_storage[node_id]
     }
+}
 
-    pub(crate) fn insert_padding(&mut self, node_id: NodeId, padding: Padding) {
-        self.padding_storage.insert(node_id, padding);
-    }
-
-    pub(crate) fn orientation(&self) -> Orientation {
-        self.orientation
+impl Layout {
+    pub(crate) fn set_alignment(&mut self, node_id: &NodeId) {
+        self.alignment = self.alignment_storage[node_id];
     }
 
     pub(crate) fn set_orientation(&mut self, node_id: &NodeId) {
@@ -124,16 +150,8 @@ impl Layout {
         f(&mut self.next_pos);
     }
 
-    pub(crate) fn spacing(&self, node_id: &NodeId) -> u32 {
-        self.spacing_storage[node_id]
-    }
-
     pub(crate) fn set_spacing(&mut self, node_id: &NodeId) {
         self.spacing = self.spacing_storage[node_id];
-    }
-
-    pub(crate) fn padding(&self, node_id: &NodeId) -> Padding {
-        self.padding_storage[node_id]
     }
 
     pub(crate) fn set_padding(&mut self, node_id: &NodeId) {
@@ -143,7 +161,7 @@ impl Layout {
     pub(crate) fn assign_position(&mut self, node_id: &NodeId) -> Attributes {
         let spacing = self.spacing;
         if let Some(attribs) = self.attributes.get_mut(node_id) {
-            let half = attribs.dims / 2;
+            let half = attribs.size / 2;
             attribs.pos = self.next_pos + half;
             let pos = attribs.pos;
             match self.orientation {

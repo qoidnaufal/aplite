@@ -1,5 +1,6 @@
 use util::Vector2;
-use crate::view::NodeId;
+
+use crate::tree::NodeId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseAction {

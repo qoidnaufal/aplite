@@ -13,9 +13,9 @@ pub mod tree;
 pub mod view;
 
 pub mod prelude {
-    use crate::error::Error;
-    use crate::app::App;
+    use crate::error::GuiError;
 
+    pub use crate::app::App;
     pub use crate::reactive::{arc_signal, signal, Get, Set};
     pub use crate::color::Rgba;
     pub use crate::element::Element;
@@ -29,13 +29,13 @@ pub mod prelude {
         image
     };
 
-    pub type AppResult = Result<(), Error>;
+    pub type AppResult = Result<(), GuiError>;
 
-    pub fn launch<F, IV>(f: F) -> Result<(), Error>
-    where
-        F: Fn() -> IV + 'static,
-        IV: IntoView + 'static,
-    {
-        App::new(f).run()
-    }
+    // pub fn launch<F, IV>(f: F) -> Result<(), Error>
+    // where
+    //     F: Fn() -> IV + 'static,
+    //     IV: IntoView + 'static,
+    // {
+    //     App::new(f).launch()
+    // }
 }

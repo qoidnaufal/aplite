@@ -8,9 +8,10 @@ use winit::application::ApplicationHandler;
 use util::{Size, Vector2};
 
 use crate::cursor::Cursor;
+use crate::prelude::AppResult;
 use crate::renderer::Renderer;
 use crate::tree::WidgetTree;
-use crate::error::Error;
+use crate::error::GuiError;
 use crate::view::IntoView;
 
 struct Stats {
@@ -39,11 +40,12 @@ impl Drop for Stats {
     }
 }
 
-pub(crate) struct App<F> {
+pub struct App<F> {
     renderer: Option<Renderer>,
     tree: WidgetTree,
     cursor: Cursor,
     window: HashMap<WindowId, Arc<Window>>,
+    window_properties: Option<fn(&Window)>,
     stats: Stats,
     view_fn: Option<F>,
 }
@@ -53,10 +55,11 @@ where
     F: Fn() -> IV + 'static,
     IV: IntoView + 'static,
 {
-    pub(crate) fn new(view_fn: F) -> Self {
+    pub fn new(view_fn: F) -> Self {
         Self {
             renderer: None,
             window: HashMap::with_capacity(4),
+            window_properties: None,
             tree: WidgetTree::new(),
             cursor: Cursor::new(),
             stats: Stats::new(),
@@ -64,11 +67,16 @@ where
         }
     }
 
-    pub(crate) fn run(mut self) -> Result<(), Error> {
+    pub fn launch(mut self) -> AppResult {
         let event_loop = EventLoop::new()?;
         event_loop.run_app(&mut self)?;
 
         Ok(())
+    }
+
+    pub fn set_window_properties(mut self, f: fn(&Window)) -> Self {
+        self.window_properties = Some(f);
+        self
     }
 
     fn request_redraw(&self, window_id: winit::window::WindowId) {
@@ -95,19 +103,17 @@ where
         }
     }
 
-    fn render(&mut self) -> Result<(), Error> {
+    fn render(&mut self) -> Result<(), GuiError> {
         if let Some(renderer) = self.renderer.as_mut() {
             renderer.render()
         } else {
-            Err(Error::UnitializedRenderer)
+            Err(GuiError::UnitializedRenderer)
         }
     }
 }
 
 fn create_window(event_loop: &winit::event_loop::ActiveEventLoop) -> Arc<Window> {
     let window = event_loop.create_window(Default::default()).unwrap();
-    window.set_title("My App");
-    window.set_transparent(true);
     Arc::new(window)
 }
 
@@ -119,9 +125,16 @@ where
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         if let Some(view_fn) = self.view_fn.take() {
             let window = create_window(event_loop);
+            if let Some(window_fn) = self.window_properties.take() {
+                window_fn(&window);
+            } else {
+                window.set_title("GUI App");
+            }
             self.renderer = Some(Renderer::new(window.clone(), &mut self.tree, view_fn));
             self.window.insert(window.id(), window);
         }
+
+        eprintln!("{:#?}", self.tree.nodes);
     }
 
     fn window_event(
@@ -142,7 +155,7 @@ where
                 let start = std::time::Instant::now();
                 match self.render() {
                     Ok(_) => {},
-                    Err(Error::SurfaceRendering(surface_err)) => {
+                    Err(GuiError::SurfaceRendering(surface_err)) => {
                         match surface_err {
                             wgpu::SurfaceError::Outdated
                             | wgpu::SurfaceError::Lost => {

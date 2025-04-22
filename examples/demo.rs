@@ -163,7 +163,7 @@ fn dummy() -> impl IntoView {
 
     button()
         .style(|style| {
-            style.set_dimensions((500, 200));
+            style.set_size((500, 200));
             style.set_stroke_color(Rgba::WHITE);
             style.set_stroke_width(10.);
             style.set_corners(|r| r.set_each(0.15));
@@ -176,7 +176,16 @@ fn dummy() -> impl IntoView {
 fn main() -> AppResult {
     let mut args = std::env::args();
     match args.nth(1) {
-        Some(arg) if arg == "dummy" => launch(dummy),
-        _ => launch(root)
+        Some(arg) if arg == "dummy" => {
+            App::new(dummy)
+                .set_window_properties(|window| {
+                    window.set_title("Dummy");
+                    window.set_decorations(false);
+                })
+                .launch()
+        },
+        _ => {
+            App::new(root).launch()
+        }
     }
 }

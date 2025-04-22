@@ -2,11 +2,9 @@ mod button;
 mod image;
 mod stack;
 
-use std::sync::atomic::{AtomicU64, Ordering};
-
 use crate::layout::{Attributes, Layout};
-use crate::style::{Orientation, Shape, Style};
-use crate::tree::WidgetTree;
+use crate::style::{HAlign, Orientation, Shape, Style, VAlign};
+use crate::tree::{NodeId, WidgetTree};
 use crate::renderer::{Gfx, Gpu};
 use crate::element::Element;
 use crate::color::{Pixel, Rgba};
@@ -17,22 +15,6 @@ pub use {
     image::*,
     stack::*,
 };
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct NodeId(pub u64);
-
-impl NodeId {
-    pub fn new() -> Self {
-        static NODE_ID: AtomicU64 = AtomicU64::new(0);
-        Self(NODE_ID.fetch_add(1, Ordering::Relaxed))
-    }
-}
-
-impl std::fmt::Display for NodeId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
 
 pub type AnyView = Box<dyn View>;
 
@@ -50,26 +32,15 @@ pub trait View {
     fn style(&self) -> Style;
     fn layout(&self, layout: &mut Layout) -> Attributes;
 
-    fn build_tree(&self, tree: &mut WidgetTree) {
-        let node_id = self.id();
-        if let Some(children) = self.children() {
-            children.iter().for_each(|child| {
-                tree.insert_children(node_id, child.id());
-                tree.insert_parent(child.id(), node_id);
-                child.build_tree(tree);
-            });
-        }
-    }
-
-    fn calculate_dimensions(&self, layout: &mut Layout) {
+    fn calculate_size(&self, layout: &mut Layout) {
         let style = self.style();
         let padding = style.padding();
-        let mut size = style.dimensions();
+        let mut size = style.size();
 
         if let Some(children) = self.children() {
             children.iter().for_each(|child| {
-                child.calculate_dimensions(layout);
-                let child_size = layout.get_attributes(&child.id()).dims;
+                child.calculate_size(layout);
+                let child_size = layout.get_attributes(&child.id()).size;
                 match style.orientation() {
                     Orientation::Vertical => {
                         size.height += child_size.height;
@@ -106,23 +77,43 @@ pub trait View {
         tree: &mut WidgetTree,
     ) {
         let node_id = self.id();
+        tree.nodes.push(
+            node_id,
+            self.children().map(|slice| slice.iter().map(|av| av.id()).collect()),
+            self.style()
+        );
         if tree.is_root(&node_id) {
-            self.build_tree(tree);
-            self.calculate_dimensions(&mut tree.layout);
+            self.calculate_size(&mut tree.layout);
         }
-        let attr = self.layout(&mut tree.layout);
-        let current_half = attr.dims / 2;
+        let attr = self.layout(&mut tree.layout); // FIXME: this is sucks
+        let current_half = attr.size / 2;
         let current_pos = attr.pos;
         let mut element = self.element();
-        tree.nodes.push(node_id);
         tree.cached_color.insert(node_id, element.fill_color());
         gfx.push_texture(gpu, self.pixel(), &mut element);
         gfx.register(element, &attr, gpu.size());
 
         if let Some(children) = self.children() {
-            let padding = tree.layout.padding(&node_id);
+            let padding = tree.layout.get_padding(&node_id);
+            // let alignment = tree.layout.alignment();
+
             // setting for the first child's position
             tree.layout.set_next_pos(|pos| {
+                // match (alignment.horizontal, alignment.vertical) {
+                //     (HAlignment::Left, VAlignment::Top) => {
+                //         pos.x = current_pos.x - current_half.width + padding.left();
+                //         pos.y = current_pos.y - current_half.height + padding.top();
+                //     },
+                //     (HAlignment::Left, VAlignment::Middle) => {},
+                //     (HAlignment::Left, VAlignment::Bottom) => {},
+                //     (HAlignment::Center, VAlignment::Top) => {},
+                //     (HAlignment::Center, VAlignment::Middle) => {},
+                //     (HAlignment::Center, VAlignment::Bottom) => {},
+                //     (HAlignment::Right, VAlignment::Top) => {},
+                //     (HAlignment::Right, VAlignment::Middle) => {},
+                //     (HAlignment::Right, VAlignment::Bottom) => {},
+                // }
+
                 pos.x = current_pos.x - current_half.width + padding.left();
                 pos.y = current_pos.y - current_half.height + padding.top();
             });

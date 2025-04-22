@@ -15,7 +15,7 @@ pub(crate) use shader::SHADER;
 pub(crate) use texture::{TextureData, image_reader};
 
 use crate::tree::WidgetTree;
-use crate::error::Error;
+use crate::error::GuiError;
 use crate::view::{IntoView, View};
 use crate::color::Rgb;
 
@@ -94,7 +94,7 @@ impl Renderer {
         self.gfx.write(&self.gpu.device, &self.gpu.queue);
     }
 
-    pub fn render(&mut self) -> Result<(), Error> {
+    pub fn render(&mut self) -> Result<(), GuiError> {
         let output = self.gpu.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self

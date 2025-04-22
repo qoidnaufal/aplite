@@ -75,8 +75,8 @@ impl Element {
         let x_cursor = cursor.hover.pos.x;
         let y_cursor = cursor.hover.pos.y;
 
-        let width = attr.dims.width as f32 / 2.0;
-        let height = attr.dims.height as f32 / 2.0;
+        let width = attr.size.width as f32 / 2.0;
+        let height = attr.size.height as f32 / 2.0;
 
         let angled = if Shape::from(self.shape).is_triangle() {
             let c_tangen = tan(x_cursor - x, y_cursor - y + height);
