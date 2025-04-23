@@ -1,6 +1,6 @@
-use util::Size;
+use util::{tan, Matrix4x4, Size, Vector2};
 
-use crate::color::Rgba;
+use crate::{color::Rgba, cursor::Cursor};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shape {
@@ -156,16 +156,19 @@ impl Padding {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Style {
-    alignment: Alignment, // child alignment
-    orientation: Orientation,
+    pos: Vector2<u32>,
     size: Size<u32>,
     min_width: Option<u32>,
     min_height: Option<u32>,
     max_width: Option<u32>,
     max_height: Option<u32>,
     fill_color: Rgba<u8>,
+    hover_color: Option<Rgba<u8>>,
+    click_color: Option<Rgba<u8>>,
     stroke_color: Rgba<u8>,
     shape: Shape,
+    alignment: Alignment, // child alignment
+    orientation: Orientation,
     corners: Corners,
     padding: Padding,
     spacing: u32,
@@ -180,16 +183,19 @@ impl Style {
         shape: Shape,
     ) -> Self {
         Self {
-            alignment: Default::default(),
-            orientation: Orientation::default(),
+            pos: Vector2::default(),
             size: size.into(),
             min_width: None,
             min_height: None,
             max_width: None,
             max_height: None,
             fill_color,
+            hover_color: None,
+            click_color: None,
             stroke_color: Rgba::BLACK,
             shape,
+            alignment: Default::default(),
+            orientation: Orientation::default(),
             corners: if shape.is_rounded_rect() { 0.025.into() } else { 0.0.into() },
             rotate: 0.0,
             stroke_width: 0.0,
@@ -210,6 +216,21 @@ impl Style {
         self.size = size.into();
     }
 
+    pub fn set_position(&mut self, pos: Vector2<u32>) {
+        self.pos = pos;
+    }
+
+    pub(crate) fn set_transform(
+        &mut self,
+        new_pos: Vector2<f32>,
+        transform: &mut Matrix4x4,
+    ) {
+        self.pos = new_pos.into();
+        let x = self.pos.x as f32 / (self.size.width as f32 / transform[0].x) * 2.0 - 1.0;
+        let y = 1.0 - self.pos.y as f32 / (self.size.height as f32 / transform[1].y) * 2.0;
+        transform.translate(x, y);
+    }
+
     pub fn set_min_width(&mut self, value: u32) { self.min_width = Some(value) }
 
     pub fn set_min_height(&mut self, value: u32) { self.min_height = Some(value) }
@@ -220,6 +241,14 @@ impl Style {
 
     pub fn set_fill_color(&mut self, color: impl Into<Rgba<u8>>) {
         self.fill_color = color.into();
+    }
+
+    pub fn set_hover_color(&mut self, color: impl Into<Rgba<u8>>) {
+        self.hover_color = Some(color.into());
+    }
+
+    pub fn set_click_color(&mut self, color: impl Into<Rgba<u8>>) {
+        self.click_color = Some(color.into());
     }
 
     pub fn set_stroke_color(&mut self, color: impl Into<Rgba<u8>>) {
@@ -258,6 +287,8 @@ impl Style {
 
     pub(crate) fn orientation(&self) -> Orientation { self.orientation }
 
+    pub(crate) fn pos(&self) -> Vector2<u32> { self.pos }
+
     pub(crate) fn size(&self) -> Size<u32> { self.size }
 
     pub(crate) fn min_width(&self) -> Option<u32> { self.min_width }
@@ -283,4 +314,39 @@ impl Style {
     pub(crate) fn padding(&self) -> Padding { self.padding }
 
     pub(crate) fn spacing(&self) -> u32 { self.spacing }
+
+    pub(crate) fn transform(&self, window_size: Size<u32>) -> Matrix4x4 {
+        let mut matrix = Matrix4x4::IDENTITY;
+        let ws: Size<f32> = window_size.into();
+        let x = self.pos.x as f32 / ws.width * 2.0 - 1.0;
+        let y = 1.0 - self.pos.y as f32 / ws.height * 2.0;
+        let d: Size<f32> = self.size.into();
+        let scale = d / ws;
+        matrix.transform(x, y, scale.width, scale.height);
+        matrix
+    }
+
+    pub(crate) fn is_hovered(&self, cursor: &Cursor) -> bool {
+        // let rotate = Matrix2x2::rotate(self.rotate);
+        // let pos: Vector2<f32> = attr.pos.into();
+        // let p = rotate * pos;
+        let x = self.pos.x as f32;
+        let y = self.pos.y as f32;
+
+        let x_cursor = cursor.hover.pos.x;
+        let y_cursor = cursor.hover.pos.y;
+
+        let width = self.size.width as f32 / 2.0;
+        let height = self.size.height as f32 / 2.0;
+
+        let angled = if Shape::from(self.shape).is_triangle() {
+            let c_tangen = tan(x_cursor - x, y_cursor - y + height);
+            let t_tangen = tan(width / 2.0, height);
+            (t_tangen - c_tangen).is_sign_negative()
+        } else { true };
+
+        (y - height..y + height).contains(&y_cursor)
+            && (x - width..x + width).contains(&x_cursor)
+            && angled
+    }
 }

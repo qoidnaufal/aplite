@@ -14,7 +14,7 @@ pub(crate) use gpu::Gpu;
 pub(crate) use shader::SHADER;
 pub(crate) use texture::{TextureData, image_reader};
 
-use crate::tree::WidgetTree;
+use crate::context::Context;
 use crate::error::GuiError;
 use crate::view::{IntoView, View};
 use crate::color::Rgb;
@@ -32,7 +32,7 @@ pub struct Renderer {
 impl Renderer {
     pub fn new<F, IV>(
         window: Arc<Window>,
-        tree: &mut WidgetTree,
+        cx: &mut Context,
         view_fn: F
     ) -> Self
     where
@@ -48,7 +48,7 @@ impl Renderer {
         // this is important to avoid creating texture for every element
         let pseudo_texture = TextureData::new(&gpu, &Rgb::WHITE.into());
 
-        view_fn().into_view().prepare(&gpu, &mut gfx, tree);
+        view_fn().into_view().render(&gpu, &mut gfx, cx);
         gfx.write(&gpu.device, &gpu.queue);
         screen.write(&gpu.device, &gpu.queue);
 

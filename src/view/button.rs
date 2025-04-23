@@ -1,8 +1,8 @@
-use crate::layout::{Attributes, Layout};
 use crate::callback::CALLBACKS;
 use crate::style::{Shape, Style};
 use crate::element::Element;
 use crate::color::{Pixel, Rgba};
+use crate::context::Context;
 
 use super::{AnyView, IntoView, NodeId, View};
 
@@ -52,8 +52,8 @@ impl View for Button {
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
-    fn layout(&self, layout: &mut Layout) -> Attributes {
-        layout.assign_position(&self.id)
+    fn layout(&self, cx: &mut Context) {
+        cx.assign_position(&self.id)
     }
 
     fn style(&self) -> Style { self.style }

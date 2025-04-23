@@ -10,7 +10,7 @@ use util::{Size, Vector2};
 use crate::cursor::Cursor;
 use crate::prelude::AppResult;
 use crate::renderer::Renderer;
-use crate::tree::WidgetTree;
+use crate::context::Context;
 use crate::error::GuiError;
 use crate::view::IntoView;
 
@@ -42,7 +42,7 @@ impl Drop for Stats {
 
 pub struct App<F> {
     renderer: Option<Renderer>,
-    tree: WidgetTree,
+    cx: Context,
     cursor: Cursor,
     window: HashMap<WindowId, Arc<Window>>,
     window_properties: Option<fn(&Window)>,
@@ -60,7 +60,7 @@ where
             renderer: None,
             window: HashMap::with_capacity(4),
             window_properties: None,
-            tree: WidgetTree::new(),
+            cx: Context::new(),
             cursor: Cursor::new(),
             stats: Stats::new(),
             view_fn: Some(view_fn),
@@ -93,12 +93,12 @@ where
 
     fn update(&mut self) {
         if let Some(renderer) = self.renderer.as_mut() {
-            self.tree.submit_update(renderer);
+            self.cx.submit_update(renderer);
         }
     }
 
     fn detect_update(&self, window_id: winit::window::WindowId) {
-        if self.tree.has_changed() {
+        if self.cx.has_changed() {
             self.request_redraw(window_id);
         }
     }
@@ -130,11 +130,12 @@ where
             } else {
                 window.set_title("GUI App");
             }
-            self.renderer = Some(Renderer::new(window.clone(), &mut self.tree, view_fn));
+            self.renderer = Some(Renderer::new(window.clone(), &mut self.cx, view_fn));
             self.window.insert(window.id(), window);
         }
 
-        eprintln!("{:#?}", self.tree.nodes);
+        // eprintln!("{:#?}", self.cx.nodes);
+        // eprintln!("{}", self.cx.nodes.len());
     }
 
     fn window_event(
@@ -183,13 +184,13 @@ where
             WindowEvent::MouseInput { state: action, button, .. } => {
                 let gfx = &mut self.renderer.as_mut().unwrap().gfx;
                 self.cursor.set_click_state(action.into(), button.into());
-                self.tree.handle_click(&mut self.cursor, gfx);
+                self.cx.handle_click(&mut self.cursor, gfx);
             }
             WindowEvent::CursorMoved { position, .. } => {
                 let renderer = self.renderer.as_mut().unwrap();
                 self.cursor.hover.pos = Vector2::new(position.x as _, position.y as _);
-                self.tree.detect_hover(&mut self.cursor, &renderer.gfx);
-                self.tree.handle_hover(&mut self.cursor, &mut renderer.gfx);
+                self.cx.detect_hover(&mut self.cursor);
+                self.cx.handle_hover(&mut self.cursor, &mut renderer.gfx);
             }
             _ => {}
         }

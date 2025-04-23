@@ -2,9 +2,8 @@ mod button;
 mod image;
 mod stack;
 
-use crate::layout::{Attributes, Layout};
 use crate::style::{HAlign, Orientation, Shape, Style, VAlign};
-use crate::tree::{NodeId, WidgetTree};
+use crate::context::{NodeId, Context};
 use crate::renderer::{Gfx, Gpu};
 use crate::element::Element;
 use crate::color::{Pixel, Rgba};
@@ -30,17 +29,17 @@ pub trait View {
     fn children(&self) -> Option<&[AnyView]>;
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>>;
     fn style(&self) -> Style;
-    fn layout(&self, layout: &mut Layout) -> Attributes;
+    fn layout(&self, cx: &mut Context);
 
-    fn calculate_size(&self, layout: &mut Layout) {
+    fn calculate_size(&self, cx: &mut Context) {
         let style = self.style();
         let padding = style.padding();
         let mut size = style.size();
 
         if let Some(children) = self.children() {
             children.iter().for_each(|child| {
-                child.calculate_size(layout);
-                let child_size = layout.get_attributes(&child.id()).size;
+                child.calculate_size(cx);
+                let child_size = cx.get_node_data(&child.id()).unwrap().size();
                 match style.orientation() {
                     Orientation::Vertical => {
                         size.height += child_size.height;
@@ -67,38 +66,58 @@ pub trait View {
         let final_size = size
             .max(style.min_width(), style.min_height())
             .min(style.max_width(), style.max_height());
-        layout.insert_attributes(self.id(), final_size);
+
+        if let Some(s) = cx.get_node_data_mut(&self.id()) {
+            s.set_size(final_size);
+        }
     }
 
-    fn prepare(
+    fn prepare(&self, cx: &mut Context) {
+        let node_id = self.id();
+        eprintln!("preparing: {node_id:?}");
+        cx.nodes.push(
+            node_id,
+            self.children()
+                .map(|children| {
+                    children
+                        .iter()
+                        .map(|child_view| child_view.id())
+                        .collect()
+                }),
+            self.style()
+        );
+        if let Some(children) = self.children() {
+            children.iter().for_each(|child_view| child_view.prepare(cx));
+        }
+    }
+
+    fn render(
         &self,
         gpu: &Gpu,
         gfx: &mut Gfx,
-        tree: &mut WidgetTree,
+        cx: &mut Context,
     ) {
         let node_id = self.id();
-        tree.nodes.push(
-            node_id,
-            self.children().map(|slice| slice.iter().map(|av| av.id()).collect()),
-            self.style()
-        );
-        if tree.is_root(&node_id) {
-            self.calculate_size(&mut tree.layout);
-        }
-        let attr = self.layout(&mut tree.layout); // FIXME: this is sucks
-        let current_half = attr.size / 2;
-        let current_pos = attr.pos;
+        if !cx.contains(&node_id) { self.prepare(cx) }
+        if cx.is_root(&node_id) { self.calculate_size(cx) }
+        self.layout(cx);
+        let style = cx.get_node_data(&node_id).unwrap();
+        let size = style.size();
+        let pos = style.pos();
+        let current_half = size / 2;
+        let current_pos = pos;
+        let transform = style.transform(gpu.size());
         let mut element = self.element();
-        tree.cached_color.insert(node_id, element.fill_color());
+        cx.cached_color.insert(node_id, element.color());
         gfx.push_texture(gpu, self.pixel(), &mut element);
-        gfx.register(element, &attr, gpu.size());
+        gfx.register(element, transform);
 
         if let Some(children) = self.children() {
-            let padding = tree.layout.get_padding(&node_id);
+            let padding = cx.get_node_data(&node_id).unwrap().padding();
             // let alignment = tree.layout.alignment();
 
             // setting for the first child's position
-            tree.layout.set_next_pos(|pos| {
+            cx.layout.set_next_pos(|pos| {
                 // match (alignment.horizontal, alignment.vertical) {
                 //     (HAlignment::Left, VAlignment::Top) => {
                 //         pos.x = current_pos.x - current_half.width + padding.left();
@@ -119,14 +138,13 @@ pub trait View {
             });
 
             children.iter().for_each(|child| {
-                child.prepare(gpu, gfx, tree);
+                child.render(gpu, gfx, cx);
             });
 
-            if let Some(parent_id) = tree.get_parent(&node_id) {
-                tree.layout.reset_to_parent(*parent_id, current_pos, current_half);
+            if let Some(parent_id) = cx.get_parent(&node_id).cloned() {
+                cx.reset_to_parent(&parent_id, current_pos, current_half);
             }
         }
-
     }
 }
 
@@ -151,8 +169,8 @@ impl View for DynView {
 
     fn style(&self) -> Style { self.0.style() }
 
-    fn layout(&self, layout: &mut Layout) -> Attributes {
-        self.0.layout(layout)
+    fn layout(&self, cx: &mut Context) {
+        self.0.layout(cx)
     }
 }
 
@@ -210,8 +228,8 @@ impl View for TestTriangleWidget {
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
-    fn layout(&self, layout: &mut Layout) -> Attributes {
-        layout.assign_position(&self.id)
+    fn layout(&self, cx: &mut Context) {
+        cx.assign_position(&self.id)
     }
 
     fn style(&self) -> Style { self.style }
@@ -264,8 +282,8 @@ impl View for TestCircleWidget {
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
-    fn layout(&self, layout: &mut Layout) -> Attributes {
-        layout.assign_position(&self.id)
+    fn layout(&self, cx: &mut Context) {
+        cx.assign_position(&self.id)
     }
 
     fn style(&self) -> Style { self.style }

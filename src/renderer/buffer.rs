@@ -2,7 +2,6 @@ use util::{cast_slice, Matrix4x4, Size};
 
 use crate::color::{Pixel, Rgba};
 use crate::style::Shape;
-use crate::layout::Attributes;
 use crate::element::Element;
 use super::{Gpu, TextureData};
 
@@ -135,10 +134,8 @@ impl Gfx {
     pub fn register(
         &mut self,
         mut element: Element,
-        attr: &Attributes,
-        window_size: Size<u32>
+        transform: Matrix4x4,
     ) {
-        let transform = attr.get_transform(window_size);
         let transform_id = self.transforms.len() as u32;
         element.transform_id = transform_id;
         self.indices.extend_from_slice(&element.indices());

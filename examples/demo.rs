@@ -8,21 +8,21 @@ fn root() -> impl IntoView {
     let inc = move |el: &mut Element| {
         c1.set(|num| *num += 1);
         eprintln!("inc {}", c1.get());
-        el.set_fill_color(|color| color.r += 150);
+        el.update_color(|color| color.r += 150);
     };
 
     let c2 = counter.clone();
     let dec = move |el: &mut Element| {
         c2.set(|num| *num -= 1);
         eprintln!("dec {}", c2.get());
-        el.set_fill_color(|color| color.r += 150);
+        el.update_color(|color| color.r += 150);
     };
 
     let hover = |el: &mut Element| {
-        el.set_fill_color(|color| *color = Rgba::BLUE);
+        el.update_color(|color| *color = Rgba::BLUE);
     };
     let drag = |el: &mut Element| {
-        el.set_fill_color(|color| *color = Rgba::GREEN);
+        el.update_color(|color| *color = Rgba::GREEN);
     };
 
     let first_row = [
@@ -152,10 +152,10 @@ fn dummy() -> impl IntoView {
         } else {
             Rgba::YELLOW
         };
-        el.set_fill_color(|c| *c = color);
+        el.update_color(|c| *c = color);
     };
     let drag = |el: &mut Element| {
-        el.set_fill_color(|color| *color = Rgba::GREEN);
+        el.update_color(|color| *color = Rgba::GREEN);
     };
     let click = move |_: &mut Element| {
         counter.set(|num| *num += 1);

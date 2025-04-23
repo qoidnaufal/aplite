@@ -9,7 +9,7 @@ pub mod error;
 pub mod layout;
 pub mod reactive;
 pub mod style;
-pub mod tree;
+pub mod context;
 pub mod view;
 
 pub mod prelude {

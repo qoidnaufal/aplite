@@ -1,8 +1,8 @@
 use crate::callback::CALLBACKS;
-use crate::layout::{Attributes, Layout};
 use crate::color::{Pixel, Rgba};
 use crate::element::Element;
 use crate::style::{Style, Shape};
+use crate::context::Context;
 
 use super::{AnyView, IntoView, NodeId, View};
 
@@ -54,18 +54,13 @@ impl View for Stack {
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
-    fn layout(&self, layout: &mut Layout) -> Attributes {
-        layout.insert_orientation(self.id, self.style.orientation());
-        layout.insert_alignment(self.id, self.style.alignment());
-        layout.insert_spacing(self.id, self.style.spacing());
-        layout.insert_padding(self.id, self.style.padding());
-        
-        layout.set_orientation(&self.id);
-        layout.set_alignment(&self.id);
-        layout.set_spacing(&self.id);
-        layout.set_padding(&self.id);
+    fn layout(&self, cx: &mut Context) {
+        cx.set_orientation(&self.id);
+        cx.set_alignment(&self.id);
+        cx.set_spacing(&self.id);
+        cx.set_padding(&self.id);
 
-        layout.assign_position(&self.id)
+        cx.assign_position(&self.id);
     }
 
     fn style(&self) -> Style { self.style }
