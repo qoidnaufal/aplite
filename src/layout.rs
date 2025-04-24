@@ -1,5 +1,5 @@
 use util::{Size, Vector2};
-use crate::style::{Alignment, Orientation, Padding};
+use crate::properties::{Alignment, Orientation, Padding};
 
 #[derive(Debug, Clone)]
 pub struct Layout {
@@ -53,7 +53,7 @@ impl Layout {
         self.padding = padding;
     }
 
-    pub(crate) fn set_next_pos<F: FnMut(&mut Vector2<u32>)>(&mut self, mut f: F) {
+    pub(crate) fn set_next_pos<F: FnOnce(&mut Vector2<u32>)>(&mut self, f: F) {
         f(&mut self.next_pos);
     }
 

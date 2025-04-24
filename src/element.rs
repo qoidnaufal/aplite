@@ -1,7 +1,6 @@
 use crate::renderer::Indices;
-use crate::style::{Corners, Shape, Style};
+use crate::properties::{Corners, Shape, Properties};
 use crate::color::Rgba;
-
 
 #[repr(C)]
 #[derive(Debug, Clone)]
@@ -17,28 +16,15 @@ pub struct Element {
 }
 
 impl Element {
-    pub fn filled(style: &Style) -> Self {
+    pub(crate) fn new(properties: &Properties) -> Self {
         Self {
-            fill_color: style.fill_color().into(),
-            stroke_color: style.stroke_color().into(),
-            shape: style.shape() as u32,
-            corners: style.corners(),
-            rotate: style.rotation(),
-            stroke_width: style.stroke_width(),
-            texture_id: -1,
-            transform_id: 0,
-        }
-    }
-
-    pub fn textured(style: &Style) -> Self {
-        Self {
-            fill_color: style.fill_color().into(),
-            stroke_color: style.stroke_color().into(),
-            shape: style.shape() as u32,
-            corners: style.corners(),
-            rotate: style.rotation(),
-            stroke_width: style.stroke_width(),
-            texture_id: 0,
+            fill_color: properties.fill_color().into(),
+            stroke_color: properties.stroke_color().into(),
+            shape: properties.shape() as u32,
+            corners: properties.corners(),
+            rotate: properties.rotation(),
+            stroke_width: properties.stroke_width(),
+            texture_id: if properties.textured() { 0 } else { -1 },
             transform_id: 0,
         }
     }

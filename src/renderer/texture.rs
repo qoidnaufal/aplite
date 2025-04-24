@@ -3,6 +3,7 @@ use std::io::Read;
 use std::fs::File;
 
 use image::GenericImageView;
+use util::Size;
 
 use crate::color::{Pixel, Rgba};
 use super::Gpu;
@@ -27,30 +28,17 @@ impl TextureData {
         let device = &gpu.device;
         let queue = &gpu.queue;
 
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("texture"),
-            size: wgpu::Extent3d {
-                width: pixel.dimensions().width,
-                height: pixel.dimensions().height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
+        let texture = Self::create_texture(device, pixel.dimensions());
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = sampler(device);
+        let sampler = Self::create_sampler(device);
         let bind_group = Self::bind_group(device, &view, &sampler);
 
-        submit_texture(queue, texture.as_image_copy(), pixel);
+        Self::submit_texture(queue, texture.as_image_copy(), pixel);
 
         Self { texture, bind_group }
     }
 
-    pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+    pub(crate) fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("texture bind group layout"),
             entries: &[
@@ -74,7 +62,7 @@ impl TextureData {
         })
     }
 
-    pub fn bind_group(
+    pub(crate) fn bind_group(
         device: &wgpu::Device,
         view: &wgpu::TextureView,
         sampler: &wgpu::Sampler,
@@ -95,40 +83,61 @@ impl TextureData {
         })
     }
 
-    // pub fn update_texture(&self, queue: &wgpu::Queue, new_color: Rgb<u8>) {
-    //     submit_texture(queue, self.texture.as_image_copy(), new_color.into());
-    // }
-}
-
-fn submit_texture(
-    queue: &wgpu::Queue,
-    texture: wgpu::TexelCopyTextureInfo,
-    pixel: &Pixel<Rgba<u8>>
-) {
-    queue.write_texture(
-        texture,
-        pixel,
-        wgpu::TexelCopyBufferLayout {
-            offset: 0,
-            bytes_per_row: Some(4 * pixel.dimensions().width),
-            rows_per_image: Some(pixel.dimensions().height),
-        },
-        wgpu::Extent3d {
-            width: pixel.dimensions().width,
-            height: pixel.dimensions().height,
-            depth_or_array_layers: 1,
+    pub fn update_texture(&mut self, gpu: &Gpu, new_pixel: &Pixel<Rgba<u8>>) {
+        let size = new_pixel.dimensions();
+        if size.width > self.texture.width() || size.height > self.texture.height() {
+            self.texture = Self::create_texture(&gpu.device, size);
         }
-    );
-}
+        Self::submit_texture(&gpu.queue, self.texture.as_image_copy(), &new_pixel);
+    }
 
-fn sampler(device: &wgpu::Device) -> wgpu::Sampler {
-    device.create_sampler(&wgpu::SamplerDescriptor {
-        address_mode_u: wgpu::AddressMode::ClampToEdge,
-        address_mode_v: wgpu::AddressMode::ClampToEdge,
-        address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Nearest,
-        mipmap_filter: wgpu::FilterMode::Nearest,
-        ..Default::default()
-    })
+    fn create_texture(device: &wgpu::Device, size: Size<u32>) -> wgpu::Texture {
+        device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("texture"),
+            size: wgpu::Extent3d {
+                width: size.width,
+                height: size.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        })
+    }
+
+    fn create_sampler(device: &wgpu::Device) -> wgpu::Sampler {
+        device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        })
+    }
+
+    fn submit_texture(
+        queue: &wgpu::Queue,
+        texture: wgpu::TexelCopyTextureInfo,
+        pixel: &Pixel<Rgba<u8>>
+    ) {
+        queue.write_texture(
+            texture,
+            pixel,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * pixel.dimensions().width),
+                rows_per_image: Some(pixel.dimensions().height),
+            },
+            wgpu::Extent3d {
+                width: pixel.dimensions().width,
+                height: pixel.dimensions().height,
+                depth_or_array_layers: 1,
+            }
+        );
+    }
 }

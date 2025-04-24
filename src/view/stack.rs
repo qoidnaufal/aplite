@@ -1,7 +1,7 @@
 use crate::callback::CALLBACKS;
 use crate::color::{Pixel, Rgba};
 use crate::element::Element;
-use crate::style::{Style, Shape};
+use crate::properties::{Properties, Shape};
 use crate::context::Context;
 
 use super::{AnyView, IntoView, NodeId, View};
@@ -13,19 +13,19 @@ pub fn stack(child_nodes: impl IntoIterator<Item = AnyView>) -> Stack {
 pub struct Stack {
     id: NodeId,
     children: Vec<Box<dyn View>>,
-    style: Style,
+    inner: Properties,
 }
 
 impl Stack {
     fn new(child_nodes: impl IntoIterator<Item = AnyView>) -> Self {
         let id = NodeId::new();
         let children = child_nodes.into_iter().collect();
-        let style = Style::new(Rgba::DARK_GRAY, (1, 1), Shape::Rect);
-        Self { id, children, style }
+        let inner = Properties::new(Rgba::DARK_GRAY, (1, 1), Shape::Rect, false);
+        Self { id, children, inner }
     }
 
-    pub fn style<F: FnMut(&mut Style)>(mut self, mut f: F) -> Self {
-        f(&mut self.style);
+    pub fn style<F: FnMut(&mut Properties)>(mut self, mut f: F) -> Self {
+        f(&mut self.inner);
         self
     }
 
@@ -50,8 +50,6 @@ impl View for Stack {
 
     fn children(&self) -> Option<&[AnyView]> { Some(&self.children) }
 
-    fn element(&self) -> Element { Element::filled(&self.style) }
-
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
     fn layout(&self, cx: &mut Context) {
@@ -63,7 +61,7 @@ impl View for Stack {
         cx.assign_position(&self.id);
     }
 
-    fn style(&self) -> Style { self.style }
+    fn properties(&self) -> &Properties { &self.inner }
 }
 
 impl IntoView for Stack {

@@ -6,7 +6,7 @@ mod texture;
 
 use std::sync::Arc;
 use winit::window::Window;
-use util::Size;
+use util::{Matrix4x4, Size};
 
 pub(crate) use buffer::{Gfx, Screen, Buffer, Indices};
 pub(crate) use pipeline::pipeline;
@@ -15,9 +15,15 @@ pub(crate) use shader::SHADER;
 pub(crate) use texture::{TextureData, image_reader};
 
 use crate::context::Context;
+use crate::element::Element;
 use crate::error::GuiError;
 use crate::view::{IntoView, View};
 use crate::color::Rgb;
+
+pub(crate) trait Render {
+    fn element(&self) -> Element;
+    fn transform(&self, window_size: Size<u32>) -> Matrix4x4;
+}
 
 pub struct Renderer {
     pub gpu: Gpu,

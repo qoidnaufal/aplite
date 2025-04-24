@@ -2,9 +2,9 @@ mod button;
 mod image;
 mod stack;
 
-use crate::style::{HAlign, Orientation, Shape, Style, VAlign};
+use crate::properties::{HAlign, Orientation, Shape, Properties, VAlign};
 use crate::context::{NodeId, Context};
-use crate::renderer::{Gfx, Gpu};
+use crate::renderer::{Gfx, Gpu, Render};
 use crate::element::Element;
 use crate::color::{Pixel, Rgba};
 use crate::callback::CALLBACKS;
@@ -25,22 +25,21 @@ impl std::fmt::Debug for AnyView {
 
 pub trait View {
     fn id(&self) -> NodeId;
-    fn element(&self) -> Element;
     fn children(&self) -> Option<&[AnyView]>;
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>>;
-    fn style(&self) -> Style;
+    fn properties(&self) -> &Properties;
     fn layout(&self, cx: &mut Context);
 
     fn calculate_size(&self, cx: &mut Context) {
-        let style = self.style();
-        let padding = style.padding();
-        let mut size = style.size();
+        let prop = self.properties();
+        let padding = prop.padding();
+        let mut size = prop.size();
 
         if let Some(children) = self.children() {
             children.iter().for_each(|child| {
                 child.calculate_size(cx);
                 let child_size = cx.get_node_data(&child.id()).unwrap().size();
-                match style.orientation() {
+                match prop.orientation() {
                     Orientation::Vertical => {
                         size.height += child_size.height;
                         size.width = size.width.max(child_size.width + padding.horizontal());
@@ -52,8 +51,8 @@ pub trait View {
                 }
             });
             let child_len = children.len() as u32;
-            let stretch = style.spacing() * (child_len - 1);
-            match style.orientation() {
+            let stretch = prop.spacing() * (child_len - 1);
+            match prop.orientation() {
                 Orientation::Vertical => {
                     size.height += padding.vertical() + stretch;
                 },
@@ -64,30 +63,21 @@ pub trait View {
         }
 
         let final_size = size
-            .max(style.min_width(), style.min_height())
-            .min(style.max_width(), style.max_height());
+            .max(prop.min_width(), prop.min_height())
+            .min(prop.max_width(), prop.max_height());
 
-        if let Some(s) = cx.get_node_data_mut(&self.id()) {
-            s.set_size(final_size);
+        if let Some(properties) = cx.get_node_data_mut(&self.id()) {
+            if properties.size() != final_size {
+                properties.set_size(final_size);
+            }
         }
     }
 
-    fn prepare(&self, cx: &mut Context) {
+    fn prepare(&self, cx: &mut Context, parent_id: Option<NodeId>) {
         let node_id = self.id();
-        eprintln!("preparing: {node_id:?}");
-        cx.nodes.push(
-            node_id,
-            self.children()
-                .map(|children| {
-                    children
-                        .iter()
-                        .map(|child_view| child_view.id())
-                        .collect()
-                }),
-            self.style()
-        );
+        cx.insert(node_id, parent_id, self.properties());
         if let Some(children) = self.children() {
-            children.iter().for_each(|child_view| child_view.prepare(cx));
+            children.iter().for_each(|child_view| child_view.prepare(cx, Some(node_id)));
         }
     }
 
@@ -98,26 +88,20 @@ pub trait View {
         cx: &mut Context,
     ) {
         let node_id = self.id();
-        if !cx.contains(&node_id) { self.prepare(cx) }
+        if !cx.contains(&node_id) { self.prepare(cx, None) }
         if cx.is_root(&node_id) { self.calculate_size(cx) }
         self.layout(cx);
-        let style = cx.get_node_data(&node_id).unwrap();
-        let size = style.size();
-        let pos = style.pos();
-        let current_half = size / 2;
-        let current_pos = pos;
-        let transform = style.transform(gpu.size());
-        let mut element = self.element();
-        cx.cached_color.insert(node_id, element.color());
-        gfx.push_texture(gpu, self.pixel(), &mut element);
-        gfx.register(element, transform);
+        let properties = cx.get_node_data(&node_id).unwrap();
+        gfx.register(gpu, self.pixel(), properties);
 
         if let Some(children) = self.children() {
-            let padding = cx.get_node_data(&node_id).unwrap().padding();
-            // let alignment = tree.layout.alignment();
+            let padding = properties.padding();
+            let current_pos = properties.pos();
+            let current_half = properties.size() / 2;
+            // let alignment = properties.alignment();
 
             // setting for the first child's position
-            cx.layout.set_next_pos(|pos| {
+            cx.set_next_pos(|pos| {
                 // match (alignment.horizontal, alignment.vertical) {
                 //     (HAlignment::Left, VAlignment::Top) => {
                 //         pos.x = current_pos.x - current_half.width + padding.left();
@@ -141,8 +125,8 @@ pub trait View {
                 child.render(gpu, gfx, cx);
             });
 
-            if let Some(parent_id) = cx.get_parent(&node_id).cloned() {
-                cx.reset_to_parent(&parent_id, current_pos, current_half);
+            if let Some(parent_idx) = cx.get_parent(&node_id) {
+                cx.reset_to_parent(*parent_idx, current_pos, current_half);
             }
         }
     }
@@ -159,15 +143,11 @@ pub struct DynView(AnyView);
 impl View for DynView {
     fn id(&self) -> NodeId { self.0.id() }
 
-    fn element(&self) -> Element {
-        self.0.element()
-    }
-
     fn children(&self) -> Option<&[AnyView]> { self.0.children() }
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { self.0.pixel() }
 
-    fn style(&self) -> Style { self.0.style() }
+    fn properties(&self) -> &Properties { self.0.properties() }
 
     fn layout(&self, cx: &mut Context) {
         self.0.layout(cx)
@@ -188,18 +168,18 @@ where
 
 pub struct TestTriangleWidget {
     id: NodeId,
-    style: Style,
+    inner: Properties,
 }
 
 impl TestTriangleWidget {
     pub fn new() -> Self {
         let id = NodeId::new();
-        let style = Style::new(Rgba::RED, (300, 300), Shape::Triangle);
-        Self { id, style }
+        let inner = Properties::new(Rgba::RED, (300, 300), Shape::Triangle, false);
+        Self { id, inner }
     }
 
-    pub fn style<F: FnOnce(&mut Style)>(mut self, f: F) -> Self {
-        f(&mut self.style);
+    pub fn style<F: FnOnce(&mut Properties)>(mut self, f: F) -> Self {
+        f(&mut self.inner);
         self
     }
 
@@ -224,15 +204,13 @@ impl View for TestTriangleWidget {
 
     fn children(&self) -> Option<&[Box<dyn View>]> { None }
 
-    fn element(&self) -> Element { Element::filled(&self.style) }
-
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
     fn layout(&self, cx: &mut Context) {
         cx.assign_position(&self.id)
     }
 
-    fn style(&self) -> Style { self.style }
+    fn properties(&self) -> &Properties { &self.inner }
 }
 
 impl IntoView for TestTriangleWidget {
@@ -242,18 +220,18 @@ impl IntoView for TestTriangleWidget {
 
 pub struct TestCircleWidget {
     id: NodeId,
-    style: Style,
+    inner: Properties,
 }
 
 impl TestCircleWidget {
     pub fn new() -> Self {
         let id = NodeId::new();
-        let style = Style::new(Rgba::RED, (300, 300), Shape::Circle);
-        Self { id, style }
+        let inner = Properties::new(Rgba::RED, (300, 300), Shape::Circle, false);
+        Self { id, inner }
     }
 
-    pub fn style<F: FnMut(&mut Style)>(mut self, mut f: F) -> Self {
-        f(&mut self.style);
+    pub fn style<F: FnMut(&mut Properties)>(mut self, mut f: F) -> Self {
+        f(&mut self.inner);
         self
     }
 
@@ -278,15 +256,13 @@ impl View for TestCircleWidget {
 
     fn children(&self) -> Option<&[Box<dyn View>]> { None }
 
-    fn element(&self) -> Element { Element::filled(&self.style) }
-
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
     fn layout(&self, cx: &mut Context) {
         cx.assign_position(&self.id)
     }
 
-    fn style(&self) -> Style { self.style }
+    fn properties(&self) -> &Properties { &self.inner }
 }
 
 impl IntoView for TestCircleWidget {

@@ -1,5 +1,5 @@
 use crate::callback::CALLBACKS;
-use crate::style::{Shape, Style};
+use crate::properties::{Shape, Properties};
 use crate::element::Element;
 use crate::color::{Pixel, Rgba};
 use crate::context::Context;
@@ -10,18 +10,18 @@ pub fn button() -> Button { Button::new() }
 
 pub struct Button {
     id: NodeId,
-    style: Style,
+    inner: Properties,
 }
 
 impl Button {
     fn new() -> Self {
         let id = NodeId::new();
-        let style = Style::new(Rgba::RED, (200, 50), Shape::RoundedRect);
-        Self { id, style }
+        let inner = Properties::new(Rgba::RED, (200, 50), Shape::RoundedRect, false);
+        Self { id, inner }
     }
 
-    pub fn style<F: FnOnce(&mut Style)>(mut self, f: F) -> Self {
-        f(&mut self.style);
+    pub fn style<F: FnOnce(&mut Properties)>(mut self, f: F) -> Self {
+        f(&mut self.inner);
         self
     }
 
@@ -46,17 +46,13 @@ impl View for Button {
 
     fn children(&self) -> Option<&[AnyView]> { None }
 
-    fn element(&self) -> Element {
-        Element::filled(&self.style)
-    }
-
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
     fn layout(&self, cx: &mut Context) {
         cx.assign_position(&self.id)
     }
 
-    fn style(&self) -> Style { self.style }
+    fn properties(&self) -> &Properties { &self.inner }
 }
 
 impl IntoView for Button {

@@ -1,6 +1,9 @@
 use util::{tan, Matrix4x4, Size, Vector2};
 
-use crate::{color::Rgba, cursor::Cursor};
+use crate::color::Rgba;
+use crate::cursor::Cursor;
+use crate::element::Element;
+use crate::renderer::Render;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shape {
@@ -122,13 +125,13 @@ pub struct Padding {
 }
 
 impl Padding {
-    pub(crate) fn new(top: u32, bottom: u32, left: u32, right: u32) -> Self {
-        Self { top, bottom, left, right }
-    }
+    // pub(crate) fn new(top: u32, bottom: u32, left: u32, right: u32) -> Self {
+    //     Self { top, bottom, left, right }
+    // }
 
-    pub(crate) fn vertical(&self) -> u32 { self.top + self.bottom }
+    pub(crate) fn vertical(&self) -> u32 { self.top() + self.bottom() }
 
-    pub(crate) fn horizontal(&self) -> u32 { self.left + self.right }
+    pub(crate) fn horizontal(&self) -> u32 { self.left() + self.right() }
 
     pub(crate) fn top(&self) -> u32 { self.top }
 
@@ -155,32 +158,34 @@ impl Padding {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Style {
-    pos: Vector2<u32>,
-    size: Size<u32>,
-    min_width: Option<u32>,
-    min_height: Option<u32>,
-    max_width: Option<u32>,
-    max_height: Option<u32>,
-    fill_color: Rgba<u8>,
-    hover_color: Option<Rgba<u8>>,
-    click_color: Option<Rgba<u8>>,
-    stroke_color: Rgba<u8>,
-    shape: Shape,
-    alignment: Alignment, // child alignment
-    orientation: Orientation,
-    corners: Corners,
-    padding: Padding,
-    spacing: u32,
-    rotate: f32,
-    stroke_width: f32,
+pub struct Properties {
+    pos: Vector2<u32>,             // layout
+    size: Size<u32>,               // layout
+    min_width: Option<u32>,        // layout
+    min_height: Option<u32>,       // layout
+    max_width: Option<u32>,        // layout
+    max_height: Option<u32>,       // layout
+    alignment: Alignment,          // layout
+    orientation: Orientation,      // layout
+    spacing: u32,                  // layout
+    padding: Padding,              // layout
+    hover_color: Option<Rgba<u8>>, // style
+    click_color: Option<Rgba<u8>>, // style
+    fill_color: Rgba<u8>,          // render
+    stroke_color: Rgba<u8>,        // render
+    shape: Shape,                  // render
+    corners: Corners,              // render
+    rotate: f32,                   // render
+    stroke_width: f32,             // render
+    textured: bool,                // render
 }
 
-impl Style {
+impl Properties {
     pub fn new(
         fill_color: Rgba<u8>,
         size: impl Into<Size<u32>>,
         shape: Shape,
+        textured: bool,
     ) -> Self {
         Self {
             pos: Vector2::default(),
@@ -189,18 +194,19 @@ impl Style {
             min_height: None,
             max_width: None,
             max_height: None,
-            fill_color,
+            alignment: Default::default(),
+            orientation: Default::default(),
+            spacing: 0,
+            padding: Padding::default(),
             hover_color: None,
             click_color: None,
+            fill_color,
             stroke_color: Rgba::BLACK,
             shape,
-            alignment: Default::default(),
-            orientation: Orientation::default(),
             corners: if shape.is_rounded_rect() { 0.025.into() } else { 0.0.into() },
             rotate: 0.0,
             stroke_width: 0.0,
-            padding: Padding::default(),
-            spacing: 0,
+            textured,
         }
     }
 
@@ -282,7 +288,7 @@ impl Style {
     }
 }
 
-impl Style {
+impl Properties {
     pub(crate) fn alignment(&self) -> Alignment { self.alignment }
 
     pub(crate) fn orientation(&self) -> Orientation { self.orientation }
@@ -315,18 +321,10 @@ impl Style {
 
     pub(crate) fn spacing(&self) -> u32 { self.spacing }
 
-    pub(crate) fn transform(&self, window_size: Size<u32>) -> Matrix4x4 {
-        let mut matrix = Matrix4x4::IDENTITY;
-        let ws: Size<f32> = window_size.into();
-        let x = self.pos.x as f32 / ws.width * 2.0 - 1.0;
-        let y = 1.0 - self.pos.y as f32 / ws.height * 2.0;
-        let d: Size<f32> = self.size.into();
-        let scale = d / ws;
-        matrix.transform(x, y, scale.width, scale.height);
-        matrix
-    }
+    pub(crate) fn textured(&self) -> bool { self.textured }
 
     pub(crate) fn is_hovered(&self, cursor: &Cursor) -> bool {
+        // FIXME: consider rotation
         // let rotate = Matrix2x2::rotate(self.rotate);
         // let pos: Vector2<f32> = attr.pos.into();
         // let p = rotate * pos;
@@ -348,5 +346,32 @@ impl Style {
         (y - height..y + height).contains(&y_cursor)
             && (x - width..x + width).contains(&x_cursor)
             && angled
+    }
+}
+
+impl Render for Properties {
+    fn element(&self) -> Element {
+        Element::new(self)
+    }
+
+    fn transform(&self, window_size: Size<u32>) -> Matrix4x4 {
+        let mut matrix = Matrix4x4::IDENTITY;
+        let ws: Size<f32> = window_size.into();
+        let x = self.pos.x as f32 / ws.width * 2.0 - 1.0;
+        let y = 1.0 - self.pos.y as f32 / ws.height * 2.0;
+        let d: Size<f32> = self.size.into();
+        let scale = d / ws;
+        matrix.transform(x, y, scale.width, scale.height);
+        matrix
+    }
+}
+
+impl Render for &Properties {
+    fn element(&self) -> Element {
+        (*self).element()
+    }
+
+    fn transform(&self, window_size: Size<u32>) -> Matrix4x4 {
+        (*self).transform(window_size)
     }
 }

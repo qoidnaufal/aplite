@@ -8,7 +8,7 @@ pub mod element;
 pub mod error;
 pub mod layout;
 pub mod reactive;
-pub mod style;
+pub mod properties;
 pub mod context;
 pub mod view;
 
@@ -19,7 +19,7 @@ pub mod prelude {
     pub use crate::reactive::{arc_signal, signal, Get, Set};
     pub use crate::color::Rgba;
     pub use crate::element::Element;
-    pub use crate::style::Orientation;
+    pub use crate::properties::Orientation;
     pub use crate::view::{
         IntoView,
         TestCircleWidget,
