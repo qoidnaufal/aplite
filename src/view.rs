@@ -2,12 +2,10 @@ mod button;
 mod image;
 mod stack;
 
-use crate::properties::{HAlign, Orientation, Shape, Properties, VAlign};
+use crate::properties::{Orientation, Shape, Properties, HAlign, VAlign};
 use crate::context::{NodeId, Context};
-use crate::renderer::{Gfx, Gpu, Render};
-use crate::element::Element;
+use crate::renderer::{Gfx, Gpu};
 use crate::color::{Pixel, Rgba};
-use crate::callback::CALLBACKS;
 
 pub use {
     button::*,
@@ -38,7 +36,7 @@ pub trait View {
         if let Some(children) = self.children() {
             children.iter().for_each(|child| {
                 child.calculate_size(cx);
-                let child_size = cx.get_node_data(&child.id()).unwrap().size();
+                let child_size = cx.get_node_data(child.id()).size();
                 match prop.orientation() {
                     Orientation::Vertical => {
                         size.height += child_size.height;
@@ -66,11 +64,10 @@ pub trait View {
             .max(prop.min_width(), prop.min_height())
             .min(prop.max_width(), prop.max_height());
 
-        if let Some(properties) = cx.get_node_data_mut(&self.id()) {
-            if properties.size() != final_size {
-                properties.set_size(final_size);
-            }
-        }
+        let properties = cx.get_node_data_mut(self.id());
+        properties.set_size(final_size);
+        // if size != final_size {
+        // }
     }
 
     fn prepare(&self, cx: &mut Context, parent_id: Option<NodeId>) {
@@ -88,35 +85,21 @@ pub trait View {
         cx: &mut Context,
     ) {
         let node_id = self.id();
-        if !cx.contains(&node_id) { self.prepare(cx, None) }
-        if cx.is_root(&node_id) { self.calculate_size(cx) }
+        if cx.is_empty() {
+            self.prepare(cx, None);
+            self.calculate_size(cx);
+        }
         self.layout(cx);
-        let properties = cx.get_node_data(&node_id).unwrap();
+        let properties = cx.get_node_data(node_id);
         gfx.register(gpu, self.pixel(), properties);
 
         if let Some(children) = self.children() {
             let padding = properties.padding();
             let current_pos = properties.pos();
             let current_half = properties.size() / 2;
-            // let alignment = properties.alignment();
 
-            // setting for the first child's position
+            // FIXME: consider alignment
             cx.set_next_pos(|pos| {
-                // match (alignment.horizontal, alignment.vertical) {
-                //     (HAlignment::Left, VAlignment::Top) => {
-                //         pos.x = current_pos.x - current_half.width + padding.left();
-                //         pos.y = current_pos.y - current_half.height + padding.top();
-                //     },
-                //     (HAlignment::Left, VAlignment::Middle) => {},
-                //     (HAlignment::Left, VAlignment::Bottom) => {},
-                //     (HAlignment::Center, VAlignment::Top) => {},
-                //     (HAlignment::Center, VAlignment::Middle) => {},
-                //     (HAlignment::Center, VAlignment::Bottom) => {},
-                //     (HAlignment::Right, VAlignment::Top) => {},
-                //     (HAlignment::Right, VAlignment::Middle) => {},
-                //     (HAlignment::Right, VAlignment::Bottom) => {},
-                // }
-
                 pos.x = current_pos.x - current_half.width + padding.left();
                 pos.y = current_pos.y - current_half.height + padding.top();
             });
@@ -182,21 +165,6 @@ impl TestTriangleWidget {
         f(&mut self.inner);
         self
     }
-
-    pub fn on_hover<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
-        self
-    }
-
-    pub fn on_click<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
-        self
-    }
-
-    pub fn on_drag<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
-        self
-    }
 }
 
 impl View for TestTriangleWidget {
@@ -207,7 +175,7 @@ impl View for TestTriangleWidget {
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
     fn layout(&self, cx: &mut Context) {
-        cx.assign_position(&self.id)
+        cx.assign_position(self.id)
     }
 
     fn properties(&self) -> &Properties { &self.inner }
@@ -234,21 +202,6 @@ impl TestCircleWidget {
         f(&mut self.inner);
         self
     }
-
-    pub fn on_hover<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
-        self
-    }
-
-    pub fn on_click<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
-        self
-    }
-
-    pub fn on_drag<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
-        self
-    }
 }
 
 impl View for TestCircleWidget {
@@ -259,7 +212,7 @@ impl View for TestCircleWidget {
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
     fn layout(&self, cx: &mut Context) {
-        cx.assign_position(&self.id)
+        cx.assign_position(self.id)
     }
 
     fn properties(&self) -> &Properties { &self.inner }

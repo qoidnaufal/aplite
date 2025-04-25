@@ -1,42 +1,29 @@
 use learn_wgpu::prelude::*;
 
 fn root() -> impl IntoView {
-    let counter = signal(0i32);
+    let (counter, set_counter) = signal(0i32);
     eprintln!("{}", counter.get());
 
     let c1 = counter.clone();
-    let inc = move |el: &mut Element| {
-        c1.set(|num| *num += 1);
+    let s1 = set_counter.clone();
+    let inc = move || {
+        s1.set(|num| *num += 1);
         eprintln!("inc {}", c1.get());
-        el.update_color(|color| color.r += 150);
     };
 
-    let c2 = counter.clone();
-    let dec = move |el: &mut Element| {
-        c2.set(|num| *num -= 1);
-        eprintln!("dec {}", c2.get());
-        el.update_color(|color| color.r += 150);
-    };
-
-    let hover = |el: &mut Element| {
-        el.update_color(|color| *color = Rgba::BLUE);
-    };
-    let drag = |el: &mut Element| {
-        el.update_color(|color| *color = Rgba::GREEN);
+    let dec = move || {
+        set_counter.set(|num| *num -= 1);
+        eprintln!("dec {}", counter.get());
     };
 
     let first_row = [
         image("assets/image1.jpg").into_any(),
-        image("assets/image2.jpg").on_drag(drag).into_any(),
+        image("assets/image2.jpg").style(|s| s.set_dragable(true)).into_any(),
         TestTriangleWidget::new()
             .style(|style| {
-                if counter.get() % 2 == 0 {
-                    style.set_fill_color(Rgba::BLACK);
-                } else {
-                    style.set_fill_color(Rgba::RED);
-                };
+                style.set_hover_color(Rgba::BLUE);
+                style.set_fill_color(Rgba::BLACK);
             })
-            .on_hover(hover)
             .into_any(),
     ];
 
@@ -44,6 +31,8 @@ fn root() -> impl IntoView {
         stack([
             button()
                 .style(|style| {
+                    style.set_hover_color(Rgba::BLUE);
+                    style.set_click_color(Rgba::GREEN);
                     style.set_stroke_width(10.);
                     style.set_corners(|corners| {
                         corners.set_top_left(0.025);
@@ -53,18 +42,19 @@ fn root() -> impl IntoView {
                     });
                 })
                 .on_click(inc)
-                .on_hover(hover)
                 .into_any(),
             button()
                 .style(|style| {
+                    style.set_hover_color(Rgba::WHITE);
+                    style.set_click_color(Rgba::BLUE);
                     style.set_stroke_width(5.);
                     style.set_corners(|r| r.set_each(0.039));
                 })
                 .on_click(dec)
-                .on_hover(hover)
                 .into_any(),
             button()
                 .style(|style| {
+                    style.set_hover_color(Rgba::YELLOW);
                     style.set_stroke_width(5.);
                     style.set_corners(|corners| {
                         corners.set_top_left(0.);
@@ -73,18 +63,16 @@ fn root() -> impl IntoView {
                         corners.set_top_right(0.03);
                     });
                 })
-                .on_hover(hover)
                 .into_any(),
             button()
                 .style(|style| {
                     style.set_corners(|corners| corners.set_each(0.04));
                     style.set_fill_color(Rgba::new(69, 172, 23, 255));
                 })
-                .on_hover(hover)
                 .into_any(),
             ])
-            .on_drag(drag)
             .style(|style| {
+                style.set_dragable(true);
                 style.set_fill_color(Rgba::new(111, 72, 234, 255));
                 style.set_min_width(1000);
                 style.set_padding(|padding| padding.set_all(20));
@@ -93,17 +81,24 @@ fn root() -> impl IntoView {
             .into_any(),
         TestCircleWidget::new()
             .style(|style| {
+                style.set_hover_color(Rgba::GREEN);
                 style.set_stroke_width(10.);
                 style.set_fill_color(Rgba::BLACK);
                 style.set_stroke_color(Rgba::RED);
             })
-            .on_hover(hover)
             .into_any(),
     ];
 
     stack([
         stack(first_row)
             .style(|style| {
+                style.set_shape(Shape::RoundedRect);
+                style.set_corners(|corner| {
+                    corner.set_each(0.03);
+                });
+                style.set_stroke_color(Rgba::GREEN);
+                style.set_stroke_width(5.);
+                style.set_dragable(true);
                 style.set_orientation(Orientation::Horizontal);
                 style.set_fill_color(Rgba::YELLOW);
                 style.set_padding(|padding| {
@@ -114,10 +109,10 @@ fn root() -> impl IntoView {
                 });
                 style.set_spacing(40);
             })
-            .on_drag(drag)
             .into_any(),
         stack(second_row)
             .style(|style| {
+                style.set_dragable(true);
                 style.set_fill_color(Rgba::new(69, 69, 69, 255));
                 style.set_orientation(Orientation::Horizontal);
                 style.set_padding(|padding| {
@@ -125,16 +120,15 @@ fn root() -> impl IntoView {
                 });
                 style.set_spacing(30);
             })
-            .on_drag(drag)
             .into_any(),
         TestCircleWidget::new()
             .style(|style| {
+                style.set_dragable(true);
+                style.set_hover_color(Rgba::BLACK);
                 style.set_fill_color(Rgba::new(169, 72, 43, 255));
                 style.set_stroke_width(5.);
                 style.set_stroke_color(Rgba::WHITE);
             })
-            .on_drag(drag)
-            .on_hover(hover)
             .into_any(),
         ])
         .style(|style| {
@@ -144,33 +138,32 @@ fn root() -> impl IntoView {
 }
 
 fn dummy() -> impl IntoView {
-    let counter = signal(0i32);
-    let set_counter = counter.clone();
-    let hover = move |el: &mut Element| {
-        let color = if set_counter.get() % 3 == 0 {
-            Rgba::BLUE
-        } else {
-            Rgba::YELLOW
-        };
-        el.update_color(|c| *c = color);
-    };
-    let drag = |el: &mut Element| {
-        el.update_color(|color| *color = Rgba::GREEN);
-    };
-    let click = move |_: &mut Element| {
-        counter.set(|num| *num += 1);
+    let (counter, set_counter) = signal(0i32);
+
+    let click = move || {
+        set_counter.set(|num| *num += 1);
+        eprintln!("counter: {}", counter.get());
     };
 
-    button()
+    stack([
+        button()
+            .style(|style| {
+                style.set_size((500, 200));
+                style.set_stroke_color(Rgba::WHITE);
+                style.set_stroke_width(10.);
+                style.set_corners(|r| r.set_each(0.15));
+            })
+            .on_click(click)
+            .into_any(),
+        TestCircleWidget::new()
+            .style(|style| {
+                style.set_dragable(true);
+            })
+            .into_any(),
+        ])
         .style(|style| {
-            style.set_size((500, 200));
-            style.set_stroke_color(Rgba::WHITE);
-            style.set_stroke_width(10.);
-            style.set_corners(|r| r.set_each(0.15));
+            style.set_padding(|p| p.set_all(30));
         })
-        .on_hover(hover)
-        .on_drag(drag)
-        .on_click(click)
 }
 
 fn main() -> AppResult {

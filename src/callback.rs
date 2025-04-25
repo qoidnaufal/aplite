@@ -1,55 +1,49 @@
 use std::{cell::RefCell, collections::HashMap};
 
-use crate::{element::Element, context::NodeId};
+use crate::context::NodeId;
 
 thread_local! {
     pub static CALLBACKS: RefCell<Callbacks> = RefCell::new(Callbacks::default());
 }
 
-pub struct Callback(Box<dyn FnMut(&mut Element) + 'static>);
+pub struct Action(Box<dyn Fn() + 'static>);
 
 #[derive(Default)]
 pub struct Callbacks {
-    pub on_click: HashMap<NodeId, Callback>,
-    pub on_drag: HashMap<NodeId, Callback>,
-    pub on_hover: HashMap<NodeId, Callback>,
+    action: HashMap<NodeId, Action>,
 }
 
-impl<F: FnMut(&mut Element) + 'static> From<F> for Callback {
+impl Callbacks {
+    pub(crate) fn insert(&mut self, node_id: NodeId, action: impl Into<Action>) {
+        self.action.insert(node_id, action.into());
+    }
+
+    pub(crate) fn get(&self, node_id: &NodeId) -> Option<&Action> {
+        self.action.get(node_id)
+    }
+
+    pub(crate) fn run(&self, node_id: &NodeId) {
+        if let Some(action) = self.get(node_id) {
+            action();
+        }
+    }
+}
+
+impl<F: Fn() + 'static> From<F> for Action {
     fn from(callback: F) -> Self {
         Self(Box::new(callback))
     }
 }
 
-impl std::ops::Deref for Callback {
-    type Target = Box<dyn FnMut(&mut Element) + 'static>;
+impl std::ops::Deref for Action {
+    type Target = Box<dyn Fn() + 'static>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl std::ops::DerefMut for Callback {
+impl std::ops::DerefMut for Action {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
-    }
-}
-
-impl Callbacks {
-    pub fn handle_click(&mut self, node_id: &NodeId, element: &mut Element) {
-        if let Some(on_click) = self.on_click.get_mut(node_id) {
-            on_click(element);
-        }
-    }
-
-    // pub fn handle_drag(&mut self, node_id: &NodeId, element: &mut Element) {
-    //     if let Some(on_drag) = self.on_drag.get_mut(node_id) {
-    //         on_drag(element)
-    //     }
-    // }
-
-    pub fn handle_hover(&mut self, node_id: &NodeId, element: &mut Element) {
-        if let Some(on_hover) = self.on_hover.get_mut(node_id) {
-            on_hover(element)
-        }
     }
 }

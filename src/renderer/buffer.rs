@@ -2,8 +2,7 @@ use util::{cast_slice, Matrix4x4, Size};
 
 use crate::color::{Pixel, Rgba};
 use crate::properties::Shape;
-use crate::element::Element;
-use super::{Gpu, Render, TextureData};
+use super::{Gpu, Render, TextureData, Element};
 
 const INITIAL_CAPACITY: u64 = 1024 * 4;
 

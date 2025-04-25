@@ -1,6 +1,5 @@
 use crate::callback::CALLBACKS;
 use crate::properties::{Shape, Properties};
-use crate::element::Element;
 use crate::color::{Pixel, Rgba};
 use crate::context::Context;
 
@@ -25,18 +24,8 @@ impl Button {
         self
     }
 
-    pub fn on_hover<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
-        self
-    }
-
-    pub fn on_click<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
-        self
-    }
-
-    pub fn on_drag<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
+    pub fn on_click<F: Fn() + 'static>(self, f: F) -> Self {
+        CALLBACKS.with_borrow_mut(|cb| cb.insert(self.id(), f));
         self
     }
 }
@@ -48,9 +37,7 @@ impl View for Button {
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
-    fn layout(&self, cx: &mut Context) {
-        cx.assign_position(&self.id)
-    }
+    fn layout(&self, cx: &mut Context) { cx.assign_position(self.id) }
 
     fn properties(&self) -> &Properties { &self.inner }
 }

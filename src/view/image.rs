@@ -1,9 +1,7 @@
 use std::path::PathBuf;
 
 use crate::renderer::image_reader;
-use crate::element::Element;
 use crate::properties::{Shape, Properties};
-use crate::callback::CALLBACKS;
 use crate::color::{Pixel, Rgba};
 use crate::context::Context;
 use super::{AnyView, IntoView, NodeId, View};
@@ -32,21 +30,6 @@ impl Image {
         f(&mut self.inner);
         self
     }
-
-    pub fn on_hover<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
-        self
-    }
-
-    pub fn on_click<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
-        self
-    }
-
-    pub fn on_drag<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
-        self
-    }
 }
 
 impl View for Image {
@@ -56,7 +39,7 @@ impl View for Image {
 
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { Some(&self.pixel) }
 
-    fn layout(&self, cx: &mut Context) { cx.assign_position(&self.id) }
+    fn layout(&self, cx: &mut Context) { cx.assign_position(self.id) }
 
     fn properties(&self) -> &Properties { &self.inner }
 }

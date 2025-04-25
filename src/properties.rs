@@ -2,8 +2,7 @@ use util::{tan, Matrix4x4, Size, Vector2};
 
 use crate::color::Rgba;
 use crate::cursor::Cursor;
-use crate::element::Element;
-use crate::renderer::Render;
+use crate::renderer::{Render, Element};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shape {
@@ -178,6 +177,7 @@ pub struct Properties {
     rotate: f32,                   // render
     stroke_width: f32,             // render
     textured: bool,                // render
+    dragable: bool,
 }
 
 impl Properties {
@@ -207,6 +207,7 @@ impl Properties {
             rotate: 0.0,
             stroke_width: 0.0,
             textured,
+            dragable: false,
         }
     }
 
@@ -283,6 +284,8 @@ impl Properties {
 
     pub fn set_spacing(&mut self, spacing: u32) { self.spacing = spacing }
 
+    pub fn set_dragable(&mut self, val: bool) { self.dragable = val }
+
     pub(crate) fn adjust_ratio(&mut self, aspect_ratio: f32) {
         self.size.width = (self.size.height as f32 * aspect_ratio) as u32;
     }
@@ -307,6 +310,10 @@ impl Properties {
 
     pub(crate) fn fill_color(&self) -> Rgba<u8> { self.fill_color }
 
+    pub(crate) fn hover_color(&self) -> Option<Rgba<u8>> { self.hover_color }
+
+    pub(crate) fn click_color(&self) -> Option<Rgba<u8>> { self.click_color }
+
     pub(crate) fn stroke_color(&self) -> Rgba<u8> { self.stroke_color }
 
     pub(crate) fn shape(&self) -> Shape { self.shape }
@@ -321,7 +328,9 @@ impl Properties {
 
     pub(crate) fn spacing(&self) -> u32 { self.spacing }
 
-    pub(crate) fn textured(&self) -> bool { self.textured }
+    pub(crate) fn is_dragable(&self) -> bool { self.dragable }
+
+    pub(crate) fn is_textured(&self) -> bool { self.textured }
 
     pub(crate) fn is_hovered(&self, cursor: &Cursor) -> bool {
         // FIXME: consider rotation

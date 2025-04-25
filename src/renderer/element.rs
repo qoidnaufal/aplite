@@ -1,4 +1,4 @@
-use crate::renderer::Indices;
+use super::Indices;
 use crate::properties::{Corners, Shape, Properties};
 use crate::color::Rgba;
 
@@ -24,7 +24,7 @@ impl Element {
             corners: properties.corners(),
             rotate: properties.rotation(),
             stroke_width: properties.stroke_width(),
-            texture_id: if properties.textured() { 0 } else { -1 },
+            texture_id: if properties.is_textured() { 0 } else { -1 },
             transform_id: 0,
         }
     }

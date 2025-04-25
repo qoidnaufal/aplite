@@ -3,6 +3,7 @@ mod buffer;
 mod shader;
 mod pipeline;
 mod texture;
+mod element;
 
 use std::sync::Arc;
 use winit::window::Window;
@@ -13,9 +14,9 @@ pub(crate) use pipeline::pipeline;
 pub(crate) use gpu::Gpu;
 pub(crate) use shader::SHADER;
 pub(crate) use texture::{TextureData, image_reader};
+pub use element::Element;
 
 use crate::context::Context;
-use crate::element::Element;
 use crate::error::GuiError;
 use crate::view::{IntoView, View};
 use crate::color::Rgb;

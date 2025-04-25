@@ -1,6 +1,4 @@
-use crate::callback::CALLBACKS;
 use crate::color::{Pixel, Rgba};
-use crate::element::Element;
 use crate::properties::{Properties, Shape};
 use crate::context::Context;
 
@@ -28,21 +26,6 @@ impl Stack {
         f(&mut self.inner);
         self
     }
-
-    pub fn on_hover<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_hover.insert(self.id(), f.into()));
-        self
-    }
-
-    pub fn on_click<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_click.insert(self.id(), f.into()));
-        self
-    }
-
-    pub fn on_drag<F: FnMut(&mut Element) + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cbs| cbs.on_drag.insert(self.id(), f.into()));
-        self
-    }
 }
 
 impl View for Stack {
@@ -53,12 +36,12 @@ impl View for Stack {
     fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
 
     fn layout(&self, cx: &mut Context) {
-        cx.set_orientation(&self.id);
-        cx.set_alignment(&self.id);
-        cx.set_spacing(&self.id);
-        cx.set_padding(&self.id);
+        cx.set_orientation(self.id);
+        cx.set_alignment(self.id);
+        cx.set_spacing(self.id);
+        cx.set_padding(self.id);
 
-        cx.assign_position(&self.id);
+        cx.assign_position(self.id);
     }
 
     fn properties(&self) -> &Properties { &self.inner }
