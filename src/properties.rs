@@ -2,7 +2,7 @@ use util::{tan, Matrix4x4, Size, Vector2};
 
 use crate::color::Rgba;
 use crate::cursor::Cursor;
-use crate::renderer::{Render, Element};
+use crate::renderer::{Corners, IntoRenderComponent};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shape {
@@ -59,62 +59,6 @@ pub enum Orientation {
     Horizontal,
 }
 
-#[repr(C, align(16))]
-#[derive(Debug, Clone, Copy)]
-pub struct Corners {
-    top_left: f32,
-    bot_left: f32,
-    bot_right: f32,
-    top_right: f32,
-}
-
-impl From<f32> for Corners {
-    fn from(val: f32) -> Self {
-        Self {
-            top_left: val,
-            bot_left: val,
-            bot_right: val,
-            top_right: val,
-        }
-    }
-}
-
-impl Corners {
-    pub fn new_homogen(r: f32) -> Self {
-        r.into()
-    }
-
-    pub fn set_all(&mut self, tl: f32, bl: f32, br: f32, tr: f32) {
-        self.top_left = tl;
-        self.bot_left = bl;
-        self.bot_right = br;
-        self.top_right = tr;
-    }
-
-    pub fn set_each(&mut self, r: f32) {
-        self.top_left = r;
-        self.bot_left = r;
-        self.bot_right = r;
-        self.top_right = r;
-    }
-
-    pub fn set_top_left(&mut self, r: f32) {
-        self.top_left = r;
-    }
-
-    pub fn set_bot_left(&mut self, r: f32) {
-        self.bot_left = r;
-    }
-
-    pub fn set_bot_right(&mut self, r: f32) {
-        self.bot_right = r;
-    }
-
-    pub fn set_top_right(&mut self, r: f32) {
-        self.top_right = r;
-    }
-}
-
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Padding {
     top: u32,
@@ -158,25 +102,25 @@ impl Padding {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Properties {
-    pos: Vector2<u32>,             // layout
-    size: Size<u32>,               // layout
-    min_width: Option<u32>,        // layout
-    min_height: Option<u32>,       // layout
-    max_width: Option<u32>,        // layout
-    max_height: Option<u32>,       // layout
-    alignment: Alignment,          // layout
-    orientation: Orientation,      // layout
-    spacing: u32,                  // layout
-    padding: Padding,              // layout
-    hover_color: Option<Rgba<u8>>, // style
-    click_color: Option<Rgba<u8>>, // style
-    fill_color: Rgba<u8>,          // render
-    stroke_color: Rgba<u8>,        // render
-    shape: Shape,                  // render
-    corners: Corners,              // render
-    rotate: f32,                   // render
-    stroke_width: f32,             // render
-    textured: bool,                // render
+    pos: Vector2<u32>,
+    size: Size<u32>,
+    min_width: Option<u32>,
+    min_height: Option<u32>,
+    max_width: Option<u32>,
+    max_height: Option<u32>,
+    alignment: Alignment,
+    orientation: Orientation,
+    spacing: u32,
+    padding: Padding,
+    hover_color: Option<Rgba<u8>>,
+    click_color: Option<Rgba<u8>>,
+    fill_color: Rgba<u8>,
+    stroke_color: Rgba<u8>,
+    shape: Shape,
+    corners: Corners,
+    rotation: f32,
+    stroke_width: f32,
+    texture_id: i32,
     dragable: bool,
 }
 
@@ -204,9 +148,36 @@ impl Properties {
             stroke_color: Rgba::BLACK,
             shape,
             corners: if shape.is_rounded_rect() { 0.025.into() } else { 0.0.into() },
-            rotate: 0.0,
+            rotation: 0.0,
             stroke_width: 0.0,
-            textured,
+            texture_id: if textured { 0 } else { -1 },
+            dragable: false,
+        }
+    }
+
+    pub(crate) fn window_properties(window: &winit::window::Window) -> Self {
+        let inner_size = window.inner_size();
+        let size: Size<u32> = (inner_size.width, inner_size.height).into();
+        Self {
+            pos: (size / 2).into(),
+            size,
+            min_width: None,
+            min_height: None,
+            max_width: None,
+            max_height: None,
+            alignment: Default::default(),
+            orientation: Default::default(),
+            spacing: 0,
+            padding: Default::default(),
+            hover_color: None,
+            click_color: None,
+            fill_color: Rgba::BLACK,
+            stroke_color: Rgba::BLACK,
+            shape: Shape::Rect,
+            corners: 0.0.into(),
+            rotation: 0.0,
+            stroke_width: 0.0,
+            texture_id: -1,
             dragable: false,
         }
     }
@@ -271,7 +242,7 @@ impl Properties {
     }
 
     pub fn set_rotation(&mut self, rotate: f32) {
-        self.rotate = rotate;
+        self.rotation = rotate;
     }
 
     pub fn set_stroke_width(&mut self, stroke: f32) {
@@ -285,6 +256,10 @@ impl Properties {
     pub fn set_spacing(&mut self, spacing: u32) { self.spacing = spacing }
 
     pub fn set_dragable(&mut self, val: bool) { self.dragable = val }
+
+    pub(crate) fn set_texture_id(&mut self, val: i32) {
+        self.texture_id = val;
+    }
 
     pub(crate) fn adjust_ratio(&mut self, aspect_ratio: f32) {
         self.size.width = (self.size.height as f32 * aspect_ratio) as u32;
@@ -320,7 +295,7 @@ impl Properties {
 
     pub(crate) fn corners(&self) -> Corners { self.corners }
 
-    pub(crate) fn rotation(&self) -> f32 { self.rotate }
+    pub(crate) fn rotation(&self) -> f32 { self.rotation }
 
     pub(crate) fn stroke_width(&self) -> f32 { self.stroke_width }
 
@@ -330,7 +305,7 @@ impl Properties {
 
     pub(crate) fn is_dragable(&self) -> bool { self.dragable }
 
-    pub(crate) fn is_textured(&self) -> bool { self.textured }
+    pub(crate) fn texture_id(&self) -> i32 { self.texture_id }
 
     pub(crate) fn is_hovered(&self, cursor: &Cursor) -> bool {
         // FIXME: consider rotation
@@ -358,10 +333,20 @@ impl Properties {
     }
 }
 
-impl Render for Properties {
-    fn element(&self) -> Element {
-        Element::new(self)
-    }
+impl IntoRenderComponent for Properties {
+    fn fill_color(&self) -> Rgba<f32> { self.fill_color().into() }
+
+    fn stroke_color(&self) -> Rgba<f32> { self.stroke_color().into() }
+
+    fn corners(&self) -> Corners { self.corners() }
+
+    fn shape(&self) -> u32 { self.shape() as u32 }
+
+    fn rotation(&self) -> f32 { self.rotation() }
+
+    fn stroke_width(&self) -> f32 { self.stroke_width() }
+
+    fn texture_id(&self) -> i32 { self.texture_id() }
 
     fn transform(&self, window_size: Size<u32>) -> Matrix4x4 {
         let mut matrix = Matrix4x4::IDENTITY;
@@ -375,12 +360,29 @@ impl Render for Properties {
     }
 }
 
-impl Render for &Properties {
-    fn element(&self) -> Element {
-        (*self).element()
-    }
+impl IntoRenderComponent for &Properties {
+    fn fill_color(&self) -> Rgba<f32> { self.fill_color.into() }
+
+    fn stroke_color(&self) -> Rgba<f32> { self.stroke_color.into() }
+
+    fn corners(&self) -> Corners { self.corners }
+
+    fn shape(&self) -> u32 { self.shape as u32 }
+
+    fn rotation(&self) -> f32 { self.rotation }
+
+    fn stroke_width(&self) -> f32 { self.stroke_width }
+
+    fn texture_id(&self) -> i32 { self.texture_id }
 
     fn transform(&self, window_size: Size<u32>) -> Matrix4x4 {
-        (*self).transform(window_size)
+        let mut matrix = Matrix4x4::IDENTITY;
+        let ws: Size<f32> = window_size.into();
+        let x = self.pos.x as f32 / ws.width * 2.0 - 1.0;
+        let y = 1.0 - self.pos.y as f32 / ws.height * 2.0;
+        let d: Size<f32> = self.size.into();
+        let scale = d / ws;
+        matrix.transform(x, y, scale.width, scale.height);
+        matrix
     }
 }

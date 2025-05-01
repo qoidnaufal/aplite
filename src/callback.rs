@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap};
 
-use crate::context::NodeId;
+use crate::tree::NodeId;
 
 thread_local! {
     pub static CALLBACKS: RefCell<Callbacks> = RefCell::new(Callbacks::default());

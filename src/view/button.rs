@@ -1,26 +1,25 @@
 use crate::callback::CALLBACKS;
 use crate::properties::{Shape, Properties};
 use crate::color::{Pixel, Rgba};
-use crate::context::Context;
 
-use super::{AnyView, IntoView, NodeId, View};
+use super::{NodeId, Render, View};
 
 pub fn button() -> Button { Button::new() }
 
 pub struct Button {
     id: NodeId,
-    inner: Properties,
+    properties: Properties,
 }
 
 impl Button {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let id = NodeId::new();
-        let inner = Properties::new(Rgba::RED, (200, 50), Shape::RoundedRect, false);
-        Self { id, inner }
+        let properties = Properties::new(Rgba::RED, (200, 50), Shape::RoundedRect, false);
+        Self { id, properties }
     }
 
     pub fn style<F: FnOnce(&mut Properties)>(mut self, f: F) -> Self {
-        f(&mut self.inner);
+        f(&mut self.properties);
         self
     }
 
@@ -30,19 +29,12 @@ impl Button {
     }
 }
 
-impl View for Button {
+impl Render for Button {
     fn id(&self) -> NodeId { self.id }
 
-    fn children(&self) -> Option<&[AnyView]> { None }
+    fn children(&self) -> Option<&[View]> { None }
 
-    fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
+    fn pixel(&self) -> Option<Pixel<u8>> { None }
 
-    fn layout(&self, cx: &mut Context) { cx.assign_position(self.id) }
-
-    fn properties(&self) -> &Properties { &self.inner }
-}
-
-impl IntoView for Button {
-    type V = Self;
-    fn into_view(self) -> Self::V { self }
+    fn properties(&self) -> &Properties { &self.properties }
 }

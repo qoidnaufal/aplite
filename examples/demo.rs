@@ -17,19 +17,19 @@ fn root() -> impl IntoView {
     };
 
     let first_row = [
-        image("assets/image1.jpg").into_any(),
-        image("assets/image2.jpg").style(|s| s.set_dragable(true)).into_any(),
+        Image::new("assets/image1.jpg", |_| {}).into_view(),
+        Image::new("assets/image2.jpg", |_| {}).style(|s| s.set_dragable(true)).into_view(),
         TestTriangleWidget::new()
             .style(|style| {
                 style.set_hover_color(Rgba::BLUE);
                 style.set_fill_color(Rgba::BLACK);
             })
-            .into_any(),
+            .into_view(),
     ];
 
     let second_row = [
-        stack([
-            button()
+        Stack::new([
+            Button::new()
                 .style(|style| {
                     style.set_hover_color(Rgba::BLUE);
                     style.set_click_color(Rgba::GREEN);
@@ -42,8 +42,8 @@ fn root() -> impl IntoView {
                     });
                 })
                 .on_click(inc)
-                .into_any(),
-            button()
+                .into_view(),
+            Button::new()
                 .style(|style| {
                     style.set_hover_color(Rgba::WHITE);
                     style.set_click_color(Rgba::BLUE);
@@ -51,8 +51,8 @@ fn root() -> impl IntoView {
                     style.set_corners(|r| r.set_each(0.039));
                 })
                 .on_click(dec)
-                .into_any(),
-            button()
+                .into_view(),
+            Button::new()
                 .style(|style| {
                     style.set_hover_color(Rgba::YELLOW);
                     style.set_stroke_width(5.);
@@ -63,13 +63,13 @@ fn root() -> impl IntoView {
                         corners.set_top_right(0.03);
                     });
                 })
-                .into_any(),
-            button()
+                .into_view(),
+            Button::new()
                 .style(|style| {
                     style.set_corners(|corners| corners.set_each(0.04));
                     style.set_fill_color(Rgba::new(69, 172, 23, 255));
                 })
-                .into_any(),
+                .into_view(),
             ])
             .style(|style| {
                 style.set_dragable(true);
@@ -78,7 +78,7 @@ fn root() -> impl IntoView {
                 style.set_padding(|padding| padding.set_all(20));
                 style.set_spacing(40);
             })
-            .into_any(),
+            .into_view(),
         TestCircleWidget::new()
             .style(|style| {
                 style.set_hover_color(Rgba::GREEN);
@@ -86,11 +86,11 @@ fn root() -> impl IntoView {
                 style.set_fill_color(Rgba::BLACK);
                 style.set_stroke_color(Rgba::RED);
             })
-            .into_any(),
+            .into_view(),
     ];
 
-    stack([
-        stack(first_row)
+    Stack::new([
+        Stack::new(first_row)
             .style(|style| {
                 style.set_shape(Shape::RoundedRect);
                 style.set_corners(|corner| {
@@ -109,8 +109,8 @@ fn root() -> impl IntoView {
                 });
                 style.set_spacing(40);
             })
-            .into_any(),
-        stack(second_row)
+            .into_view(),
+        Stack::new(second_row)
             .style(|style| {
                 style.set_dragable(true);
                 style.set_fill_color(Rgba::new(69, 69, 69, 255));
@@ -120,7 +120,7 @@ fn root() -> impl IntoView {
                 });
                 style.set_spacing(30);
             })
-            .into_any(),
+            .into_view(),
         TestCircleWidget::new()
             .style(|style| {
                 style.set_dragable(true);
@@ -129,7 +129,7 @@ fn root() -> impl IntoView {
                 style.set_stroke_width(5.);
                 style.set_stroke_color(Rgba::WHITE);
             })
-            .into_any(),
+            .into_view(),
         ])
         .style(|style| {
             style.set_padding(|padding| padding.set_all(20));
@@ -145,8 +145,8 @@ fn dummy() -> impl IntoView {
         eprintln!("counter: {}", counter.get());
     };
 
-    stack([
-        button()
+    Stack::new([
+        Button::new()
             .style(|style| {
                 style.set_size((500, 200));
                 style.set_stroke_color(Rgba::WHITE);
@@ -154,12 +154,12 @@ fn dummy() -> impl IntoView {
                 style.set_corners(|r| r.set_each(0.15));
             })
             .on_click(click)
-            .into_any(),
+            .into_view(),
         TestCircleWidget::new()
             .style(|style| {
                 style.set_dragable(true);
             })
-            .into_any(),
+            .into_view(),
         ])
         .style(|style| {
             style.set_padding(|p| p.set_all(30));
@@ -173,10 +173,14 @@ fn main() -> AppResult {
             App::new(dummy)
                 .set_window_properties(|window| {
                     window.set_title("Dummy");
-                    window.set_decorations(false);
                 })
                 .launch()
         },
+        Some(arg) if arg == "empty" => {
+            App::<fn() -> View>::new_empty()
+                .set_window_properties(|window| window.set_title("Empty"))
+                .launch()
+        }
         _ => {
             App::new(root).launch()
         }

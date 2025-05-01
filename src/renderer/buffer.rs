@@ -1,8 +1,7 @@
 use util::{cast_slice, Matrix4x4, Size};
 
-use crate::color::{Pixel, Rgba};
 use crate::properties::Shape;
-use super::{Gpu, Render, TextureData, Element};
+use super::{Element, Gpu, IntoRenderComponent, IntoTextureData, TextureData};
 
 const INITIAL_CAPACITY: u64 = 1024 * 4;
 
@@ -14,11 +13,11 @@ pub struct Buffer<T> {
 }
 
 impl<T> Buffer<T> {
-    pub fn uniform(device: &wgpu::Device, label: &str) -> Self {
+    pub(crate) fn uniform(device: &wgpu::Device, label: &str) -> Self {
         Self::new(device, wgpu::BufferUsages::UNIFORM, 1, label)
     }
 
-    pub fn storage(device: &wgpu::Device, label: &str) -> Self {
+    pub(crate) fn storage(device: &wgpu::Device, label: &str) -> Self {
         Self::new(device, wgpu::BufferUsages::STORAGE, INITIAL_CAPACITY, label)
     }
 
@@ -75,9 +74,9 @@ impl<T> Buffer<T> {
         }
     }
 
-    pub fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> bool {
+    pub(crate) fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> bool {
         let data_size = self.data.len() * size_of::<T>();
-        let realloc = data_size as u64 > self.buffer.size();
+        let realloc = data_size > self.buffer.size() as usize;
         if realloc {
             let usage = self.buffer.usage();
             self.buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -91,15 +90,15 @@ impl<T> Buffer<T> {
         realloc
     }
 
-    pub fn push(&mut self, data: T) {
+    pub(crate) fn push(&mut self, data: T) {
         self.data.push(data);
     }
 
-    pub fn update<F: FnMut(&mut T)>(&mut self, index: usize, mut f: F) {
+    pub(crate) fn update<F: FnMut(&mut T)>(&mut self, index: usize, mut f: F) {
         f(&mut self.data[index])
     }
 
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.data.len()
     }
 }
@@ -116,29 +115,38 @@ impl Gfx {
     pub(crate) fn new(device: &wgpu::Device) -> Self {
         let indices = vec![];
         let textures = vec![];
-        let element = Buffer::<Element>::storage(device, "element");
+        let elements = Buffer::<Element>::storage(device, "element");
         let transforms = Buffer::<Matrix4x4>::storage(device, "transforms");
         let bind_group = Self::bind_group(device, &[
-            element.bind_group_entry(0),
+            elements.bind_group_entry(0),
             transforms.bind_group_entry(1),
         ]);
 
-        Self { elements: element, transforms, bind_group, indices, textures }
+        Self { elements, transforms, bind_group, indices, textures }
     }
 
-    pub(crate) fn count(&self) -> usize {
-        self.elements.len()
+    pub(crate) fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        let mut realloc = false;
+        realloc |= self.elements.write(device, queue);
+        realloc |= self.transforms.write(device, queue);
+
+        if realloc {
+            self.bind_group = Self::bind_group(device, &[
+                self.elements.bind_group_entry(0),
+                self.transforms.bind_group_entry(1),
+            ]);
+        }
     }
 
     pub(crate) fn register(
         &mut self,
         gpu: &Gpu,
-        maybe_pixel: Option<&Pixel<Rgba<u8>>>,
-        render: impl Render,
+        maybe_pixel: Option<impl IntoTextureData>,
+        render_component: impl IntoRenderComponent,
     ) {
         let window_size = gpu.size();
-        let mut element = render.element();
-        let transform = render.transform(window_size);
+        let mut element = render_component.element();
+        let transform = render_component.transform(window_size);
         let transform_id = self.transforms.len() as u32;
         element.transform_id = transform_id;
         self.push_texture(gpu, maybe_pixel, &mut element);
@@ -150,7 +158,7 @@ impl Gfx {
     fn push_texture(
         &mut self,
         gpu: &Gpu,
-        maybe_pixel: Option<&Pixel<Rgba<u8>>>,
+        maybe_pixel: Option<impl IntoTextureData>,
         element: &mut Element
     ) {
         if let Some(pixel) = maybe_pixel {
@@ -195,19 +203,6 @@ impl Gfx {
         }
     }
 
-    pub(crate) fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        let mut realloc = false;
-        realloc |= self.elements.write(device, queue);
-        realloc |= self.transforms.write(device, queue);
-
-        if realloc {
-            self.bind_group = Self::bind_group(device, &[
-                self.elements.bind_group_entry(0),
-                self.transforms.bind_group_entry(1),
-            ]);
-        }
-    }
-
     pub(crate) fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("gfx bind group layout"),
@@ -227,6 +222,14 @@ impl Gfx {
             layout: &Self::bind_group_layout(device),
             entries,
         })
+    }
+
+    pub(crate) fn count(&self) -> usize {
+        self.elements.len()
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.elements.data.is_empty()
     }
 }
 

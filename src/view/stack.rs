@@ -2,52 +2,47 @@ use crate::color::{Pixel, Rgba};
 use crate::properties::{Properties, Shape};
 use crate::context::Context;
 
-use super::{AnyView, IntoView, NodeId, View};
+use super::{NodeId, Render, View};
 
-pub fn stack(child_nodes: impl IntoIterator<Item = AnyView>) -> Stack {
-    Stack::new(child_nodes)
+pub fn stack(cx: &mut Context, child_view: impl IntoIterator<Item = View>) -> Stack {
+    Stack::new(cx, child_view)
 }
 
 pub struct Stack {
     id: NodeId,
-    children: Vec<Box<dyn View>>,
-    inner: Properties,
+    children: Option<Vec<View>>,
+    properties: Properties,
 }
 
 impl Stack {
-    fn new(child_nodes: impl IntoIterator<Item = AnyView>) -> Self {
+    pub fn new(cx: &mut Context, child_view: impl IntoIterator<Item = View>) -> Self {
+        Self::init().child(child_view)
+    }
+
+    fn init() -> Self {
         let id = NodeId::new();
-        let children = child_nodes.into_iter().collect();
-        let inner = Properties::new(Rgba::DARK_GRAY, (1, 1), Shape::Rect, false);
-        Self { id, children, inner }
+        let children = None;
+        let properties = Properties::new(Rgba::DARK_GRAY, (1, 1), Shape::Rect, false);
+        Self { id, children, properties }
+    }
+
+    fn child(mut self, child_view: impl IntoIterator<Item = View>) -> Self {
+        self.children = Some(child_view.into_iter().collect());
+        self
     }
 
     pub fn style<F: FnMut(&mut Properties)>(mut self, mut f: F) -> Self {
-        f(&mut self.inner);
+        f(&mut self.properties);
         self
     }
 }
 
-impl View for Stack {
+impl Render for Stack {
     fn id(&self) -> NodeId { self.id }
 
-    fn children(&self) -> Option<&[AnyView]> { Some(&self.children) }
+    fn children(&self) -> Option<&[View]> { self.children.as_ref().map(|cv| cv.as_slice()) }
 
-    fn pixel(&self) -> Option<&Pixel<Rgba<u8>>> { None }
+    fn pixel(&self) -> Option<Pixel<u8>> { None }
 
-    fn layout(&self, cx: &mut Context) {
-        cx.set_orientation(self.id);
-        cx.set_alignment(self.id);
-        cx.set_spacing(self.id);
-        cx.set_padding(self.id);
-
-        cx.assign_position(self.id);
-    }
-
-    fn properties(&self) -> &Properties { &self.inner }
-}
-
-impl IntoView for Stack {
-    type V = Self;
-    fn into_view(self) -> Self::V { self }
+    fn properties(&self) -> &Properties { &self.properties }
 }

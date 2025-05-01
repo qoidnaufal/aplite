@@ -64,7 +64,7 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+mod slot_test {
     use super::*;
 
     #[test]

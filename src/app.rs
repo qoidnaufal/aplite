@@ -7,12 +7,13 @@ use winit::event::WindowEvent;
 use winit::application::ApplicationHandler;
 use util::{Size, Vector2};
 
+use crate::color::Pixel;
 use crate::cursor::Cursor;
 use crate::prelude::AppResult;
-use crate::renderer::Renderer;
+use crate::renderer::{Gfx, Gpu, IntoRenderSource, Renderer};
 use crate::context::Context;
 use crate::error::GuiError;
-use crate::view::IntoView;
+use crate::view::{IntoView, Render};
 
 struct Stats {
     counter: u32,
@@ -45,25 +46,31 @@ pub struct App<F> {
     cx: Context,
     cursor: Cursor,
     window: HashMap<WindowId, Arc<Window>>,
-    window_properties: Option<fn(&Window)>,
+    window_fn: Option<fn(&Window)>,
     stats: Stats,
     view_fn: Option<F>,
 }
 
 impl<F, IV> App<F>
 where
-    F: Fn() -> IV + 'static,
+    F: FnOnce() -> IV + 'static,
     IV: IntoView + 'static,
 {
     pub fn new(view_fn: F) -> Self {
+        let mut app = Self::new_empty();
+        app.view_fn = Some(view_fn);
+        app
+    }
+
+    pub fn new_empty() -> Self {
         Self {
             renderer: None,
-            window: HashMap::with_capacity(4),
-            window_properties: None,
-            cx: Context::new(),
+            cx: Context::default(),
             cursor: Cursor::new(),
+            window: HashMap::with_capacity(4),
+            window_fn: None,
             stats: Stats::new(),
-            view_fn: Some(view_fn),
+            view_fn: None,
         }
     }
 
@@ -75,8 +82,29 @@ where
     }
 
     pub fn set_window_properties(mut self, f: fn(&Window)) -> Self {
-        self.window_properties = Some(f);
+        self.window_fn = Some(f);
         self
+    }
+
+    fn initialize_window(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) -> Arc<Window> {
+        let window = event_loop.create_window(Default::default()).unwrap();
+        window.set_title("GUI App");
+        if let Some(window_fn) = self.window_fn.take() {
+            window_fn(&window);
+        }
+        self.cx.initialize_root(&window);
+        Arc::new(window)
+    }
+
+    fn initialize_renderer(&mut self, window: Arc<Window>) {
+        let gpu = Gpu::request(window.clone()).unwrap();
+        let mut gfx = Gfx::new(&gpu.device);
+        gfx.register(&gpu, None::<Pixel<u8>>, self.cx.get_window_properties());
+        if let Some(view_fn) = self.view_fn.take() {
+            view_fn().into_view().render(&mut self.cx);
+            self.cx.register(&gpu, &mut gfx);
+        }
+        self.renderer = Some(Renderer::new(gpu, gfx));
     }
 
     fn request_redraw(&self, window_id: winit::window::WindowId) {
@@ -87,7 +115,9 @@ where
 
     fn resize(&mut self, size: impl Into<Size<u32>>) {
         if let Some(renderer) = self.renderer.as_mut() {
-            renderer.resize(size.into());
+            let size: Size<u32> = size.into();
+            self.cx.update_window_properties(|prop| prop.set_size(size));
+            renderer.resize(size);
         }
     }
 
@@ -112,30 +142,18 @@ where
     }
 }
 
-fn create_window(event_loop: &winit::event_loop::ActiveEventLoop) -> Arc<Window> {
-    let window = event_loop.create_window(Default::default()).unwrap();
-    Arc::new(window)
-}
-
 impl<F, IV> ApplicationHandler for App<F>
 where
-    F: Fn() -> IV + 'static,
+    F: FnOnce() -> IV + 'static,
     IV: IntoView + 'static,
 {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        if let Some(view_fn) = self.view_fn.take() {
-            let window = create_window(event_loop);
-            if let Some(window_fn) = self.window_properties.take() {
-                window_fn(&window);
-            } else {
-                window.set_title("GUI App");
-            }
-            self.renderer = Some(Renderer::new(window.clone(), &mut self.cx, view_fn));
-            self.window.insert(window.id(), window);
-        }
+        let window = self.initialize_window(event_loop);
+        self.initialize_renderer(Arc::clone(&window));
+        self.window.insert(window.id(), window);
 
-        // eprintln!("{:#?}", self.cx.nodes);
-        // eprintln!("{}", self.cx.nodes.len());
+        // self.cx.print_nodes();
+        // eprintln!("{}", self.cx.trees.len());
     }
 
     fn window_event(
@@ -189,8 +207,10 @@ where
             WindowEvent::CursorMoved { position, .. } => {
                 let renderer = self.renderer.as_mut().unwrap();
                 self.cursor.hover.pos = Vector2::new(position.x as _, position.y as _);
-                self.cx.detect_hover(&mut self.cursor);
-                self.cx.handle_hover(&mut self.cursor, &mut renderer.gfx);
+                if !renderer.gfx.is_empty() {
+                    self.cx.detect_hover(&mut self.cursor);
+                    self.cx.handle_hover(&mut self.cursor, &mut renderer.gfx);
+                }
             }
             _ => {}
         }

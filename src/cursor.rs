@@ -1,6 +1,6 @@
 use util::Vector2;
 
-use crate::context::NodeId;
+use crate::tree::NodeId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseAction {
@@ -110,8 +110,8 @@ impl Cursor {
         }
     }
 
-    pub(crate) fn is_dragging(&self, hover_id: NodeId) -> bool {
-        self.click.obj.is_some_and(|click_id| click_id == hover_id)
+    pub(crate) fn is_dragging(&self, hover_id: &NodeId) -> bool {
+        self.click.obj.is_some_and(|click_id| &click_id == hover_id)
             && self.hover.pos != self.click.pos
     }
 

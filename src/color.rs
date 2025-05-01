@@ -1,20 +1,18 @@
-use std::marker::PhantomData;
-
 use util::{Size, Vector4};
 
+use crate::renderer::IntoTextureData;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Pixel<Container> {
+pub struct Pixel<T> {
     dimensions: Size<u32>,
-    data: Vec<u8>,
-    _phatom: PhantomData<Container>,
+    data: Vec<T>,
 }
 
-impl Pixel<Rgba<u8>> {
-    pub fn new(dimensions: impl Into<Size<u32>>, data: &[u8]) -> Self {
+impl<T: Clone> Pixel<T> {
+    pub fn new(dimensions: impl Into<Size<u32>>, data: &[T]) -> Self {
         Self {
             dimensions: dimensions.into(),
             data: data.to_vec(),
-            _phatom: PhantomData,
         }
     }
 
@@ -27,41 +25,30 @@ impl Pixel<Rgba<u8>> {
     }
 }
 
-impl std::ops::Deref for Pixel<Rgba<u8>> {
-    type Target = Vec<u8>;
+impl<T> std::ops::Deref for Pixel<T> {
+    type Target = [T];
     fn deref(&self) -> &Self::Target {
-        &self.data
+        self.data.as_slice()
     }
 }
 
-impl From<Rgb<u8>> for Pixel<Rgb<u8>> {
+impl From<Rgb<u8>> for Pixel<u8> {
     fn from(rgb: Rgb<u8>) -> Self {
-        Self {
-            dimensions: Size::new(1, 1),
-            data: vec![rgb.r, rgb.g, rgb.b],
-            _phatom: PhantomData,
-        }
+        let rgba: Rgba<u8> = rgb.into();
+        Self::new((1, 1), &rgba.to_slice())
     }
 }
 
-impl From<Rgb<u8>> for Pixel<Rgba<u8>> {
-    fn from(rgb: Rgb<u8>) -> Self {
-        Self {
-            dimensions: Size::new(1, 1),
-            data: vec![rgb.r, rgb.g, rgb.b, u8::MAX],
-            _phatom: PhantomData,
-        }
-    }
-}
-
-impl From<Rgba<u8>> for Pixel<Rgba<u8>> {
+impl From<Rgba<u8>> for Pixel<u8> {
     fn from(rgba: Rgba<u8>) -> Self {
-        Self {
-            dimensions: Size::new(1, 1),
-            data: vec![rgba.r, rgba.g, rgba.b, rgba.a],
-            _phatom: PhantomData,
-        }
+        Self::new((1, 1), &rgba.to_slice())
     }
+}
+
+impl IntoTextureData for Pixel<u8> {
+    fn texture_data(&self) -> &[u8] { self }
+
+    fn dimensions(&self) -> Size<u32> { self.dimensions }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -147,6 +134,12 @@ pub struct Rgba<T> {
     pub a: T,
 }
 
+impl<T: Clone + Copy> Rgba<T> {
+    fn to_slice(&self) -> [T; 4] {
+        [self.r, self.g, self.b, self.a]
+    }
+}
+
 impl Rgba<u8> {
     pub const BLACK: Self = Self { r: 0, g: 0, b: 0, a: 255 };
     pub const RED: Self = Self { r: 255, g: 0, b: 0, a: 255 };
@@ -158,6 +151,17 @@ impl Rgba<u8> {
 
     pub fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self { r, g, b, a }
+    }
+}
+
+impl From<Rgba<u8>> for wgpu::Color {
+    fn from(rgba8: Rgba<u8>) -> Self {
+        Self {
+            r: rgba8.r as f64 / u8::MAX as f64,
+            g: rgba8.g as f64 / u8::MAX as f64,
+            b: rgba8.b as f64 / u8::MAX as f64,
+            a: rgba8.a as f64 / u8::MAX as f64,
+        }
     }
 }
 

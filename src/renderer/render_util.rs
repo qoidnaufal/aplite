@@ -1,6 +1,57 @@
-use super::{Gpu, SHADER};
+use util::{Matrix4x4, Size};
 
-pub fn pipeline(
+use crate::color::Rgba;
+
+use super::{Corners, Element, Gfx, Gpu, SHADER};
+
+pub(crate) trait IntoRenderComponent: Sized + Copy {
+    fn fill_color(&self) -> Rgba<f32>;
+    fn stroke_color(&self) -> Rgba<f32>;
+    fn corners(&self) -> Corners;
+    fn shape(&self) -> u32;
+    fn rotation(&self) -> f32;
+    fn stroke_width(&self) -> f32;
+    fn texture_id(&self) -> i32;
+    fn transform(&self, window_size: Size<u32>) -> Matrix4x4;
+
+    fn element(&self) -> Element {
+        Element::new(
+            self.fill_color(),
+            self.stroke_color(),
+            self.corners(),
+            self.shape(),
+            self.rotation(),
+            self.stroke_width(),
+            self.texture_id(),
+        )
+    }
+}
+
+pub(crate) trait IntoTextureData: Clone {
+    fn texture_data(&self) -> &[u8];
+    fn dimensions(&self) -> Size<u32>;
+}
+
+pub(crate) trait IntoRenderSource {
+    type RC: IntoRenderComponent;
+    type TD: IntoTextureData;
+
+    fn components(&self) -> &[Self::RC];
+    fn textures(&self) -> &[Self::TD];
+
+    fn register(&self, gpu: &Gpu, gfx: &mut Gfx) {
+        self.components().iter().for_each(|comps| {
+            let maybe_pixel = if comps.texture_id() >= 0 {
+                Some(self.textures()[comps.texture_id() as usize].clone())
+            } else {
+                None
+            };
+            gfx.register(gpu, maybe_pixel, *comps);
+        });
+    }
+}
+
+pub(crate) fn create_pipeline(
     gpu: &Gpu,
     buffers: &[wgpu::VertexBufferLayout<'_>],
     bind_group_layouts: &[&wgpu::BindGroupLayout],
