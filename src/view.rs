@@ -5,7 +5,6 @@ mod stack;
 use crate::properties::{Orientation, Shape, Properties, HAlign, VAlign};
 use crate::context::Context;
 use crate::tree::NodeId;
-use crate::renderer::{Gfx, Gpu};
 use crate::color::{Pixel, Rgba};
 
 pub use {

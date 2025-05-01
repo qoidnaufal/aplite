@@ -4,7 +4,7 @@ use crate::color::Rgba;
 
 use super::{Corners, Element, Gfx, Gpu, SHADER};
 
-pub(crate) trait IntoRenderComponent: Sized + Copy {
+pub(crate) trait IntoRenderComponent {
     fn fill_color(&self) -> Rgba<f32>;
     fn stroke_color(&self) -> Rgba<f32>;
     fn corners(&self) -> Corners;
@@ -27,7 +27,7 @@ pub(crate) trait IntoRenderComponent: Sized + Copy {
     }
 }
 
-pub(crate) trait IntoTextureData: Clone {
+pub(crate) trait IntoTextureData {
     fn texture_data(&self) -> &[u8];
     fn dimensions(&self) -> Size<u32>;
 }
@@ -40,13 +40,13 @@ pub(crate) trait IntoRenderSource {
     fn textures(&self) -> &[Self::TD];
 
     fn register(&self, gpu: &Gpu, gfx: &mut Gfx) {
-        self.components().iter().for_each(|comps| {
-            let maybe_pixel = if comps.texture_id() >= 0 {
-                Some(self.textures()[comps.texture_id() as usize].clone())
+        self.components().iter().for_each(|rc| {
+            let maybe_pixel = if rc.texture_id() >= 0 {
+                Some(&self.textures()[rc.texture_id() as usize])
             } else {
                 None
             };
-            gfx.register(gpu, maybe_pixel, *comps);
+            gfx.register(gpu, maybe_pixel, rc);
         });
     }
 }

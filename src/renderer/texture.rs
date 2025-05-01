@@ -24,7 +24,7 @@ pub struct TextureData {
 }
 
 impl TextureData {
-    pub fn new(gpu: &Gpu, td: impl IntoTextureData) -> Self {
+    pub fn new(gpu: &Gpu, td: &impl IntoTextureData) -> Self {
         let device = &gpu.device;
         let queue = &gpu.queue;
 
@@ -83,7 +83,7 @@ impl TextureData {
         })
     }
 
-    pub fn update_texture(&mut self, gpu: &Gpu, td: impl IntoTextureData) {
+    pub fn update_texture(&mut self, gpu: &Gpu, td: &impl IntoTextureData) {
         let size = td.dimensions();
         if size.width > self.texture.width() || size.height > self.texture.height() {
             self.texture = Self::create_texture(&gpu.device, size);
@@ -123,7 +123,7 @@ impl TextureData {
     fn submit_texture(
         queue: &wgpu::Queue,
         texture: wgpu::TexelCopyTextureInfo,
-        td: impl IntoTextureData,
+        td: &impl IntoTextureData,
     ) {
         queue.write_texture(
             texture,

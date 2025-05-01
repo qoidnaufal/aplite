@@ -141,8 +141,8 @@ impl Gfx {
     pub(crate) fn register(
         &mut self,
         gpu: &Gpu,
-        maybe_pixel: Option<impl IntoTextureData>,
-        render_component: impl IntoRenderComponent,
+        maybe_pixel: Option<&impl IntoTextureData>,
+        render_component: &impl IntoRenderComponent,
     ) {
         let window_size = gpu.size();
         let mut element = render_component.element();
@@ -158,7 +158,7 @@ impl Gfx {
     fn push_texture(
         &mut self,
         gpu: &Gpu,
-        maybe_pixel: Option<impl IntoTextureData>,
+        maybe_pixel: Option<&impl IntoTextureData>,
         element: &mut Element
     ) {
         if let Some(pixel) = maybe_pixel {

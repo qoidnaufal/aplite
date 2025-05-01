@@ -99,7 +99,7 @@ where
     fn initialize_renderer(&mut self, window: Arc<Window>) {
         let gpu = Gpu::request(window.clone()).unwrap();
         let mut gfx = Gfx::new(&gpu.device);
-        gfx.register(&gpu, None::<Pixel<u8>>, self.cx.get_window_properties());
+        gfx.register(&gpu, None::<&Pixel<u8>>, self.cx.get_window_properties());
         if let Some(view_fn) = self.view_fn.take() {
             view_fn().into_view().render(&mut self.cx);
             self.cx.register(&gpu, &mut gfx);
