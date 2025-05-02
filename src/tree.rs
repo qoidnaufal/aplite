@@ -292,24 +292,29 @@ impl<'a, E: Entity> IntoIterator for &'a Tree<E> {
 mod tree_test {
     use super::*;
 
-    #[test]
-    fn get_ancestor() {
+    fn setup_tree() -> Tree<NodeId> {
         let mut tree: Tree<NodeId> = Tree::new();
         tree.insert(NodeId::root(), None);
         let mut parent = None;
-        for _ in 0..10 {
+        for i in 0..10 {
             let node_id = tree.create_entity();
             tree.insert(node_id, parent);
-            if node_id.index() % 4 == 0 {
+            if i > 0 && i % 3 == 0 {
                 parent = Some(NodeId(1));
             } else {
                 parent = Some(node_id);
             }
         }
+        tree
+    }
 
-        let ancestor_1 = tree.get_ancestor(&NodeId(10));
+    #[test]
+    fn get_ancestor() {
+        let tree = setup_tree();
+
+        let ancestor = tree.get_ancestor(&NodeId(10));
         let next_sibling = tree.get_next_sibling(&NodeId(5));
-        assert_eq!(ancestor_1, Some(&NodeId(1)));
-        assert_eq!(next_sibling, Some(&NodeId(9)));
+        assert_eq!(ancestor, Some(&NodeId(1)));
+        assert_eq!(next_sibling, Some(&NodeId(8)));
     }
 }

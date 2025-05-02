@@ -43,7 +43,7 @@ impl Renderer {
         gpu.configure();
 
         // this is important to avoid creating texture for every element
-        let pseudo_texture = TextureData::new(&gpu, Pixel::from(Rgba::WHITE));
+        let pseudo_texture = TextureData::new(&gpu, &Pixel::from(Rgba::WHITE));
         let mut screen = Screen::new(&gpu.device, gpu.size());
         screen.write(&gpu.device, &gpu.queue);
         gfx.write(&gpu.device, &gpu.queue);
@@ -78,13 +78,13 @@ impl Renderer {
             self.gpu.configure();
         }
 
-        // update root's size
-        self.gfx.transforms.update(0, |mat| {
-            let s = ns / ps;
-            let sw = 1.0 + s.width;
-            let sh = 1.0 + s.height;
-            mat.scale(sw, sh);
-        });
+        // FIXME: is it necessary to have a dummy root widget?
+        // self.gfx.transforms.update(0, |mat| {
+        //     let s = ns / ps;
+        //     let sw = 1.0 + s.width;
+        //     let sh = 1.0 + s.height;
+        //     mat.scale(sw, sh);
+        // });
 
         self.screen.update_transform(|mat| {
             mat.scale(scale.width, scale.height);
@@ -97,7 +97,7 @@ impl Renderer {
         self.gfx.write(&self.gpu.device, &self.gpu.queue);
     }
 
-    pub(crate) fn render(&mut self) -> Result<(), GuiError> {
+    pub(crate) fn render(&mut self, color: Rgba<u8>) -> Result<(), GuiError> {
         let output = self.gpu.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
@@ -105,7 +105,7 @@ impl Renderer {
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("render encoder") });
 
-        self.encode(&mut encoder, &view);
+        self.encode(&mut encoder, &view, color);
 
         self.gpu.queue.submit(std::iter::once(encoder.finish()));
         output.present();
@@ -113,14 +113,14 @@ impl Renderer {
         Ok(())
     }
 
-    fn encode(&self, encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView) {
+    fn encode(&self, encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView, color: Rgba<u8>) {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("render pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(Rgba::BLACK.into()),
+                    load: wgpu::LoadOp::Clear(color.into()),
                     store: wgpu::StoreOp::Store,
                 }
             })],

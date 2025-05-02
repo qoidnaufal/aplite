@@ -125,19 +125,6 @@ impl Gfx {
         Self { elements, transforms, bind_group, indices, textures }
     }
 
-    pub(crate) fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        let mut realloc = false;
-        realloc |= self.elements.write(device, queue);
-        realloc |= self.transforms.write(device, queue);
-
-        if realloc {
-            self.bind_group = Self::bind_group(device, &[
-                self.elements.bind_group_entry(0),
-                self.transforms.bind_group_entry(1),
-            ]);
-        }
-    }
-
     pub(crate) fn register(
         &mut self,
         gpu: &Gpu,
@@ -166,6 +153,19 @@ impl Gfx {
             element.texture_id = texture_id;
             let texture_data = TextureData::new(gpu, pixel);
             self.textures.push(texture_data);
+        }
+    }
+
+    pub(crate) fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        let mut realloc = false;
+        realloc |= self.elements.write(device, queue);
+        realloc |= self.transforms.write(device, queue);
+
+        if realloc {
+            self.bind_group = Self::bind_group(device, &[
+                self.elements.bind_group_entry(0),
+                self.transforms.bind_group_entry(1),
+            ]);
         }
     }
 
@@ -232,8 +232,6 @@ impl Gfx {
         self.elements.data.is_empty()
     }
 }
-
-// const DEFAULT_SCREEN_SIZE: Size<u32> = Size::new(1600, 1200);
 
 pub(crate) struct Screen {
     transform: Buffer<Matrix4x4>,

@@ -155,9 +155,7 @@ impl Properties {
         }
     }
 
-    pub(crate) fn window_properties(window: &winit::window::Window) -> Self {
-        let inner_size = window.inner_size();
-        let size: Size<u32> = (inner_size.width, inner_size.height).into();
+    pub(crate) fn window_properties(size: Size<u32>) -> Self {
         Self {
             pos: (size / 2).into(),
             size,

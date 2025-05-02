@@ -21,7 +21,6 @@ pub mod prelude {
     pub use crate::context::Context;
     pub use crate::properties::{Orientation, Shape};
     pub use crate::view::{
-        IntoView,
         View,
         TestCircleWidget,
         TestTriangleWidget,

@@ -7,13 +7,12 @@ use winit::event::WindowEvent;
 use winit::application::ApplicationHandler;
 use util::{Size, Vector2};
 
-use crate::color::Pixel;
+use crate::color::{Pixel, Rgba};
 use crate::cursor::Cursor;
 use crate::prelude::AppResult;
 use crate::renderer::{Gfx, Gpu, IntoRenderSource, Renderer};
 use crate::context::Context;
 use crate::error::GuiError;
-use crate::view::{IntoView, Render};
 
 struct Stats {
     counter: u32,
@@ -41,7 +40,9 @@ impl Drop for Stats {
     }
 }
 
-pub struct App<F> {
+const DEFAULT_SCREEN_SIZE: Size<u32> = Size::new(1600, 1200);
+
+pub struct App<F: FnOnce(&mut Context)> {
     renderer: Option<Renderer>,
     cx: Context,
     cursor: Cursor,
@@ -51,11 +52,7 @@ pub struct App<F> {
     view_fn: Option<F>,
 }
 
-impl<F, IV> App<F>
-where
-    F: FnOnce() -> IV + 'static,
-    IV: IntoView + 'static,
-{
+impl<F: FnOnce(&mut Context)> App<F> {
     pub fn new(view_fn: F) -> Self {
         let mut app = Self::new_empty();
         app.view_fn = Some(view_fn);
@@ -63,9 +60,11 @@ where
     }
 
     pub fn new_empty() -> Self {
+        let mut cx = Context::default();
+        cx.initialize_root(DEFAULT_SCREEN_SIZE);
         Self {
             renderer: None,
-            cx: Context::default(),
+            cx,
             cursor: Cursor::new(),
             window: HashMap::with_capacity(4),
             window_fn: None,
@@ -81,8 +80,13 @@ where
         Ok(())
     }
 
-    pub fn set_window_properties(mut self, f: fn(&Window)) -> Self {
+    pub fn set_window_attributes(mut self, f: fn(&Window)) -> Self {
         self.window_fn = Some(f);
+        self
+    }
+
+    pub fn set_background_color(mut self, color: Rgba<u8>) -> Self {
+        self.cx.update_window_properties(|prop| prop.set_fill_color(color));
         self
     }
 
@@ -91,17 +95,24 @@ where
         window.set_title("GUI App");
         if let Some(window_fn) = self.window_fn.take() {
             window_fn(&window);
+            let inner_size = window.inner_size();
+            let size: Size<u32> = (inner_size.width, inner_size.height).into();
+            if size != DEFAULT_SCREEN_SIZE {
+                self.cx.update_window_properties(|prop| prop.set_size(size));
+            }
         }
-        self.cx.initialize_root(&window);
         Arc::new(window)
     }
 
     fn initialize_renderer(&mut self, window: Arc<Window>) {
         let gpu = Gpu::request(window.clone()).unwrap();
         let mut gfx = Gfx::new(&gpu.device);
-        gfx.register(&gpu, None::<&Pixel<u8>>, self.cx.get_window_properties());
+
+        // FIXME: is it necessary to have a dummy root widget?
+        // gfx.register(&gpu, None::<&Pixel<u8>>, self.cx.get_window_properties());
+
         if let Some(view_fn) = self.view_fn.take() {
-            view_fn().into_view().render(&mut self.cx);
+            view_fn(&mut self.cx);
             self.cx.register(&gpu, &mut gfx);
         }
         self.renderer = Some(Renderer::new(gpu, gfx));
@@ -135,18 +146,14 @@ where
 
     fn render(&mut self) -> Result<(), GuiError> {
         if let Some(renderer) = self.renderer.as_mut() {
-            renderer.render()
+            renderer.render(self.cx.get_window_properties().fill_color())
         } else {
             Err(GuiError::UnitializedRenderer)
         }
     }
 }
 
-impl<F, IV> ApplicationHandler for App<F>
-where
-    F: FnOnce() -> IV + 'static,
-    IV: IntoView + 'static,
-{
+impl<F: FnOnce(&mut Context)> ApplicationHandler for App<F> {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         let window = self.initialize_window(event_loop);
         self.initialize_renderer(Arc::clone(&window));

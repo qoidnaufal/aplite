@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use util::{Matrix4x4, Size, Vector2};
 
 use crate::color::Pixel;
@@ -5,24 +7,29 @@ use crate::layout::Layout;
 use crate::cursor::{Cursor, MouseAction};
 use crate::renderer::{Buffer, Element, Gfx, IntoRenderSource, Renderer};
 use crate::properties::{Orientation, Properties};
-use crate::callback::CALLBACKS;
-use crate::tree::{NodeId, Tree};
+use crate::tree::{Entity, NodeId, Tree};
 
 pub struct Context {
+    current: NodeId,
     pub(crate) tree: Tree<NodeId>,
     properties: Vec<Properties>,
     pixels: Vec<Pixel<u8>>,
     layout: Layout,
+    style_fn: HashMap<NodeId, Box<dyn Fn(&mut Properties)>>,
+    callbacks: HashMap<NodeId, Box<dyn Fn()>>,
     pending_update: Vec<NodeId>,
 }
 
 impl Default for Context {
     fn default() -> Self {
         Self {
+            current: NodeId::root(),
             tree: Default::default(),
             properties: Vec::with_capacity(1024),
             pixels: Vec::new(),
             layout: Layout::new(),
+            style_fn: HashMap::new(),
+            callbacks: HashMap::new(),
             pending_update: Vec::with_capacity(10),
         }
     }
@@ -40,6 +47,21 @@ impl Context {
             eprintln!("{id:?} | {parent:?} | {children:?}");
         }
     }
+
+    pub(crate) fn add_style_fn<F: Fn(&mut Properties) + 'static>(&mut self, node_id: NodeId, style_fn: F) {
+        self.style_fn.insert(node_id, Box::new(style_fn));
+    }
+
+    pub(crate) fn add_callbacks<F: Fn() + 'static>(&mut self, node_id: NodeId, callback: F) {
+        self.callbacks.insert(node_id, Box::new(callback));
+    }
+
+    pub(crate) fn add_pixel(&mut self, node_id: NodeId, pixel: Pixel<u8>) {
+        let texture_id = self.pixels.len();
+        let properties = self.get_node_data_mut(&node_id);
+        properties.set_texture_id(texture_id as i32);
+        self.pixels.push(pixel);
+    }
 }
 
 impl Context {
@@ -47,25 +69,34 @@ impl Context {
         self.tree.create_entity()
     }
 
-    pub(crate) fn initialize_root(&mut self, window: &winit::window::Window) {
-        self.tree.insert(NodeId::root(), None);
-        self.properties.push(Properties::window_properties(window));
+    pub(crate) fn current_entity(&self) -> Option<NodeId> {
+        if self.current == NodeId::root() {
+            None
+        } else {
+            Some(self.current)
+        }
     }
 
-    pub(crate) fn insert(&mut self,
+    pub(crate) fn set_current_entity(&mut self, maybe_entity: Option<NodeId>) {
+        if let Some(entity) = maybe_entity {
+            self.current = entity;
+        } else {
+            self.current = NodeId::root();
+        }
+    }
+
+    pub(crate) fn initialize_root(&mut self, size: Size<u32>) {
+        self.tree.insert(NodeId::root(), None);
+        self.properties.push(Properties::window_properties(size));
+    }
+
+    pub(crate) fn insert(
+        &mut self,
         node_id: NodeId,
         maybe_parent: Option<NodeId>,
-        mut properties: Properties,
-        maybe_pixel: Option<Pixel<u8>>,
+        properties: Properties,
     ) {
         self.tree.insert(node_id, maybe_parent);
-        if let Some(pixel) = maybe_pixel {
-            let texture_id = self.pixels.len() as i32;
-            let aspect_ratio = pixel.aspect_ratio();
-            self.pixels.push(pixel);
-            properties.set_texture_id(texture_id);
-            properties.adjust_ratio(aspect_ratio);
-        }
         self.properties.push(properties);
     }
 
@@ -80,13 +111,11 @@ impl Context {
     }
 
     pub(crate) fn get_node_data(&self, node_id: &NodeId) -> &Properties {
-        let idx = self.tree.iter().position(|node| node.id() == node_id).unwrap();
-        &self.properties[idx]
+        &self.properties[node_id.index()]
     }
 
     pub(crate) fn get_node_data_mut(&mut self, node_id: &NodeId) -> &mut Properties {
-        let idx = self.tree.iter().position(|node| node.id() == node_id).unwrap();
-        &mut self.properties[idx]
+        &mut self.properties[node_id.index()]
     }
 
     pub(crate) fn set_orientation(&mut self, node_id: &NodeId) {
@@ -151,7 +180,7 @@ impl Context {
 
     pub(crate) fn detect_hover(&self, cursor: &mut Cursor) {
         // let start = std::time::Instant::now();
-        let hovered = self.tree.into_iter().filter_map(|node| {
+        let hovered = self.tree.iter().skip(1).filter_map(|node| {
             let prop = self.get_node_data(node.id());
             if prop.is_hovered(cursor) {
                 Some(node.id())
@@ -173,19 +202,22 @@ impl Context {
             return;
         }
         if let Some(prev_id) = cursor.hover.prev.take() {
-            let idx = self.tree.into_iter().position(|node| *node.id() == prev_id).unwrap();
             let properties = self.get_node_data(&prev_id);
-            gfx.elements.update(idx, |element| element.set_color(properties.fill_color()));
-            self.pending_update.push(prev_id);
+            if properties.hover_color().is_some() {
+                let idx = prev_id.index();
+                gfx.elements.update(idx - 1, |element| element.set_color(properties.fill_color()));
+                self.pending_update.push(prev_id);
+            }
         }
         if let Some(hover_id) = cursor.hover.curr.as_ref() {
-            let idx = self.tree.into_iter().position(|node| node.id() == hover_id).unwrap();
+            let idx = hover_id.index();
             let properties = self.get_node_data(hover_id);
             let dragable = properties.is_dragable();
             let hover_color = properties.hover_color();
-            gfx.elements.update(idx, |element| {
+            gfx.elements.update(idx - 1, |element| {
                 if let Some(color) = hover_color {
                     element.set_color(color);
+                    self.pending_update.push(*hover_id);
                 }
                 if cursor.is_dragging(hover_id) && dragable {
                     self.handle_drag(
@@ -194,9 +226,9 @@ impl Context {
                         element,
                         &mut gfx.transforms,
                     );
+                    self.pending_update.push(*hover_id);
                 }
             });
-            self.pending_update.push(*hover_id);
         }
     }
 
@@ -250,8 +282,8 @@ impl Context {
             });
 
             children.iter().for_each(|child_id| {
-                let child_idx = self.tree.into_iter().position(|node| node.id() == child_id).unwrap();
-                transforms.update(child_idx, |child_transform| {
+                let child_idx = child_id.index();
+                transforms.update(child_idx - 1, |child_transform| {
                     self.assign_position(child_id);
                     let child_props = self.properties[child_idx];
                     let x = child_props.pos().x as f32 / (child_props.size().width as f32 / child_transform[0].x) * 2.0 - 1.0;
@@ -270,11 +302,13 @@ impl Context {
 
     pub(crate) fn handle_click(&mut self, cursor: &mut Cursor, gfx: &mut Gfx) {
         if let Some(ref click_id) = cursor.click.obj {
-            CALLBACKS.with_borrow(|cb| cb.run(click_id));
-            let idx = self.tree.into_iter().position(|node| node.id() == click_id).unwrap();
+            if let Some(callback) = self.callbacks.get(click_id) {
+                callback();
+            }
+            let idx = click_id.index();
             let props = self.properties[idx];
             cursor.click.offset = cursor.click.pos - Vector2::<f32>::from(props.pos());
-            gfx.elements.update(idx, |element| {
+            gfx.elements.update(idx - 1, |element| {
                 if let Some(color) = props.click_color() {
                     element.set_color(color);
                     self.pending_update.push(*click_id);
@@ -283,9 +317,9 @@ impl Context {
         }
         if cursor.state.action == MouseAction::Released {
             if let Some(ref hover_id) = cursor.hover.curr {
-                let idx = self.tree.into_iter().position(|node| node.id() == hover_id).unwrap();
+                let idx = hover_id.index();
                 let props = self.properties[idx];
-                gfx.elements.update(idx, |element| {
+                gfx.elements.update(idx - 1, |element| {
                     if let Some(color) = props.hover_color() {
                         element.set_color(color);
                         self.pending_update.push(*hover_id);

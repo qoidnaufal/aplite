@@ -1,40 +1,34 @@
-use crate::callback::CALLBACKS;
+use crate::context::Context;
 use crate::properties::{Shape, Properties};
-use crate::color::{Pixel, Rgba};
+use crate::color::Rgba;
 
-use super::{NodeId, Render, View};
+use super::{Render, View};
 
-pub fn button() -> Button { Button::new() }
+pub fn button(cx: &mut Context) -> View<Button> { Button::new(cx) }
 
 pub struct Button {
-    id: NodeId,
     properties: Properties,
 }
 
 impl Button {
-    pub fn new() -> Self {
-        let id = NodeId::new();
+    pub fn new(cx: &mut Context) -> View<Self> {
         let properties = Properties::new(Rgba::RED, (200, 50), Shape::RoundedRect, false);
-        Self { id, properties }
+        Self { properties }.render(cx, |_| {})
     }
 
     pub fn style<F: FnOnce(&mut Properties)>(mut self, f: F) -> Self {
         f(&mut self.properties);
         self
     }
+}
 
+impl<'a> View<'a, Button> {
     pub fn on_click<F: Fn() + 'static>(self, f: F) -> Self {
-        CALLBACKS.with_borrow_mut(|cb| cb.insert(self.id(), f));
+        self.cx.add_callbacks(self.id(), f);
         self
     }
 }
 
 impl Render for Button {
-    fn id(&self) -> NodeId { self.id }
-
-    fn children(&self) -> Option<&[View]> { None }
-
-    fn pixel(&self) -> Option<Pixel<u8>> { None }
-
-    fn properties(&self) -> &Properties { &self.properties }
+    fn properties(&self) -> Properties { self.properties }
 }

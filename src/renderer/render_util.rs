@@ -40,7 +40,7 @@ pub(crate) trait IntoRenderSource {
     fn textures(&self) -> &[Self::TD];
 
     fn register(&self, gpu: &Gpu, gfx: &mut Gfx) {
-        self.components().iter().for_each(|rc| {
+        self.components().iter().skip(1).for_each(|rc| {
             let maybe_pixel = if rc.texture_id() >= 0 {
                 Some(&self.textures()[rc.texture_id() as usize])
             } else {

@@ -2,9 +2,9 @@ use std::{cell::RefCell, collections::HashMap};
 
 use crate::tree::NodeId;
 
-thread_local! {
-    pub static CALLBACKS: RefCell<Callbacks> = RefCell::new(Callbacks::default());
-}
+// thread_local! {
+//     pub static CALLBACKS: RefCell<Callbacks> = RefCell::new(Callbacks::default());
+// }
 
 pub struct Action(Box<dyn Fn() + 'static>);
 

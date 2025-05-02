@@ -2,13 +2,18 @@ use util::{Size, Vector4};
 
 use crate::renderer::IntoTextureData;
 
+pub trait ColorPrimitive: Copy + Clone {}
+
+impl ColorPrimitive for u8 {}
+impl ColorPrimitive for f32 {}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Pixel<T> {
+pub struct Pixel<T: ColorPrimitive> {
     dimensions: Size<u32>,
     data: Vec<T>,
 }
 
-impl<T: Clone> Pixel<T> {
+impl<T: ColorPrimitive> Pixel<T> {
     pub fn new(dimensions: impl Into<Size<u32>>, data: &[T]) -> Self {
         Self {
             dimensions: dimensions.into(),
@@ -25,7 +30,7 @@ impl<T: Clone> Pixel<T> {
     }
 }
 
-impl<T> std::ops::Deref for Pixel<T> {
+impl<T: ColorPrimitive> std::ops::Deref for Pixel<T> {
     type Target = [T];
     fn deref(&self) -> &Self::Target {
         self.data.as_slice()
@@ -52,7 +57,7 @@ impl IntoTextureData for Pixel<u8> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Rgb<T> {
+pub struct Rgb<T: ColorPrimitive> {
     pub r: T,
     pub g: T,
     pub b: T,
@@ -66,6 +71,7 @@ impl Rgb<u8> {
     pub const WHITE: Self = Self { r: 255, g: 255, b: 255 };
     pub const YELLOW: Self = Self { r: 255, g: 255, b: 0 };
     pub const DARK_GRAY: Self = Self { r: 30, g: 30, b: 30 };
+    pub const DARK_GREEN: Self = Self { r: 21, g: 71, b: 52 };
 }
 
 impl From<Rgb<u8>> for wgpu::Color {
@@ -127,14 +133,14 @@ impl PartialEq for Rgb<f32> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Rgba<T> {
+pub struct Rgba<T: ColorPrimitive> {
     pub r: T,
     pub g: T,
     pub b: T,
     pub a: T,
 }
 
-impl<T: Clone + Copy> Rgba<T> {
+impl<T: ColorPrimitive> Rgba<T> {
     fn to_slice(&self) -> [T; 4] {
         [self.r, self.g, self.b, self.a]
     }
@@ -148,6 +154,7 @@ impl Rgba<u8> {
     pub const WHITE: Self = Self { r: 255, g: 255, b: 255, a: 255 };
     pub const YELLOW: Self = Self { r: 255, g: 255, b: 0, a: 255 };
     pub const DARK_GRAY: Self = Self { r: 30, g: 30, b: 30, a: 255 };
+    pub const DARK_GREEN: Self = Self { r: 10, g: 30, b: 15, a: 255 };
 
     pub fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self { r, g, b, a }
