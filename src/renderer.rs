@@ -68,7 +68,7 @@ impl Renderer {
     }
 
     pub(crate) fn resize(&mut self, new_size: Size<u32>) {
-        let ps: Size<f32> = self.screen.initial_size().into();
+        let ps: Size<f32> = self.screen.previous_size().into();
         let ns: Size<f32> = new_size.into();
         let scale = ps / ns;
 

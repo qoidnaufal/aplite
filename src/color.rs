@@ -1,8 +1,17 @@
-use util::{Size, Vector4};
+ use util::{Fraction, Size, Vector4};
 
 use crate::renderer::IntoTextureData;
 
-pub trait ColorPrimitive: Copy + Clone {}
+pub trait ColorPrimitive
+where Self: Copy + Clone
+    + std::ops::Add<Self, Output = Self> + std::ops::AddAssign<Self>
+    + std::ops::Div<Self, Output = Self> + std::ops::DivAssign<Self>
+    + std::ops::Mul<Self, Output = Self> + std::ops::MulAssign<Self>
+    + std::ops::Rem<Self, Output = Self> + std::ops::RemAssign<Self>
+    + std::ops::Sub<Self, Output = Self> + std::ops::SubAssign<Self>
+    + PartialEq
+    + Default
+{}
 
 impl ColorPrimitive for u8 {}
 impl ColorPrimitive for f32 {}
@@ -21,8 +30,8 @@ impl<T: ColorPrimitive> Pixel<T> {
         }
     }
 
-    pub fn aspect_ratio(&self) -> f32 {
-        self.dimensions.width as f32 / self.dimensions.height as f32
+    pub fn aspect_ratio(&self) -> Fraction<u32> {
+        self.dimensions.aspect_ratio()
     }
 
     pub fn dimensions(&self) -> Size<u32> {
@@ -51,7 +60,7 @@ impl From<Rgba<u8>> for Pixel<u8> {
 }
 
 impl IntoTextureData for Pixel<u8> {
-    fn texture_data(&self) -> &[u8] { self }
+    fn data(&self) -> &[u8] { self }
 
     fn dimensions(&self) -> Size<u32> { self.dimensions }
 }
@@ -141,7 +150,7 @@ pub struct Rgba<T: ColorPrimitive> {
 }
 
 impl<T: ColorPrimitive> Rgba<T> {
-    fn to_slice(&self) -> [T; 4] {
+    fn to_slice(self) -> [T; 4] {
         [self.r, self.g, self.b, self.a]
     }
 }

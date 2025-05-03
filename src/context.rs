@@ -5,7 +5,7 @@ use util::{Matrix4x4, Size, Vector2};
 use crate::color::Pixel;
 use crate::layout::Layout;
 use crate::cursor::{Cursor, MouseAction};
-use crate::renderer::{Buffer, Element, Gfx, IntoRenderSource, Renderer};
+use crate::renderer::{Buffer, Gfx, IntoRenderSource, Renderer};
 use crate::properties::{Orientation, Properties};
 use crate::tree::{Entity, NodeId, Tree};
 
@@ -37,14 +37,45 @@ impl Default for Context {
 
 impl Context {
     #[allow(unused)]
-    pub(crate) fn print_nodes(&self) {
-        let to_print = self
-            .tree
-            .into_iter()
-            .map(|node| (node.id(), node.parent(), self.tree.get_all_children(node.id())))
-            .collect::<Vec<_>>();
-        for (id, parent, children) in to_print {
-            eprintln!("{id:?} | {parent:?} | {children:?}");
+    pub(crate) fn print_nodes(&self, start: Option<NodeId>, indent: usize) {
+        let acc = 3;
+        if let Some(current) = start {
+            self
+                .tree
+                .iter()
+                .filter_map(|node| {
+                    if node.id() == &current {
+                        self.tree.get_all_children(node.id())
+                    } else { None }
+                })
+                .for_each(|children| {
+                    children.iter().for_each(|child| {
+                        if self.tree.get_parent(child).is_some_and(|p| self.tree.get_parent(p).is_some()) {
+                            for i in 0..(indent - acc)/acc {
+                                let c = acc - i;
+                                eprint!("{:c$}|", "");
+                            }
+                            let j = acc - 1;
+                            eprintln!("{:j$}╰─ {child:?}", "");
+                        } else {
+                            eprintln!("{:indent$}╰─ {child:?}", "");
+                        }
+                        if self.tree.get_first_child(child).is_some() {
+                            self.print_nodes(Some(*child), indent + acc);
+                        }
+                    });
+                });
+        } else {
+            self
+                .tree
+                .iter()
+                .filter(|node| node.parent().is_none())
+                .for_each(|node| {
+                    eprintln!(" - {:?}", node.id());
+                    if node.first_child().is_some() {
+                        self.print_nodes(Some(*node.id()), indent + acc);
+                    }
+                });
         }
     }
 
@@ -152,6 +183,7 @@ impl Context {
 
         self.layout.assign_position(pos, size);
     }
+
     pub(crate) fn reset_to_parent(
         &mut self,
         node_id: &NodeId,
@@ -164,6 +196,49 @@ impl Context {
         self.set_padding(node_id);
         self.layout.reset_to_parent(current_pos, half);
     }
+
+    pub(crate) fn calculate_size(&mut self, node_id: &NodeId) {
+        let prop = *self.get_node_data(node_id);
+        let padding = prop.padding();
+        let mut size = prop.size();
+
+        let children = self.tree.get_all_children(node_id);
+        if let Some(children) = children {
+            children.iter().for_each(|child_id| {
+                self.calculate_size(child_id);
+                let child_size = self.get_node_data(child_id).size();
+                match prop.orientation() {
+                    Orientation::Vertical => {
+                        size.height += child_size.height;
+                        size.width = size.width.max(child_size.width + padding.horizontal());
+                    }
+                    Orientation::Horizontal => {
+                        size.height = size.height.max(child_size.height + padding.vertical());
+                        size.width += child_size.width - 1;
+                    }
+                }
+            });
+            let child_len = children.len() as u32;
+            let stretch = prop.spacing() * (child_len - 1);
+            match prop.orientation() {
+                Orientation::Vertical => {
+                    size.height += padding.vertical() + stretch;
+                },
+                Orientation::Horizontal => {
+                    size.width += padding.horizontal() + stretch;
+                },
+            }
+        }
+
+        let final_size = size
+            .max(prop.min_width(), prop.min_height())
+            .min(prop.max_width(), prop.max_height());
+
+        let properties = self.get_node_data_mut(node_id);
+        properties.set_size(final_size);
+    }
+
+    pub(crate) fn layout(&mut self) {}
 }
 
 // .....................................................................
@@ -180,12 +255,22 @@ impl Context {
 
     pub(crate) fn detect_hover(&self, cursor: &mut Cursor) {
         // let start = std::time::Instant::now();
+
+        // let hovered = self.properties.iter().enumerate().skip(1).filter(|(_, prop)| {
+        //     prop.is_dragable()
+        //         || prop.hover_color().is_some()
+        //         || prop.click_color().is_some()
+        // })
+        // .filter(|(_, prop)| prop.is_hovered(cursor))
+        // .map(|(idx, _)| idx).min();
+
         let hovered = self.tree.iter().skip(1).filter_map(|node| {
             let prop = self.get_node_data(node.id());
             if prop.is_hovered(cursor) {
                 Some(node.id())
             } else { None }
         }).min();
+
         // eprintln!("{:?}", start.elapsed());
         if let Some(id) = hovered {
             if cursor.click.obj.is_none() {
@@ -221,9 +306,8 @@ impl Context {
                 }
                 if cursor.is_dragging(hover_id) && dragable {
                     self.handle_drag(
-                        &hover_id,
+                        hover_id,
                         cursor,
-                        element,
                         &mut gfx.transforms,
                     );
                     self.pending_update.push(*hover_id);
@@ -236,11 +320,10 @@ impl Context {
         &mut self,
         hover_id: &NodeId,
         cursor: &Cursor,
-        element: &mut Element,
         transforms: &mut Buffer<Matrix4x4>,
     ) {
         let props = self.get_node_data_mut(hover_id);
-        transforms.update(element.transform_id as usize, |transform| {
+        transforms.update(hover_id.index() - 1, |transform| {
             let delta = cursor.hover.pos - cursor.click.offset;
             props.set_transform(delta, transform);
         });
@@ -252,15 +335,7 @@ impl Context {
         node_id: &NodeId,
         transforms: &mut Buffer<Matrix4x4>,
     ) {
-        let children = self
-            .tree
-            .get_all_children(node_id)
-            .map(|nodes| {
-                nodes
-                    .iter()
-                    .map(|n| **n)
-                    .collect::<Vec<_>>()
-            });
+        let children = self.tree.get_all_children(node_id);
 
         if let Some(children) = children {
             self.set_orientation(node_id);
@@ -294,7 +369,7 @@ impl Context {
                 self.handle_child_relayout(child_id, transforms);
             });
 
-            if let Some(parent_id) = self.tree.get_parent(&node_id).cloned() {
+            if let Some(parent_id) = self.tree.get_parent(node_id).cloned() {
                 self.reset_to_parent(&parent_id, pos, size / 2);
             }
         }
@@ -334,7 +409,7 @@ impl IntoRenderSource for Context {
     type RC = Properties;
     type TD = Pixel<u8>;
 
-    fn components(&self) -> &[Self::RC] { self.properties.as_slice() }
+    fn render_components_source(&self) -> &[Self::RC] { self.properties.as_slice() }
 
-    fn textures(&self) -> &[Self::TD] { self.pixels.as_slice() }
+    fn texture_data_source(&self) -> &[Self::TD] { self.pixels.as_slice() }
 }

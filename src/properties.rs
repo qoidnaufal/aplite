@@ -1,4 +1,4 @@
-use util::{tan, Matrix4x4, Size, Vector2};
+use util::{tan, Fraction, Matrix4x4, Size, Vector2};
 
 use crate::color::Rgba;
 use crate::cursor::Cursor;
@@ -259,8 +259,12 @@ impl Properties {
         self.texture_id = val;
     }
 
-    pub(crate) fn adjust_ratio(&mut self, aspect_ratio: f32) {
-        self.size.width = (self.size.height as f32 * aspect_ratio) as u32;
+    pub(crate) fn adjust_width(&mut self, aspect_ratio: Fraction<u32>) {
+        self.size.adjust_width(aspect_ratio);
+    }
+
+    pub(crate) fn adjust_hight(&mut self, aspect_ratio: Fraction<u32>) {
+        self.size.adjust_height(aspect_ratio);
     }
 }
 
@@ -319,7 +323,7 @@ impl Properties {
         let width = self.size.width as f32 / 2.0;
         let height = self.size.height as f32 / 2.0;
 
-        let angled = if Shape::from(self.shape).is_triangle() {
+        let angled = if self.shape.is_triangle() {
             let c_tangen = tan(x_cursor - x, y_cursor - y + height);
             let t_tangen = tan(width / 2.0, height);
             (t_tangen - c_tangen).is_sign_negative()

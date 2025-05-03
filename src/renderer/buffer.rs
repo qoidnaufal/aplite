@@ -1,23 +1,24 @@
-use util::{cast_slice, Matrix4x4, Size};
+use util::{Matrix4x4, Size};
 
 use crate::properties::Shape;
 use super::{Element, Gpu, IntoRenderComponent, IntoTextureData, TextureData};
+use super::render_util::cast_slice;
 
 const INITIAL_CAPACITY: u64 = 1024 * 4;
 
 #[derive(Debug)]
-pub struct Buffer<T> {
-    pub buffer: wgpu::Buffer,
-    pub data: Vec<T>,
+pub(crate) struct Buffer<T> {
+    pub(crate) buffer: wgpu::Buffer,
+    pub(crate) data: Vec<T>,
     label: String,
 }
 
 impl<T> Buffer<T> {
-    pub(crate) fn uniform(device: &wgpu::Device, label: &str) -> Self {
+    fn uniform(device: &wgpu::Device, label: &str) -> Self {
         Self::new(device, wgpu::BufferUsages::UNIFORM, 1, label)
     }
 
-    pub(crate) fn storage(device: &wgpu::Device, label: &str) -> Self {
+    fn storage(device: &wgpu::Device, label: &str) -> Self {
         Self::new(device, wgpu::BufferUsages::STORAGE, INITIAL_CAPACITY, label)
     }
 
@@ -74,7 +75,7 @@ impl<T> Buffer<T> {
         }
     }
 
-    pub(crate) fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> bool {
+    fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> bool {
         let data_size = self.data.len() * size_of::<T>();
         let realloc = data_size > self.buffer.size() as usize;
         if realloc {
@@ -90,7 +91,7 @@ impl<T> Buffer<T> {
         realloc
     }
 
-    pub(crate) fn push(&mut self, data: T) {
+    fn push(&mut self, data: T) {
         self.data.push(data);
     }
 
@@ -98,12 +99,12 @@ impl<T> Buffer<T> {
         f(&mut self.data[index])
     }
 
-    pub(crate) fn len(&self) -> usize {
+    fn len(&self) -> usize {
         self.data.len()
     }
 }
 
-pub struct Gfx {
+pub(crate) struct Gfx {
     pub(crate) elements: Buffer<Element>,
     pub(crate) transforms: Buffer<Matrix4x4>,
     pub(crate) bind_group: wgpu::BindGroup,
@@ -258,7 +259,7 @@ impl Screen {
         self.size.write(device, queue);
     }
 
-    pub(crate) fn initial_size(&self) -> Size<u32> {
+    pub(crate) fn previous_size(&self) -> Size<u32> {
         self.size.data[0]
     }
 

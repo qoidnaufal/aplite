@@ -28,7 +28,7 @@ pub(crate) trait IntoRenderComponent {
 }
 
 pub(crate) trait IntoTextureData {
-    fn texture_data(&self) -> &[u8];
+    fn data(&self) -> &[u8];
     fn dimensions(&self) -> Size<u32>;
 }
 
@@ -36,19 +36,24 @@ pub(crate) trait IntoRenderSource {
     type RC: IntoRenderComponent;
     type TD: IntoTextureData;
 
-    fn components(&self) -> &[Self::RC];
-    fn textures(&self) -> &[Self::TD];
+    fn render_components_source(&self) -> &[Self::RC];
+    fn texture_data_source(&self) -> &[Self::TD];
 
     fn register(&self, gpu: &Gpu, gfx: &mut Gfx) {
-        self.components().iter().skip(1).for_each(|rc| {
+        self.render_components_source().iter().skip(1).for_each(|rc| {
             let maybe_pixel = if rc.texture_id() >= 0 {
-                Some(&self.textures()[rc.texture_id() as usize])
+                Some(&self.texture_data_source()[rc.texture_id() as usize])
             } else {
                 None
             };
             gfx.register(gpu, maybe_pixel, rc);
         });
     }
+}
+
+pub fn cast_slice<SRC: Sized, DST: Sized>(src: &[SRC]) -> &[DST] {
+    let len = size_of_val(src);
+    unsafe { core::slice::from_raw_parts(src.as_ptr() as *const DST, len) }
 }
 
 pub(crate) fn create_pipeline(

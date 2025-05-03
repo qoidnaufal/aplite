@@ -15,15 +15,8 @@ pub use {
     stack::*,
 };
 
-// pub trait IntoView where Self: Sized + Render {
-//     fn into_view(self) -> View<Self>;
-// }
-
-// impl<T: Render + 'static> IntoView for T {
-//     fn into_view(self) -> View<T> { View::new(self) }
-// }
-
 pub trait Render: Sized {
+    fn debug_name<'a>(&self) -> &'a str;
     fn properties(&self) -> Properties;
 
     // fn children(&self) -> Option<&[View<Self>]>;
@@ -78,16 +71,6 @@ pub trait Render: Sized {
     //     properties.set_size(final_size);
     // }
 
-    // fn prepare(&self, cx: &mut Context, parent_id: Option<NodeId>) {
-    //     let node_id = cx.create_entity();
-    //     let prev = cx.current_entity();
-    //     cx.set_current_entity(node_id);
-    //     cx.insert(node_id, parent_id, *self.properties(), self.pixel());
-    //     if let Some(children) = self.children() {
-    //         children.iter().for_each(|child| child.prepare(cx, Some(node_id)));
-    //     }
-    // }
-
     fn render<F>(self, cx: &mut Context, child_fn: F) -> View<Self>
     where F: FnOnce(&mut Context),
     {
@@ -96,9 +79,11 @@ pub trait Render: Sized {
         cx.insert(node_id, parent, self.properties());
         cx.set_current_entity(Some(node_id));
 
-        eprintln!("node_id: {node_id:?} | parent: {parent:?}");
+        // let name = self.debug_name();
+        // eprintln!("{name}: node_id: {node_id:?} | parent: {parent:?}");
 
         child_fn(cx);
+        cx.calculate_size(&node_id);
         // self.layout(cx, &node_id);
         // let properties = cx.get_node_data(&node_id);
 
@@ -140,7 +125,7 @@ impl<'a, R: Render> View<'a, R> {
             entity,
             parent,
             cx,
-            inner: PhantomData::default(),
+            inner: PhantomData,
         }
     }
 
@@ -169,6 +154,7 @@ impl TestTriangleWidget {
 }
 
 impl Render for TestTriangleWidget {
+    fn debug_name<'a>(&self) -> &'a str { "TestTriangleWidget" }
     fn properties(&self) -> Properties { self.properties }
 }
 
@@ -185,5 +171,6 @@ impl TestCircleWidget {
 }
 
 impl Render for TestCircleWidget {
+    fn debug_name<'a>(&self) -> &'a str { "TestCircleWidget" }
     fn properties(&self) -> Properties { self.properties }
 }

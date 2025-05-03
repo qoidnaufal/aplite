@@ -21,7 +21,7 @@ impl Image {
     }
 }
 
-impl<'a> View<'a, Image> {
+impl View<'_, Image> {
     pub fn add_pixel<P: Into<PathBuf>>(self, src: P) -> Self {
         let pixel = image_reader(src);
         self.cx.add_pixel(self.id(), pixel);
@@ -30,5 +30,6 @@ impl<'a> View<'a, Image> {
 }
 
 impl Render for Image {
+    fn debug_name<'a>(&self) -> &'a str { "Image" }
     fn properties(&self) -> Properties { self.properties }
 }

@@ -5,11 +5,11 @@ use winit::window::Window;
 
 use crate::error::GuiError;
 
-pub struct Gpu {
-    pub surface: wgpu::Surface<'static>,
-    pub device: wgpu::Device,
-    pub queue: wgpu::Queue,
-    pub config: wgpu::SurfaceConfiguration,
+pub(crate) struct Gpu {
+    pub(crate) surface: wgpu::Surface<'static>,
+    pub(crate) device: wgpu::Device,
+    pub(crate) queue: wgpu::Queue,
+    pub(crate) config: wgpu::SurfaceConfiguration,
 }
 
 fn backend() -> wgpu::Backends {
@@ -21,7 +21,7 @@ fn backend() -> wgpu::Backends {
 }
 
 impl Gpu {
-    pub fn request(window: Arc<Window>) -> Result<Self, GuiError> {
+    pub(crate) fn request(window: Arc<Window>) -> Result<Self, GuiError> {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: backend(),
@@ -69,11 +69,11 @@ impl Gpu {
         })
     }
 
-    pub fn configure(&self) {
+    pub(crate) fn configure(&self) {
         self.surface.configure(&self.device, &self.config);
     }
 
-    pub fn size(&self) -> Size<u32> {
+    pub(crate) fn size(&self) -> Size<u32> {
         Size::new(self.config.width, self.config.height)
     }
 }

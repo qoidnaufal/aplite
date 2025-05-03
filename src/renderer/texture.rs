@@ -8,7 +8,7 @@ use util::Size;
 use crate::color::Pixel;
 use super::{Gpu, IntoTextureData};
 
-pub fn image_reader<P: Into<PathBuf>>(path: P) -> Pixel<u8> {
+pub(crate) fn image_reader<P: Into<PathBuf>>(path: P) -> Pixel<u8> {
     let mut file = File::open(path.into()).unwrap();
     let mut buf = Vec::new();
     let len = file.read_to_end(&mut buf).unwrap();
@@ -18,13 +18,13 @@ pub fn image_reader<P: Into<PathBuf>>(path: P) -> Pixel<u8> {
 }
 
 #[derive(Debug)]
-pub struct TextureData {
-    texture: wgpu::Texture,
-    pub bind_group: wgpu::BindGroup,
+pub(crate) struct TextureData {
+    _texture: wgpu::Texture,
+    pub(crate) bind_group: wgpu::BindGroup,
 }
 
 impl TextureData {
-    pub fn new(gpu: &Gpu, td: &impl IntoTextureData) -> Self {
+    pub(crate) fn new(gpu: &Gpu, td: &impl IntoTextureData) -> Self {
         let device = &gpu.device;
         let queue = &gpu.queue;
 
@@ -35,7 +35,7 @@ impl TextureData {
 
         Self::submit_texture(queue, texture.as_image_copy(), td);
 
-        Self { texture, bind_group }
+        Self { _texture: texture, bind_group }
     }
 
     pub(crate) fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
@@ -83,12 +83,13 @@ impl TextureData {
         })
     }
 
-    pub fn update_texture(&mut self, gpu: &Gpu, td: &impl IntoTextureData) {
+    // FIXME: integrate this
+    pub(crate) fn _update_texture(&mut self, gpu: &Gpu, td: &impl IntoTextureData) {
         let size = td.dimensions();
-        if size.width > self.texture.width() || size.height > self.texture.height() {
-            self.texture = Self::create_texture(&gpu.device, size);
+        if size.width > self._texture.width() || size.height > self._texture.height() {
+            self._texture = Self::create_texture(&gpu.device, size);
         }
-        Self::submit_texture(&gpu.queue, self.texture.as_image_copy(), td);
+        Self::submit_texture(&gpu.queue, self._texture.as_image_copy(), td);
     }
 
     fn create_texture(device: &wgpu::Device, size: Size<u32>) -> wgpu::Texture {
@@ -127,7 +128,7 @@ impl TextureData {
     ) {
         queue.write_texture(
             texture,
-            td.texture_data(),
+            td.data(),
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * td.dimensions().width),

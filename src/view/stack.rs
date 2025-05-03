@@ -26,5 +26,6 @@ impl Stack {
 }
 
 impl Render for Stack {
+    fn debug_name<'a>(&self) -> &'a str { "Stack" }
     fn properties(&self) -> Properties { self.properties }
 }

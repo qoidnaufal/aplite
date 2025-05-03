@@ -76,6 +76,32 @@ impl<E: Entity> Tree<E> {
         }
     }
 
+    fn add_child(&mut self, entity: &E, child: E) {
+        match self.get_first_child(entity).cloned() {
+            Some(first) => {
+                let last = *self.get_last_child(entity).unwrap();
+                if last == first {
+                    self.set_next_sibling(&first, child);
+                    self.set_prev_sibling(&child, first);
+                } else {
+                    self.set_next_sibling(&last, child);
+                    self.set_prev_sibling(&child, last);
+                }
+            },
+            None => self.set_first_child(entity, child),
+        }
+        self.set_last_child(entity, child);
+    }
+
+    pub(crate) fn get_all_ancestor(&self) -> Vec<&E> {
+        self
+            .entities
+            .iter()
+            .skip(1)
+            .filter(|e| self.get_parent(e).is_none())
+            .collect()
+    }
+
     #[allow(unused)]
     pub(crate) fn get_ancestor<'a>(&'a self, entity: &'a E) -> Option<&'a E> {
         if let Some(parent) = self.get_parent(entity) {
@@ -128,79 +154,43 @@ impl<E: Entity> Tree<E> {
         self.prev_sibling.get_mut(entity.index()).and_then(|e| e.as_mut())
     }
 
-    pub(crate) fn get_all_children(&self, entity: &E) -> Option<Vec<&E>> {
+    pub(crate) fn get_all_children(&self, entity: &E) -> Option<Vec<E>> {
         if let Some(first) = self.get_first_child(entity) {
             let last = self.get_last_child(entity).unwrap();
             if first == last {
-                return Some(vec![first]);
+                Some(vec![*first])
             } else {
-                assert!(last > first);
-                self.entities[first.index()..=last.index()]
-                    .iter()
-                    .map(|child_entity| Some(child_entity))
-                    .collect()
+                let mut children = vec![];
+                let mut curr = *first;
+                loop {
+                    children.push(curr);
+                    if let Some(next) = self.get_next_sibling(&curr) {
+                        curr = *next;
+                    } else {
+                        break;
+                    }
+                }
+                Some(children)
             }
         } else {
             None
         }
     }
 
-    pub(crate) fn add_child(&mut self, entity: &E, child: E) {
-        match self.get_first_child(entity).cloned() {
-            Some(first) => {
-                let last = *self.get_last_child(entity).unwrap();
-                if last == first {
-                    self.set_prev_sibling(&child, first);
-                    self.set_next_sibling(&first, child);
-                } else {
-                    assert!(last > first);
-                    self.set_prev_sibling(&child, last);
-                    self.set_next_sibling(&last, child);
-                }
-            },
-            None => self.set_first_child(entity, child),
-        }
-        self.set_last_child(entity, child);
-    }
-
     pub(crate) fn set_first_child(&mut self, entity: &E, child: E) {
-        if self.first_child.len() > entity.index() {
-            self.first_child[entity.index()] = Some(child);
-        } else {
-            self.first_child.push(Some(child));
-        }
+        self.first_child[entity.index()] = Some(child);
     }
 
     pub(crate) fn set_last_child(&mut self, entity: &E, child: E) {
-        if self.last_child.len() > entity.index() {
-            self.last_child[entity.index()] = Some(child);
-        } else {
-            self.last_child.push(Some(child));
-        }
+        self.last_child[entity.index()] = Some(child);
     }
 
     pub(crate) fn set_prev_sibling(&mut self, entity: &E, prev: E) {
-        if let Some(prev_sibling) = self.get_prev_sibling_mut(entity) {
-            *prev_sibling = prev;
-        } else {
-            if self.prev_sibling.len() > entity.index() {
-                self.prev_sibling[entity.index()] = Some(prev);
-            } else {
-                self.prev_sibling.push(Some(prev));
-            }
-        }
+        self.prev_sibling[entity.index()] = Some(prev);
     }
 
     pub(crate) fn set_next_sibling(&mut self, entity: &E, next: E) {
-        if let Some(next_sibling) = self.get_next_sibling_mut(entity) {
-            *next_sibling = next;
-        } else {
-            if self.next_sibling.len() > entity.index() {
-                self.next_sibling[entity.index()] = Some(next);
-            } else {
-                self.next_sibling.push(Some(next));
-            }
-        }
+        self.next_sibling[entity.index()] = Some(next);
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -240,10 +230,8 @@ impl<'a, E: Entity> NodeRef<'a, E> {
 
     pub(crate) fn id(&self) -> &'a E { self.id }
 
-    #[allow(unused)]
     pub(crate) fn parent(&self) -> Option<&'a E> { self.parent }
 
-    #[allow(unused)]
     pub(crate) fn first_child(&self) -> Option<&'a E> { self.first_child }
 
     #[allow(unused)]
@@ -273,7 +261,7 @@ impl<'a, E: Entity> Iterator for TreeIterator<'a, E> {
         if self.counter < self.tree.len() {
             let node = Some(self.tree.get_node_ref(self.counter));
             self.counter += 1;
-            return node;
+            node
         } else {
             None
         }

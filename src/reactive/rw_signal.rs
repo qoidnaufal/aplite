@@ -13,11 +13,10 @@ pub struct RwSignal<T> {
 
 impl<T: 'static> RwSignal<T> {
     pub fn new(value: T) -> Self {
-        let rw_signal = Self {
+        Self {
             id: SignalId::new(),
             value: Rc::new(RefCell::new(value)),
-        };
-        rw_signal
+        }
     }
 
     pub fn split(self) -> (SignalRead<T>, SignalWrite<T>) {

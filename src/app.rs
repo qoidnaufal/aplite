@@ -7,7 +7,7 @@ use winit::event::WindowEvent;
 use winit::application::ApplicationHandler;
 use util::{Size, Vector2};
 
-use crate::color::{Pixel, Rgba};
+use crate::color::Rgba;
 use crate::cursor::Cursor;
 use crate::prelude::AppResult;
 use crate::renderer::{Gfx, Gpu, IntoRenderSource, Renderer};
@@ -42,12 +42,51 @@ impl Drop for Stats {
 
 const DEFAULT_SCREEN_SIZE: Size<u32> = Size::new(1600, 1200);
 
+pub struct WindowAttributes {
+    title: String,
+    inner_size: Size<u32>,
+    decorations: bool,
+}
+
+impl Default for WindowAttributes {
+    fn default() -> Self {
+        Self {
+            title: "GUI App".into(),
+            inner_size: DEFAULT_SCREEN_SIZE,
+            decorations: true,
+        }
+    }
+}
+
+impl WindowAttributes {
+    pub fn set_title(&mut self, title: impl Into<String>) {
+        self.title = title.into();
+    }
+
+    pub fn set_inner_size(&mut self, size: impl Into<Size<u32>>) {
+        self.inner_size = size.into();
+    }
+
+    pub fn set_decorations_enabled(&mut self, val: bool) {
+        self.decorations = val;
+    }
+}
+
+impl From<WindowAttributes> for winit::window::WindowAttributes {
+    fn from(w: WindowAttributes) -> Self {
+        Self::default()
+            .with_inner_size::<winit::dpi::PhysicalSize<u32>>(w.inner_size.into())
+            .with_title(w.title)
+            .with_decorations(w.decorations)
+    }
+}
+
 pub struct App<F: FnOnce(&mut Context)> {
     renderer: Option<Renderer>,
     cx: Context,
     cursor: Cursor,
     window: HashMap<WindowId, Arc<Window>>,
-    window_fn: Option<fn(&Window)>,
+    window_fn: Option<fn(&mut WindowAttributes)>,
     stats: Stats,
     view_fn: Option<F>,
 }
@@ -80,7 +119,7 @@ impl<F: FnOnce(&mut Context)> App<F> {
         Ok(())
     }
 
-    pub fn set_window_attributes(mut self, f: fn(&Window)) -> Self {
+    pub fn set_window_attributes(mut self, f: fn(&mut WindowAttributes)) -> Self {
         self.window_fn = Some(f);
         self
     }
@@ -91,15 +130,15 @@ impl<F: FnOnce(&mut Context)> App<F> {
     }
 
     fn initialize_window(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) -> Arc<Window> {
-        let window = event_loop.create_window(Default::default()).unwrap();
-        window.set_title("GUI App");
+        let mut attributes = WindowAttributes::default();
         if let Some(window_fn) = self.window_fn.take() {
-            window_fn(&window);
-            let inner_size = window.inner_size();
-            let size: Size<u32> = (inner_size.width, inner_size.height).into();
-            if size != DEFAULT_SCREEN_SIZE {
-                self.cx.update_window_properties(|prop| prop.set_size(size));
-            }
+            window_fn(&mut attributes);
+        }
+        let window = event_loop.create_window(attributes.into()).unwrap();
+        let inner_size = window.inner_size();
+        let size: Size<u32> = (inner_size.width, inner_size.height).into();
+        if size != DEFAULT_SCREEN_SIZE {
+            self.cx.update_window_properties(|prop| prop.set_size(size));
         }
         Arc::new(window)
     }
@@ -159,7 +198,7 @@ impl<F: FnOnce(&mut Context)> ApplicationHandler for App<F> {
         self.initialize_renderer(Arc::clone(&window));
         self.window.insert(window.id(), window);
 
-        // self.cx.print_nodes();
+        self.cx.print_nodes(None, 0);
         // eprintln!("{}", self.cx.trees.len());
     }
 
@@ -204,7 +243,7 @@ impl<F: FnOnce(&mut Context)> ApplicationHandler for App<F> {
                 self.stats.inc(elapsed);
             }
             WindowEvent::Resized(new_size) => {
-                self.resize((new_size.width, new_size.height));
+                self.resize(new_size);
             }
             WindowEvent::MouseInput { state: action, button, .. } => {
                 let gfx = &mut self.renderer.as_mut().unwrap().gfx;

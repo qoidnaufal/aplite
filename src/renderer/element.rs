@@ -60,15 +60,15 @@ impl Corners {
 
 #[repr(C)]
 #[derive(Debug, Clone)]
-pub struct Element {
+pub(crate) struct Element {
     fill_color: Rgba<f32>,
     stroke_color: Rgba<f32>,
     corners: Corners,
     shape: u32,
     rotation: f32,
     stroke_width: f32,
-    pub texture_id: i32,
-    pub transform_id: u32,
+    pub(crate) texture_id: i32,
+    pub(crate) transform_id: u32,
 }
 
 impl Element {

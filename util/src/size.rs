@@ -1,4 +1,7 @@
 use std::ops::Deref;
+use winit::dpi::PhysicalSize;
+
+use crate::{gcd, Fraction};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -19,6 +22,21 @@ impl<T: Default> Default for Size<T> {
 impl<T> Size<T> {
     pub const fn new(width: T, height: T) -> Self {
         Self { width, height }
+    }
+}
+
+impl Size<u32> {
+    pub fn aspect_ratio(&self) -> Fraction<u32> {
+        let gcd = gcd(self.width, self.height);
+        Fraction::new(self.width / gcd, self.height / gcd)
+    }
+
+    pub fn adjust_width(&mut self, aspect_ratio: Fraction<u32>) {
+        self.width = self.height * aspect_ratio;
+    }
+
+    pub fn adjust_height(&mut self, aspect_ratio: Fraction<u32>) {
+        self.height = self.width / aspect_ratio;
     }
 }
 
@@ -53,6 +71,21 @@ where
     }
 }
 
+impl From<Size<u32>> for PhysicalSize<u32> {
+    fn from(size: Size<u32>) -> Self {
+        Self {
+            width: size.width,
+            height: size.height,
+        }
+    }
+}
+
+impl From<PhysicalSize<u32>> for Size<u32> {
+    fn from(p: PhysicalSize<u32>) -> Self {
+        Self::new(p.width, p.height)
+    }
+}
+
 impl From<Size<u32>> for Size<f32> {
     fn from(value: Size<u32>) -> Self {
         Self  {
@@ -79,34 +112,6 @@ where T:
     type Target = Self;
     fn deref(&self) -> &Self::Target {
         self
-    }
-}
-
-impl<T> std::ops::Div<T> for Size<T>
-where T:
-    std::ops::Div<T, Output = T>
-    + Copy
-{
-    type Output = Self;
-    fn div(self, rhs: T) -> Self::Output {
-        Self {
-            width: self.width / rhs,
-            height: self.height / rhs,
-        }
-    }
-}
-
-impl<T> std::ops::Div for Size<T>
-where T:
-    std::ops::Div<T, Output = T>
-    + Copy
-{
-    type Output = Self;
-    fn div(self, rhs: Self) -> Self::Output {
-        Self {
-            width: self.width / rhs.width,
-            height: self.height / rhs.height,
-        }
     }
 }
 
@@ -151,6 +156,34 @@ where T:
     }
 }
 
+impl<T> std::ops::Div<T> for Size<T>
+where T:
+    std::ops::Div<T, Output = T>
+    + Copy
+{
+    type Output = Self;
+    fn div(self, rhs: T) -> Self::Output {
+        Self {
+            width: self.width / rhs,
+            height: self.height / rhs,
+        }
+    }
+}
+
+impl<T> std::ops::Div for Size<T>
+where T:
+    std::ops::Div<T, Output = T>
+    + Copy
+{
+    type Output = Self;
+    fn div(self, rhs: Self) -> Self::Output {
+        Self {
+            width: self.width / rhs.width,
+            height: self.height / rhs.height,
+        }
+    }
+}
+
 impl<T> std::ops::Mul<T> for Size<T>
 where T:
     std::ops::Mul<T, Output = T>
@@ -178,36 +211,25 @@ where T:
 }
 
 impl<T> PartialEq for Size<T>
-where T:
-    PartialEq<T>
+where
+    T: PartialEq<T>
 {
     fn eq(&self, other: &Self) -> bool {
         self.width == other.width && self.height == other.height
     }
 }
 
+impl<T> std::ops::Mul<Fraction<T>> for Size<T>
+where
+    T: std::ops::Mul<T, Output = T>
+{
+    type Output = Self;
+    fn mul(self, rhs: Fraction<T>) -> Self::Output {
+        Self {
+            width: self.width * rhs.numerator,
+            height: self.height * rhs.denominator,
+        }
+    }
+}
+
 impl<T: PartialEq + Eq> Eq for Size<T> {}
-
-// impl<T> PartialOrd for Size<T>
-// where T:
-//     PartialOrd<T> + Ord + PartialEq<T> + Eq
-//     + std::ops::Mul<T, Output = T>
-//     + Copy
-// {
-//     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-//         Some(self.cmp(other))
-//     }
-// }
-
-// impl<T> Ord for Size<T>
-// where T:
-//     PartialOrd<T> + Ord + PartialEq<T> + Eq
-//     + std::ops::Mul<T, Output = T>
-//     + Copy
-// {
-//     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-//         let a = self.width * self.height;
-//         let b = other.width * other.height;
-//         (a).cmp(&b)
-//     }
-// }

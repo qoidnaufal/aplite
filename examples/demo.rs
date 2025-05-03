@@ -131,24 +131,19 @@ fn dummy(cx: &mut Context) {
         eprintln!("counter: {}", counter.get());
     };
 
-    // Stack::new(cx, |cx| {
-        Button::new(cx)
-            .style(|style| {
-                style.set_size((500, 200));
-                style.set_stroke_color(Rgba::WHITE);
-                style.set_stroke_width(10.);
-                style.set_corners(|r| r.set_each(0.15));
-                style.set_dragable(true);
-            })
-            .on_click(click);
-    //     TestCircleWidget::new(cx)
-    //         .style(|style| {
-    //             style.set_dragable(true);
-    //         });
-    // })
-    // .style(|style| {
-    //     style.set_padding(|p| p.set_all(30));
-    // });
+    Button::new(cx)
+        .style(|style| {
+            style.set_size((500, 200));
+            style.set_stroke_color(Rgba::WHITE);
+            style.set_stroke_width(10.);
+            style.set_corners(|r| r.set_each(0.15));
+            style.set_dragable(true);
+        })
+        .on_click(click);
+    TestCircleWidget::new(cx)
+        .style(|style| {
+            style.set_dragable(true);
+        });
 }
 
 fn main() -> AppResult {
@@ -158,13 +153,16 @@ fn main() -> AppResult {
             App::new(dummy)
                 .set_window_attributes(|window| {
                     window.set_title("Dummy");
+                    window.set_inner_size((500, 500));
                 })
                 .set_background_color(Rgba::DARK_GRAY)
                 .launch()
         },
         Some(arg) if arg == "empty" => {
             App::<fn(&mut Context)>::new_empty()
-                .set_window_attributes(|window| window.set_title("Empty"))
+                .set_window_attributes(|window| {
+                    window.set_title("Empty");
+                })
                 .set_background_color(Rgba::DARK_GREEN)
                 .launch()
         }

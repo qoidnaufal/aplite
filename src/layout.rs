@@ -1,25 +1,13 @@
 use util::{Size, Vector2};
 use crate::properties::{Alignment, Orientation, Padding};
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct Layout {
     next_pos: Vector2<u32>,
     orientation: Orientation,
     alignment: Alignment,
     spacing: u32,
     padding: Padding,
-}
-
-impl Default for Layout {
-    fn default() -> Self {
-        Self {
-            next_pos: Vector2::default(),
-            orientation: Orientation::default(),
-            alignment: Alignment::default(),
-            padding: Padding::default(),
-            spacing: 0,
-        }
-    }
 }
 
 impl Layout {

@@ -638,7 +638,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c5e5ea60d70410161c8bf5da3fdfeaa1c72ed2c15f8bbb9d19fe3a4fad085f08"
 dependencies = [
  "js-sys",
- "slotmap 1.0.7",
+ "slotmap",
  "wasm-bindgen",
  "web-sys",
 ]
@@ -1898,10 +1898,6 @@ dependencies = [
 
 [[package]]
 name = "slotmap"
-version = "0.1.0"
-
-[[package]]
-name = "slotmap"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dbff4acf519f630b3a3ddcfaea6c06b42174d9a44bc70c620e9ed1649d58b82a"
@@ -2184,6 +2180,9 @@ checksum = "1fc81956842c57dac11422a97c3b8195a1ff727f06e85c84ed2e8aa277c9a0fd"
 [[package]]
 name = "util"
 version = "0.1.0"
+dependencies = [
+ "winit",
+]
 
 [[package]]
 name = "v_frame"
