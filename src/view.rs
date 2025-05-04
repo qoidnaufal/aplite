@@ -4,7 +4,7 @@ mod stack;
 
 use std::marker::PhantomData;
 
-use crate::properties::{Orientation, Shape, Properties, HAlign, VAlign};
+use crate::properties::{Shape, Properties};
 use crate::context::Context;
 use crate::color::Rgba;
 use crate::tree::NodeId;
@@ -15,115 +15,36 @@ pub use {
     stack::*,
 };
 
-pub trait Render: Sized {
-    fn debug_name<'a>(&self) -> &'a str;
+pub trait IntoView: Sized {
+    fn debug_name(&self) -> Option<&'static str> { None }
     fn properties(&self) -> Properties;
 
-    // fn children(&self) -> Option<&[View<Self>]>;
-
-    // fn layout(&self, cx: &mut Context, node_id: &NodeId) {
-    //     if self.children().is_some() {
-    //         cx.set_orientation(node_id);
-    //         cx.set_alignment(node_id);
-    //         cx.set_spacing(node_id);
-    //         cx.set_padding(node_id);
-    //     }
-    //     cx.assign_position(node_id);
-    // }
-
-    // fn calculate_size(&self, cx: &mut Context) {
-    //     let prop = self.properties();
-    //     let padding = prop.padding();
-    //     let mut size = prop.size();
-
-    //     if let Some(children) = self.children() {
-    //         children.iter().for_each(|child| {
-    //             child.calculate_size(cx);
-    //             let child_size = cx.get_node_data(&child.id()).size();
-    //             match prop.orientation() {
-    //                 Orientation::Vertical => {
-    //                     size.height += child_size.height;
-    //                     size.width = size.width.max(child_size.width + padding.horizontal());
-    //                 }
-    //                 Orientation::Horizontal => {
-    //                     size.height = size.height.max(child_size.height + padding.vertical());
-    //                     size.width += child_size.width - 1;
-    //                 }
-    //             }
-    //         });
-    //         let child_len = children.len() as u32;
-    //         let stretch = prop.spacing() * (child_len - 1);
-    //         match prop.orientation() {
-    //             Orientation::Vertical => {
-    //                 size.height += padding.vertical() + stretch;
-    //             },
-    //             Orientation::Horizontal => {
-    //                 size.width += padding.horizontal() + stretch;
-    //             },
-    //         }
-    //     }
-
-    //     let final_size = size
-    //         .max(prop.min_width(), prop.min_height())
-    //         .min(prop.max_width(), prop.max_height());
-
-    //     let properties = cx.get_node_data_mut(&self.id());
-    //     properties.set_size(final_size);
-    // }
-
-    fn render<F>(self, cx: &mut Context, child_fn: F) -> View<Self>
+    fn into_view<F>(self, cx: &mut Context, child_fn: F) -> View<Self>
     where F: FnOnce(&mut Context),
     {
         let node_id = cx.create_entity();
         let parent = cx.current_entity();
-        cx.insert(node_id, parent, self.properties());
+        cx.insert(node_id, parent, self.properties(), self.debug_name());
         cx.set_current_entity(Some(node_id));
 
-        // let name = self.debug_name();
-        // eprintln!("{name}: node_id: {node_id:?} | parent: {parent:?}");
-
         child_fn(cx);
-        cx.calculate_size(&node_id);
-        // self.layout(cx, &node_id);
-        // let properties = cx.get_node_data(&node_id);
-
-        // if let Some(child) = child_view {
-        //     child(cx);
-            // let padding = properties.padding();
-            // let current_pos = properties.pos();
-            // let current_half = properties.size() / 2;
-
-            // // FIXME: consider alignment
-            // cx.set_next_pos(|pos| {
-            //     pos.x = current_pos.x - current_half.width + padding.left();
-            //     pos.y = current_pos.y - current_half.height + padding.top();
-            // });
-
-            // // children.iter().for_each(|child| child.render(cx));
-
-            // if let Some(parent_idx) = cx.tree.get_parent(&node_id).copied() {
-            //     cx.reset_to_parent(&parent_idx, current_pos, current_half);
-            // }
-        // }
 
         cx.set_current_entity(parent);
 
-        View::new(node_id, parent, cx)
+        View::new(node_id, cx)
     }
 }
 
-pub struct View<'a, R: Render> {
+pub struct View<'a, R: IntoView> {
     entity: NodeId,
-    parent: Option<NodeId>,
     cx: &'a mut Context,
     inner: PhantomData<R>,
 }
 
-impl<'a, R: Render> View<'a, R> {
-    fn new(entity: NodeId, parent: Option<NodeId>, cx: &'a mut Context) -> Self {
+impl<'a, R: IntoView> View<'a, R> {
+    fn new(entity: NodeId, cx: &'a mut Context) -> Self {
         Self {
             entity,
-            parent,
             cx,
             inner: PhantomData,
         }
@@ -149,12 +70,12 @@ pub struct TestTriangleWidget {
 impl TestTriangleWidget {
     pub fn new(cx: &mut Context) -> View<Self> {
         let properties = Properties::new(Rgba::RED, (300, 300), Shape::Triangle, false);
-        Self { properties }.render(cx, |_| {})
+        Self { properties }.into_view(cx, |_| {})
     }
 }
 
-impl Render for TestTriangleWidget {
-    fn debug_name<'a>(&self) -> &'a str { "TestTriangleWidget" }
+impl IntoView for TestTriangleWidget {
+    fn debug_name(&self) -> Option<&'static str> { Some("TestTriangleWidget") }
     fn properties(&self) -> Properties { self.properties }
 }
 
@@ -166,11 +87,11 @@ pub struct TestCircleWidget {
 impl TestCircleWidget {
     pub fn new(cx: &mut Context) -> View<Self> {
         let properties = Properties::new(Rgba::RED, (300, 300), Shape::Circle, false);
-        Self { properties }.render(cx, |_| {})
+        Self { properties }.into_view(cx, |_| {})
     }
 }
 
-impl Render for TestCircleWidget {
-    fn debug_name<'a>(&self) -> &'a str { "TestCircleWidget" }
+impl IntoView for TestCircleWidget {
+    fn debug_name(&self) -> Option<&'static str> { Some("TestCircleWidget") }
     fn properties(&self) -> Properties { self.properties }
 }

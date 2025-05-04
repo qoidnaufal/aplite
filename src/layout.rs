@@ -45,7 +45,7 @@ impl Layout {
         f(&mut self.next_pos);
     }
 
-    pub(crate) fn assign_position(&mut self, pos: Vector2<u32>, size: Size<u32>) {
+    pub(crate) fn adjust_next_pos(&mut self, pos: Vector2<u32>, size: Size<u32>) {
         let spacing = self.spacing;
         let half = size / 2;
         match self.orientation {
@@ -58,25 +58,22 @@ impl Layout {
         };
     }
 
-    pub(crate) fn reset_to_parent(
-        &mut self,
-        current_pos: Vector2<u32>,
-        half: Size<u32>
-    ) {
+    pub(crate) fn reset_to_parent(&mut self, pos: Vector2<u32>, size: Size<u32>) {
         let spacing = self.spacing;
+        let half = size / 2;
 
         // parent orientation
         match self.orientation {
             Orientation::Vertical => {
-                self.set_next_pos(|pos| {
-                    pos.x = current_pos.x - half.width;
-                    pos.y = current_pos.y + half.height + spacing;
+                self.set_next_pos(|p| {
+                    p.x = pos.x - half.width;
+                    p.y = pos.y + half.height + spacing;
                 });
             }
             Orientation::Horizontal => {
                 self.set_next_pos(|pos| {
-                    pos.y = current_pos.y - half.height;
-                    pos.x = current_pos.x + half.width + spacing;
+                    pos.y = pos.y - half.height;
+                    pos.x = pos.x + half.width + spacing;
                 });
             }
         }

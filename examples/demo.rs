@@ -16,110 +16,100 @@ fn root(cx: &mut Context) {
         eprintln!("dec {}", counter.get());
     };
 
-    Stack::new(cx, |cx| {
-        Stack::new(cx, |cx| {
-            Image::new(cx, "assets/image1.jpg");
-            Image::new(cx, "assets/image2.jpg").style(|s| s.set_dragable(true));
-            TestTriangleWidget::new(cx)
+    HStack::new(cx, |cx| {
+        Image::new(cx, "assets/image1.jpg");
+        Image::new(cx, "assets/image2.jpg").style(|s| s.set_dragable(true));
+        TestTriangleWidget::new(cx).style(|style| {
+            style.set_hover_color(Rgba::BLUE);
+            style.set_fill_color(Rgba::BLACK);
+        });
+    }).style(|style| {
+        style.set_shape(Shape::RoundedRect);
+        style.set_corners(|corner| corner.set_each(0.03));
+        style.set_stroke_color(Rgba::YELLOW);
+        style.set_stroke_width(5.);
+        style.set_dragable(true);
+        style.set_fill_color(Rgba::GREEN);
+        style.set_spacing(40);
+        style.set_padding(|padding| {
+            padding.set_left(40);
+            padding.set_right(40);
+            padding.set_top(20);
+            padding.set_bottom(20);
+        });
+    });
+
+    HStack::new(cx, |cx| {
+        VStack::new(cx, |cx| {
+            Button::new(cx)
                 .style(|style| {
                     style.set_hover_color(Rgba::BLUE);
-                    style.set_fill_color(Rgba::BLACK);
-                });
-        })
-            .style(|style| {
-                style.set_shape(Shape::RoundedRect);
-                style.set_corners(|corner| {
-                    corner.set_each(0.03);
-                });
-                style.set_stroke_color(Rgba::GREEN);
-                style.set_stroke_width(5.);
-                style.set_dragable(true);
-                style.set_orientation(Orientation::Horizontal);
-                style.set_fill_color(Rgba::YELLOW);
-                style.set_padding(|padding| {
-                    padding.set_left(40);
-                    padding.set_right(40);
-                    padding.set_top(20);
-                    padding.set_bottom(20);
-                });
-                style.set_spacing(40);
-            });
-        Stack::new(cx, |cx| {
-            Stack::new(cx, |cx| {
-                Button::new(cx)
-                    .style(|style| {
-                        style.set_hover_color(Rgba::BLUE);
-                        style.set_click_color(Rgba::GREEN);
-                        style.set_stroke_width(10.);
-                        style.set_corners(|corners| {
-                            corners.set_top_left(0.025);
-                            corners.set_bot_left(0.025);
-                            corners.set_bot_right(0.0);
-                            corners.set_top_right(0.0);
-                        });
-                    })
-                    .on_click(inc);
-                Button::new(cx)
-                    .style(|style| {
-                        style.set_hover_color(Rgba::WHITE);
-                        style.set_click_color(Rgba::BLUE);
-                        style.set_stroke_width(5.);
-                        style.set_corners(|r| r.set_each(0.039));
-                    })
-                    .on_click(dec);
-                Button::new(cx)
-                    .style(|style| {
-                        style.set_hover_color(Rgba::YELLOW);
-                        style.set_stroke_width(5.);
-                        style.set_corners(|corners| {
-                            corners.set_top_left(0.);
-                            corners.set_bot_left(0.03);
-                            corners.set_bot_right(0.);
-                            corners.set_top_right(0.03);
-                        });
-                    });
-                Button::new(cx)
-                    .style(|style| {
-                        style.set_corners(|corners| corners.set_each(0.04));
-                        style.set_fill_color(Rgba::new(69, 172, 23, 255));
+                    style.set_click_color(Rgba::GREEN);
+                    style.set_stroke_width(10.);
+                    style.set_corners(|corners| {
+                        corners.set_top_left(0.025);
+                        corners.set_bot_left(0.025);
+                        corners.set_bot_right(0.0);
+                        corners.set_top_right(0.0);
                     });
                 })
+                .on_click(inc);
+            Button::new(cx)
                 .style(|style| {
-                    style.set_dragable(true);
-                    style.set_fill_color(Rgba::new(111, 72, 234, 255));
-                    style.set_min_width(1000);
-                    style.set_padding(|padding| padding.set_all(20));
-                    style.set_spacing(40);
-                });
-            TestCircleWidget::new(cx)
+                    style.set_hover_color(Rgba::WHITE);
+                    style.set_click_color(Rgba::BLUE);
+                    style.set_stroke_width(5.);
+                    style.set_corners(|r| r.set_each(0.039));
+                })
+                .on_click(dec);
+            Button::new(cx)
                 .style(|style| {
-                    style.set_hover_color(Rgba::GREEN);
-                    style.set_stroke_width(10.);
-                    style.set_fill_color(Rgba::BLACK);
-                    style.set_stroke_color(Rgba::RED);
+                    style.set_hover_color(Rgba::YELLOW);
+                    style.set_stroke_width(5.);
+                    style.set_corners(|corners| {
+                        corners.set_top_left(0.);
+                        corners.set_bot_left(0.03);
+                        corners.set_bot_right(0.);
+                        corners.set_top_right(0.03);
+                    });
                 });
-        })
-            .style(|style| {
-                style.set_dragable(true);
-                style.set_fill_color(Rgba::new(69, 69, 69, 255));
-                style.set_orientation(Orientation::Horizontal);
-                style.set_padding(|padding| {
-                    padding.set_all(30);
+            Button::new(cx)
+                .style(|style| {
+                    style.set_corners(|corners| corners.set_each(0.04));
+                    style.set_fill_color(Rgba::new(69, 172, 23, 255));
                 });
-                style.set_spacing(30);
-            });
+        }).style(|style| {
+            style.set_dragable(true);
+            style.set_fill_color(Rgba::new(111, 72, 234, 255));
+            style.set_min_width(1000);
+            style.set_padding(|padding| padding.set_all(20));
+            style.set_spacing(40);
+        });
+
         TestCircleWidget::new(cx)
             .style(|style| {
-                style.set_dragable(true);
-                style.set_hover_color(Rgba::BLACK);
-                style.set_fill_color(Rgba::new(169, 72, 43, 255));
-                style.set_stroke_width(5.);
-                style.set_stroke_color(Rgba::WHITE);
+                style.set_hover_color(Rgba::GREEN);
+                style.set_stroke_width(10.);
+                style.set_fill_color(Rgba::BLACK);
+                style.set_stroke_color(Rgba::RED);
             });
-        })
+
+    }).style(|style| {
+        style.set_dragable(true);
+        style.set_fill_color(Rgba::new(69, 69, 69, 255));
+        style.set_padding(|padding| {
+            padding.set_all(30);
+        });
+        style.set_spacing(30);
+    });
+
+    TestCircleWidget::new(cx)
         .style(|style| {
-            style.set_padding(|padding| padding.set_all(20));
-            style.set_spacing(20);
+            style.set_dragable(true);
+            style.set_hover_color(Rgba::BLACK);
+            style.set_fill_color(Rgba::new(169, 72, 43, 255));
+            style.set_stroke_width(5.);
+            style.set_stroke_color(Rgba::WHITE);
         });
 }
 

@@ -2,7 +2,7 @@ use crate::context::Context;
 use crate::properties::{Shape, Properties};
 use crate::color::Rgba;
 
-use super::{Render, View};
+use super::{IntoView, View};
 
 pub fn button(cx: &mut Context) -> View<Button> { Button::new(cx) }
 
@@ -13,7 +13,7 @@ pub struct Button {
 impl Button {
     pub fn new(cx: &mut Context) -> View<Self> {
         let properties = Properties::new(Rgba::RED, (200, 50), Shape::RoundedRect, false);
-        Self { properties }.render(cx, |_| {})
+        Self { properties }.into_view(cx, |_| {})
     }
 }
 
@@ -24,7 +24,7 @@ impl View<'_, Button> {
     }
 }
 
-impl Render for Button {
-    fn debug_name<'a>(&self) -> &'a str { "Button" }
+impl IntoView for Button {
+    fn debug_name(&self) -> Option<&'static str> { Some("Button") }
     fn properties(&self) -> Properties { self.properties }
 }

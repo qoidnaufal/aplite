@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 const INITIAL_CAPACITY: usize = 1024;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct NodeId(pub(crate) u64);
+pub(crate) struct NodeId(u64);
 
 impl std::fmt::Display for NodeId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -28,13 +28,12 @@ impl Entity for NodeId {
     fn index(&self) -> usize { self.0 as usize }
 }
 
-pub trait Entity: Copy + PartialEq + PartialOrd {
+pub trait Entity: std::fmt::Debug + Copy + PartialEq + PartialOrd {
     fn new() -> Self;
     fn root() -> Self;
     fn index(&self) -> usize;
 }
 
-#[derive(Debug)]
 pub(crate) struct Tree<E: Entity> {
     entities: Vec<E>,
     parent: Vec<Option<E>>,
@@ -42,6 +41,47 @@ pub(crate) struct Tree<E: Entity> {
     last_child: Vec<Option<E>>,
     next_sibling: Vec<Option<E>>,
     prev_sibling: Vec<Option<E>>,
+}
+
+impl<E: Entity> std::fmt::Debug for Tree<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut s = String::new();
+        s.push_str("-- ROOT --\n");
+        fn recursive_nodes<E: Entity>(tree: &Tree<E>, s: &mut String, start: Option<E>, indent: usize) {
+            let acc = 3;
+            if let Some(current) = start {
+                tree.get_all_children(&current)
+                    .map(|children| {
+                        children.iter().for_each(|child| {
+                            if tree.get_parent(child).is_some_and(|p| tree.get_parent(p).is_some()) {
+                                for i in 0..(indent - acc)/acc {
+                                    let c = acc - i;
+                                    s.push_str(format!("{:c$}|", "").as_str());
+                                }
+                                let j = acc - 1;
+                                s.push_str(format!("{:j$}╰─ {child:?}\n", "").as_str());
+                            } else {
+                                s.push_str(format!("{:indent$}╰─ {child:?}\n", "").as_str());
+                            }
+                            if tree.get_first_child(child).is_some() {
+                                recursive_nodes(tree, s, Some(*child), indent + acc);
+                            }
+                        });
+                    });
+            } else {
+                tree.get_all_ancestor()
+                    .iter()
+                    .for_each(|node| {
+                        s.push_str(format!(" - {:?}\n", node).as_str());
+                        if tree.get_first_child(node).is_some() {
+                            recursive_nodes(tree, s, Some(**node), indent + acc);
+                        }
+                    });
+            }
+        }
+        recursive_nodes(self, &mut s, None, 0);
+        write!(f, "{}", s)
+    }
 }
 
 impl<E: Entity> Default for Tree<E> {
@@ -64,14 +104,14 @@ impl<E: Entity> Tree<E> {
 
     pub(crate) fn iter(&self) -> TreeIterator<'_, E> { self.into_iter() }
 
-    pub(crate) fn insert(&mut self, entity: E, maybe_parent: Option<E>) {
+    pub(crate) fn insert(&mut self, entity: E, parent: Option<E>) {
         self.entities.push(entity);
         self.first_child.push(None);
         self.last_child.push(None);
         self.next_sibling.push(None);
         self.prev_sibling.push(None);
-        self.parent.push(maybe_parent);
-        if let Some(parent) = maybe_parent.as_ref() {
+        self.parent.push(parent);
+        if let Some(parent) = parent.as_ref() {
             self.add_child(parent, entity);
         }
     }
@@ -230,8 +270,10 @@ impl<'a, E: Entity> NodeRef<'a, E> {
 
     pub(crate) fn id(&self) -> &'a E { self.id }
 
+    #[allow(unused)]
     pub(crate) fn parent(&self) -> Option<&'a E> { self.parent }
 
+    #[allow(unused)]
     pub(crate) fn first_child(&self) -> Option<&'a E> { self.first_child }
 
     #[allow(unused)]

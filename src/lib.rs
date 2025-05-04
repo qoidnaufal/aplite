@@ -24,12 +24,14 @@ pub mod prelude {
         View,
         TestCircleWidget,
         TestTriangleWidget,
-        Stack,
+        HStack,
+        VStack,
         Button,
         Image,
     };
     pub use crate::view::{
-        stack,
+        h_stack,
+        v_stack,
         button,
         image,
     };

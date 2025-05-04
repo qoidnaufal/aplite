@@ -147,11 +147,13 @@ impl<F: FnOnce(&mut Context)> App<F> {
         let gpu = Gpu::request(window.clone()).unwrap();
         let mut gfx = Gfx::new(&gpu.device);
 
-        // FIXME: is it necessary to have a dummy root widget?
+        // FIXME: is it necessary to render root widget?
         // gfx.register(&gpu, None::<&Pixel<u8>>, self.cx.get_window_properties());
 
         if let Some(view_fn) = self.view_fn.take() {
             view_fn(&mut self.cx);
+            self.cx.layout();
+            self.cx.debug_size();
             self.cx.register(&gpu, &mut gfx);
         }
         self.renderer = Some(Renderer::new(gpu, gfx));
@@ -198,8 +200,8 @@ impl<F: FnOnce(&mut Context)> ApplicationHandler for App<F> {
         self.initialize_renderer(Arc::clone(&window));
         self.window.insert(window.id(), window);
 
-        self.cx.print_nodes(None, 0);
-        // eprintln!("{}", self.cx.trees.len());
+        // eprintln!("{:?}", self.cx.tree);
+        // eprintln!("current: {:?}", self.cx.current_entity());
     }
 
     fn window_event(
