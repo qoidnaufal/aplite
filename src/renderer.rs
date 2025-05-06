@@ -8,25 +8,30 @@ mod element;
 use util::Size;
 
 use shader::SHADER;
+pub use element::Shape;
 
 pub(crate) use gpu::Gpu;
 pub(crate) use texture::{TextureData, image_reader};
 pub(crate) use element::{Element, Corners};
 pub(crate) use render_util::{
+    cast_slice,
     create_pipeline,
-    IntoRenderComponent,
+    RenderComponentSource,
     IntoRenderSource,
-    IntoTextureData,
+    TextureDataSource,
 };
 pub(crate) use buffer::{
     Gfx,
     Screen,
     Buffer,
     Indices,
+    Vertices,
 };
 
 use crate::error::GuiError;
 use crate::color::{Pixel, Rgba};
+
+pub(crate) const DEFAULT_SCALER: Size<f32> = Size::new(500., 500.);
 
 pub(crate) struct Renderer {
     pub(crate) gpu: Gpu,
@@ -35,6 +40,7 @@ pub(crate) struct Renderer {
     screen: Screen,
     pipeline: wgpu::RenderPipeline,
     indices: wgpu::Buffer,
+    vertices: wgpu::Buffer,
     instances: wgpu::Buffer,
 }
 
@@ -50,11 +56,14 @@ impl Renderer {
 
         let indices = gfx.indices(&gpu.device);
         let instances = gfx.instances(&gpu.device);
-        let pipeline = create_pipeline(&gpu, &[Gfx::instance_desc()], &[
+        let vertices = gfx.vertices(&gpu.device);
+        let buffer_descriptors = &[Gfx::vertice_desc(), Gfx::instance_desc()];
+        let bind_group_layouts = &[
             &Screen::bind_group_layout(&gpu.device),
             &Gfx::bind_group_layout(&gpu.device),
             &TextureData::bind_group_layout(&gpu.device),
-        ]);
+        ];
+        let pipeline = create_pipeline(&gpu, buffer_descriptors, bind_group_layouts);
 
         Self {
             gpu,
@@ -62,6 +71,7 @@ impl Renderer {
             screen,
             pipeline,
             indices,
+            vertices,
             instances,
             pseudo_texture,
         }
@@ -130,7 +140,8 @@ impl Renderer {
         if !self.gfx.is_empty() {
             pass.set_pipeline(&self.pipeline);
             pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
-            pass.set_vertex_buffer(0, self.instances.slice(..));
+            pass.set_vertex_buffer(0, self.vertices.slice(..));
+            pass.set_vertex_buffer(1, self.instances.slice(..));
             pass.set_bind_group(0, &self.screen.bind_group, &[]);         // screen transform
             pass.set_bind_group(1, &self.gfx.bind_group, &[]);            // storage buffers
             pass.set_bind_group(2, &self.pseudo_texture.bind_group, &[]); // pseudo texture

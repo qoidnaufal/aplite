@@ -95,6 +95,15 @@ impl From<Size<u32>> for Size<f32> {
     }
 }
 
+impl From<Size<f32>> for Size<u32> {
+    fn from(value: Size<f32>) -> Self {
+        Self  {
+            width: value.width as _,
+            height: value.height as _,
+        }
+    }
+}
+
 impl<T> From<(T, T)> for Size<T> {
     fn from(value: (T, T)) -> Self {
         Self {

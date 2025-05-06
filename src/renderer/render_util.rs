@@ -2,17 +2,18 @@ use util::{Matrix4x4, Size};
 
 use crate::color::Rgba;
 
-use super::{Corners, Element, Gfx, Gpu, SHADER};
+use super::{Corners, Element, Gfx, Gpu, Shape, Vertices, SHADER};
 
-pub(crate) trait IntoRenderComponent {
+pub(crate) trait RenderComponentSource {
     fn fill_color(&self) -> Rgba<f32>;
     fn stroke_color(&self) -> Rgba<f32>;
     fn corners(&self) -> Corners;
-    fn shape(&self) -> u32;
+    fn shape(&self) -> Shape;
     fn rotation(&self) -> f32;
     fn stroke_width(&self) -> f32;
     fn texture_id(&self) -> i32;
-    fn transform(&self, window_size: Size<u32>) -> Matrix4x4;
+    fn vertices(&self) -> Vertices;
+    fn transform(&self, size: Size<f32>) -> Matrix4x4;
 
     fn element(&self) -> Element {
         Element::new(
@@ -27,17 +28,17 @@ pub(crate) trait IntoRenderComponent {
     }
 }
 
-pub(crate) trait IntoTextureData {
+pub(crate) trait TextureDataSource {
     fn data(&self) -> &[u8];
     fn dimensions(&self) -> Size<u32>;
 }
 
 pub(crate) trait IntoRenderSource {
-    type RC: IntoRenderComponent;
-    type TD: IntoTextureData;
+    type RenderComponentSource: RenderComponentSource;
+    type TetureDataSource: TextureDataSource;
 
-    fn render_components_source(&self) -> &[Self::RC];
-    fn texture_data_source(&self) -> &[Self::TD];
+    fn render_components_source(&self) -> &[Self::RenderComponentSource];
+    fn texture_data_source(&self) -> &[Self::TetureDataSource];
 
     fn register(&self, gpu: &Gpu, gfx: &mut Gfx) {
         self.render_components_source().iter().skip(1).for_each(|rc| {
@@ -51,7 +52,7 @@ pub(crate) trait IntoRenderSource {
     }
 }
 
-pub fn cast_slice<SRC: Sized, DST: Sized>(src: &[SRC]) -> &[DST] {
+pub(crate) fn cast_slice<SRC: Sized, DST: Sized>(src: &[SRC]) -> &[DST] {
     let len = size_of_val(src);
     unsafe { core::slice::from_raw_parts(src.as_ptr() as *const DST, len) }
 }

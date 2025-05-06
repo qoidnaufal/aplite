@@ -1,9 +1,23 @@
 use super::Indices;
-use crate::properties::Shape;
 use crate::color::Rgba;
 
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Shape {
+    Circle = 0,
+    Rect = 1,
+    RoundedRect = 2,
+    Triangle = 3,
+}
+
+impl Shape {
+    pub(crate) fn is_triangle(&self) -> bool { matches!(self, Self::Triangle) }
+
+    // pub(crate) fn is_rounded_rect(&self) -> bool { matches!(self, Self::RoundedRect) }
+}
+
 #[repr(C, align(16))]
-#[derive(Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct Corners {
     top_left: f32,
     bot_left: f32,
@@ -23,8 +37,13 @@ impl From<f32> for Corners {
 }
 
 impl Corners {
-    pub fn new_homogen(r: f32) -> Self {
-        r.into()
+    pub const fn new_homogen(r: f32) -> Self {
+        Self {
+            top_left: r,
+            bot_left: r,
+            bot_right: r,
+            top_right: r,
+        }
     }
 
     pub fn set_all(&mut self, tl: f32, bl: f32, br: f32, tr: f32) {
@@ -64,7 +83,7 @@ pub(crate) struct Element {
     fill_color: Rgba<f32>,
     stroke_color: Rgba<f32>,
     corners: Corners,
-    shape: u32,
+    shape: Shape,
     rotation: f32,
     stroke_width: f32,
     pub(crate) texture_id: i32,
@@ -76,7 +95,7 @@ impl Element {
         fill_color: Rgba<f32>,
         stroke_color: Rgba<f32>,
         corners: Corners,
-        shape: u32,
+        shape: Shape,
         rotation: f32,
         stroke_width: f32,
         texture_id: i32,

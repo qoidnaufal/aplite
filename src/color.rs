@@ -1,6 +1,6 @@
  use util::{Fraction, Size, Vector4};
 
-use crate::renderer::IntoTextureData;
+use crate::renderer::TextureDataSource;
 
 pub trait ColorPrimitive
 where Self: Copy + Clone
@@ -59,7 +59,7 @@ impl From<Rgba<u8>> for Pixel<u8> {
     }
 }
 
-impl IntoTextureData for Pixel<u8> {
+impl TextureDataSource for Pixel<u8> {
     fn data(&self) -> &[u8] { self }
 
     fn dimensions(&self) -> Size<u32> { self.dimensions }

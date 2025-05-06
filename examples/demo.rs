@@ -82,8 +82,12 @@ fn root(cx: &mut Context) {
             style.set_dragable(true);
             style.set_fill_color(Rgba::new(111, 72, 234, 255));
             style.set_min_width(1000);
+            style.set_alignment(|align| {
+                align.set_h(HAlign::Left);
+                align.set_v(VAlign::Bottom);
+            });
             style.set_padding(|padding| padding.set_all(20));
-            style.set_spacing(40);
+            style.set_spacing(10);
         });
 
         TestCircleWidget::new(cx)
@@ -132,6 +136,7 @@ fn dummy(cx: &mut Context) {
         .on_click(click);
     TestCircleWidget::new(cx)
         .style(|style| {
+            style.set_size((150, 150));
             style.set_dragable(true);
         });
 }

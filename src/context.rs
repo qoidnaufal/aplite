@@ -3,11 +3,19 @@ use std::collections::HashMap;
 use util::{Matrix4x4, Size, Vector2};
 
 use crate::color::Pixel;
-use crate::layout::Layout;
 use crate::cursor::{Cursor, MouseAction};
 use crate::renderer::{Buffer, Gfx, IntoRenderSource, Renderer};
-use crate::properties::{Orientation, Properties};
+use crate::properties::Properties;
 use crate::tree::{Entity, NodeId, Tree};
+
+// mod data;
+pub mod layout;
+
+use layout::{
+    Layout,
+    LayoutContext,
+    Orientation,
+};
 
 pub struct Context {
     current: Option<NodeId>,
@@ -38,18 +46,19 @@ impl Default for Context {
 }
 
 impl Context {
-    pub(crate) fn debug_size(&self) {
+    pub(crate) fn debug_tree(&self) {
         // let mut s = String::new();
-        self.recursive_print_size(None, 0);
+        eprintln!("NodeId::ROOT : {:?}", self.get_window_properties().pos());
+        self.recursive_print(None, 0);
     }
 
-    fn recursive_print_size(&self, start: Option<NodeId>, indent: usize) {
+    fn recursive_print(&self, start: Option<NodeId>, indent: usize) {
         let acc = 3;
         if let Some(current) = start {
             self.tree.get_all_children(&current)
                 .map(|children| {
                     children.iter().for_each(|child| {
-                        let size = self.get_node_data(child).size();
+                        let data = self.get_node_data(child).pos();
                         let name = self.debug_name[child.index()];
                         if self.tree.get_parent(child).is_some_and(|p| self.tree.get_parent(p).is_some()) {
                             for i in 0..(indent - acc)/acc {
@@ -57,12 +66,12 @@ impl Context {
                                 eprint!("{:c$}|", "");
                             }
                             let j = acc - 1;
-                            eprintln!("{:j$}╰─ {child:?}: {size:?} | {name:?}", "");
+                            eprintln!("{:j$}╰─ {child:?}: {data:?} | {name:?}", "");
                         } else {
-                            eprintln!("{:indent$}╰─ {child:?}: {size:?} | {name:?}", "");
+                            eprintln!("{:indent$}╰─ {child:?}: {data:?} | {name:?}", "");
                         }
                         if self.tree.get_first_child(child).is_some() {
-                            self.recursive_print_size(Some(*child), indent + acc);
+                            self.recursive_print(Some(*child), indent + acc);
                         }
                     });
                 });
@@ -70,17 +79,37 @@ impl Context {
             self.tree.get_all_ancestor()
                 .iter()
                 .for_each(|node| {
-                    let size = self.get_node_data(*node).size();
+                    let data = self.get_node_data(*node).pos();
                     let name = self.debug_name[node.index()];
-                    eprintln!(" > {node:?}: {size:?} | {name:?}");
+                    eprintln!(" > {node:?}: {data:?} | {name:?}");
                     if self.tree.get_first_child(node).is_some() {
-                        self.recursive_print_size(Some(**node), indent + acc);
+                        self.recursive_print(Some(**node), indent + acc);
                     }
                 });
         }
     }
 }
 
+// window
+impl Context {
+    pub(crate) fn initialize_root(&mut self, size: Size<u32>) {
+        self.tree.insert(NodeId::root(), None);
+        self.properties.push(Properties::window_properties(size));
+        self.debug_name.push(Some("NodeId::ROOT"));
+    }
+
+    pub(crate) fn get_window_properties(&self) -> &Properties {
+        &self.properties[0]
+    }
+
+    pub(crate) fn update_window_properties<F: Fn(&mut Properties)>(&mut self, f: F) {
+        if let Some(prop) = self.properties.get_mut(0) {
+            f(prop);
+        }
+    }
+}
+
+// callback
 impl Context {
     pub(crate) fn add_style_fn<F: Fn(&mut Properties) + 'static>(&mut self, node_id: NodeId, style_fn: F) {
         self.style_fn.insert(node_id, Box::new(style_fn));
@@ -91,6 +120,7 @@ impl Context {
     }
 }
 
+// data
 impl Context {
     pub(crate) fn create_entity(&self) -> NodeId {
         self.tree.create_entity()
@@ -102,12 +132,6 @@ impl Context {
 
     pub(crate) fn set_current_entity(&mut self, entity: Option<NodeId>) {
         self.current = entity;
-    }
-
-    pub(crate) fn initialize_root(&mut self, size: Size<u32>) {
-        self.tree.insert(NodeId::root(), None);
-        self.properties.push(Properties::window_properties(size));
-        self.debug_name.push(Some("NodeId::ROOT"));
     }
 
     pub(crate) fn insert(
@@ -131,16 +155,6 @@ impl Context {
         self.pixels.push(pixel);
     }
 
-    pub(crate) fn get_window_properties(&self) -> &Properties {
-        &self.properties[0]
-    }
-
-    pub(crate) fn update_window_properties<F: Fn(&mut Properties)>(&mut self, f: F) {
-        if let Some(prop) = self.properties.get_mut(0) {
-            f(prop);
-        }
-    }
-
     pub(crate) fn get_node_data(&self, node_id: &NodeId) -> &Properties {
         &self.properties[node_id.index()]
     }
@@ -148,7 +162,10 @@ impl Context {
     pub(crate) fn get_node_data_mut(&mut self, node_id: &NodeId) -> &mut Properties {
         &mut self.properties[node_id.index()]
     }
+}
 
+// layout
+impl Context {
     pub(crate) fn set_orientation(&mut self, node_id: &NodeId) {
         let properties = self.get_node_data(node_id);
         self.layout.set_orientation(properties.orientation());
@@ -182,14 +199,14 @@ impl Context {
     pub(crate) fn reset_to_parent(
         &mut self,
         parent_id: &NodeId,
-        current_pos: Vector2<u32>,
-        half: Size<u32>
+        pos: Vector2<u32>,
+        size: Size<u32>
     ) {
         self.set_orientation(parent_id);
         self.set_alignment(parent_id);
         self.set_spacing(parent_id);
         self.set_padding(parent_id);
-        self.layout.reset_to_parent(current_pos, half);
+        self.layout.reset_to_parent(pos, size);
     }
 
     pub(crate) fn layout(&mut self) {
@@ -203,28 +220,23 @@ impl Context {
             .iter()
             .for_each(|node_id| {
                 self.calculate_size(node_id);
-                self.recursive_layout(node_id);
             });
+
+        self.recursive_layout(&NodeId::root());
     }
 
     fn recursive_layout(&mut self, node_id: &NodeId) {
-        self.assign_position(node_id);
-        if let Some(children) = self.tree.get_all_children(node_id) {
-            let current = self.get_node_data(node_id);
-            let current_pos = current.pos();
-            let current_size = current.size();
-            let padding = current.padding();
-            self.set_orientation(node_id);
-            self.set_alignment(node_id);
-            self.set_spacing(node_id);
-            self.set_padding(node_id);
-            self.layout.set_next_pos(|next| {
-                next.x = current_pos.x - current_size.width / 2 + padding.left();
-                next.y = current_pos.y - current_size.height / 2 + padding.top();
-            });
-            children.iter().for_each(|child_id| self.recursive_layout(child_id));
-            let parent_id = self.tree.get_parent(node_id).copied().unwrap_or(NodeId::root());
-            self.reset_to_parent(&parent_id, current_pos, current_size);
+        LayoutContext::new(node_id, self).calculate();
+        let children = if node_id == &NodeId::root() {
+            self.tree.get_all_ancestor()
+                .iter()
+                .map(|a| Some(**a))
+                .collect::<Option<Vec<_>>>()
+        } else {
+            self.tree.get_all_children(node_id)
+        };
+        if let Some(children) = children {
+            children.iter().for_each(|child| self.recursive_layout(child));
         }
     }
 
@@ -244,7 +256,7 @@ impl Context {
                     }
                     Orientation::Horizontal => {
                         size.height = size.height.max(child_size.height + padding.vertical());
-                        size.width += child_size.width - 1;
+                        size.width += child_size.width;
                     }
                 }
             });
@@ -270,8 +282,7 @@ impl Context {
     }
 }
 
-// .....................................................................
-
+// render
 impl Context {
     pub(crate) fn has_changed(&self) -> bool {
         !self.pending_update.is_empty()
@@ -354,7 +365,7 @@ impl Context {
         let props = self.get_node_data_mut(hover_id);
         transforms.update(hover_id.index() - 1, |transform| {
             let delta = cursor.hover.pos - cursor.click.offset;
-            props.set_transform(delta, transform);
+            props.adjust_transform(delta, transform);
         });
         self.handle_child_relayout(hover_id, transforms);
     }
@@ -375,12 +386,6 @@ impl Context {
             let pos = properties.pos();
             let size = properties.size();
             let padding = properties.padding();
-            // let padding = {
-            //     match self.layout.orientation() {
-            //         Orientation::Vertical => padding.top(),
-            //         Orientation::Horizontal => padding.left(),
-            //     }
-            // };
             self.layout.set_next_pos(|next_pos| {
                 next_pos.x = pos.x - size.width / 2 + padding.left();
                 next_pos.y = pos.y - size.height / 2 + padding.top();
@@ -436,10 +441,10 @@ impl Context {
 }
 
 impl IntoRenderSource for Context {
-    type RC = Properties;
-    type TD = Pixel<u8>;
+    type RenderComponentSource = Properties;
+    type TetureDataSource = Pixel<u8>;
 
-    fn render_components_source(&self) -> &[Self::RC] { self.properties.as_slice() }
+    fn render_components_source(&self) -> &[Self::RenderComponentSource] { self.properties.as_slice() }
 
-    fn texture_data_source(&self) -> &[Self::TD] { self.pixels.as_slice() }
+    fn texture_data_source(&self) -> &[Self::TetureDataSource] { self.pixels.as_slice() }
 }

@@ -1,6 +1,7 @@
 use crate::color::Rgba;
 use crate::prelude::Orientation;
-use crate::properties::{Properties, Shape};
+use crate::properties::Properties;
+use crate::renderer::Shape;
 use crate::context::Context;
 
 use super::{IntoView, View};
@@ -20,9 +21,10 @@ impl VStack {
     where
         F: FnOnce(&mut Context)
     {
-        Self {
-            properties: Properties::new(Rgba::DARK_GRAY, (1, 1), Shape::Rect, false),
-        }.into_view(cx, child_view)
+        let properties = Properties::new()
+            .with_shape(Shape::Rect)
+            .with_fill_color(Rgba::DARK_GRAY);
+        Self { properties }.into_view(cx, child_view)
     }
 }
 
@@ -46,11 +48,11 @@ impl HStack {
     where
         F: FnOnce(&mut Context)
     {
-        let mut properties = Properties::new(Rgba::DARK_GRAY, (1, 1), Shape::Rect, false);
-        properties.set_orientation(Orientation::Horizontal);
-        Self {
-            properties,
-        }.into_view(cx, child_view)
+        let properties = Properties::new()
+            .with_shape(Shape::Rect)
+            .with_orientation(Orientation::Horizontal)
+            .with_fill_color(Rgba::DARK_GRAY);
+        Self { properties }.into_view(cx, child_view)
     }
 }
 

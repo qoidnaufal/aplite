@@ -6,7 +6,7 @@ use image::GenericImageView;
 use util::Size;
 
 use crate::color::Pixel;
-use super::{Gpu, IntoTextureData};
+use super::{Gpu, TextureDataSource};
 
 pub(crate) fn image_reader<P: Into<PathBuf>>(path: P) -> Pixel<u8> {
     let mut file = File::open(path.into()).unwrap();
@@ -24,7 +24,7 @@ pub(crate) struct TextureData {
 }
 
 impl TextureData {
-    pub(crate) fn new(gpu: &Gpu, td: &impl IntoTextureData) -> Self {
+    pub(crate) fn new(gpu: &Gpu, td: &impl TextureDataSource) -> Self {
         let device = &gpu.device;
         let queue = &gpu.queue;
 
@@ -84,7 +84,7 @@ impl TextureData {
     }
 
     // FIXME: integrate this
-    pub(crate) fn _update_texture(&mut self, gpu: &Gpu, td: &impl IntoTextureData) {
+    pub(crate) fn _update_texture(&mut self, gpu: &Gpu, td: &impl TextureDataSource) {
         let size = td.dimensions();
         if size.width > self._texture.width() || size.height > self._texture.height() {
             self._texture = Self::create_texture(&gpu.device, size);
@@ -124,7 +124,7 @@ impl TextureData {
     fn submit_texture(
         queue: &wgpu::Queue,
         texture: wgpu::TexelCopyTextureInfo,
-        td: &impl IntoTextureData,
+        td: &impl TextureDataSource,
     ) {
         queue.write_texture(
             texture,

@@ -1,5 +1,5 @@
 use crate::context::Context;
-use crate::properties::{Shape, Properties};
+use crate::properties::Properties;
 use crate::color::Rgba;
 
 use super::{IntoView, View};
@@ -12,7 +12,9 @@ pub struct Button {
 
 impl Button {
     pub fn new(cx: &mut Context) -> View<Self> {
-        let properties = Properties::new(Rgba::RED, (200, 50), Shape::RoundedRect, false);
+        let properties = Properties::new()
+            .with_size((200, 50))
+            .with_fill_color(Rgba::RED);
         Self { properties }.into_view(cx, |_| {})
     }
 }

@@ -36,27 +36,16 @@ fn rotate(r: f32, pos: vec2<f32>) -> vec4<f32> {
     return vec4<f32>(xy, 0.0, 1.0);
 }
 
-const vertices = array<vec2<f32>, 5>(
-    vec2<f32>(-1.0,  1.0),
-    vec2<f32>(-1.0, -1.0),
-    vec2<f32>( 1.0, -1.0),
-    vec2<f32>( 1.0,  1.0),
-    vec2<f32>( 0.0,  1.0),
-);
-
-const uv_table = array<vec2<f32>, 5>(
-    vec2<f32>(0.0, 0.0),
-    vec2<f32>(0.0, 1.0),
-    vec2<f32>(1.0, 1.0),
-    vec2<f32>(1.0, 0.0),
-    vec2<f32>(0.5, 0.0),
-);
+struct VertexInput {
+    @location(0) pos: vec2<f32>,
+    @location(1) uv: vec2<f32>,
+}
 
 struct Instance {
     @location(2) index: u32,
 };
 
-struct VertexOutput {
+struct FragmentPayload {
     @builtin(position) position: vec4<f32>,
     @location(0) @interpolate(flat) index: u32,
     @location(1) uv: vec2<f32>,
@@ -64,16 +53,16 @@ struct VertexOutput {
 
 @vertex
 fn vs_main(
-    @builtin(vertex_index) v: u32,
+    vertex: VertexInput,
     instance: Instance,
-) -> VertexOutput {
+) -> FragmentPayload {
     let element = elements[instance.index];
     let screen_t = screen.transform;
     let element_t = transforms[element.transform_id];
-    let pos = rotate(element.rotate, vertices[v]);
+    let pos = rotate(element.rotate, vertex.pos);
 
-    var out: VertexOutput;
-    out.uv = select(uv_table[v], uv_table[v] * 2 - 1, element.texture_id < 0);
+    var out: FragmentPayload;
+    out.uv = select(vertex.uv, vertex.uv * 2 - 1, element.texture_id < 0);
     out.index = instance.index;
     out.position = screen_t * element_t * pos;
     return out;
@@ -147,7 +136,7 @@ fn sdf(uv: vec2<f32>, element: Element) -> f32 {
 // }
 
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+fn fs_main(in: FragmentPayload) -> @location(0) vec4<f32> {
     let element = elements[in.index];
     let element_color = element.color;
     let border = element.outline;

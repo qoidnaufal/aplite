@@ -133,6 +133,19 @@ impl<E: Entity> Tree<E> {
         self.set_last_child(entity, child);
     }
 
+    // pub(crate) fn get_prev_ancestor(&self, entity: &E) -> Option<&E> {
+    //     if self.get_parent(entity).is_some() || entity == &Entity::root() {
+    //         return None;
+    //     }
+    //     let ancestors = self.get_all_ancestor();
+    //     let idx = ancestors.iter().position(|e| e == &entity).unwrap();
+    //     if idx < 1 {
+    //         None
+    //     } else {
+    //         Some(&ancestors[idx - 1])
+    //     }
+    // }
+
     pub(crate) fn get_all_ancestor(&self) -> Vec<&E> {
         self
             .entities
@@ -148,6 +161,10 @@ impl<E: Entity> Tree<E> {
             self.get_ancestor(parent)
         } else { Some(entity) }
     }
+
+    // pub(crate) fn is_ancestor(&self, entity: &E) -> bool {
+    //     self.get_parent(entity).is_none()
+    // }
 
     pub(crate) fn get_parent(&self, entity: &E) -> Option<&E> {
         self.parent.get(entity.index()).and_then(|e| e.as_ref())
@@ -186,13 +203,13 @@ impl<E: Entity> Tree<E> {
         self.last_child.get_mut(entity.index()).and_then(|e| e.as_mut())
     }
 
-    pub(crate) fn get_next_sibling_mut(&mut self, entity: &E) -> Option<&mut E> {
-        self.next_sibling.get_mut(entity.index()).and_then(|e| e.as_mut())
-    }
+    // pub(crate) fn get_next_sibling_mut(&mut self, entity: &E) -> Option<&mut E> {
+    //     self.next_sibling.get_mut(entity.index()).and_then(|e| e.as_mut())
+    // }
 
-    pub(crate) fn get_prev_sibling_mut(&mut self, entity: &E) -> Option<&mut E> {
-        self.prev_sibling.get_mut(entity.index()).and_then(|e| e.as_mut())
-    }
+    // pub(crate) fn get_prev_sibling_mut(&mut self, entity: &E) -> Option<&mut E> {
+    //     self.prev_sibling.get_mut(entity.index()).and_then(|e| e.as_mut())
+    // }
 
     pub(crate) fn get_all_children(&self, entity: &E) -> Option<Vec<E>> {
         if let Some(first) = self.get_first_child(entity) {

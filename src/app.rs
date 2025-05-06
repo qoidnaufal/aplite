@@ -138,7 +138,10 @@ impl<F: FnOnce(&mut Context)> App<F> {
         let inner_size = window.inner_size();
         let size: Size<u32> = (inner_size.width, inner_size.height).into();
         if size != DEFAULT_SCREEN_SIZE {
-            self.cx.update_window_properties(|prop| prop.set_size(size));
+            self.cx.update_window_properties(|prop| {
+                prop.set_size(size);
+                prop.set_position(Vector2::new(size.width / 2, size.height / 2));
+            });
         }
         Arc::new(window)
     }
@@ -153,7 +156,7 @@ impl<F: FnOnce(&mut Context)> App<F> {
         if let Some(view_fn) = self.view_fn.take() {
             view_fn(&mut self.cx);
             self.cx.layout();
-            self.cx.debug_size();
+            self.cx.debug_tree();
             self.cx.register(&gpu, &mut gfx);
         }
         self.renderer = Some(Renderer::new(gpu, gfx));
@@ -168,7 +171,10 @@ impl<F: FnOnce(&mut Context)> App<F> {
     fn resize(&mut self, size: impl Into<Size<u32>>) {
         if let Some(renderer) = self.renderer.as_mut() {
             let size: Size<u32> = size.into();
-            self.cx.update_window_properties(|prop| prop.set_size(size));
+            self.cx.update_window_properties(|prop| {
+                prop.set_size(size);
+                prop.set_position(Vector2::new(size.width / 2, size.height / 2));
+            });
             renderer.resize(size);
         }
     }

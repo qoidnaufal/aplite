@@ -4,9 +4,10 @@ mod stack;
 
 use std::marker::PhantomData;
 
-use crate::properties::{Shape, Properties};
+use crate::properties::Properties;
 use crate::context::Context;
 use crate::color::Rgba;
+use crate::renderer::Shape;
 use crate::tree::NodeId;
 
 pub use {
@@ -26,22 +27,20 @@ pub trait IntoView: Sized {
         let parent = cx.current_entity();
         cx.insert(node_id, parent, self.properties(), self.debug_name());
         cx.set_current_entity(Some(node_id));
-
         child_fn(cx);
-
         cx.set_current_entity(parent);
 
         View::new(node_id, cx)
     }
 }
 
-pub struct View<'a, R: IntoView> {
+pub struct View<'a, IV: IntoView> {
     entity: NodeId,
     cx: &'a mut Context,
-    inner: PhantomData<R>,
+    inner: PhantomData<IV>,
 }
 
-impl<'a, R: IntoView> View<'a, R> {
+impl<'a, IV: IntoView> View<'a, IV> {
     fn new(entity: NodeId, cx: &'a mut Context) -> Self {
         Self {
             entity,
@@ -54,10 +53,10 @@ impl<'a, R: IntoView> View<'a, R> {
         self.entity
     }
 
-    pub fn style<P: Fn(&mut Properties) + 'static>(self, f: P) -> Self {
+    pub fn style<F: Fn(&mut Properties) + 'static>(self, style_fn: F) -> Self {
         let prop = self.cx.get_node_data_mut(&self.id());
-        f(prop);
-        self.cx.add_style_fn(self.id(), f);
+        style_fn(prop);
+        self.cx.add_style_fn(self.id(), style_fn);
         self
     }
 }
@@ -69,7 +68,10 @@ pub struct TestTriangleWidget {
 
 impl TestTriangleWidget {
     pub fn new(cx: &mut Context) -> View<Self> {
-        let properties = Properties::new(Rgba::RED, (300, 300), Shape::Triangle, false);
+        let properties = Properties::new()
+            .with_size((300, 300))
+            .with_shape(Shape::Triangle)
+            .with_fill_color(Rgba::RED);
         Self { properties }.into_view(cx, |_| {})
     }
 }
@@ -86,7 +88,10 @@ pub struct TestCircleWidget {
 
 impl TestCircleWidget {
     pub fn new(cx: &mut Context) -> View<Self> {
-        let properties = Properties::new(Rgba::RED, (300, 300), Shape::Circle, false);
+        let properties = Properties::new()
+            .with_size((300, 300))
+            .with_shape(Shape::Circle)
+            .with_fill_color(Rgba::RED);
         Self { properties }.into_view(cx, |_| {})
     }
 }

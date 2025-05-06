@@ -24,7 +24,7 @@ where T:
     + std::ops::Mul<T, Output = T>
     + std::ops::Add<T, Output = T>,
 {
-    pub fn new(x: T, y: T) -> Self {
+    pub const fn new(x: T, y: T) -> Self {
         Self { x, y }
     }
 
