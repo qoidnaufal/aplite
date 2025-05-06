@@ -1,4 +1,4 @@
-use learn_wgpu::prelude::*;
+use aplite::prelude::*;
 
 fn root(cx: &mut Context) {
     let (counter, set_counter) = signal(0i32);
@@ -145,7 +145,7 @@ fn main() -> AppResult {
     let mut args = std::env::args();
     match args.nth(1) {
         Some(arg) if arg == "dummy" => {
-            App::new(dummy)
+            Aplite::new(dummy)
                 .set_window_attributes(|window| {
                     window.set_title("Dummy");
                     window.set_inner_size((500, 500));
@@ -154,7 +154,7 @@ fn main() -> AppResult {
                 .launch()
         },
         Some(arg) if arg == "empty" => {
-            App::<fn(&mut Context)>::new_empty()
+            Aplite::<fn(&mut Context)>::new_empty()
                 .set_window_attributes(|window| {
                     window.set_title("Empty");
                 })
@@ -162,7 +162,7 @@ fn main() -> AppResult {
                 .launch()
         }
         _ => {
-            App::new(root).launch()
+            Aplite::new(root).launch()
         }
     }
 }

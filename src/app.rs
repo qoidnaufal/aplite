@@ -81,7 +81,7 @@ impl From<WindowAttributes> for winit::window::WindowAttributes {
     }
 }
 
-pub struct App<F: FnOnce(&mut Context)> {
+pub struct Aplite<F: FnOnce(&mut Context)> {
     renderer: Option<Renderer>,
     cx: Context,
     cursor: Cursor,
@@ -91,7 +91,7 @@ pub struct App<F: FnOnce(&mut Context)> {
     view_fn: Option<F>,
 }
 
-impl<F: FnOnce(&mut Context)> App<F> {
+impl<F: FnOnce(&mut Context)> Aplite<F> {
     pub fn new(view_fn: F) -> Self {
         let mut app = Self::new_empty();
         app.view_fn = Some(view_fn);
@@ -200,7 +200,7 @@ impl<F: FnOnce(&mut Context)> App<F> {
     }
 }
 
-impl<F: FnOnce(&mut Context)> ApplicationHandler for App<F> {
+impl<F: FnOnce(&mut Context)> ApplicationHandler for Aplite<F> {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         let window = self.initialize_window(event_loop);
         self.initialize_renderer(Arc::clone(&window));
