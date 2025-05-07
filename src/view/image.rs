@@ -1,8 +1,8 @@
 use std::path::PathBuf;
+use shared::Rgba;
 
 use crate::renderer::{image_reader, Shape};
 use crate::properties::Properties;
-use crate::color::Rgba;
 use crate::context::Context;
 use super::{IntoView, View};
 

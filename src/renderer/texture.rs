@@ -3,7 +3,7 @@ use std::io::Read;
 use std::fs::File;
 
 use image::GenericImageView;
-use util::Size;
+use shared::Size;
 
 use crate::color::Pixel;
 use super::{Gpu, TextureDataSource};
@@ -86,7 +86,7 @@ impl TextureData {
     // FIXME: integrate this
     pub(crate) fn _update_texture(&mut self, gpu: &Gpu, td: &impl TextureDataSource) {
         let size = td.dimensions();
-        if size.width > self._texture.width() || size.height > self._texture.height() {
+        if size.width() > self._texture.width() || size.height() > self._texture.height() {
             self._texture = Self::create_texture(&gpu.device, size);
         }
         Self::submit_texture(&gpu.queue, self._texture.as_image_copy(), td);
@@ -96,8 +96,8 @@ impl TextureData {
         device.create_texture(&wgpu::TextureDescriptor {
             label: Some("texture"),
             size: wgpu::Extent3d {
-                width: size.width,
-                height: size.height,
+                width: size.width(),
+                height: size.height(),
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -131,12 +131,12 @@ impl TextureData {
             td.data(),
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(4 * td.dimensions().width),
-                rows_per_image: Some(td.dimensions().height),
+                bytes_per_row: Some(4 * td.dimensions().width()),
+                rows_per_image: Some(td.dimensions().height()),
             },
             wgpu::Extent3d {
-                width: td.dimensions().width,
-                height: td.dimensions().height,
+                width: td.dimensions().width(),
+                height: td.dimensions().height(),
                 depth_or_array_layers: 1,
             }
         );

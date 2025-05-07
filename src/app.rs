@@ -5,9 +5,8 @@ use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowId};
 use winit::event::WindowEvent;
 use winit::application::ApplicationHandler;
-use util::{Size, Vector2};
+use shared::{Size, Vector2, Rgba};
 
-use crate::color::Rgba;
 use crate::cursor::Cursor;
 use crate::prelude::AppResult;
 use crate::renderer::{Gfx, Gpu, IntoRenderSource, Renderer};
@@ -140,7 +139,7 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
         if size != DEFAULT_SCREEN_SIZE {
             self.cx.update_window_properties(|prop| {
                 prop.set_size(size);
-                prop.set_position(Vector2::new(size.width / 2, size.height / 2));
+                prop.set_position((size / 2).into());
             });
         }
         Arc::new(window)
@@ -173,7 +172,7 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
             let size: Size<u32> = size.into();
             self.cx.update_window_properties(|prop| {
                 prop.set_size(size);
-                prop.set_position(Vector2::new(size.width / 2, size.height / 2));
+                prop.set_position((size / 2).into());
             });
             renderer.resize(size);
         }
@@ -263,7 +262,7 @@ impl<F: FnOnce(&mut Context)> ApplicationHandler for Aplite<F> {
                 self.cursor.hover.pos = Vector2::new(position.x as _, position.y as _);
                 if !renderer.gfx.is_empty() {
                     self.cx.detect_hover(&mut self.cursor);
-                    self.cx.handle_hover(&mut self.cursor, &mut renderer.gfx);
+                    self.cx.handle_hover(&mut self.cursor);
                 }
             }
             _ => {}

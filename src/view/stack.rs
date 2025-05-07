@@ -1,4 +1,4 @@
-use crate::color::Rgba;
+use shared::Rgba;
 use crate::prelude::Orientation;
 use crate::properties::Properties;
 use crate::renderer::Shape;

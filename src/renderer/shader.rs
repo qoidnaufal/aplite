@@ -4,7 +4,7 @@ struct Screen {
 };
 
 @group(0) @binding(0) var<uniform> screen: Screen;
-@group(0) @binding(1) var<uniform> window_size: vec2<u32>;
+@group(0) @binding(1) var<uniform> scaler: vec2<u32>;
 
 struct Radius {
     top_left: f32,
@@ -101,8 +101,8 @@ fn sdf(uv: vec2<f32>, element: Element) -> f32 {
     let transform = transforms[element.transform_id];
     let size = vec2f(transform[0].x, transform[1].y);
     let stroke = 10 * vec2f(
-        element.stroke / f32(window_size.x),
-        element.stroke / f32(window_size.y),
+        element.stroke / f32(scaler.x),
+        element.stroke / f32(scaler.y),
     );
 
     switch element.kind {
@@ -143,7 +143,7 @@ fn fs_main(in: FragmentPayload) -> @location(0) vec4<f32> {
 
     let transform = transforms[element.transform_id];
     let size = vec2f(transform[0].x, transform[1].y);
-    let stroke = element.stroke / f32(window_size.x);
+    let stroke = element.stroke / f32(scaler.x);
 
     let sdf = sdf(in.uv, element);
     let fill = select(vec4f(0.0), element.color, sdf < 0.0);

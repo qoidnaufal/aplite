@@ -1,28 +1,14 @@
- use util::{Fraction, Size, Vector4};
+ use shared::{Fraction, GpuPrimitive, Size, Rgba};
 
 use crate::renderer::TextureDataSource;
 
-pub trait ColorPrimitive
-where Self: Copy + Clone
-    + std::ops::Add<Self, Output = Self> + std::ops::AddAssign<Self>
-    + std::ops::Div<Self, Output = Self> + std::ops::DivAssign<Self>
-    + std::ops::Mul<Self, Output = Self> + std::ops::MulAssign<Self>
-    + std::ops::Rem<Self, Output = Self> + std::ops::RemAssign<Self>
-    + std::ops::Sub<Self, Output = Self> + std::ops::SubAssign<Self>
-    + PartialEq
-    + Default
-{}
-
-impl ColorPrimitive for u8 {}
-impl ColorPrimitive for f32 {}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Pixel<T: ColorPrimitive> {
+pub struct Pixel<T: GpuPrimitive> {
     dimensions: Size<u32>,
     data: Vec<T>,
 }
 
-impl<T: ColorPrimitive> Pixel<T> {
+impl<T: GpuPrimitive> Pixel<T> {
     pub fn new(dimensions: impl Into<Size<u32>>, data: &[T]) -> Self {
         Self {
             dimensions: dimensions.into(),
@@ -39,17 +25,10 @@ impl<T: ColorPrimitive> Pixel<T> {
     }
 }
 
-impl<T: ColorPrimitive> std::ops::Deref for Pixel<T> {
+impl<T: GpuPrimitive> std::ops::Deref for Pixel<T> {
     type Target = [T];
     fn deref(&self) -> &Self::Target {
         self.data.as_slice()
-    }
-}
-
-impl From<Rgb<u8>> for Pixel<u8> {
-    fn from(rgb: Rgb<u8>) -> Self {
-        let rgba: Rgba<u8> = rgb.into();
-        Self::new((1, 1), &rgba.to_slice())
     }
 }
 
@@ -64,230 +43,3 @@ impl TextureDataSource for Pixel<u8> {
 
     fn dimensions(&self) -> Size<u32> { self.dimensions }
 }
-
-#[derive(Debug, Clone, Copy)]
-pub struct Rgb<T: ColorPrimitive> {
-    pub r: T,
-    pub g: T,
-    pub b: T,
-}
-
-impl Rgb<u8> {
-    pub const BLACK: Self = Self { r: 0, g: 0, b: 0 };
-    pub const RED: Self = Self { r: 255, g: 0, b: 0 };
-    pub const GREEN: Self = Self { r: 0, g: 255, b: 0 };
-    pub const BLUE: Self = Self { r: 0, g: 0, b: 255 };
-    pub const WHITE: Self = Self { r: 255, g: 255, b: 255 };
-    pub const YELLOW: Self = Self { r: 255, g: 255, b: 0 };
-    pub const DARK_GRAY: Self = Self { r: 30, g: 30, b: 30 };
-    pub const DARK_GREEN: Self = Self { r: 21, g: 71, b: 52 };
-}
-
-impl From<Rgb<u8>> for wgpu::Color {
-    fn from(rgb8: Rgb<u8>) -> Self {
-        Self {
-            r: rgb8.r as f64 / u8::MAX as f64,
-            g: rgb8.g as f64 / u8::MAX as f64,
-            b: rgb8.b as f64 / u8::MAX as f64,
-            a: 1.0,
-        }
-    }
-}
-
-impl From<Rgb<u8>> for Rgb<f32> {
-    fn from(val: Rgb<u8>) -> Self {
-        Self {
-            r: val.r as f32 / u8::MAX as f32,
-            g: val.g as f32 / u8::MAX as f32,
-            b: val.b as f32 / u8::MAX as f32,
-        }
-    }
-}
-
-impl From<Rgb<f32>> for Rgb<u8> {
-    fn from(val: Rgb<f32>) -> Self {
-        Self {
-            r: (val.r * u8::MAX as f32) as u8,
-            g: (val.g * u8::MAX as f32) as u8,
-            b: (val.b * u8::MAX as f32) as u8,
-        }
-    }
-}
-
-impl From<Rgba<f32>> for Rgb<u8> {
-    fn from(rgba_f32: Rgba<f32>) -> Self {
-        let rgba_u8: Rgba<u8> = rgba_f32.into();
-        Self {
-            r: rgba_u8.r,
-            g: rgba_u8.g,
-            b: rgba_u8.b,
-        }
-    }
-}
-
-impl PartialEq for Rgb<u8> {
-    fn eq(&self, other: &Self) -> bool {
-        self.r == other.r
-            && self.g == other.g
-            && self.b == other.b
-    }
-}
-
-impl PartialEq for Rgb<f32> {
-    fn eq(&self, other: &Self) -> bool {
-        self.r == other.r
-            && self.g == other.g
-            && self.b == other.b
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Rgba<T: ColorPrimitive> {
-    pub r: T,
-    pub g: T,
-    pub b: T,
-    pub a: T,
-}
-
-impl<T: ColorPrimitive> Rgba<T> {
-    fn to_slice(self) -> [T; 4] {
-        [self.r, self.g, self.b, self.a]
-    }
-}
-
-impl Rgba<u8> {
-    pub const BLACK: Self = Self { r: 0, g: 0, b: 0, a: 255 };
-    pub const RED: Self = Self { r: 255, g: 0, b: 0, a: 255 };
-    pub const GREEN: Self = Self { r: 0, g: 255, b: 0, a: 255 };
-    pub const BLUE: Self = Self { r: 0, g: 0, b: 255, a: 255 };
-    pub const WHITE: Self = Self { r: 255, g: 255, b: 255, a: 255 };
-    pub const YELLOW: Self = Self { r: 255, g: 255, b: 0, a: 255 };
-    pub const DARK_GRAY: Self = Self { r: 30, g: 30, b: 30, a: 255 };
-    pub const DARK_GREEN: Self = Self { r: 10, g: 30, b: 15, a: 255 };
-
-    pub fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
-        Self { r, g, b, a }
-    }
-}
-
-impl From<Rgba<u8>> for wgpu::Color {
-    fn from(rgba8: Rgba<u8>) -> Self {
-        Self {
-            r: rgba8.r as f64 / u8::MAX as f64,
-            g: rgba8.g as f64 / u8::MAX as f64,
-            b: rgba8.b as f64 / u8::MAX as f64,
-            a: rgba8.a as f64 / u8::MAX as f64,
-        }
-    }
-}
-
-impl From<Rgba<u8>> for u32 {
-    fn from(rgba: Rgba<u8>) -> Self {
-        ((rgba.r as u32) << 24)
-        | ((rgba.g as u32) << 16)
-        | ((rgba.b as u32) << 8)
-        | (rgba.a as u32)
-    }
-}
-
-impl From<u32> for Rgba<u8> {
-    fn from(num: u32) -> Self {
-        let r = (num >> 24) as u8;
-        let g = ((num >> 16) & 0xFF) as u8;
-        let b = ((num >> 8) & 0xFF) as u8;
-        let a = (num & 0xFF) as u8;
-        Self { r, g, b, a }
-    }
-}
-
-impl From<Rgba<u8>> for Rgba<f32> {
-    fn from(val: Rgba<u8>) -> Self {
-        Self {
-            r: val.r as f32 / u8::MAX as f32,
-            g: val.g as f32 / u8::MAX as f32,
-            b: val.b as f32 / u8::MAX as f32,
-            a: val.a as f32 / u8::MAX as f32,
-        }
-    }
-}
-
-impl From<Rgba<f32>> for Rgba<u8> {
-    fn from(val: Rgba<f32>) -> Self {
-        Self {
-            r: (val.r * u8::MAX as f32) as u8,
-            g: (val.g * u8::MAX as f32) as u8,
-            b: (val.b * u8::MAX as f32) as u8,
-            a: (val.a * u8::MAX as f32) as u8,
-        }
-    }
-}
-
-impl From<Vector4<f32>> for Rgba<u8> {
-    fn from(vec4f: Vector4<f32>) -> Self {
-        Self {
-            r: (vec4f.x * 255.0) as u8,
-            g: (vec4f.y * 255.0) as u8,
-            b: (vec4f.z * 255.0) as u8,
-            a: (vec4f.w * 255.0) as u8,
-        }
-    }
-}
-
-impl From<Rgba<u8>> for Vector4<f32> {
-    fn from(rgba: Rgba<u8>) -> Self {
-        Self {
-            x: rgba.r as f32 / u8::MAX as f32,
-            y: rgba.g as f32 / u8::MAX as f32,
-            z: rgba.b as f32 / u8::MAX as f32,
-            w: rgba.a as f32 / u8::MAX as f32,
-        }
-    }
-}
-
-impl From<Rgba<f32>> for Vector4<f32> {
-    fn from(rgba: Rgba<f32>) -> Self {
-        Self {
-            x: rgba.r,
-            y: rgba.g,
-            z: rgba.b,
-            w: rgba.a,
-        }
-    }
-}
-
-impl From<Rgb<u8>> for Rgba<u8> {
-    fn from(value: Rgb<u8>) -> Self {
-        Self {
-            r: value.r,
-            g: value.g,
-            b: value.b,
-            a: u8::MAX,
-        }
-    }
-}
-
-impl From<Rgb<u8>> for Rgba<f32> {
-    fn from(value: Rgb<u8>) -> Self {
-        let rgba: Rgba<u8> = value.into();
-        rgba.into()
-    }
-}
-
-impl PartialEq for Rgba<u8> {
-    fn eq(&self, other: &Self) -> bool {
-        self.r == other.r
-            && self.g == other.g
-            && self.b == other.b
-            && self.a == other.a
-    }
-}
-
-impl PartialEq for Rgba<f32> {
-    fn eq(&self, other: &Self) -> bool {
-        self.r == other.r
-            && self.g == other.g
-            && self.b == other.b
-            && self.a == other.a
-    }
-}
-

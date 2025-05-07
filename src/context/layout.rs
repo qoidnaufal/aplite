@@ -1,4 +1,4 @@
-use util::{Size, Vector2};
+use shared::{Size, Vector2};
 
 use crate::context::Context;
 use crate::properties::Properties;
@@ -116,8 +116,8 @@ impl Rules {
 
 impl Rules {
     fn inner_space(&self) -> Size<u32> {
-        (self.size.width - self.padding.horizontal(),
-        self.size.height - self.padding.vertical()).into()
+        (self.size.width() - self.padding.horizontal(),
+        self.size.height() - self.padding.vertical()).into()
     }
 
     fn offset_x(&self) -> u32 {
@@ -125,15 +125,15 @@ impl Rules {
         let pr = self.padding.right();
 
         match self.alignment.h_align {
-            HAlign::Left => self.position.x - (self.size.width / 2) + pl,
+            HAlign::Left => self.position.x() - (self.size.width() / 2) + pl,
             HAlign::Center => {
                 if pl >= pr {
-                    self.position.x + (pl - pr) / 2
+                    self.position.x() + (pl - pr) / 2
                 } else {
-                    self.position.x - (pr - pl) / 2
+                    self.position.x() - (pr - pl) / 2
                 }
             }
-            HAlign::Right => self.position.x + (self.size.width / 2) - pr
+            HAlign::Right => self.position.x() + (self.size.width() / 2) - pr
         }
     }
 
@@ -142,15 +142,15 @@ impl Rules {
         let pb = self.padding.bottom();
 
         match self.alignment.v_align {
-            VAlign::Top => self.position.y - (self.size.height / 2) + pt,
+            VAlign::Top => self.position.y() - (self.size.height() / 2) + pt,
             VAlign::Middle => {
                 if pt >= pb {
-                    self.position.y + (pt - pb) / 2
+                    self.position.y() + (pt - pb) / 2
                 } else {
-                    self.position.y - (pb - pt) / 2
+                    self.position.y() - (pb - pt) / 2
                 }
             }
-            VAlign::Bottom => self.position.y + (self.size.height / 2) - pb,
+            VAlign::Bottom => self.position.y() + (self.size.height() / 2) - pb,
         }
     }
 
@@ -199,7 +199,6 @@ pub(crate) struct LayoutContext<'a> {
 
 impl<'a> LayoutContext<'a> {
     pub(crate) fn new(entity: &'a NodeId, cx: &'a mut Context) -> Self {
-        // let parent = cx.tree.get_parent(&entity).copied().unwrap_or(NodeId::root());
         let rules = Rules::new(cx.get_node_data(&entity));
         Self {
             entity,
@@ -215,8 +214,8 @@ impl<'a> LayoutContext<'a> {
             (children.iter().map(|child| {
                 let size = self.cx.get_node_data(child).size();
                 match self.rules.orientation {
-                    Orientation::Vertical => size.height,
-                    Orientation::Horizontal => size.width,
+                    Orientation::Vertical => size.height(),
+                    Orientation::Horizontal => size.width(),
                 }
             }).sum(), children.len() as u32)
         } else { (0, 0) }
@@ -227,12 +226,12 @@ impl<'a> LayoutContext<'a> {
 
         match self.rules.orientation {
             Orientation::Vertical => {
-                self.next_pos.x = self.rules.offset_x();
-                self.next_pos.y = self.rules.start_y(child_size, child_len);
+                self.next_pos.set_x(self.rules.offset_x());
+                self.next_pos.set_y(self.rules.start_y(child_size, child_len));
             }
             Orientation::Horizontal => {
-                self.next_pos.x = self.rules.start_x(child_size, child_len);
-                self.next_pos.y = self.rules.offset_y();
+                self.next_pos.set_x(self.rules.start_x(child_size, child_len));
+                self.next_pos.set_y(self.rules.offset_y());
             }
         }
     }
@@ -253,27 +252,29 @@ impl<'a> LayoutContext<'a> {
         let size = prop.size();
 
         match self.rules.orientation {
-            Orientation::Vertical => self.next_pos.y += size.height / 2,
-            Orientation::Horizontal => self.next_pos.x += size.width / 2,
+            Orientation::Vertical => self.next_pos.add_y(size.height() / 2),
+            Orientation::Horizontal => self.next_pos.add_x(size.width() / 2),
         }
 
         prop.set_position(self.next_pos);
 
         match self.rules.orientation {
-            Orientation::Vertical => self.next_pos.y += self.rules.spacing + size.height / 2,
-            Orientation::Horizontal => self.next_pos.x += self.rules.spacing + size.width / 2,
+            Orientation::Vertical => self.next_pos.add_y(self.rules.spacing + size.height() / 2),
+            Orientation::Horizontal => self.next_pos.add_x(self.rules.spacing + size.width() / 2),
         }
     }
 
-    pub(crate) fn calculate(&mut self) {
+    pub(crate) fn calculate(&mut self) -> Option<Vec<NodeId>> {
         let children = self.get_children();
         self.initialize_next_pos(children.as_ref());
 
-        if let Some(children) = children {
+        if let Some(children) = children.as_ref() {
             children.iter().for_each(|child| {
                 self.assign_position(child);
             });
         }
+
+        children
     }
 }
 
@@ -286,72 +287,72 @@ pub(crate) struct Layout {
     padding: Padding,
 }
 
-impl Layout {
-    pub(crate) fn new() -> Self { Self::default() }
+// impl Layout {
+//     pub(crate) fn new() -> Self { Self::default() }
 
-    pub(crate) fn next_pos(&self) -> Vector2<u32> {
-        self.next_pos
-    }
+//     pub(crate) fn next_pos(&self) -> Vector2<u32> {
+//         self.next_pos
+//     }
 
-    pub(crate) fn alignment(&self) -> Alignment {
-        self.alignment
-    }
+//     pub(crate) fn alignment(&self) -> Alignment {
+//         self.alignment
+//     }
 
-    pub(crate) fn orientation(&self) -> Orientation {
-        self.orientation
-    }
+//     pub(crate) fn orientation(&self) -> Orientation {
+//         self.orientation
+//     }
 
-    pub(crate) fn set_alignment(&mut self, align: Alignment) {
-        self.alignment = align;
-    }
+//     pub(crate) fn set_alignment(&mut self, align: Alignment) {
+//         self.alignment = align;
+//     }
 
-    pub(crate) fn set_orientation(&mut self, orientation: Orientation) {
-        self.orientation = orientation;
-    }
+//     pub(crate) fn set_orientation(&mut self, orientation: Orientation) {
+//         self.orientation = orientation;
+//     }
 
-    pub(crate) fn set_spacing(&mut self, spacing: u32) {
-        self.spacing = spacing;
-    }
+//     pub(crate) fn set_spacing(&mut self, spacing: u32) {
+//         self.spacing = spacing;
+//     }
 
-    pub(crate) fn set_padding(&mut self, padding: Padding) {
-        self.padding = padding;
-    }
+//     pub(crate) fn set_padding(&mut self, padding: Padding) {
+//         self.padding = padding;
+//     }
 
-    pub(crate) fn set_next_pos<F: FnOnce(&mut Vector2<u32>)>(&mut self, f: F) {
-        f(&mut self.next_pos);
-    }
+//     pub(crate) fn set_next_pos<F: FnOnce(&mut Vector2<u32>)>(&mut self, f: F) {
+//         f(&mut self.next_pos);
+//     }
 
-    pub(crate) fn adjust_next_pos(&mut self, pos: Vector2<u32>, size: Size<u32>) {
-        let spacing = self.spacing;
-        let half = size / 2;
-        match self.orientation {
-            Orientation::Vertical => {
-                self.set_next_pos(|p| p.y = pos.y + half.height + spacing);
-            }
-            Orientation::Horizontal => {
-                self.set_next_pos(|p| p.x = pos.x + half.width + spacing);
-            }
-        };
-    }
+//     pub(crate) fn adjust_next_pos(&mut self, pos: Vector2<u32>, size: Size<u32>) {
+//         let spacing = self.spacing;
+//         let half = size / 2;
+//         match self.orientation {
+//             Orientation::Vertical => {
+//                 self.set_next_pos(|p| p.set_y(pos.y() + half.height() + spacing));
+//             }
+//             Orientation::Horizontal => {
+//                 self.set_next_pos(|p| p.set_x(pos.x() + half.width() + spacing));
+//             }
+//         };
+//     }
 
-    pub(crate) fn reset_to_parent(&mut self, pos: Vector2<u32>, size: Size<u32>) {
-        let spacing = self.spacing;
-        let half = size / 2;
+//     pub(crate) fn reset_to_parent(&mut self, pos: Vector2<u32>, size: Size<u32>) {
+//         let spacing = self.spacing;
+//         let half = size / 2;
 
-        // parent orientation
-        match self.orientation {
-            Orientation::Vertical => {
-                self.set_next_pos(|p| {
-                    p.x = pos.x - half.width;
-                    p.y = pos.y + half.height + spacing;
-                });
-            }
-            Orientation::Horizontal => {
-                self.set_next_pos(|pos| {
-                    pos.y = pos.y - half.height;
-                    pos.x = pos.x + half.width + spacing;
-                });
-            }
-        }
-    }
-}
+//         // parent orientation
+//         match self.orientation {
+//             Orientation::Vertical => {
+//                 self.set_next_pos(|p| {
+//                     p.set_x(pos.x() - half.width());
+//                     p.set_y(pos.y() + half.height() + spacing);
+//                 });
+//             }
+//             Orientation::Horizontal => {
+//                 self.set_next_pos(|pos| {
+//                     pos.set_y(pos.y() - half.height());
+//                     pos.set_x(pos.x() + half.width() + spacing);
+//                 });
+//             }
+//         }
+//     }
+// }

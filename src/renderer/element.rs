@@ -1,5 +1,5 @@
-use super::Indices;
-use crate::color::Rgba;
+use shared::Rgba;
+use super::{Indices, RenderComponentSource};
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -111,6 +111,15 @@ impl Element {
             transform_id: 0,
         }
     }
+
+    // pub(crate) fn update(&mut self, rcs: impl RenderComponentSource) {
+    //     self.fill_color =  rcs.fill_color();
+    //     self.stroke_color =  rcs.stroke_color();
+    //     self.corners =  rcs.corners();
+    //     self.shape =  rcs.shape();
+    //     self.rotation =  rcs.rotation();
+    //     self.stroke_width =  rcs.stroke_width();
+    // }
 
     pub(crate) fn indices<'a>(&self) -> Indices<'a> {
         Indices::from(Shape::from(self.shape))

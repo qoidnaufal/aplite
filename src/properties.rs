@@ -1,6 +1,5 @@
-use util::{tan, Fraction, Matrix4x4, Size, Vector2};
+use shared::{tan, Fraction, Matrix4x4, Size, Vector2, Rgba};
 
-use crate::color::Rgba;
 use crate::context::layout::{Alignment, Orientation, Padding};
 use crate::cursor::Cursor;
 use crate::renderer::{Corners, RenderComponentSource, Shape, Vertices, DEFAULT_SCALER};
@@ -70,8 +69,8 @@ impl Properties {
     }
 
     pub(crate) fn adjust_transform(&mut self, pos: Vector2<f32>, mat: &mut Matrix4x4) {
-        let x = pos.x / (self.size.width as f32 / mat[0].x) * 2.0 - 1.0;
-        let y = 1.0 - pos.y / (self.size.height as f32 / mat[1].y) * 2.0;
+        let x = pos.x() / (self.size.width() as f32 / mat[0].x()) * 2.0 - 1.0;
+        let y = 1.0 - pos.y() / (self.size.height() as f32 / mat[1].y()) * 2.0;
         self.set_position(pos.into());
         mat.translate(x, y);
     }
@@ -81,14 +80,14 @@ impl Properties {
         // let rotate = Matrix2x2::rotate(self.rotate);
         // let pos: Vector2<f32> = attr.pos.into();
         // let p = rotate * pos;
-        let x = self.pos.x as f32;
-        let y = self.pos.y as f32;
+        let x = self.pos.x() as f32;
+        let y = self.pos.y() as f32;
 
-        let x_cursor = cursor.hover.pos.x;
-        let y_cursor = cursor.hover.pos.y;
+        let x_cursor = cursor.hover.pos.x();
+        let y_cursor = cursor.hover.pos.y();
 
-        let width = self.size.width as f32 / 2.0;
-        let height = self.size.height as f32 / 2.0;
+        let width = self.size.width() as f32 / 2.0;
+        let height = self.size.height() as f32 / 2.0;
 
         let angled = if self.shape.is_triangle() {
             let c_tangen = tan(x_cursor - x, y_cursor - y + height);
@@ -367,15 +366,14 @@ impl RenderComponentSource for Properties {
         Vertices::new(self.shape, self.size.into())
     }
 
-    fn transform(&self, size: Size<f32>) -> Matrix4x4 {
-        let mut matrix = Matrix4x4::IDENTITY;
-        let tx = self.pos.x as f32 / size.width * 2.0 - 1.0;
-        let ty = 1.0 - self.pos.y as f32 / size.height * 2.0;
+    fn transform(&self) -> Matrix4x4 {
+        let tx = self.pos.x() as f32 / DEFAULT_SCALER.width() * 2.0 - 1.0;
+        let ty = 1.0 - self.pos.y() as f32 / DEFAULT_SCALER.height() * 2.0;
         // let d: Size<f32> = self.size.into();
         // let scale = d / DEFAULT_SCALER;
-        matrix.translate(tx, ty);
+        Matrix4x4::IDENTITY.translate(tx, ty)
         // matrix.transform(tx, ty, scale.width, scale.height);
-        matrix
+        // matrix
     }
 }
 
@@ -398,14 +396,13 @@ impl RenderComponentSource for &Properties {
         Vertices::new(self.shape, self.size.into())
     }
 
-    fn transform(&self, size: Size<f32>) -> Matrix4x4 {
-        let mut matrix = Matrix4x4::IDENTITY;
-        let tx = self.pos.x as f32 / size.width * 2.0 - 1.0;
-        let ty = 1.0 - self.pos.y as f32 / size.height * 2.0;
+    fn transform(&self) -> Matrix4x4 {
+        let tx = self.pos.x() as f32 / DEFAULT_SCALER.width() * 2.0 - 1.0;
+        let ty = 1.0 - self.pos.y() as f32 / DEFAULT_SCALER.height() * 2.0;
         // let d: Size<f32> = self.size.into();
         // let scale = d / DEFAULT_SCALER;
-        matrix.translate(tx, ty);
+        Matrix4x4::IDENTITY.translate(tx, ty)
         // matrix.transform(tx, ty, scale.width, scale.height);
-        matrix
+        // matrix
     }
 }

@@ -3,10 +3,10 @@ mod image;
 mod stack;
 
 use std::marker::PhantomData;
+use shared::Rgba;
 
 use crate::properties::Properties;
 use crate::context::Context;
-use crate::color::Rgba;
 use crate::renderer::Shape;
 use crate::tree::NodeId;
 

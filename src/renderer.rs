@@ -5,7 +5,7 @@ mod render_util;
 mod texture;
 mod element;
 
-use util::Size;
+use shared::{Size, Rgba};
 
 use shader::SHADER;
 pub use element::Shape;
@@ -29,9 +29,9 @@ pub(crate) use buffer::{
 };
 
 use crate::error::GuiError;
-use crate::color::{Pixel, Rgba};
+use crate::color::Pixel;
 
-pub(crate) const DEFAULT_SCALER: Size<f32> = Size::new(500., 500.);
+pub(crate) const DEFAULT_SCALER: Size<f32> = Size::new(1600., 1200.);
 
 pub(crate) struct Renderer {
     pub(crate) gpu: Gpu,
@@ -78,13 +78,13 @@ impl Renderer {
     }
 
     pub(crate) fn resize(&mut self, new_size: Size<u32>) {
-        let ps: Size<f32> = self.screen.previous_size().into();
+        let ps: Size<f32> = self.screen.scaler().into();
         let ns: Size<f32> = new_size.into();
-        let scale = ps / ns;
+        let s = ps / ns;
 
-        if new_size.width > 0 && new_size.height > 0 {
-            self.gpu.config.width = new_size.width;
-            self.gpu.config.height = new_size.height;
+        if new_size.width() > 0 && new_size.height() > 0 {
+            self.gpu.config.width = new_size.width();
+            self.gpu.config.height = new_size.height();
             self.gpu.configure();
         }
 
@@ -97,8 +97,9 @@ impl Renderer {
         // });
 
         self.screen.update_transform(|mat| {
-            mat.scale(scale.width, scale.height);
-            mat.translate(scale.width - 1.0, 1.0 - scale.height);
+            *mat = mat
+                .scale(s.width(), s.height())
+                .translate(s.width() - 1.0, 1.0 - s.height());
         });
     }
 

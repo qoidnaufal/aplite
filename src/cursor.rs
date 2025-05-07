@@ -1,4 +1,4 @@
-use util::Vector2;
+use shared::Vector2;
 
 use crate::tree::NodeId;
 

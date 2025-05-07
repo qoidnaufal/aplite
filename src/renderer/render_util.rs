@@ -1,6 +1,4 @@
-use util::{Matrix4x4, Size};
-
-use crate::color::Rgba;
+use shared::{Matrix4x4, Size, Rgba};
 
 use super::{Corners, Element, Gfx, Gpu, Shape, Vertices, SHADER};
 
@@ -13,7 +11,7 @@ pub(crate) trait RenderComponentSource {
     fn stroke_width(&self) -> f32;
     fn texture_id(&self) -> i32;
     fn vertices(&self) -> Vertices;
-    fn transform(&self, size: Size<f32>) -> Matrix4x4;
+    fn transform(&self) -> Matrix4x4;
 
     fn element(&self) -> Element {
         Element::new(

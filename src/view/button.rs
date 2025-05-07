@@ -1,6 +1,6 @@
+use shared::Rgba;
 use crate::context::Context;
 use crate::properties::Properties;
-use crate::color::Rgba;
 
 use super::{IntoView, View};
 

@@ -13,9 +13,9 @@ pub mod view;
 pub mod prelude {
     use crate::error::GuiError;
 
+    pub use shared::Rgba;
     pub use crate::app::Aplite;
     pub use crate::reactive::{arc_signal, signal, Get, Set};
-    pub use crate::color::Rgba;
     pub use crate::context::Context;
     pub use crate::renderer::Shape;
     pub use crate::context::layout::{

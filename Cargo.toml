@@ -4,16 +4,17 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = [ "util", "pollster" ]
+members = [ "shared", "pollster" ]
 
 [dependencies]
-util.workspace = true
+shared.workspace = true
 pollster.workspace = true
 winit.workspace = true
+wgpu.workspace = true
 image = { version = "0.25.5", features = ["png", "jpeg"] }
-wgpu = "25.0.0"
 
 [workspace.dependencies]
+wgpu = "25.0.0"
 winit = "0.30.10"
-util = { path = "./util" }
+shared = { path = "./shared" }
 pollster = { path = "./pollster" }

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use util::Size;
+use shared::Size;
 use winit::window::Window;
 
 use crate::error::GuiError;

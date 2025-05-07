@@ -1,4 +1,4 @@
-use util::{Matrix4x4, Size, Vector2};
+use shared::{Matrix4x4, Size, Vector2};
 
 use super::{
     cast_slice, Element, Gpu, RenderComponentSource, Shape, TextureData, TextureDataSource, DEFAULT_SCALER
@@ -135,7 +135,7 @@ impl Gfx {
         render_component: &impl RenderComponentSource,
     ) {
         let mut element = render_component.element();
-        let transform = render_component.transform(gpu.size().into());
+        let transform = render_component.transform();
         let vertices = render_component.vertices();
         let transform_id = self.transforms.len() as u32;
         element.transform_id = transform_id;
@@ -275,9 +275,14 @@ pub(crate) struct Screen {
 
 impl Screen {
     pub(crate) fn new(device: &wgpu::Device, initial_size: Size<u32>) -> Self {
+        let s = DEFAULT_SCALER / Size::<f32>::from(initial_size);
         let mut transform = Buffer::uniform(device, "screen_transform");
         let mut scaler = Buffer::uniform(device, "screen_scaler");
-        transform.push(Matrix4x4::IDENTITY);
+        transform.push(
+            Matrix4x4::IDENTITY
+                .scale(s.width(), s.height())
+                .translate(s.width() - 1.0, 1.0 - s.height())
+        );
         scaler.push(DEFAULT_SCALER.into());
         let bind_group = Self::bind_group(device, &[
             transform.bind_group_entry(0),
@@ -299,7 +304,7 @@ impl Screen {
         self.initialized = true;
     }
 
-    pub(crate) fn previous_size(&self) -> Size<u32> {
+    pub(crate) fn scaler(&self) -> Size<u32> {
         self.scaler.data[0]
     }
 
@@ -387,8 +392,8 @@ impl std::ops::DerefMut for Vertices {
 
 impl Vertices {
     pub(crate) fn new(shape: Shape, size: Size<f32>) -> Self {
-        let sw = size.width / DEFAULT_SCALER.width / 2.;
-        let sh = size.height / DEFAULT_SCALER.height / 2.;
+        let sw = size.width() / DEFAULT_SCALER.width() / 2.;
+        let sh = size.height() / DEFAULT_SCALER.height() / 2.;
         match shape {
             Shape::Triangle => Self::three(sw, sh),
             _ => Self::four(sw, sh),
@@ -401,18 +406,18 @@ impl Vertices {
 
     fn four(sw: f32, sh: f32) -> Self {
         Self(vec![
-            Vertex { _pos: Vector2 { x: -sw, y:  sh }, _uv: Vector2 { x: 0.0, y: 0.0 } },
-            Vertex { _pos: Vector2 { x: -sw, y: -sh }, _uv: Vector2 { x: 0.0, y: 1.0 } },
-            Vertex { _pos: Vector2 { x:  sw, y: -sh }, _uv: Vector2 { x: 1.0, y: 1.0 } },
-            Vertex { _pos: Vector2 { x:  sw, y:  sh }, _uv: Vector2 { x: 1.0, y: 0.0 } },
+            Vertex { _pos: Vector2::new( -sw,  sh ), _uv: Vector2::new( 0.0, 0.0 ) },
+            Vertex { _pos: Vector2::new( -sw, -sh ), _uv: Vector2::new( 0.0, 1.0 ) },
+            Vertex { _pos: Vector2::new(  sw, -sh ), _uv: Vector2::new( 1.0, 1.0 ) },
+            Vertex { _pos: Vector2::new(  sw,  sh ), _uv: Vector2::new( 1.0, 0.0 ) },
         ])
     }
 
     fn three(sw: f32, sh: f32) -> Self {
         Self(vec![
-            Vertex { _pos: Vector2 { x:  0., y:  sh }, _uv: Vector2 { x: 0.5, y: 0.0 } },
-            Vertex { _pos: Vector2 { x: -sw, y: -sh }, _uv: Vector2 { x: 0.0, y: 1.0 } },
-            Vertex { _pos: Vector2 { x:  sw, y: -sh }, _uv: Vector2 { x: 1.0, y: 1.0 } },
+            Vertex { _pos: Vector2::new(  0.,  sh ), _uv: Vector2::new( 0.5, 0.0 ) },
+            Vertex { _pos: Vector2::new( -sw, -sh ), _uv: Vector2::new( 0.0, 1.0 ) },
+            Vertex { _pos: Vector2::new(  sw, -sh ), _uv: Vector2::new( 1.0, 1.0 ) },
         ])
     }
 }
