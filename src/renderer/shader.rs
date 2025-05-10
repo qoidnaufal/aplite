@@ -4,7 +4,7 @@ struct Screen {
 };
 
 @group(0) @binding(0) var<uniform> screen: Screen;
-@group(0) @binding(1) var<uniform> scaler: vec2<u32>;
+@group(0) @binding(1) var<uniform> scaler: vec2<f32>;
 
 struct Radius {
     top_left: f32,
@@ -13,13 +13,23 @@ struct Radius {
     top_right: f32,
 };
 
+fn scale_radius(r: Radius) -> Radius {
+    var ret: Radius;
+    ret.top_left = r.top_left / scaler.x;
+    ret.bot_left = r.bot_left / scaler.x;
+    ret.bot_right = r.bot_right / scaler.x;
+    ret.top_right = r.top_right / scaler.x;
+    return ret;
+}
+
 struct Element {
     color: vec4<f32>,
-    outline: vec4<f32>,
+    stroke_color: vec4<f32>,
     radius: Radius,
-    kind: u32,
+    size: vec2<f32>,
+    shape: u32,
     rotate: f32,
-    stroke: f32,
+    stroke_width: f32,
     texture_id: i32,
     transform_id: u32,
 };
@@ -83,9 +93,9 @@ fn sdRect(p: vec2f, b: vec2f) -> f32 {
 fn sdRoundedRect(p: vec2<f32>, b: vec2<f32>, r: Radius) -> f32 {
     var x = r.top_left;
     var y = r.bot_left;
-    x = select(r.bot_right, r.bot_left, p.x > 0.);
-    y = select(r.top_right, r.top_left, p.x > 0.);
-    x = select(y, x, p.y < 0.);
+    x = select(r.bot_left, r.bot_right, p.x > 0.);
+    y = select(r.top_left, r.top_right, p.x > 0.);
+    x = select(y, x, p.y > 0.);
     let d = abs(p) - b + x;
     return min(max(d.x, d.y), 0.0) + length(max(d, vec2f(0.0))) - x;
 }
@@ -99,56 +109,46 @@ fn sdSegment(p: vec2f, a: vec2f, b: vec2f) -> f32 {
 
 fn sdf(uv: vec2<f32>, element: Element) -> f32 {
     let transform = transforms[element.transform_id];
-    let size = vec2f(transform[0].x, transform[1].y);
-    let stroke = 10 * vec2f(
-        element.stroke / f32(scaler.x),
-        element.stroke / f32(scaler.y),
+    let size = element.size / scaler;
+    let stroke_width = vec2f(
+        element.stroke_width / scaler.x,
+        element.stroke_width / scaler.y,
     );
 
-    switch element.kind {
+    switch element.shape {
         case 0u: {
             let p = uv * size.x;
-            let t = size * stroke;
-            let r = size.x - t.x;
+            let r = size.x - stroke_width.x;
             return sdCircle(p, r);
         }
         case 1u: {
             let p = uv * size;
-            let t = size * stroke;
-            let b = size - t;
+            let b = size - stroke_width;
             return sdRect(p, b);
         }
         case 2u: {
             let p = uv * size;
-            let t = size * stroke;
-            let b = size - t;
-            return sdRoundedRect(p, b, element.radius);
+            let b = size - stroke_width;
+            let r = scale_radius(element.radius);
+            return sdRoundedRect(p, b, r);
         }
         default: { return -1.0; }
     }
 }
 
-// fn sdfColor(sdf: f32, color: vec4<f32>) -> vec4<f32> {
-//     return vec4<f32>(
-//         color.rgb - sign(sdf) * color.rgb,
-//         color.a - sign(sdf)
-//     );
-// }
-
 @fragment
 fn fs_main(in: FragmentPayload) -> @location(0) vec4<f32> {
     let element = elements[in.index];
-    let element_color = element.color;
-    let border = element.outline;
+    let color = element.color;
+    let border = element.stroke_color;
 
     let transform = transforms[element.transform_id];
-    let size = vec2f(transform[0].x, transform[1].y);
-    let stroke = element.stroke / f32(scaler.x);
+    let stroke_width = element.stroke_width / scaler.x;
 
     let sdf = sdf(in.uv, element);
-    let fill = select(vec4f(0.0), element.color, sdf < 0.0);
+    let fill = select(vec4f(0.0), color, sdf < 0.0);
 
-    let blend = 1.0 - smoothstep(0.0, stroke, abs(sdf));
+    let blend = 1.0 - smoothstep(0.0, stroke_width, abs(sdf));
     let color_mask = mix(fill, border, select(0.0, 1.0, blend > 0.0));
     let texture_mask = textureSample(t, s, in.uv);
 

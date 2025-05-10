@@ -1,7 +1,14 @@
 use shared::{Matrix4x4, Size, Vector2};
 
+use crate::app::DEFAULT_SCREEN_SIZE;
+
 use super::{
-    cast_slice, Element, Gpu, RenderComponentSource, Shape, TextureData, TextureDataSource, DEFAULT_SCALER
+    cast_slice,
+    Element,
+    Gpu,
+    RenderComponentSource,
+    TextureData,
+    TextureDataSource,
 };
 
 const INITIAL_CAPACITY: u64 = 1024 * 4;
@@ -109,14 +116,10 @@ pub(crate) struct Gfx {
     pub(crate) transforms: Buffer<Matrix4x4>,
     pub(crate) bind_group: wgpu::BindGroup,
     pub(crate) textures: Vec<TextureData>,
-    indices: Vec<u32>,
-    vertices: Vec<Vertex>,
 }
 
 impl Gfx {
     pub(crate) fn new(device: &wgpu::Device) -> Self {
-        let indices = vec![];
-        let vertices = vec![];
         let textures = vec![];
         let elements = Buffer::<Element>::storage(device, "element");
         let transforms = Buffer::<Matrix4x4>::storage(device, "transforms");
@@ -125,7 +128,7 @@ impl Gfx {
             transforms.bind_group_entry(1),
         ]);
 
-        Self { elements, transforms, bind_group, indices, textures, vertices }
+        Self { elements, transforms, bind_group, textures }
     }
 
     pub(crate) fn register(
@@ -134,14 +137,14 @@ impl Gfx {
         maybe_pixel: Option<&impl TextureDataSource>,
         render_component: &impl RenderComponentSource,
     ) {
+        let window_size: Size<f32> = gpu.size().into();
+
         let mut element = render_component.element();
-        let transform = render_component.transform();
-        let vertices = render_component.vertices();
+        let transform = render_component.transform(window_size);
         let transform_id = self.transforms.len() as u32;
         element.transform_id = transform_id;
+
         self.push_texture(gpu, maybe_pixel, &mut element);
-        self.indices.extend_from_slice(&element.indices());
-        self.vertices.extend_from_slice(vertices.as_slice());
         self.transforms.push(transform);
         self.elements.push(element);
     }
@@ -157,6 +160,8 @@ impl Gfx {
             element.texture_id = texture_id;
             let texture_data = TextureData::new(gpu, pixel);
             self.textures.push(texture_data);
+        } else {
+            element.texture_id = -1;
         }
     }
 
@@ -175,10 +180,15 @@ impl Gfx {
 
     pub(crate) fn indices(&self, device: &wgpu::Device) -> wgpu::Buffer {
         use wgpu::util::DeviceExt;
+
+        let mut indices = vec![];
+        for _ in 0..self.count() {
+            indices.extend_from_slice(&Indices::new());
+        }
         
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("indices buffer"),
-            contents: cast_slice(&self.indices),
+            contents: cast_slice(&indices),
             usage: wgpu::BufferUsages::INDEX,
         })
     }
@@ -186,9 +196,24 @@ impl Gfx {
     pub(crate) fn vertices(&self, device: &wgpu::Device) -> wgpu::Buffer {
         use wgpu::util::DeviceExt;
 
+        let mut vertices = vec![];
+        for _ in 0..self.count() {
+            vertices.extend_from_slice(&Vertices::new());
+        }
+
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("vertex buffer"),
-            contents: cast_slice(&self.vertices),
+            contents: cast_slice(&vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        })
+    }
+
+    pub(crate) fn instances(&self,device: &wgpu::Device) -> wgpu::Buffer {
+        use wgpu::util::DeviceExt;
+        
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("instance buffer"),
+            contents: cast_slice(&(0..self.count() as u32).collect::<Vec<_>>()),
             usage: wgpu::BufferUsages::VERTEX,
         })
     }
@@ -210,16 +235,6 @@ impl Gfx {
                 },
             ],
         }
-    }
-
-    pub(crate) fn instances(&self,device: &wgpu::Device) -> wgpu::Buffer {
-        use wgpu::util::DeviceExt;
-        
-        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("instance buffer"),
-            contents: cast_slice(&(0..self.count() as u32).collect::<Vec<_>>()),
-            usage: wgpu::BufferUsages::VERTEX,
-        })
     }
 
     pub(crate) fn instance_desc<'a>() -> wgpu::VertexBufferLayout<'a> {
@@ -268,22 +283,18 @@ impl Gfx {
 
 pub(crate) struct Screen {
     transform: Buffer<Matrix4x4>,
-    scaler: Buffer<Size<u32>>,
+    scaler: Buffer<Size<f32>>,
     pub(crate) bind_group: wgpu::BindGroup,
+    initial_size: Size<f32>,
     initialized: bool,
 }
 
 impl Screen {
-    pub(crate) fn new(device: &wgpu::Device, initial_size: Size<u32>) -> Self {
-        let s = DEFAULT_SCALER / Size::<f32>::from(initial_size);
+    pub(crate) fn new(device: &wgpu::Device, initial_size: Size<f32>) -> Self {
         let mut transform = Buffer::uniform(device, "screen_transform");
         let mut scaler = Buffer::uniform(device, "screen_scaler");
-        transform.push(
-            Matrix4x4::IDENTITY
-                .scale(s.width(), s.height())
-                .translate(s.width() - 1.0, 1.0 - s.height())
-        );
-        scaler.push(DEFAULT_SCALER.into());
+        transform.push(Matrix4x4::IDENTITY);
+        scaler.push(DEFAULT_SCREEN_SIZE.into());
         let bind_group = Self::bind_group(device, &[
             transform.bind_group_entry(0),
             scaler.bind_group_entry(1)
@@ -292,6 +303,7 @@ impl Screen {
             scaler,
             transform,
             bind_group,
+            initial_size,
             initialized: false,
         }
     }
@@ -304,24 +316,20 @@ impl Screen {
         self.initialized = true;
     }
 
-    pub(crate) fn scaler(&self) -> Size<u32> {
-        self.scaler.data[0]
+    pub(crate) fn initial_size(&self) -> Size<f32> {
+        self.initial_size
     }
 
     pub(crate) fn update_transform<F: FnMut(&mut Matrix4x4)>(&mut self, f: F) {
         self.transform.update(0, f);
     }
 
-    // pub(crate) fn update_size<F: FnMut(&mut Size<u32>)>(&mut self, f: F) {
-    //     self.size.update(0, f);
-    // }
-
     pub(crate) fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("screen bind group layout"),
             entries: &[
                 Buffer::<Matrix4x4>::uniform_bind_group_layout_entry(0),
-                Buffer::<Size<u32>>::uniform_bind_group_layout_entry(1),
+                Buffer::<Size<f32>>::uniform_bind_group_layout_entry(1),
             ],
         })
     }
@@ -338,6 +346,8 @@ impl Screen {
     }
 }
 
+// .....................................
+
 #[derive(Debug, Clone)]
 pub(crate) struct Indices<'a>(&'a [u32]);
 
@@ -348,26 +358,17 @@ impl std::ops::Deref for Indices<'_> {
     }
 }
 
-impl From<Shape> for Indices<'_> {
-   fn from(shape: Shape) -> Self {
-        match shape {
-            Shape::Circle => Self::four(),
-            Shape::Rect => Self::four(),
-            Shape::RoundedRect => Self::four(),
-            Shape::Triangle => Self::three(),
-        }
-    }
-}
-
 impl Indices<'_> {
-    const fn four() -> Self {
+    const fn new() -> Self {
         Self(&[0, 1, 2, 2, 3, 0])
     }
 
-    const fn three() -> Self {
-        Self(&[0, 1, 2])
-    }
+    // const fn three() -> Self {
+    //     Self(&[0, 1, 2])
+    // }
 }
+
+// ....................................
 
 #[derive(Clone, Copy)]
 pub(crate) struct Vertex {
@@ -375,7 +376,9 @@ pub(crate) struct Vertex {
     _uv: Vector2<f32>,
 }
 
-pub(crate) struct Vertices(Vec<Vertex>);
+// ....................................
+
+pub(crate) struct Vertices([Vertex; 4]);
 
 impl std::ops::Deref for Vertices {
     type Target = [Vertex];
@@ -391,33 +394,44 @@ impl std::ops::DerefMut for Vertices {
 }
 
 impl Vertices {
-    pub(crate) fn new(shape: Shape, size: Size<f32>) -> Self {
-        let sw = size.width() / DEFAULT_SCALER.width() / 2.;
-        let sh = size.height() / DEFAULT_SCALER.height() / 2.;
-        match shape {
-            Shape::Triangle => Self::three(sw, sh),
-            _ => Self::four(sw, sh),
-        }
+    const VERTICES: Self = Self ([
+        Vertex { _pos: Vector2::new( -1.0,  1.0 ), _uv: Vector2::new( 0.0, 0.0 ) },
+        Vertex { _pos: Vector2::new( -1.0, -1.0 ), _uv: Vector2::new( 0.0, 1.0 ) },
+        Vertex { _pos: Vector2::new(  1.0, -1.0 ), _uv: Vector2::new( 1.0, 1.0 ) },
+        Vertex { _pos: Vector2::new(  1.0,  1.0 ), _uv: Vector2::new( 1.0, 0.0 ) },
+    ]);
+
+    pub(crate) fn new() -> Self {
+        // let s = size / DEFAULT_SCALER / 2.;
+        // Self::VERTICES.adjust(s.width(), s.height())
+        Self::VERTICES
     }
 
     pub(crate) fn as_slice(&self) -> &[Vertex] {
         self.0.as_slice()
     }
 
-    fn four(sw: f32, sh: f32) -> Self {
-        Self(vec![
-            Vertex { _pos: Vector2::new( -sw,  sh ), _uv: Vector2::new( 0.0, 0.0 ) },
-            Vertex { _pos: Vector2::new( -sw, -sh ), _uv: Vector2::new( 0.0, 1.0 ) },
-            Vertex { _pos: Vector2::new(  sw, -sh ), _uv: Vector2::new( 1.0, 1.0 ) },
-            Vertex { _pos: Vector2::new(  sw,  sh ), _uv: Vector2::new( 1.0, 0.0 ) },
-        ])
-    }
+    // fn adjust(mut self, sw: f32, sh: f32) -> Self {
+    //     self.iter_mut().for_each(|vertex| {
+    //         vertex._pos.mul_x(sw);
+    //         vertex._pos.mul_y(sh);
+    //     });
+    //     self
+    // }
+}
 
-    fn three(sw: f32, sh: f32) -> Self {
-        Self(vec![
-            Vertex { _pos: Vector2::new(  0.,  sh ), _uv: Vector2::new( 0.5, 0.0 ) },
-            Vertex { _pos: Vector2::new( -sw, -sh ), _uv: Vector2::new( 0.0, 1.0 ) },
-            Vertex { _pos: Vector2::new(  sw, -sh ), _uv: Vector2::new( 1.0, 1.0 ) },
-        ])
+impl std::fmt::Debug for Vertices {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut s = String::new();
+        let len = self.0.len();
+        for i in 0..len {
+            let pos = self.0[i]._pos;
+            if i == len - 1 {
+                s.push_str(format!("{i}: {pos:?}").as_str());
+            } else {
+                s.push_str(format!("{i}: {pos:?}\n").as_str());
+            }
+        }
+        write!(f, "{s}")
     }
 }

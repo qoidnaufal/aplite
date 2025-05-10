@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
-use shared::{Matrix4x4, Size, Vector2};
+// use data::Data;
+use shared::{Size, Vector2};
 
 use crate::color::Pixel;
 use crate::cursor::{Cursor, MouseAction};
-use crate::renderer::{Buffer, Gfx, IntoRenderSource, RenderComponentSource, Renderer};
+use crate::renderer::{Gfx, IntoRenderSource, RenderComponentSource, Renderer};
 use crate::properties::Properties;
 use crate::tree::{Entity, NodeId, Tree};
 
@@ -12,7 +13,6 @@ use crate::tree::{Entity, NodeId, Tree};
 pub mod layout;
 
 use layout::{
-    Layout,
     LayoutContext,
     Orientation,
 };
@@ -23,7 +23,7 @@ pub struct Context {
     pub(crate) debug_name: Vec<Option<&'static str>>,
     properties: Vec<Properties>,
     pixels: Vec<Pixel<u8>>,
-    layout: Layout,
+    // pub(crate) data: Data,
     style_fn: HashMap<NodeId, Box<dyn Fn(&mut Properties)>>,
     callbacks: HashMap<NodeId, Box<dyn Fn()>>,
     pending_update: Vec<NodeId>,
@@ -37,7 +37,7 @@ impl Default for Context {
             debug_name: Vec::with_capacity(1024),
             properties: Vec::with_capacity(1024),
             pixels: Vec::new(),
-            layout: Layout::default(),
+            // data: Data::default(),
             style_fn: HashMap::new(),
             callbacks: HashMap::new(),
             pending_update: Vec::with_capacity(10),
@@ -45,11 +45,20 @@ impl Default for Context {
     }
 }
 
+// debug
 impl Context {
     pub(crate) fn debug_tree(&self) {
         // let mut s = String::new();
-        eprintln!("NodeId::ROOT : {:?}", self.get_window_properties().pos());
-        self.recursive_print(None, 0);
+        self.print_children_from(NodeId::root());
+    }
+
+    pub(crate) fn print_children_from(&self, start: NodeId) {
+        eprintln!(" > {start:?}: {:?}", self.get_window_properties().pos());
+        if start == NodeId::root() {
+            self.recursive_print(None, 0);
+        } else {
+            self.recursive_print(Some(start), 0);
+        }
     }
 
     fn recursive_print(&self, start: Option<NodeId>, indent: usize) {
@@ -142,6 +151,7 @@ impl Context {
         debug_name: Option<&'static str>,
     ) {
         self.tree.insert(node_id, parent);
+        // self.data.insert(&properties);
         self.properties.push(properties);
         self.debug_name.push(debug_name);
     }
@@ -166,49 +176,6 @@ impl Context {
 
 // layout
 impl Context {
-    // pub(crate) fn set_orientation(&mut self, node_id: &NodeId) {
-    //     let properties = self.get_node_data(node_id);
-    //     self.layout.set_orientation(properties.orientation());
-    // }
-
-    // pub(crate) fn set_alignment(&mut self, node_id: &NodeId) {
-    //     let properties = self.get_node_data(node_id);
-    //     self.layout.set_alignment(properties.alignment());
-    // }
-
-    // pub(crate) fn set_spacing(&mut self, node_id: &NodeId) {
-    //     let properties = self.get_node_data(node_id);
-    //     self.layout.set_spacing(properties.spacing());
-    // }
-
-    // pub(crate) fn set_padding(&mut self, node_id: &NodeId) {
-    //     let properties = self.get_node_data(node_id);
-    //     self.layout.set_padding(properties.padding());
-    // }
-
-    // pub(crate) fn assign_position(&mut self, node_id: &NodeId) {
-    //     let next_pos = self.layout.next_pos();
-    //     let properties = self.get_node_data_mut(node_id);
-    //     let size = properties.size();
-    //     properties.set_position(next_pos + size / 2);
-    //     let pos = properties.pos();
-
-    //     self.layout.adjust_next_pos(pos, size);
-    // }
-
-    // pub(crate) fn reset_to_parent(
-    //     &mut self,
-    //     parent_id: &NodeId,
-    //     pos: Vector2<u32>,
-    //     size: Size<u32>
-    // ) {
-    //     self.set_orientation(parent_id);
-    //     self.set_alignment(parent_id);
-    //     self.set_spacing(parent_id);
-    //     self.set_padding(parent_id);
-    //     self.layout.reset_to_parent(pos, size);
-    // }
-
     pub(crate) fn layout(&mut self) {
         let ancestors = self.tree
             .get_all_ancestor()
@@ -225,7 +192,7 @@ impl Context {
         self.recursive_layout(&NodeId::root());
     }
 
-    fn recursive_layout(&mut self, node_id: &NodeId) {
+    pub(crate) fn recursive_layout(&mut self, node_id: &NodeId) {
         let children = LayoutContext::new(node_id, self).calculate();
 
         if node_id != &NodeId::root() {
@@ -286,17 +253,21 @@ impl Context {
     }
 
     pub(crate) fn submit_update(&mut self, renderer: &mut Renderer) {
-        self.pending_update.iter().for_each(|node_id| {
-            let mut prop = *self.get_node_data(node_id);
-            if let Some(style_fn) = self.style_fn.get(node_id) {
-                style_fn(&mut prop);
-            }
-            let transform = prop.transform();
-            if let Some(color) = prop.hover_color() {
-                renderer.gfx.elements.update(node_id.index() - 1, |elem| elem.set_color(color));
-            }
-            renderer.gfx.transforms.update(node_id.index() - 1, |mat| *mat = transform);
-        });
+        // let window_size = self.get_window_properties().size();
+        // self.pending_update.iter().for_each(|node_id| {
+        //     let mut prop = *self.get_node_data(node_id);
+        //     if let Some(style_fn) = self.style_fn.get(node_id) {
+        //         style_fn(&mut prop);
+        //     }
+        //     let transform = prop.transform(window_size.into());
+        //     if let Some(color) = prop.hover_color() {
+        //         renderer
+        //             .gfx
+        //             .elements
+        //             .update(node_id.index() - 1, |elem| elem.set_color(color));
+        //     }
+        //     renderer.gfx.transforms.update(node_id.index() - 1, |mat| *mat = transform);
+        // });
         self.pending_update.clear();
         renderer.update();
     }
@@ -337,7 +308,7 @@ impl Context {
         if let Some(prev_id) = cursor.hover.prev.take() {
             let properties = self.get_node_data(&prev_id);
             if properties.hover_color().is_some() {
-                let idx = prev_id.index();
+                // let idx = prev_id.index();
                 // gfx.elements.update(idx - 1, |element| element.set_color(properties.fill_color()));
                 self.pending_update.push(prev_id);
             }
@@ -359,6 +330,7 @@ impl Context {
                         // &mut gfx.transforms,
                     );
                     self.pending_update.push(*hover_id);
+                    eprintln!("updating drag: {hover_id:?}");
                 }
             // });
         }

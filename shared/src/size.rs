@@ -1,11 +1,18 @@
 use winit::dpi::PhysicalSize;
 
-use crate::{gcd, Fraction, GpuPrimitive, Vector2};
+use super::{gcd, Fraction, GpuPrimitive, NumDebugger, Vector2};
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct Size<T: GpuPrimitive> {
     inner: Vector2<T>
+}
+
+impl<T: GpuPrimitive + NumDebugger> std::fmt::Debug for Size<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = self.inner.debug_formatter("Size");
+        write!(f, "{s}")
+    }
 }
 
 impl<T: GpuPrimitive> Default for Size<T> {
@@ -21,9 +28,9 @@ impl<T: GpuPrimitive> Size<T> {
         Self { inner: Vector2::new(width, height) }
     }
 
-    pub fn width(&self) -> T { self.inner[0] }
+    pub const fn width(&self) -> T { self.inner.x() }
 
-    pub fn height(&self) -> T { self.inner[1] }
+    pub const fn height(&self) -> T { self.inner.y() }
 
     pub fn set_width(&mut self, val: T) { self.inner.set_x(val) }
 

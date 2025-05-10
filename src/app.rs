@@ -8,10 +8,11 @@ use winit::application::ApplicationHandler;
 use shared::{Size, Vector2, Rgba};
 
 use crate::cursor::Cursor;
-use crate::prelude::AppResult;
+use crate::prelude::ApliteResult;
 use crate::renderer::{Gfx, Gpu, IntoRenderSource, Renderer};
 use crate::context::Context;
-use crate::error::GuiError;
+use crate::error::ApliteError;
+use crate::tree::NodeId;
 
 struct Stats {
     counter: u32,
@@ -39,7 +40,7 @@ impl Drop for Stats {
     }
 }
 
-const DEFAULT_SCREEN_SIZE: Size<u32> = Size::new(1600, 1200);
+pub(crate) const DEFAULT_SCREEN_SIZE: Size<u32> = Size::new(1600, 1200);
 
 pub struct WindowAttributes {
     title: String,
@@ -111,7 +112,7 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
         }
     }
 
-    pub fn launch(mut self) -> AppResult {
+    pub fn launch(mut self) -> ApliteResult {
         let event_loop = EventLoop::new()?;
         event_loop.run_app(&mut self)?;
 
@@ -136,12 +137,10 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
         let window = event_loop.create_window(attributes.into()).unwrap();
         let inner_size = window.inner_size();
         let size: Size<u32> = (inner_size.width, inner_size.height).into();
-        if size != DEFAULT_SCREEN_SIZE {
-            self.cx.update_window_properties(|prop| {
-                prop.set_size(size);
-                prop.set_position((size / 2).into());
-            });
-        }
+        self.cx.update_window_properties(|prop| {
+            prop.set_size(size);
+            prop.set_position((size / 2).into());
+        });
         Arc::new(window)
     }
 
@@ -170,10 +169,11 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
     fn resize(&mut self, size: impl Into<Size<u32>>) {
         if let Some(renderer) = self.renderer.as_mut() {
             let size: Size<u32> = size.into();
-            self.cx.update_window_properties(|prop| {
-                prop.set_size(size);
-                prop.set_position((size / 2).into());
+            self.cx.update_window_properties(|wp| {
+                wp.set_size(size);
+                wp.set_position((size / 2).into());
             });
+            // self.cx.recursive_layout(&NodeId::root());
             renderer.resize(size);
         }
     }
@@ -190,11 +190,11 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
         }
     }
 
-    fn render(&mut self) -> Result<(), GuiError> {
+    fn render(&mut self) -> Result<(), ApliteError> {
         if let Some(renderer) = self.renderer.as_mut() {
             renderer.render(self.cx.get_window_properties().fill_color())
         } else {
-            Err(GuiError::UnitializedRenderer)
+            Err(ApliteError::UnitializedRenderer)
         }
     }
 }
@@ -227,7 +227,7 @@ impl<F: FnOnce(&mut Context)> ApplicationHandler for Aplite<F> {
                 let start = std::time::Instant::now();
                 match self.render() {
                     Ok(_) => {},
-                    Err(GuiError::SurfaceRendering(surface_err)) => {
+                    Err(ApliteError::SurfaceRendering(surface_err)) => {
                         match surface_err {
                             wgpu::SurfaceError::Outdated
                             | wgpu::SurfaceError::Lost => {

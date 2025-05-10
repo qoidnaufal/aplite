@@ -1,5 +1,5 @@
-use shared::Rgba;
-use super::{Indices, RenderComponentSource};
+use shared::{Rgba, Size};
+// use super::{Indices, RenderComponentSource};
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -10,70 +10,70 @@ pub enum Shape {
     Triangle = 3,
 }
 
-impl Shape {
-    pub(crate) fn is_triangle(&self) -> bool { matches!(self, Self::Triangle) }
+// impl Shape {
+//     pub(crate) fn is_triangle(&self) -> bool { matches!(self, Self::Triangle) }
 
-    // pub(crate) fn is_rounded_rect(&self) -> bool { matches!(self, Self::RoundedRect) }
-}
+//     pub(crate) fn is_rounded_rect(&self) -> bool { matches!(self, Self::RoundedRect) }
+// }
 
 #[repr(C, align(16))]
 #[derive(Default, Debug, Clone, Copy)]
-pub struct Corners {
-    top_left: f32,
-    bot_left: f32,
-    bot_right: f32,
-    top_right: f32,
+pub struct CornerRadius {
+    tl: f32,
+    bl: f32,
+    br: f32,
+    tr: f32,
 }
 
-impl From<f32> for Corners {
-    fn from(val: f32) -> Self {
+impl From<u32> for CornerRadius {
+    fn from(val: u32) -> Self {
         Self {
-            top_left: val,
-            bot_left: val,
-            bot_right: val,
-            top_right: val,
+            tl: val as _,
+            bl: val as _,
+            br: val as _,
+            tr: val as _,
         }
     }
 }
 
-impl Corners {
-    pub const fn new_homogen(r: f32) -> Self {
+impl CornerRadius {
+    pub const fn new_homogen(r: u32) -> Self {
         Self {
-            top_left: r,
-            bot_left: r,
-            bot_right: r,
-            top_right: r,
+            tl: r as _,
+            bl: r as _,
+            br: r as _,
+            tr: r as _,
         }
     }
 
-    pub fn set_all(&mut self, tl: f32, bl: f32, br: f32, tr: f32) {
-        self.top_left = tl;
-        self.bot_left = bl;
-        self.bot_right = br;
-        self.top_right = tr;
+    pub fn set_all(&mut self, tl: u32, bl: u32, br: u32, tr: u32) {
+        self.tl = tl as _;
+        self.bl = bl as _;
+        self.br = br as _;
+        self.tr = tr as _;
     }
 
-    pub fn set_each(&mut self, r: f32) {
-        self.top_left = r;
-        self.bot_left = r;
-        self.bot_right = r;
-        self.top_right = r;
+    pub fn set_each(&mut self, r: u32) {
+        self.tl = r as _;
+        self.bl = r as _;
+        self.br = r as _;
+        self.tr = r as _;
     }
 
-    pub fn set_top_left(&mut self, r: f32) {
-        self.top_left = r;
+    pub fn set_top_left(&mut self, r: u32) {
+        self.tl = r as _;
     }
 
-    pub fn set_bot_left(&mut self, r: f32) {
-        self.bot_left = r;
+    pub fn set_bot_left(&mut self, r: u32) {
+        self.bl = r as _;
     }
 
-    pub fn set_bot_right(&mut self, r: f32) {
-        self.bot_right = r;
+    pub fn set_bot_right(&mut self, r: u32) {
+        self.br = r as _;
     }
 
-    pub fn set_top_right(&mut self, r: f32) {
-        self.top_right = r;
+    pub fn set_top_right(&mut self, r: u32) {
+        self.tr = r as _;
     }
 }
 
@@ -82,7 +82,8 @@ impl Corners {
 pub(crate) struct Element {
     fill_color: Rgba<f32>,
     stroke_color: Rgba<f32>,
-    corners: Corners,
+    corners: CornerRadius,
+    size: Size<f32>,
     shape: Shape,
     rotation: f32,
     stroke_width: f32,
@@ -94,7 +95,8 @@ impl Element {
     pub(crate) fn new(
         fill_color: Rgba<f32>,
         stroke_color: Rgba<f32>,
-        corners: Corners,
+        corners: CornerRadius,
+        size: Size<f32>,
         shape: Shape,
         rotation: f32,
         stroke_width: f32,
@@ -103,8 +105,9 @@ impl Element {
         Self {
             fill_color,
             stroke_color,
-            shape,
             corners,
+            size,
+            shape,
             rotation,
             stroke_width,
             texture_id,
@@ -121,9 +124,9 @@ impl Element {
     //     self.stroke_width =  rcs.stroke_width();
     // }
 
-    pub(crate) fn indices<'a>(&self) -> Indices<'a> {
-        Indices::from(Shape::from(self.shape))
-    }
+    // pub(crate) fn indices<'a>(&self) -> Indices<'a> {
+    //     Indices::from(Shape::from(self.shape))
+    // }
 
     // pub fn color(&self) -> Rgba<u8> {
     //     self.fill_color.into()

@@ -1,23 +1,31 @@
 use shared::{Matrix4x4, Size, Rgba};
 
-use super::{Corners, Element, Gfx, Gpu, Shape, Vertices, SHADER};
+use super::{
+    CornerRadius,
+    Element,
+    Gfx,
+    Gpu,
+    Shape,
+    SHADER,
+};
 
 pub(crate) trait RenderComponentSource {
     fn fill_color(&self) -> Rgba<f32>;
     fn stroke_color(&self) -> Rgba<f32>;
-    fn corners(&self) -> Corners;
+    fn size(&self) -> Size<f32>;
+    fn corners(&self) -> CornerRadius;
     fn shape(&self) -> Shape;
     fn rotation(&self) -> f32;
     fn stroke_width(&self) -> f32;
     fn texture_id(&self) -> i32;
-    fn vertices(&self) -> Vertices;
-    fn transform(&self) -> Matrix4x4;
+    fn transform(&self, window_size: Size<f32>) -> Matrix4x4;
 
     fn element(&self) -> Element {
         Element::new(
             self.fill_color(),
             self.stroke_color(),
             self.corners(),
+            self.size(),
             self.shape(),
             self.rotation(),
             self.stroke_width(),
@@ -39,13 +47,13 @@ pub(crate) trait IntoRenderSource {
     fn texture_data_source(&self) -> &[Self::TetureDataSource];
 
     fn register(&self, gpu: &Gpu, gfx: &mut Gfx) {
-        self.render_components_source().iter().skip(1).for_each(|rc| {
-            let maybe_pixel = if rc.texture_id() >= 0 {
-                Some(&self.texture_data_source()[rc.texture_id() as usize])
+        self.render_components_source().iter().skip(1).for_each(|rcs| {
+            let maybe_pixel = if rcs.texture_id() >= 0 {
+                Some(&self.texture_data_source()[rcs.texture_id() as usize])
             } else {
                 None
             };
-            gfx.register(gpu, maybe_pixel, rc);
+            gfx.register(gpu, maybe_pixel, rcs);
         });
     }
 }

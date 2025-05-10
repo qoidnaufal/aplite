@@ -115,10 +115,10 @@ impl Rules {
 }
 
 impl Rules {
-    fn inner_space(&self) -> Size<u32> {
-        (self.size.width() - self.padding.horizontal(),
-        self.size.height() - self.padding.vertical()).into()
-    }
+    // fn inner_space(&self) -> Size<u32> {
+    //     (self.size.width() - self.padding.horizontal(),
+    //     self.size.height() - self.padding.vertical()).into()
+    // }
 
     fn offset_x(&self) -> u32 {
         let pl = self.padding.left();
@@ -193,7 +193,7 @@ pub(crate) struct LayoutContext<'a> {
     entity: &'a NodeId,
     cx: &'a mut Context,
     next_pos: Vector2<u32>,
-    avalilable_space: Size<u32>,
+    // avalilable_space: Size<u32>,
     rules: Rules,
 }
 
@@ -203,7 +203,7 @@ impl<'a> LayoutContext<'a> {
         Self {
             entity,
             cx,
-            avalilable_space: rules.inner_space(),
+            // avalilable_space: rules.inner_space(),
             next_pos: Vector2::new(0, 0),
             rules,
         }
@@ -252,8 +252,26 @@ impl<'a> LayoutContext<'a> {
         let size = prop.size();
 
         match self.rules.orientation {
-            Orientation::Vertical => self.next_pos.add_y(size.height() / 2),
-            Orientation::Horizontal => self.next_pos.add_x(size.width() / 2),
+            Orientation::Vertical => {
+                self.next_pos.add_y(size.height() / 2);
+                match self.rules.alignment.h_align {
+                    HAlign::Left | HAlign::Right => {
+                        self.next_pos.set_x(self.rules.offset_x());
+                        self.next_pos.set_x(self.next_pos.x() + size.width() / 2)
+                    }
+                    HAlign::Center => {},
+                }
+            },
+            Orientation::Horizontal => {
+                self.next_pos.add_x(size.width() / 2);
+                match self.rules.alignment.v_align {
+                    VAlign::Top | VAlign::Bottom => {
+                        self.next_pos.set_y(self.rules.offset_y());
+                        self.next_pos.set_y(self.next_pos.y() + size.height() / 2);
+                    }
+                    VAlign::Middle => {},
+                }
+            },
         }
 
         prop.set_position(self.next_pos);
@@ -277,82 +295,3 @@ impl<'a> LayoutContext<'a> {
         children
     }
 }
-
-#[derive(Default)]
-pub(crate) struct Layout {
-    next_pos: Vector2<u32>,
-    orientation: Orientation,
-    alignment: Alignment,
-    spacing: u32,
-    padding: Padding,
-}
-
-// impl Layout {
-//     pub(crate) fn new() -> Self { Self::default() }
-
-//     pub(crate) fn next_pos(&self) -> Vector2<u32> {
-//         self.next_pos
-//     }
-
-//     pub(crate) fn alignment(&self) -> Alignment {
-//         self.alignment
-//     }
-
-//     pub(crate) fn orientation(&self) -> Orientation {
-//         self.orientation
-//     }
-
-//     pub(crate) fn set_alignment(&mut self, align: Alignment) {
-//         self.alignment = align;
-//     }
-
-//     pub(crate) fn set_orientation(&mut self, orientation: Orientation) {
-//         self.orientation = orientation;
-//     }
-
-//     pub(crate) fn set_spacing(&mut self, spacing: u32) {
-//         self.spacing = spacing;
-//     }
-
-//     pub(crate) fn set_padding(&mut self, padding: Padding) {
-//         self.padding = padding;
-//     }
-
-//     pub(crate) fn set_next_pos<F: FnOnce(&mut Vector2<u32>)>(&mut self, f: F) {
-//         f(&mut self.next_pos);
-//     }
-
-//     pub(crate) fn adjust_next_pos(&mut self, pos: Vector2<u32>, size: Size<u32>) {
-//         let spacing = self.spacing;
-//         let half = size / 2;
-//         match self.orientation {
-//             Orientation::Vertical => {
-//                 self.set_next_pos(|p| p.set_y(pos.y() + half.height() + spacing));
-//             }
-//             Orientation::Horizontal => {
-//                 self.set_next_pos(|p| p.set_x(pos.x() + half.width() + spacing));
-//             }
-//         };
-//     }
-
-//     pub(crate) fn reset_to_parent(&mut self, pos: Vector2<u32>, size: Size<u32>) {
-//         let spacing = self.spacing;
-//         let half = size / 2;
-
-//         // parent orientation
-//         match self.orientation {
-//             Orientation::Vertical => {
-//                 self.set_next_pos(|p| {
-//                     p.set_x(pos.x() - half.width());
-//                     p.set_y(pos.y() + half.height() + spacing);
-//                 });
-//             }
-//             Orientation::Horizontal => {
-//                 self.set_next_pos(|pos| {
-//                     pos.set_y(pos.y() - half.height());
-//                     pos.set_x(pos.x() + half.width() + spacing);
-//                 });
-//             }
-//         }
-//     }
-// }

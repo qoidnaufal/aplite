@@ -1,8 +1,8 @@
-use shared::{tan, Fraction, Matrix4x4, Size, Vector2, Rgba};
+use shared::{Fraction, Matrix4x4, Size, Vector2, Rgba};
 
 use crate::context::layout::{Alignment, Orientation, Padding};
 use crate::cursor::Cursor;
-use crate::renderer::{Corners, RenderComponentSource, Shape, Vertices, DEFAULT_SCALER};
+use crate::renderer::{CornerRadius, RenderComponentSource, Shape};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Properties {
@@ -21,9 +21,9 @@ pub struct Properties {
     fill_color: Rgba<u8>,
     stroke_color: Rgba<u8>,
     shape: Shape,
-    corners: Corners,
+    corners: CornerRadius,
     rotation: f32,
-    stroke_width: f32,
+    stroke_width: u32,
     texture_id: i32,
     dragable: bool,
 }
@@ -47,9 +47,9 @@ impl Properties {
             fill_color: Rgba::BLACK,
             stroke_color: Rgba::BLACK,
             shape: Shape::Rect,
-            corners: 0.0.into(),
+            corners: 0.into(),
             rotation: 0.0,
-            stroke_width: 0.0,
+            stroke_width: 0,
             texture_id: -1,
             dragable: false,
         }
@@ -72,7 +72,7 @@ impl Properties {
         let x = pos.x() / (self.size.width() as f32 / mat[0].x()) * 2.0 - 1.0;
         let y = 1.0 - pos.y() / (self.size.height() as f32 / mat[1].y()) * 2.0;
         self.set_position(pos.into());
-        mat.translate(x, y);
+        mat.with_translate(x, y);
     }
 
     pub(crate) fn is_hovered(&self, cursor: &Cursor) -> bool {
@@ -89,15 +89,15 @@ impl Properties {
         let width = self.size.width() as f32 / 2.0;
         let height = self.size.height() as f32 / 2.0;
 
-        let angled = if self.shape.is_triangle() {
-            let c_tangen = tan(x_cursor - x, y_cursor - y + height);
-            let t_tangen = tan(width / 2.0, height);
-            (t_tangen - c_tangen).is_sign_negative()
-        } else { true };
+        // let angled = if self.shape.is_triangle() {
+        //     let c_tangen = tan(x_cursor - x, y_cursor - y + height);
+        //     let t_tangen = tan(width / 2.0, height);
+        //     (t_tangen - c_tangen).is_sign_negative()
+        // } else { true };
 
         (y - height..y + height).contains(&y_cursor)
             && (x - width..x + width).contains(&x_cursor)
-            && angled
+            // && angled
     }
 }
 
@@ -120,9 +120,9 @@ impl Properties {
             fill_color: Rgba::DARK_GRAY,
             stroke_color: Rgba::WHITE,
             shape: Shape::RoundedRect,
-            corners: Corners::new_homogen(0.025),
+            corners: CornerRadius::new_homogen(25),
             rotation: 0.0,
-            stroke_width: 0.0,
+            stroke_width: 0,
             texture_id: -1,
             dragable: false,
         }
@@ -198,7 +198,7 @@ impl Properties {
         self
     }
 
-    pub fn with_corners(mut self, f: impl FnOnce(&mut Corners)) -> Self {
+    pub fn with_corners(mut self, f: impl FnOnce(&mut CornerRadius)) -> Self {
         self.set_corners(f);
         self
     }
@@ -208,7 +208,7 @@ impl Properties {
         self
     }
 
-    pub fn with_stroke_width(mut self, value: f32) -> Self {
+    pub fn with_stroke_width(mut self, value: u32) -> Self {
         self.set_stroke_width(value);
         self
     }
@@ -279,7 +279,7 @@ impl Properties {
         self.shape = shape;
     }
 
-    pub fn set_corners<F: FnOnce(&mut Corners)>(&mut self, f: F) {
+    pub fn set_corners<F: FnOnce(&mut CornerRadius)>(&mut self, f: F) {
         f(&mut self.corners);
     }
 
@@ -287,7 +287,7 @@ impl Properties {
         self.rotation = value;
     }
 
-    pub fn set_stroke_width(&mut self, value: f32) {
+    pub fn set_stroke_width(&mut self, value: u32) {
         self.stroke_width = value;
     }
 
@@ -332,11 +332,11 @@ impl Properties {
 
     pub(crate) fn shape(&self) -> Shape { self.shape }
 
-    pub(crate) fn corners(&self) -> Corners { self.corners }
+    pub(crate) fn corners(&self) -> CornerRadius { self.corners }
 
     pub(crate) fn rotation(&self) -> f32 { self.rotation }
 
-    pub(crate) fn stroke_width(&self) -> f32 { self.stroke_width }
+    pub(crate) fn stroke_width(&self) -> u32 { self.stroke_width }
 
     pub(crate) fn padding(&self) -> Padding { self.padding }
 
@@ -352,57 +352,25 @@ impl RenderComponentSource for Properties {
 
     fn stroke_color(&self) -> Rgba<f32> { self.stroke_color().into() }
 
-    fn corners(&self) -> Corners { self.corners() }
+    fn size(&self) -> Size<f32> { self.size.into() }
+
+    fn corners(&self) -> CornerRadius { self.corners() }
 
     fn shape(&self) -> Shape { self.shape() }
 
     fn rotation(&self) -> f32 { self.rotation() }
 
-    fn stroke_width(&self) -> f32 { self.stroke_width() }
+    fn stroke_width(&self) -> f32 { self.stroke_width() as _ }
 
     fn texture_id(&self) -> i32 { self.texture_id() }
 
-    fn vertices(&self) -> Vertices {
-        Vertices::new(self.shape, self.size.into())
-    }
-
-    fn transform(&self) -> Matrix4x4 {
-        let tx = self.pos.x() as f32 / DEFAULT_SCALER.width() * 2.0 - 1.0;
-        let ty = 1.0 - self.pos.y() as f32 / DEFAULT_SCALER.height() * 2.0;
-        // let d: Size<f32> = self.size.into();
-        // let scale = d / DEFAULT_SCALER;
-        Matrix4x4::IDENTITY.translate(tx, ty)
-        // matrix.transform(tx, ty, scale.width, scale.height);
-        // matrix
-    }
-}
-
-impl RenderComponentSource for &Properties {
-    fn fill_color(&self) -> Rgba<f32> { self.fill_color.into() }
-
-    fn stroke_color(&self) -> Rgba<f32> { self.stroke_color.into() }
-
-    fn corners(&self) -> Corners { self.corners }
-
-    fn shape(&self) -> Shape { self.shape }
-
-    fn rotation(&self) -> f32 { self.rotation }
-
-    fn stroke_width(&self) -> f32 { self.stroke_width }
-
-    fn texture_id(&self) -> i32 { self.texture_id }
-
-    fn vertices(&self) -> Vertices {
-        Vertices::new(self.shape, self.size.into())
-    }
-
-    fn transform(&self) -> Matrix4x4 {
-        let tx = self.pos.x() as f32 / DEFAULT_SCALER.width() * 2.0 - 1.0;
-        let ty = 1.0 - self.pos.y() as f32 / DEFAULT_SCALER.height() * 2.0;
-        // let d: Size<f32> = self.size.into();
-        // let scale = d / DEFAULT_SCALER;
-        Matrix4x4::IDENTITY.translate(tx, ty)
-        // matrix.transform(tx, ty, scale.width, scale.height);
-        // matrix
+    fn transform(&self, window_size: Size<f32>) -> Matrix4x4 {
+        let tx = self.pos.x() as f32 / window_size.width() * 2.0 - 1.0;
+        let ty = 1.0 - self.pos.y() as f32 / window_size.height() * 2.0;
+        let d: Size<f32> = self.size.into();
+        let scale = d / window_size;
+        Matrix4x4::IDENTITY
+            .with_translate(tx, ty)
+            .with_scale(scale.width(), scale.height())
     }
 }

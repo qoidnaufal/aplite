@@ -1,9 +1,17 @@
-use super::GpuPrimitive;
+use super::{GpuPrimitive, NumDebugger};
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct Vector<const N: usize, T: GpuPrimitive> {
     inner: [T; N]
+}
+
+impl<const N: usize, T: GpuPrimitive + NumDebugger> std::fmt::Debug for Vector<N, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = format!("Vector{N}");
+        let s = self.debug_formatter(name.as_str());
+        write!(f, "{s}")
+    }
 }
 
 impl<const N: usize, T: GpuPrimitive> Default for Vector<N, T> {
@@ -22,6 +30,35 @@ impl<const N: usize, T: GpuPrimitive> std::ops::Index<usize> for Vector<N, T> {
 impl<const N: usize, T: GpuPrimitive> std::ops::IndexMut<usize> for Vector<N, T> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.inner[index]
+    }
+}
+
+impl<const N: usize, T: GpuPrimitive + NumDebugger> Vector<N, T> {
+    pub(crate) fn debug_formatter(&self, name: &str) -> String {
+        let mut s = String::new();
+        s.push_str(format!("{name} {{").as_str());
+        for n in 0..N {
+            let num = self[n];
+            let num_str = if num.is_signed() {
+                format!(" {num:0.3}")
+            } else {
+                if num.is_float() {
+                    format!("  {num:0.3}")
+                } else {
+                    format!(" {num}")
+                }
+            };
+            if n == N-1 {
+                if num.is_float() {
+                    s.push_str(format!("{num_str}  }}").as_str());
+                } else {
+                    s.push_str(format!("{num_str} }}").as_str());
+                }
+            } else {
+                s.push_str(format!("{num_str},").as_str());
+            }
+        }
+        s
     }
 }
 

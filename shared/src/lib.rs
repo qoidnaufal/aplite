@@ -27,6 +27,18 @@ impl GpuPrimitive for u8 {}
 impl GpuPrimitive for u32 {}
 impl GpuPrimitive for f32 {}
 
+pub trait NumDebugger: GpuPrimitive {
+    fn is_signed(&self) -> bool { false }
+    fn is_float(&self) -> bool { false }
+}
+
+impl NumDebugger for u8 {}
+impl NumDebugger for u32 {}
+impl NumDebugger for f32 {
+    fn is_signed(&self) -> bool { self.is_sign_negative() }
+    fn is_float(&self) -> bool { true }
+}
+
 pub fn tan(x: f32, y: f32) -> f32 {
     (y / x).abs()
 }

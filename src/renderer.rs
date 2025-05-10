@@ -12,7 +12,7 @@ pub use element::Shape;
 
 pub(crate) use gpu::Gpu;
 pub(crate) use texture::{TextureData, image_reader};
-pub(crate) use element::{Element, Corners};
+pub(crate) use element::{Element, CornerRadius};
 pub(crate) use render_util::{
     cast_slice,
     create_pipeline,
@@ -24,14 +24,10 @@ pub(crate) use buffer::{
     Gfx,
     Screen,
     Buffer,
-    Indices,
-    Vertices,
 };
 
-use crate::error::GuiError;
+use crate::error::ApliteError;
 use crate::color::Pixel;
-
-pub(crate) const DEFAULT_SCALER: Size<f32> = Size::new(1600., 1200.);
 
 pub(crate) struct Renderer {
     pub(crate) gpu: Gpu,
@@ -48,9 +44,9 @@ impl Renderer {
     pub(crate) fn new(gpu: Gpu, mut gfx: Gfx) -> Self {
         gpu.configure();
 
-        // this is important to avoid creating texture for every element
+        // FIXME: use atlas
         let pseudo_texture = TextureData::new(&gpu, &Pixel::from(Rgba::WHITE));
-        let mut screen = Screen::new(&gpu.device, gpu.size());
+        let mut screen = Screen::new(&gpu.device, gpu.size().into());
         screen.write(&gpu.device, &gpu.queue);
         gfx.write(&gpu.device, &gpu.queue);
 
@@ -78,9 +74,9 @@ impl Renderer {
     }
 
     pub(crate) fn resize(&mut self, new_size: Size<u32>) {
-        let ps: Size<f32> = self.screen.scaler().into();
+        let ss = self.screen.initial_size();
         let ns: Size<f32> = new_size.into();
-        let s = ps / ns;
+        let s = ss / ns;
 
         if new_size.width() > 0 && new_size.height() > 0 {
             self.gpu.config.width = new_size.width();
@@ -97,9 +93,8 @@ impl Renderer {
         // });
 
         self.screen.update_transform(|mat| {
-            *mat = mat
-                .scale(s.width(), s.height())
-                .translate(s.width() - 1.0, 1.0 - s.height());
+            mat.set_scale(s.width(), s.height());
+            mat.set_translate(s.width() - 1.0, 1.0 - s.height());
         });
     }
 
@@ -108,7 +103,7 @@ impl Renderer {
         self.gfx.write(&self.gpu.device, &self.gpu.queue);
     }
 
-    pub(crate) fn render(&mut self, color: Rgba<u8>) -> Result<(), GuiError> {
+    pub(crate) fn render(&mut self, color: Rgba<u8>) -> Result<(), ApliteError> {
         let output = self.gpu.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
@@ -147,20 +142,20 @@ impl Renderer {
             pass.set_bind_group(1, &self.gfx.bind_group, &[]);            // storage buffers
             pass.set_bind_group(2, &self.pseudo_texture.bind_group, &[]); // pseudo texture
 
-            let mut idx_offset: u32 = 0;
+            let mut idx_start: u32 = 0;
 
             for i in 0..self.gfx.count() {
                 let element = &self.gfx.elements.data[i];
-                let idx_len = element.indices().len() as u32;
                 let draw_offset = i as u32;
+                let idx_end = idx_start + 6;
 
                 // FIXME: bundle the texture into an atlas or something
                 if element.texture_id > -1 {
                     let texture_data = &self.gfx.textures[element.texture_id as usize];
                     pass.set_bind_group(2, &texture_data.bind_group, &[]);
                 }
-                pass.draw_indexed(idx_offset..idx_offset + idx_len, 0, draw_offset..draw_offset + 1);
-                idx_offset += idx_len;
+                pass.draw_indexed(idx_start..idx_end, 0, draw_offset..draw_offset + 1);
+                idx_start = idx_end;
             }
         }
     }

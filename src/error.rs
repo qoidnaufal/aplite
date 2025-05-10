@@ -1,5 +1,5 @@
 #[derive(Debug)]
-pub enum GuiError {
+pub enum ApliteError {
     UnitializedRenderer,
     EventLoopCreation(winit::error::EventLoopError),
     SurfaceCreation(wgpu::CreateSurfaceError),
@@ -8,7 +8,7 @@ pub enum GuiError {
     AdapterRequestFailed(wgpu::RequestAdapterError),
 }
 
-impl std::fmt::Display for GuiError {
+impl std::fmt::Display for ApliteError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let err_kind = match self {
             Self::UnitializedRenderer => "uninitialized renderer".to_string(),
@@ -23,7 +23,7 @@ impl std::fmt::Display for GuiError {
     }
 }
 
-impl std::error::Error for GuiError {
+impl std::error::Error for ApliteError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::UnitializedRenderer => None,
@@ -36,31 +36,31 @@ impl std::error::Error for GuiError {
     }
 }
 
-impl From<winit::error::EventLoopError> for GuiError {
+impl From<winit::error::EventLoopError> for ApliteError {
     fn from(value: winit::error::EventLoopError) -> Self {
         Self::EventLoopCreation(value)
     }
 }
 
-impl From<wgpu::CreateSurfaceError> for GuiError {
+impl From<wgpu::CreateSurfaceError> for ApliteError {
     fn from(value: wgpu::CreateSurfaceError) -> Self {
         Self::SurfaceCreation(value)
     }
 }
 
-impl From<wgpu::RequestDeviceError> for GuiError {
+impl From<wgpu::RequestDeviceError> for ApliteError {
     fn from(value: wgpu::RequestDeviceError) -> Self {
         Self::DeviceRequest(value)
     }
 }
 
-impl From<wgpu::SurfaceError> for GuiError {
+impl From<wgpu::SurfaceError> for ApliteError {
     fn from(value: wgpu::SurfaceError) -> Self {
         Self::SurfaceRendering(value)
     }
 }
 
-impl From<wgpu::RequestAdapterError> for GuiError {
+impl From<wgpu::RequestAdapterError> for ApliteError {
     fn from(value: wgpu::RequestAdapterError) -> Self {
         Self::AdapterRequestFailed(value)
     }

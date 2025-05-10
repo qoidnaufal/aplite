@@ -2,31 +2,37 @@ use std::ops::{Index, IndexMut};
 
 use crate::vector::Vector;
 
-use super::{Vector4, GpuPrimitive};
+use super::{Vector4, GpuPrimitive, NumDebugger};
 
-/// In GPU Matrix 2x3 means 3 `Vector<2, T>` stacked in vertical order. Matrix 4x2 means 2 rows of `[x, y, z, w]`.
+/// In GPU Matrix 2x3 means 3 `Vector<2, T>` stacked in horizontal order.
+/// Matrix 4x2 means 2 rows of `[x, y, z, w]`.
 /// So, [`Matrix<M, N, T>`] in CPU should be constructed by \[[`Vector<M, T>`]; `N`\].
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Matrix<const M: usize, const N: usize, T: GpuPrimitive> {
     inner: [Vector<M, T>; N]
 }
 
-impl<const M: usize, const N: usize, T: GpuPrimitive> std::fmt::Debug for Matrix<M, N, T> {
+impl<const M: usize, const N: usize, T: GpuPrimitive + NumDebugger> std::fmt::Debug for Matrix<M, N, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = String::new();
         for m in 0..M {
-            let prefix = match m {
-                0 => "\nx",
-                1 => "\ny",
-                2 => "\nz",
-                3 => "\nw",
+            let (prefix, suffix) = match m {
+                0 => ("x |", "|\n"),
+                1 => ("y |", "|\n"),
+                2 => ("z |", "|\n"),
+                3 => ("w |", "|"),
                 _ => unreachable!()
             };
-            s.push_str(format!("{prefix} |").as_str());
+            s.push_str(prefix);
             for n in 0..N {
-                s.push_str(format!("{:0.3}", self[n][m]).as_str());
+                let num = self[n][m];
+                if num.is_signed() {
+                    s.push_str(format!("{num:0.3} ").as_str());
+                } else {
+                    s.push_str(format!(" {num:0.3} ").as_str());
+                }
             }
-            s.push_str(format!(" |\n").as_str());
+            s.push_str(suffix);
         }
         write!(f, "{}", s)
     }
@@ -51,16 +57,26 @@ impl<const M: usize, const N: usize, T: GpuPrimitive> Matrix<M, N, T> {
         Self { inner: [ Vector::default(); N ] }
     }
 
-    pub fn translate(mut self, x: T, y: T) -> Self {
+    pub fn with_translate(mut self, x: T, y: T) -> Self {
         self[N - 1].set_x(x);
         self[N - 1].set_y(y);
         self
     }
 
-    pub fn scale(mut self, w: T, h: T) -> Self {
+    pub fn set_translate(&mut self, x: T, y: T) {
+        self[N - 1].set_x(x);
+        self[N - 1].set_y(y);
+    }
+
+    pub fn with_scale(mut self, w: T, h: T) -> Self {
         self[0].set_x(w);
         self[1].set_y(h);
         self
+    }
+
+    pub fn set_scale(&mut self, w: T, h: T) {
+        self[0].set_x(w);
+        self[1].set_y(h);
     }
 
     pub fn data(&self) -> &[Vector<M, T>] {

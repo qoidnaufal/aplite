@@ -3,7 +3,7 @@ use std::sync::Arc;
 use shared::Size;
 use winit::window::Window;
 
-use crate::error::GuiError;
+use crate::error::ApliteError;
 
 pub(crate) struct Gpu {
     pub(crate) surface: wgpu::Surface<'static>,
@@ -21,7 +21,7 @@ fn backend() -> wgpu::Backends {
 }
 
 impl Gpu {
-    pub(crate) fn request(window: Arc<Window>) -> Result<Self, GuiError> {
+    pub(crate) fn request(window: Arc<Window>) -> Result<Self, ApliteError> {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: backend(),
@@ -33,14 +33,14 @@ impl Gpu {
             let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions {
                 compatible_surface: Some(&surface),
                 ..Default::default()
-            }).await.map_err(GuiError::AdapterRequestFailed)?;
+            }).await.map_err(ApliteError::AdapterRequestFailed)?;
             let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor {
                     required_features: wgpu::Features::empty(),
                     ..Default::default()
                 },
             ).await?;
 
-            Ok::<(wgpu::Adapter, wgpu::Device, wgpu::Queue), GuiError>((adapter, device, queue))
+            Ok::<(wgpu::Adapter, wgpu::Device, wgpu::Queue), ApliteError>((adapter, device, queue))
         })?;
 
         let surface_capabilites = surface.get_capabilities(&adapter);

@@ -11,7 +11,7 @@ pub mod properties;
 pub mod view;
 
 pub mod prelude {
-    use crate::error::GuiError;
+    use crate::error::ApliteError;
 
     pub use shared::Rgba;
     pub use crate::app::Aplite;
@@ -27,7 +27,7 @@ pub mod prelude {
     pub use crate::view::{
         View,
         TestCircleWidget,
-        TestTriangleWidget,
+        // TestTriangleWidget,
         HStack,
         VStack,
         Button,
@@ -40,5 +40,5 @@ pub mod prelude {
         image,
     };
 
-    pub type AppResult = Result<(), GuiError>;
+    pub type ApliteResult = Result<(), ApliteError>;
 }

@@ -1,8 +1,15 @@
-use super::{Vector4, GpuPrimitive};
+use super::{Vector4, GpuPrimitive, NumDebugger};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct Rgba<T: GpuPrimitive> {
     inner: Vector4<T>
+}
+
+impl<T: GpuPrimitive + NumDebugger> std::fmt::Debug for Rgba<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = self.inner.debug_formatter("Rgba");
+        write!(f, "{s}")
+    }
 }
 
 impl<T: GpuPrimitive> Rgba<T> {
@@ -25,6 +32,8 @@ impl Rgba<u8> {
     pub const BLUE: Self = Self::new(0, 0, 255, 255);
     pub const WHITE: Self = Self::new(255, 255, 255, 255);
     pub const YELLOW: Self = Self::new(255, 255, 0, 255);
+    pub const PURPLE: Self = Self::new(111, 72, 234, 255);
+    pub const LIGHT_GRAY: Self = Rgba::new(69, 69, 69, 255);
     pub const DARK_GRAY: Self = Self::new(30, 30, 30, 255);
     pub const DARK_GREEN: Self = Self::new(10, 30, 15, 255);
 }

@@ -61,25 +61,25 @@ impl<'a, IV: IntoView> View<'a, IV> {
     }
 }
 
-#[derive(Clone)]
-pub struct TestTriangleWidget {
-    properties: Properties,
-}
+// #[derive(Clone)]
+// pub struct TestTriangleWidget {
+//     properties: Properties,
+// }
 
-impl TestTriangleWidget {
-    pub fn new(cx: &mut Context) -> View<Self> {
-        let properties = Properties::new()
-            .with_size((300, 300))
-            .with_shape(Shape::Triangle)
-            .with_fill_color(Rgba::RED);
-        Self { properties }.into_view(cx, |_| {})
-    }
-}
+// impl TestTriangleWidget {
+//     pub fn new(cx: &mut Context) -> View<Self> {
+//         let properties = Properties::new()
+//             .with_size((300, 300))
+//             .with_shape(Shape::Triangle)
+//             .with_fill_color(Rgba::RED);
+//         Self { properties }.into_view(cx, |_| {})
+//     }
+// }
 
-impl IntoView for TestTriangleWidget {
-    fn debug_name(&self) -> Option<&'static str> { Some("TestTriangleWidget") }
-    fn properties(&self) -> Properties { self.properties }
-}
+// impl IntoView for TestTriangleWidget {
+//     fn debug_name(&self) -> Option<&'static str> { Some("TestTriangleWidget") }
+//     fn properties(&self) -> Properties { self.properties }
+// }
 
 #[derive(Clone)]
 pub struct TestCircleWidget {
