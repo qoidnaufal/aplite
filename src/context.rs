@@ -5,7 +5,9 @@ use shared::{Size, Vector2};
 
 use crate::color::Pixel;
 use crate::cursor::{Cursor, MouseAction};
-use crate::renderer::{Gfx, IntoRenderSource, RenderComponentSource, Renderer};
+use crate::renderer::gfx::Gfx;
+use crate::renderer::util::IntoRenderSource;
+use crate::renderer::Renderer;
 use crate::properties::Properties;
 use crate::tree::{Entity, NodeId, Tree};
 

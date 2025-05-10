@@ -6,7 +6,8 @@ use image::GenericImageView;
 use shared::Size;
 
 use crate::color::Pixel;
-use super::{Gpu, TextureDataSource};
+use super::util::TextureDataSource;
+use super::Gpu;
 
 pub(crate) fn image_reader<P: Into<PathBuf>>(path: P) -> Pixel<u8> {
     let mut file = File::open(path.into()).unwrap();

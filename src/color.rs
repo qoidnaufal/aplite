@@ -1,6 +1,6 @@
  use shared::{Fraction, GpuPrimitive, Size, Rgba};
 
-use crate::renderer::TextureDataSource;
+use crate::renderer::util::TextureDataSource;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pixel<T: GpuPrimitive> {

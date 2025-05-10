@@ -1,9 +1,11 @@
 use std::path::PathBuf;
 use shared::Rgba;
 
-use crate::renderer::{image_reader, Shape};
 use crate::properties::Properties;
 use crate::context::Context;
+use crate::renderer::element::Shape;
+use crate::renderer::texture::image_reader;
+
 use super::{IntoView, View};
 
 pub fn image<P>(cx: &mut Context, src: P) -> View<Image> where P: Into<PathBuf> {

@@ -1,7 +1,7 @@
 use shared::Rgba;
 use crate::prelude::Orientation;
 use crate::properties::Properties;
-use crate::renderer::Shape;
+use crate::renderer::element::Shape;
 use crate::context::Context;
 
 use super::{IntoView, View};

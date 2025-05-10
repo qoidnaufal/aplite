@@ -1,33 +1,22 @@
-mod gpu;
-mod buffer;
-mod shader;
-mod render_util;
-mod texture;
-mod element;
-
-use shared::{Size, Rgba};
-
-use shader::SHADER;
-pub use element::Shape;
-
-pub(crate) use gpu::Gpu;
-pub(crate) use texture::{TextureData, image_reader};
-pub(crate) use element::{Element, CornerRadius};
-pub(crate) use render_util::{
-    cast_slice,
-    create_pipeline,
-    RenderComponentSource,
-    IntoRenderSource,
-    TextureDataSource,
-};
-pub(crate) use buffer::{
-    Gfx,
-    Screen,
-    Buffer,
-};
-
 use crate::error::ApliteError;
 use crate::color::Pixel;
+
+pub(crate) mod gpu;
+pub(crate) mod buffer;
+pub(crate) mod shader;
+pub(crate) mod util;
+pub(crate) mod texture;
+pub(crate) mod element;
+pub(crate) mod gfx;
+mod screen;
+
+use screen::Screen;
+use gfx::Gfx;
+use gpu::Gpu;
+use util::create_pipeline;
+use shared::{Size, Rgba};
+
+use texture::TextureData;
 
 pub(crate) struct Renderer {
     pub(crate) gpu: Gpu,
@@ -47,7 +36,7 @@ impl Renderer {
         // FIXME: use atlas
         let pseudo_texture = TextureData::new(&gpu, &Pixel::from(Rgba::WHITE));
         let mut screen = Screen::new(&gpu.device, gpu.size().into());
-        screen.write(&gpu.device, &gpu.queue);
+        screen.write(&gpu.queue);
         gfx.write(&gpu.device, &gpu.queue);
 
         let indices = gfx.indices(&gpu.device);
@@ -99,7 +88,7 @@ impl Renderer {
     }
 
     pub(crate) fn update(&mut self) {
-        self.screen.write(&self.gpu.device, &self.gpu.queue);
+        self.screen.write(&self.gpu.queue);
         self.gfx.write(&self.gpu.device, &self.gpu.queue);
     }
 

@@ -9,10 +9,12 @@ use shared::{Size, Vector2, Rgba};
 
 use crate::cursor::Cursor;
 use crate::prelude::ApliteResult;
-use crate::renderer::{Gfx, Gpu, IntoRenderSource, Renderer};
+use crate::renderer::gfx::Gfx;
+use crate::renderer::gpu::Gpu;
+use crate::renderer::util::IntoRenderSource;
+use crate::renderer::Renderer;
 use crate::context::Context;
 use crate::error::ApliteError;
-use crate::tree::NodeId;
 
 struct Stats {
     counter: u32,

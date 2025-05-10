@@ -2,7 +2,8 @@ use shared::{Fraction, Matrix4x4, Size, Vector2, Rgba};
 
 use crate::context::layout::{Alignment, Orientation, Padding};
 use crate::cursor::Cursor;
-use crate::renderer::{CornerRadius, RenderComponentSource, Shape};
+use crate::renderer::element::{CornerRadius, Shape};
+use crate::renderer::util::RenderComponentSource;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Properties {

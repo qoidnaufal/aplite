@@ -17,7 +17,7 @@ pub mod prelude {
     pub use crate::app::Aplite;
     pub use crate::reactive::{arc_signal, signal, Get, Set};
     pub use crate::context::Context;
-    pub use crate::renderer::Shape;
+    pub use crate::renderer::element::Shape;
     pub use crate::context::layout::{
         Orientation,
         Alignment,
