@@ -17,8 +17,8 @@ fn root(cx: &mut Context) {
     };
 
     HStack::new(cx, |cx| {
-        Image::new(cx, "assets/image1.jpg");
-        Image::new(cx, "assets/image2.jpg").style(|s| s.set_dragable(true));
+        Image::new(cx, || image_reader("assets/image1.jpg"));
+        Image::new(cx, || image_reader("assets/image2.jpg")).style(|s| s.set_dragable(true));
         TestCircleWidget::new(cx).style(|style| {
             style.set_hover_color(Rgba::BLUE);
             style.set_fill_color(Rgba::PURPLE);

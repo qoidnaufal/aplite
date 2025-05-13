@@ -21,7 +21,7 @@ fn backend() -> wgpu::Backends {
 }
 
 impl Gpu {
-    pub(crate) fn request(window: Arc<Window>) -> Result<Self, ApliteError> {
+    pub(crate) fn new(window: Arc<Window>) -> Result<Self, ApliteError> {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: backend(),

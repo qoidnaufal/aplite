@@ -2,8 +2,8 @@ use shared::{Matrix4x4, Rgba, Size, Vector2};
 
 use super::shader::SHADER;
 use super::gpu::Gpu;
-use super::gfx::Gfx;
 use super::element::{CornerRadius, Element, Shape};
+use super::Renderer;
 
 pub(crate) trait RenderComponentSource {
     fn fill_color(&self) -> Rgba<f32>;
@@ -35,23 +35,8 @@ pub(crate) trait TextureDataSource {
     fn dimensions(&self) -> Size<u32>;
 }
 
-pub(crate) trait IntoRenderSource {
-    type RenderComponentSource: RenderComponentSource;
-    type TetureDataSource: TextureDataSource;
-
-    fn render_components_source(&self) -> &[Self::RenderComponentSource];
-    fn texture_data_source(&self) -> &[Self::TetureDataSource];
-
-    fn register(&self, gpu: &Gpu, gfx: &mut Gfx) {
-        self.render_components_source().iter().skip(1).for_each(|rcs| {
-            let maybe_pixel = if rcs.texture_id() >= 0 {
-                Some(&self.texture_data_source()[rcs.texture_id() as usize])
-            } else {
-                None
-            };
-            gfx.register(gpu, maybe_pixel, rcs);
-        });
-    }
+pub(crate) trait Render {
+    fn render(&mut self, renderer: &mut Renderer);
 }
 
 // .....................................
@@ -70,10 +55,6 @@ impl Indices<'_> {
     pub(crate) const fn new() -> Self {
         Self(&[0, 1, 2, 2, 3, 0])
     }
-
-    // const fn three() -> Self {
-    //     Self(&[0, 1, 2])
-    // }
 }
 
 // ....................................
@@ -110,22 +91,12 @@ impl Vertices {
     ]);
 
     pub(crate) fn new() -> Self {
-        // let s = size / DEFAULT_SCALER / 2.;
-        // Self::VERTICES.adjust(s.width(), s.height())
         Self::VERTICES
     }
 
     pub(crate) fn as_slice(&self) -> &[Vertex] {
         self.0.as_slice()
     }
-
-    // fn adjust(mut self, sw: f32, sh: f32) -> Self {
-    //     self.iter_mut().for_each(|vertex| {
-    //         vertex._pos.mul_x(sw);
-    //         vertex._pos.mul_y(sh);
-    //     });
-    //     self
-    // }
 }
 
 impl std::fmt::Debug for Vertices {
@@ -144,10 +115,104 @@ impl std::fmt::Debug for Vertices {
     }
 }
 
+// ....................................
+
+pub(crate) enum Model {
+    Uninitialized,
+    Initialized {
+        indices: wgpu::Buffer,
+        vertices: wgpu::Buffer,
+        instances: wgpu::Buffer,
+    }
+}
+
+impl Model {
+    pub(crate) fn init(renderer: &Renderer) -> Self {
+        Self::Initialized {
+            indices: renderer.gfx.indices(&renderer.gpu.device),
+            vertices: renderer.gfx.vertices(&renderer.gpu.device),
+            instances: renderer.gfx.instances(&renderer.gpu.device),
+        }
+    }
+
+    pub(crate) fn is_unitialized(&self) -> bool {
+        matches!(self, Self::Uninitialized)
+    }
+
+    pub(crate) fn get_buffer(&self) -> Option<(&wgpu::Buffer, &wgpu::Buffer, &wgpu::Buffer)> {
+        match self {
+            Model::Uninitialized => None,
+            Model::Initialized {
+                indices,
+                vertices,
+                instances
+            } => Some((indices, vertices, instances)),
+        }
+    }
+}
+
+// ....................................
+
+pub(crate) struct Sampler {
+    pub(crate) _inner: wgpu::Sampler,
+    pub(crate) bind_group: wgpu::BindGroup,
+}
+
+impl Sampler {
+    pub(crate) fn new(device: &wgpu::Device) -> Self {
+        let _inner = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+        let bind_group = Self::bind_group(device, &_inner);
+        Self { _inner, bind_group }
+        
+    }
+
+    pub(crate) fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("sampler bind group layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                }
+            ],
+        })
+    }
+
+    pub(crate) fn bind_group(
+        device: &wgpu::Device,
+        sampler: &wgpu::Sampler,
+    ) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("sampler bind group"),
+            layout: &Self::bind_group_layout(device),
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Sampler(sampler),
+                }
+            ],
+        })
+    }
+}
+
+// ....................................
+
 pub(crate) fn cast_slice<SRC: Sized, DST: Sized>(src: &[SRC]) -> &[DST] {
     let len = size_of_val(src);
     unsafe { core::slice::from_raw_parts(src.as_ptr() as *const DST, len) }
 }
+
+// ....................................
 
 pub(crate) fn create_pipeline(
     gpu: &Gpu,

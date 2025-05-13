@@ -1,26 +1,11 @@
-use std::path::PathBuf;
-use std::io::Read;
-use std::fs::File;
-
-use image::GenericImageView;
 use shared::Size;
 
-use crate::color::Pixel;
 use super::util::TextureDataSource;
 use super::Gpu;
 
-pub(crate) fn image_reader<P: Into<PathBuf>>(path: P) -> Pixel<u8> {
-    let mut file = File::open(path.into()).unwrap();
-    let mut buf = Vec::new();
-    let len = file.read_to_end(&mut buf).unwrap();
-    let image = image::load_from_memory(&buf[..len]).unwrap();
-
-    Pixel::new(image.dimensions(), &image.to_rgba8())
-}
-
 #[derive(Debug)]
 pub(crate) struct TextureData {
-    _texture: wgpu::Texture,
+    texture: wgpu::Texture,
     pub(crate) bind_group: wgpu::BindGroup,
 }
 
@@ -31,12 +16,11 @@ impl TextureData {
 
         let texture = Self::create_texture(device, td.dimensions());
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = Self::create_sampler(device);
-        let bind_group = Self::bind_group(device, &view, &sampler);
+        let bind_group = Self::bind_group(device, &view);
 
-        Self::submit_texture(queue, texture.as_image_copy(), td);
-
-        Self { _texture: texture, bind_group }
+        let ret = Self { texture, bind_group };
+        ret.submit_texture(queue, td);
+        ret
     }
 
     pub(crate) fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
@@ -53,12 +37,6 @@ impl TextureData {
                     },
                     count: None,
                 },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                }
             ],
         })
     }
@@ -66,7 +44,6 @@ impl TextureData {
     pub(crate) fn bind_group(
         device: &wgpu::Device,
         view: &wgpu::TextureView,
-        sampler: &wgpu::Sampler,
     ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("texture bind group"),
@@ -76,10 +53,6 @@ impl TextureData {
                     binding: 0,
                     resource: wgpu::BindingResource::TextureView(view),
                 },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(sampler),
-                }
             ],
         })
     }
@@ -87,10 +60,10 @@ impl TextureData {
     // FIXME: integrate this
     pub(crate) fn _update_texture(&mut self, gpu: &Gpu, td: &impl TextureDataSource) {
         let size = td.dimensions();
-        if size.width() > self._texture.width() || size.height() > self._texture.height() {
-            self._texture = Self::create_texture(&gpu.device, size);
+        if size.width() > self.texture.width() || size.height() > self.texture.height() {
+            self.texture = Self::create_texture(&gpu.device, size);
         }
-        Self::submit_texture(&gpu.queue, self._texture.as_image_copy(), td);
+        self.submit_texture(&gpu.queue, td);
     }
 
     fn create_texture(device: &wgpu::Device, size: Size<u32>) -> wgpu::Texture {
@@ -110,25 +83,13 @@ impl TextureData {
         })
     }
 
-    fn create_sampler(device: &wgpu::Device) -> wgpu::Sampler {
-        device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        })
-    }
-
     fn submit_texture(
+        &self,
         queue: &wgpu::Queue,
-        texture: wgpu::TexelCopyTextureInfo,
         td: &impl TextureDataSource,
     ) {
         queue.write_texture(
-            texture,
+            self.texture.as_image_copy(),
             td.data(),
             wgpu::TexelCopyBufferLayout {
                 offset: 0,

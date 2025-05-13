@@ -7,6 +7,7 @@ use crate::renderer::util::RenderComponentSource;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Properties {
+    name: Option<&'static str>,
     pos: Vector2<u32>,
     size: Size<u32>,
     min_width: Option<u32>,
@@ -33,6 +34,7 @@ pub struct Properties {
 impl Properties {
     pub(crate) fn window_properties(size: Size<u32>) -> Self {
         Self {
+            name: Some("ROOT"),
             pos: (size / 2).into(),
             size,
             min_width: None,
@@ -106,6 +108,7 @@ impl Properties {
 impl Properties {
     pub const fn new() -> Self {
         Self {
+            name: None,
             pos: Vector2::new(0, 0),
             size: Size::new(0, 0),
             min_width: Some(1),
@@ -127,6 +130,11 @@ impl Properties {
             texture_id: -1,
             dragable: false,
         }
+    }
+
+    pub fn with_name(mut self, name: Option<&'static str>) -> Self {
+        self.set_name(name);
+        self
     }
 
     pub fn with_size(mut self, size: impl Into<Size<u32>>) -> Self {
@@ -228,6 +236,10 @@ impl Properties {
 
 // modifier
 impl Properties {
+    pub fn set_name(&mut self, name: Option<&'static str>) {
+        self.name = name;
+    }
+
     pub fn set_alignment(&mut self, f: impl FnOnce(&mut Alignment)) {
         f(&mut self.alignment)
     }
@@ -307,6 +319,8 @@ impl Properties {
 
 // getter
 impl Properties {
+    pub(crate) fn name(&self) -> Option<&str> { self.name }
+
     pub(crate) fn alignment(&self) -> Alignment { self.alignment }
 
     pub(crate) fn orientation(&self) -> Orientation { self.orientation }

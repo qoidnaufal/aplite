@@ -1,5 +1,8 @@
+use std::sync::Arc;
+use winit::window::Window;
+
 use crate::error::ApliteError;
-use crate::color::Pixel;
+use crate::image_data::ImageData;
 
 pub(crate) mod gpu;
 pub(crate) mod buffer;
@@ -13,53 +16,57 @@ mod screen;
 use screen::Screen;
 use gfx::Gfx;
 use gpu::Gpu;
-use util::create_pipeline;
-use shared::{Size, Rgba};
-
+use util::{create_pipeline, RenderComponentSource, Sampler, Model};
+use shared::{Fraction, Rgba, Size};
 use texture::TextureData;
 
 pub(crate) struct Renderer {
     pub(crate) gpu: Gpu,
     pub(crate) gfx: Gfx,
+    sampler: Sampler,
+    textures: Vec<TextureData>,
     pseudo_texture: TextureData,
-    screen: Screen,
     pipeline: wgpu::RenderPipeline,
-    indices: wgpu::Buffer,
-    vertices: wgpu::Buffer,
-    instances: wgpu::Buffer,
+    pub(crate) model: Model,
+    screen: Screen,
 }
 
 impl Renderer {
-    pub(crate) fn new(gpu: Gpu, mut gfx: Gfx) -> Self {
+    pub(crate) fn new(window: Arc<Window>) -> Result<Self, ApliteError> {
+        let gpu = Gpu::new(Arc::clone(&window))?;
+        let gfx = Gfx::new(&gpu.device);
         gpu.configure();
 
         // FIXME: use atlas
-        let pseudo_texture = TextureData::new(&gpu, &Pixel::from(Rgba::WHITE));
+        let pseudo_texture = TextureData::new(&gpu, &ImageData::from(Rgba::WHITE));
+        let sampler = Sampler::new(&gpu.device);
         let mut screen = Screen::new(&gpu.device, gpu.size().into());
         screen.write(&gpu.queue);
-        gfx.write(&gpu.device, &gpu.queue);
+        // gfx.write(&gpu.device, &gpu.queue);
 
-        let indices = gfx.indices(&gpu.device);
-        let instances = gfx.instances(&gpu.device);
-        let vertices = gfx.vertices(&gpu.device);
+        // FIXME: oh shit, what now?
+        let model = Model::Uninitialized;
+
         let buffer_descriptors = &[Gfx::vertice_desc(), Gfx::instance_desc()];
         let bind_group_layouts = &[
             &Screen::bind_group_layout(&gpu.device),
             &Gfx::bind_group_layout(&gpu.device),
             &TextureData::bind_group_layout(&gpu.device),
+            &Sampler::bind_group_layout(&gpu.device),
         ];
         let pipeline = create_pipeline(&gpu, buffer_descriptors, bind_group_layouts);
+        let textures = vec![];
 
-        Self {
+        Ok(Self {
             gpu,
             gfx,
-            screen,
-            pipeline,
-            indices,
-            vertices,
-            instances,
+            sampler,
+            textures,
             pseudo_texture,
-        }
+            pipeline,
+            model,
+            screen,
+        })
     }
 
     pub(crate) fn resize(&mut self, new_size: Size<u32>) {
@@ -88,6 +95,9 @@ impl Renderer {
     }
 
     pub(crate) fn update(&mut self) {
+        if self.model.is_unitialized() {
+            self.model = Model::init(self);
+        }
         self.screen.write(&self.gpu.queue);
         self.gfx.write(&self.gpu.device, &self.gpu.queue);
     }
@@ -122,14 +132,15 @@ impl Renderer {
             ..Default::default()
         });
 
-        if !self.gfx.is_empty() {
+        if let Some((indices, vertices, instances)) = self.model.get_buffer() {
             pass.set_pipeline(&self.pipeline);
-            pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
-            pass.set_vertex_buffer(0, self.vertices.slice(..));
-            pass.set_vertex_buffer(1, self.instances.slice(..));
+            pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
+            pass.set_vertex_buffer(0, vertices.slice(..));
+            pass.set_vertex_buffer(1, instances.slice(..));
             pass.set_bind_group(0, &self.screen.bind_group, &[]);         // screen transform
             pass.set_bind_group(1, &self.gfx.bind_group, &[]);            // storage buffers
             pass.set_bind_group(2, &self.pseudo_texture.bind_group, &[]); // pseudo texture
+            pass.set_bind_group(3, &self.sampler.bind_group, &[]);
 
             let mut idx_start: u32 = 0;
 
@@ -140,12 +151,39 @@ impl Renderer {
 
                 // FIXME: bundle the texture into an atlas or something
                 if element.texture_id > -1 {
-                    let texture_data = &self.gfx.textures[element.texture_id as usize];
+                    let texture_data = &self.textures[element.texture_id as usize];
                     pass.set_bind_group(2, &texture_data.bind_group, &[]);
                 }
                 pass.draw_indexed(idx_start..idx_end, 0, draw_offset..draw_offset + 1);
                 idx_start = idx_end;
             }
         }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct TextureInfo {
+    pub(crate) id: i32,
+    pub(crate) aspect_ratio: Fraction<u32>,
+}
+
+impl Renderer {
+    pub(crate) fn add_texture(&mut self, f: Box<dyn Fn() -> ImageData>) -> TextureInfo {
+        let image = f();
+        let aspect_ratio = image.aspect_ratio();
+        let id = self.textures.len() as i32;
+        let texture_data = TextureData::new(&self.gpu, &image);
+        self.textures.push(texture_data);
+        TextureInfo { id, aspect_ratio }
+    }
+
+    pub(crate) fn add_component(&mut self, rc: &impl RenderComponentSource) {
+        let mut element = rc.element();
+        let transform = rc.transform(self.gpu.size().into());
+        let transform_id = self.gfx.transforms.len();
+        element.transform_id = transform_id as u32;
+
+        self.gfx.elements.push(element);
+        self.gfx.transforms.push(transform);
     }
 }

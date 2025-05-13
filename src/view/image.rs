@@ -1,15 +1,13 @@
-use std::path::PathBuf;
 use shared::Rgba;
 
-use crate::properties::Properties;
+use crate::{image_data::ImageData, properties::Properties};
 use crate::context::Context;
 use crate::renderer::element::Shape;
-use crate::renderer::texture::image_reader;
 
 use super::{IntoView, View};
 
-pub fn image<P>(cx: &mut Context, src: P) -> View<Image> where P: Into<PathBuf> {
-    Image::new(cx, src)
+pub fn image<F: Fn() -> ImageData + 'static>(cx: &mut Context, f: F) -> View<Image> {
+    Image::new(cx, f)
 }
 
 pub struct Image {
@@ -17,20 +15,19 @@ pub struct Image {
 }
 
 impl Image {
-    pub fn new<P: Into<PathBuf>>(cx: &mut Context, src: P) -> View<Self> {
+    pub fn new<F: Fn() -> ImageData + 'static>(cx: &mut Context, f: F) -> View<Self> {
         let properties = Properties::new()
             .with_size((300, 300))
             .with_shape(Shape::Rect)
             .with_fill_color(Rgba::WHITE)
             .with_textured(true);
-        Self { properties }.into_view(cx, |_| {}).add_pixel(src)
+        Self { properties }.into_view(cx, |_| {}).add_data(f)
     }
 }
 
 impl View<'_, Image> {
-    pub fn add_pixel<P: Into<PathBuf>>(self, src: P) -> Self {
-        let pixel = image_reader(src);
-        self.cx.add_pixel(self.id(), pixel);
+    fn add_data<F: Fn() -> ImageData + 'static>(self, image_fn: F) -> Self {
+        self.cx.add_image(self.id(), image_fn);
         self
     }
 }

@@ -2,6 +2,8 @@ use shared::Vector2;
 
 use crate::tree::NodeId;
 
+use super::Context;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseAction {
     Pressed,

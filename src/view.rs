@@ -25,7 +25,7 @@ pub trait IntoView: Sized {
     {
         let node_id = cx.create_entity();
         let parent = cx.current_entity();
-        cx.insert(node_id, parent, self.properties(), self.debug_name());
+        cx.insert(node_id, parent, self.properties().with_name(self.debug_name()));
         cx.set_current_entity(Some(node_id));
         child_fn(cx);
         cx.set_current_entity(parent);
@@ -61,26 +61,6 @@ impl<'a, IV: IntoView> View<'a, IV> {
     }
 }
 
-// #[derive(Clone)]
-// pub struct TestTriangleWidget {
-//     properties: Properties,
-// }
-
-// impl TestTriangleWidget {
-//     pub fn new(cx: &mut Context) -> View<Self> {
-//         let properties = Properties::new()
-//             .with_size((300, 300))
-//             .with_shape(Shape::Triangle)
-//             .with_fill_color(Rgba::RED);
-//         Self { properties }.into_view(cx, |_| {})
-//     }
-// }
-
-// impl IntoView for TestTriangleWidget {
-//     fn debug_name(&self) -> Option<&'static str> { Some("TestTriangleWidget") }
-//     fn properties(&self) -> Properties { self.properties }
-// }
-
 #[derive(Clone)]
 pub struct TestCircleWidget {
     properties: Properties,
@@ -100,3 +80,23 @@ impl IntoView for TestCircleWidget {
     fn debug_name(&self) -> Option<&'static str> { Some("TestCircleWidget") }
     fn properties(&self) -> Properties { self.properties }
 }
+
+// #[derive(Clone)]
+// pub struct TestTriangleWidget {
+//     properties: Properties,
+// }
+
+// impl TestTriangleWidget {
+//     pub fn new(cx: &mut Context) -> View<Self> {
+//         let properties = Properties::new()
+//             .with_size((300, 300))
+//             .with_shape(Shape::Triangle)
+//             .with_fill_color(Rgba::RED);
+//         Self { properties }.into_view(cx, |_| {})
+//     }
+// }
+
+// impl IntoView for TestTriangleWidget {
+//     fn debug_name(&self) -> Option<&'static str> { Some("TestTriangleWidget") }
+//     fn properties(&self) -> Properties { self.properties }
+// }

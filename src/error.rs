@@ -6,6 +6,7 @@ pub enum ApliteError {
     SurfaceRendering(wgpu::SurfaceError),
     DeviceRequest(wgpu::RequestDeviceError),
     AdapterRequestFailed(wgpu::RequestAdapterError),
+    WindowCreationFailed(winit::error::OsError),
 }
 
 impl std::fmt::Display for ApliteError {
@@ -17,6 +18,7 @@ impl std::fmt::Display for ApliteError {
             Self::SurfaceRendering(err) => err.to_string(),
             Self::DeviceRequest(err) => err.to_string(),
             Self::AdapterRequestFailed(err) => err.to_string(),
+            Self::WindowCreationFailed(err) => err.to_string(),
         };
 
         write!(f, "{}", err_kind)
@@ -32,6 +34,7 @@ impl std::error::Error for ApliteError {
             Self::SurfaceRendering(err) => err.source(),
             Self::DeviceRequest(err) => err.source(),
             Self::AdapterRequestFailed(err) => err.source(),
+            Self::WindowCreationFailed(err) => err.source(),
         }
     }
 }
@@ -63,5 +66,11 @@ impl From<wgpu::SurfaceError> for ApliteError {
 impl From<wgpu::RequestAdapterError> for ApliteError {
     fn from(value: wgpu::RequestAdapterError) -> Self {
         Self::AdapterRequestFailed(value)
+    }
+}
+
+impl From<winit::error::OsError> for ApliteError {
+    fn from(value: winit::error::OsError) -> Self {
+        Self::WindowCreationFailed(value)
     }
 }

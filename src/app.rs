@@ -8,9 +8,7 @@ use winit::application::ApplicationHandler;
 use shared::{Size, Vector2, Rgba};
 
 use crate::prelude::ApliteResult;
-use crate::renderer::gfx::Gfx;
-use crate::renderer::gpu::Gpu;
-use crate::renderer::util::IntoRenderSource;
+use crate::renderer::util::Render;
 use crate::renderer::Renderer;
 use crate::context::Context;
 use crate::error::ApliteError;
@@ -128,35 +126,35 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
         self
     }
 
-    fn initialize_window(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) -> Arc<Window> {
+    fn initialize_window(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) -> Result<Arc<Window>, ApliteError> {
         let mut attributes = WindowAttributes::default();
         if let Some(window_fn) = self.window_fn.take() {
             window_fn(&mut attributes);
         }
-        let window = event_loop.create_window(attributes.into()).unwrap();
+        let window = event_loop.create_window(attributes.into())?;
         let inner_size = window.inner_size();
         let size: Size<u32> = (inner_size.width, inner_size.height).into();
         self.cx.update_window_properties(|prop| {
             prop.set_size(size);
             prop.set_position((size / 2).into());
         });
-        Arc::new(window)
+        Ok(Arc::new(window))
     }
 
-    fn initialize_renderer(&mut self, window: Arc<Window>) {
-        let gpu = Gpu::request(window.clone()).unwrap();
-        let mut gfx = Gfx::new(&gpu.device);
-
-        // FIXME: is it necessary to render root widget?
-        // gfx.register(&gpu, None::<&Pixel<u8>>, self.cx.get_window_properties());
-
+    fn initialize_renderer(&mut self, window: Arc<Window>) -> Result<(), ApliteError> {
+        let mut renderer = Renderer::new(Arc::clone(&window))?;
         if let Some(view_fn) = self.view_fn.take() {
             view_fn(&mut self.cx);
             self.cx.layout();
             self.cx.debug_tree();
-            self.cx.register(&gpu, &mut gfx);
+            self.cx.render(&mut renderer);
         }
-        self.renderer = Some(Renderer::new(gpu, gfx));
+        self.renderer = Some(renderer);
+        Ok(())
+    }
+
+    fn add_window(&mut self, window: Arc<Window>) {
+        self.window.insert(window.id(), window);
     }
 
     fn request_redraw(&self, window_id: winit::window::WindowId) {
@@ -172,7 +170,7 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
                 wp.set_size(size);
                 wp.set_position((size / 2).into());
             });
-            // self.cx.recursive_layout(&NodeId::root());
+            // if !renderer.model.is_unitialized() { self.cx.recursive_layout(&NodeId::root()) }
             renderer.resize(size);
         }
     }
@@ -200,9 +198,14 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
 
 impl<F: FnOnce(&mut Context)> ApplicationHandler for Aplite<F> {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let window = self.initialize_window(event_loop);
-        self.initialize_renderer(Arc::clone(&window));
-        self.window.insert(window.id(), window);
+        if let Ok(window) = self.initialize_window(event_loop) {
+            match self.initialize_renderer(Arc::clone(&window)) {
+                Ok(_) => self.add_window(window),
+                Err(_) => event_loop.exit(),
+            }
+        } else {
+            event_loop.exit();
+        }
 
         // eprintln!("{:?}", self.cx.tree);
         // eprintln!("current: {:?}", self.cx.current_entity());
