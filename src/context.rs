@@ -358,9 +358,9 @@ impl Context {
                         .update(node_id.index() - 1, |elem| elem.set_color(color));
                 },
                 UpdateMode::Transform(node_id) => {
-                    let pos = self.cursor.hover.pos - self.cursor.click.offset;
                     let prop = self.get_node_data(&node_id);
                     let size = prop.size();
+                    let pos: Vector2<f32> = prop.pos().into();
                     renderer
                         .gfx
                         .transforms
