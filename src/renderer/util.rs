@@ -1,4 +1,4 @@
-use shared::{Matrix4x4, Rgba, Size, Vector2};
+use shared::{Rgba, Size, Vector2};
 
 use super::shader::SHADER;
 use super::gpu::Gpu;
@@ -14,7 +14,6 @@ pub(crate) trait RenderComponentSource {
     fn rotation(&self) -> f32;
     fn stroke_width(&self) -> f32;
     fn texture_id(&self) -> i32;
-    fn transform(&self, window_size: Size<f32>) -> Matrix4x4;
 
     fn element(&self) -> Element {
         Element::new(
@@ -52,6 +51,7 @@ impl std::ops::Deref for Indices<'_> {
 }
 
 impl Indices<'_> {
+    #[inline(always)]
     pub(crate) const fn new() -> Self {
         Self(&[0, 1, 2, 2, 3, 0])
     }
@@ -90,10 +90,12 @@ impl Vertices {
         Vertex { _pos: Vector2::new(  1.0,  1.0 ), _uv: Vector2::new( 1.0, 0.0 ) },
     ]);
 
+    #[inline(always)]
     pub(crate) fn new() -> Self {
         Self::VERTICES
     }
 
+    #[inline(always)]
     pub(crate) fn as_slice(&self) -> &[Vertex] {
         self.0.as_slice()
     }
@@ -135,6 +137,7 @@ impl Model {
         }
     }
 
+    #[inline(always)]
     pub(crate) fn is_unitialized(&self) -> bool {
         matches!(self, Self::Uninitialized)
     }

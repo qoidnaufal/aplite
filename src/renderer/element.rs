@@ -141,5 +141,9 @@ impl Element {
     pub(crate) fn set_color(&mut self, color: Rgba<u8>) {
         self.fill_color = color.into();
     }
+
+    pub(crate) fn set_size(&mut self, size: Size<f32>) {
+        self.size = size;
+    }
 }
 

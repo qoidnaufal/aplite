@@ -83,11 +83,7 @@ impl TextureData {
         })
     }
 
-    fn submit_texture(
-        &self,
-        queue: &wgpu::Queue,
-        td: &impl TextureDataSource,
-    ) {
+    fn submit_texture(&self, queue: &wgpu::Queue, td: &impl TextureDataSource) {
         queue.write_texture(
             self.texture.as_image_copy(),
             td.data(),

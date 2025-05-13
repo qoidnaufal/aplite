@@ -17,7 +17,7 @@ use screen::Screen;
 use gfx::Gfx;
 use gpu::Gpu;
 use util::{create_pipeline, RenderComponentSource, Sampler, Model};
-use shared::{Fraction, Rgba, Size};
+use shared::{Fraction, Matrix4x4, Rgba, Size};
 use texture::TextureData;
 
 pub(crate) struct Renderer {
@@ -95,9 +95,7 @@ impl Renderer {
     }
 
     pub(crate) fn update(&mut self) {
-        if self.model.is_unitialized() {
-            self.model = Model::init(self);
-        }
+        if self.model.is_unitialized() { self.model = Model::init(self) }
         self.screen.write(&self.gpu.queue);
         self.gfx.write(&self.gpu.device, &self.gpu.queue);
     }
@@ -179,7 +177,7 @@ impl Renderer {
 
     pub(crate) fn add_component(&mut self, rc: &impl RenderComponentSource) {
         let mut element = rc.element();
-        let transform = rc.transform(self.gpu.size().into());
+        let transform = Matrix4x4::IDENTITY;
         let transform_id = self.gfx.transforms.len();
         element.transform_id = transform_id as u32;
 

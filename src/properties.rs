@@ -378,14 +378,4 @@ impl RenderComponentSource for Properties {
     fn stroke_width(&self) -> f32 { self.stroke_width() as _ }
 
     fn texture_id(&self) -> i32 { self.texture_id() }
-
-    fn transform(&self, window_size: Size<f32>) -> Matrix4x4 {
-        let tx = self.pos.x() as f32 / window_size.width() * 2.0 - 1.0;
-        let ty = 1.0 - self.pos.y() as f32 / window_size.height() * 2.0;
-        let d: Size<f32> = self.size.into();
-        let scale = d / window_size;
-        Matrix4x4::IDENTITY
-            .with_translate(tx, ty)
-            .with_scale(scale.width(), scale.height())
-    }
 }

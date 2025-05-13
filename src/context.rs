@@ -62,7 +62,7 @@ impl Context {
     }
 
     pub(crate) fn print_children_from(&self, start: NodeId) {
-        eprintln!(" > {start:?}: {:?}", self.get_window_properties().pos());
+        eprintln!(" > {start:?}: {:?}", self.get_window_properties().name());
         if start == NodeId::root() {
             self.recursive_print(None, 0);
         } else {
@@ -76,7 +76,7 @@ impl Context {
             if let Some(children) = self.tree.get_all_children(&current) {
                 children.iter().for_each(|child| {
                     let prop = self.get_node_data(child);
-                    let data = prop.pos();
+                    let data = prop.size();
                     let name = prop.name();
                     if self.tree.get_parent(child).is_some_and(|p| self.tree.get_parent(p).is_some()) {
                         for i in 0..(indent - acc)/acc {
@@ -98,7 +98,7 @@ impl Context {
                 .iter()
                 .for_each(|node| {
                     let prop = self.get_node_data(*node);
-                    let data = prop.pos();
+                    let data = prop.size();
                     let name = prop.name();
                     eprintln!(" > {node:?}: {data:?} | {name:?}");
                     if self.tree.get_first_child(node).is_some() {
@@ -349,17 +349,31 @@ impl Context {
                         .update(node_id.index() - 1, |elem| elem.set_color(color));
                 },
                 UpdateMode::Transform(node_id) => {
-                    let pos: Vector2<f32> = self.get_node_data(&node_id).pos().into();
+                    let window_size: Size<f32> = renderer.gpu.size().into();
                     let scaler: Size<f32> = DEFAULT_SCREEN_SIZE.into();
+
+                    let prop = self.get_node_data(&node_id);
+                    let pos: Vector2<f32> = prop.pos().into();
+                    let size: Size<f32> = prop.size().into();
+
                     renderer
                         .gfx
                         .transforms
                         .update(node_id.index() - 1, |matrix| {
                             let x = pos.x() / scaler.width() * 2.0 - 1.0;
                             let y = 1.0 - pos.y() / scaler.height() * 2.0;
+                            let s = size / window_size;
                             matrix.set_translate(x, y);
+                            matrix.set_scale(s.width(), s.height());
                         });
-                },
+
+                    renderer
+                        .gfx
+                        .elements
+                        .update(node_id.index() - 1, |elem| {
+                            elem.set_size(size);
+                        });
+                }
             }
         });
         self.pending_update.clear();
@@ -371,23 +385,23 @@ impl Context {
             return;
         }
         if let Some(prev_id) = self.cursor.hover.prev.take() {
-            if let Some(style_fn) = self.style_fn.get(&prev_id) {
-                // FIXME: holly fuck copying the whole struct
-                let mut properties = *self.get_node_data(&prev_id);
-                style_fn(&mut properties);
-                *self.get_node_data_mut(&prev_id) = properties;
-                self.pending_update.push(UpdateMode::RevertColor(prev_id));
-            }
+            // if let Some(style_fn) = self.style_fn.get(&prev_id) {
+            //     FIXME: holly fuck copying the whole struct
+            //     let mut properties = *self.get_node_data(&prev_id);
+            //     style_fn(&mut properties);
+            //     *self.get_node_data_mut(&prev_id) = properties;
+            // }
+            self.pending_update.push(UpdateMode::RevertColor(prev_id));
         }
         if let Some(hover_id) = self.cursor.hover.curr {
             // FIXME: holly fuck copying the whole struct
-            let mut properties = *self.get_node_data(&hover_id);
-            if let Some(style_fn) = self.style_fn.get(&hover_id) {
-                style_fn(&mut properties);
-                *self.get_node_data_mut(&hover_id) = properties;
-                self.pending_update.push(UpdateMode::HoverColor(hover_id));
-            }
-            let dragable = properties.is_dragable();
+            // let mut properties = *self.get_node_data(&hover_id);
+            // if let Some(style_fn) = self.style_fn.get(&hover_id) {
+            //     style_fn(&mut properties);
+            //     *self.get_node_data_mut(&hover_id) = properties;
+            // }
+            self.pending_update.push(UpdateMode::HoverColor(hover_id));
+            let dragable = self.get_node_data(&hover_id).is_dragable();
             if self.cursor.is_dragging(&hover_id) && dragable {
                 self.handle_drag(&hover_id);
             }
@@ -406,23 +420,23 @@ impl Context {
                 callback();
             }
             // FIXME: holly fuck copying the whole struct
-            let mut props = *self.get_node_data(&click_id);
+            let props = self.get_node_data(&click_id);
             self.cursor.click.offset = self.cursor.click.pos - Vector2::<f32>::from(props.pos());
-            if let Some(style_fn) = self.style_fn.get(&click_id) {
-                style_fn(&mut props);
-                *self.get_node_data_mut(&click_id) = props;
-                self.pending_update.push(UpdateMode::ClickColor(click_id));
-            }
+            // if let Some(style_fn) = self.style_fn.get(&click_id) {
+            //     style_fn(&mut props);
+            //     *self.get_node_data_mut(&click_id) = props;
+            // }
+            self.pending_update.push(UpdateMode::ClickColor(click_id));
         }
         if self.cursor.state.action == MouseAction::Released {
             if let Some(hover_id) = self.cursor.hover.curr {
                 // FIXME: holly fuck copying the whole struct
-                let mut props = *self.get_node_data(&hover_id);
-                if let Some(style_fn) = self.style_fn.get(&hover_id) {
-                    style_fn(&mut props);
-                    *self.get_node_data_mut(&hover_id) = props;
-                    self.pending_update.push(UpdateMode::HoverColor(hover_id));
-                }
+                // let mut props = *self.get_node_data(&hover_id);
+                // if let Some(style_fn) = self.style_fn.get(&hover_id) {
+                //     style_fn(&mut props);
+                //     *self.get_node_data_mut(&hover_id) = props;
+                // }
+                self.pending_update.push(UpdateMode::HoverColor(hover_id));
             }
         }
     }

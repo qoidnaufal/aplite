@@ -145,9 +145,9 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
         let mut renderer = Renderer::new(Arc::clone(&window))?;
         if let Some(view_fn) = self.view_fn.take() {
             view_fn(&mut self.cx);
+            self.cx.render(&mut renderer);
             self.cx.layout();
             self.cx.debug_tree();
-            self.cx.render(&mut renderer);
         }
         self.renderer = Some(renderer);
         Ok(())

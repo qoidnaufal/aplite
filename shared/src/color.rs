@@ -17,11 +17,19 @@ impl<T: GpuPrimitive> Rgba<T> {
         Self { inner: Vector4::new(r, g, b, a) }
     }
 
+    #[inline(always)]
     pub const fn to_slice(self) -> [T; 4] { self.inner.slice() }
 
+    #[inline(always)]
     pub const fn r(&self) -> T { self.inner.x() }
+
+    #[inline(always)]
     pub const fn g(&self) -> T { self.inner.y() }
+
+    #[inline(always)]
     pub const fn b(&self) -> T { self.inner.z() }
+
+    #[inline(always)]
     pub const fn a(&self) -> T { self.inner.w() }
 }
 

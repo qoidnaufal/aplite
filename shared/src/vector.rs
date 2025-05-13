@@ -63,6 +63,7 @@ impl<const N: usize, T: GpuPrimitive + NumDebugger> Vector<N, T> {
 impl<const N: usize, T: GpuPrimitive> Vector<N, T> {
     pub const fn slice(self) -> [T; N] { self.inner }
 
+    #[inline(always)]
     pub const fn x(&self) -> T { self.inner[0] }
 
     pub fn set_x(&mut self, x: T) { self.inner[0] = x }
@@ -71,6 +72,7 @@ impl<const N: usize, T: GpuPrimitive> Vector<N, T> {
     pub fn mul_x(&mut self, x: T) { self.inner[0] *= x }
     pub fn div_x(&mut self, x: T) { self.inner[0] /= x }
 
+    #[inline(always)]
     pub const fn y(&self) -> T { self.inner[1] }
 
     pub fn set_y(&mut self, y: T) { self.inner[1] = y }
@@ -113,6 +115,7 @@ impl<T: GpuPrimitive> Vector3<T> {
 }
 
 impl<T: GpuPrimitive> Vector3<T> {
+    #[inline(always)]
     pub const fn z(&self) -> T { self.inner[2] }
 
     pub fn set_z(&mut self, z: T) { self.inner[2] = z }
@@ -133,6 +136,7 @@ impl<T: GpuPrimitive> Vector4<T> {
 }
 
 impl<T: GpuPrimitive> Vector4<T> {
+    #[inline(always)]
     pub const fn z(&self) -> T { self.inner[2] }
 
     pub fn set_z(&mut self, z: T) { self.inner[2] = z }
@@ -141,6 +145,7 @@ impl<T: GpuPrimitive> Vector4<T> {
     pub fn mul_z(&mut self, z: T) { self.inner[2] *= z }
     pub fn div_z(&mut self, z: T) { self.inner[2] /= z }
 
+    #[inline(always)]
     pub const fn w(&self) -> T { self.inner[3] }
 
     pub fn set_w(&mut self, w: T) { self.inner[3] = w }
