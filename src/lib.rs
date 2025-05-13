@@ -1,14 +1,12 @@
+mod app;
+mod color;
 mod context;
-mod cursor;
+mod error;
+mod properties;
+mod reactive;
 mod renderer;
 mod tree;
-
-pub mod app;
-pub mod color;
-pub mod error;
-pub mod reactive;
-pub mod properties;
-pub mod view;
+mod view;
 
 pub mod prelude {
     use crate::error::ApliteError;

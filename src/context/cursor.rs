@@ -62,6 +62,7 @@ pub struct MouseHover {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Cursor {
+    pub ancestor: Option<NodeId>,
     pub hover: MouseHover,
     pub state: MouseState,
     pub click: MouseClick,
@@ -70,6 +71,7 @@ pub struct Cursor {
 impl Default for Cursor {
     fn default() -> Self {
         Self {
+            ancestor: None,
             hover: MouseHover {
                 pos: Vector2::default(),
                 curr: None,

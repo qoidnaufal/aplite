@@ -7,7 +7,6 @@ use winit::event::WindowEvent;
 use winit::application::ApplicationHandler;
 use shared::{Size, Vector2, Rgba};
 
-use crate::cursor::Cursor;
 use crate::prelude::ApliteResult;
 use crate::renderer::gfx::Gfx;
 use crate::renderer::gpu::Gpu;
@@ -86,7 +85,6 @@ impl From<WindowAttributes> for winit::window::WindowAttributes {
 pub struct Aplite<F: FnOnce(&mut Context)> {
     renderer: Option<Renderer>,
     cx: Context,
-    cursor: Cursor,
     window: HashMap<WindowId, Arc<Window>>,
     window_fn: Option<fn(&mut WindowAttributes)>,
     stats: Stats,
@@ -106,7 +104,6 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
         Self {
             renderer: None,
             cx,
-            cursor: Cursor::new(),
             window: HashMap::with_capacity(4),
             window_fn: None,
             stats: Stats::new(),
@@ -255,16 +252,18 @@ impl<F: FnOnce(&mut Context)> ApplicationHandler for Aplite<F> {
                 self.resize(new_size);
             }
             WindowEvent::MouseInput { state: action, button, .. } => {
-                let gfx = &mut self.renderer.as_mut().unwrap().gfx;
-                self.cursor.set_click_state(action.into(), button.into());
-                self.cx.handle_click(&mut self.cursor, gfx);
+                self.cx.cursor.set_click_state(action.into(), button.into());
+                self.cx.handle_click();
             }
             WindowEvent::CursorMoved { position, .. } => {
                 let renderer = self.renderer.as_mut().unwrap();
-                self.cursor.hover.pos = Vector2::new(position.x as _, position.y as _);
+                self.cx.cursor.hover.pos = Vector2::new(position.x as _, position.y as _);
                 if !renderer.gfx.is_empty() {
-                    self.cx.detect_hover(&mut self.cursor);
-                    self.cx.handle_hover(&mut self.cursor);
+                    self.cx.detect_hovered_ancestor();
+                    if self.cx.cursor.ancestor.is_some() {
+                        self.cx.detect_hovered_child();
+                        self.cx.handle_hover();
+                    }
                 }
             }
             _ => {}

@@ -1,7 +1,7 @@
 use shared::{Fraction, Matrix4x4, Size, Vector2, Rgba};
 
 use crate::context::layout::{Alignment, Orientation, Padding};
-use crate::cursor::Cursor;
+use crate::context::cursor::Cursor;
 use crate::renderer::element::{CornerRadius, Shape};
 use crate::renderer::util::RenderComponentSource;
 
@@ -69,12 +69,12 @@ impl Properties {
         self.size.adjust_height(aspect_ratio);
     }
 
-    pub(crate) fn adjust_transform(&mut self, pos: Vector2<f32>, mat: &mut Matrix4x4) {
-        let x = pos.x() / (self.size.width() as f32 / mat[0].x()) * 2.0 - 1.0;
-        let y = 1.0 - pos.y() / (self.size.height() as f32 / mat[1].y()) * 2.0;
-        self.set_position(pos.into());
-        mat.with_translate(x, y);
-    }
+    // pub(crate) fn adjust_transform(&mut self, pos: Vector2<f32>, mat: &mut Matrix4x4) {
+    //     let x = pos.x() / (self.size.width() as f32 / mat[0].x()) * 2.0 - 1.0;
+    //     let y = 1.0 - pos.y() / (self.size.height() as f32 / mat[1].y()) * 2.0;
+    //     self.set_position(pos.into());
+    //     mat.with_translate(x, y);
+    // }
 
     pub(crate) fn is_hovered(&self, cursor: &Cursor) -> bool {
         // FIXME: consider rotation

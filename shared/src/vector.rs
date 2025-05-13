@@ -41,12 +41,10 @@ impl<const N: usize, T: GpuPrimitive + NumDebugger> Vector<N, T> {
             let num = self[n];
             let num_str = if num.is_signed() {
                 format!(" {num:0.3}")
+            } else if num.is_float() {
+                format!("  {num:0.3}")
             } else {
-                if num.is_float() {
-                    format!("  {num:0.3}")
-                } else {
-                    format!(" {num}")
-                }
+                format!(" {num}")
             };
             if n == N-1 {
                 if num.is_float() {

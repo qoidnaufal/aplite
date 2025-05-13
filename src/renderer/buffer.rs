@@ -71,7 +71,7 @@ impl<T> Storage<T> {
     }
 
     #[allow(unused)]
-    pub(crate) fn update<F: Fn(&mut T)>(&mut self, index: usize, f: F) {
+    pub(crate) fn update<F: FnMut(&mut T)>(&mut self, index: usize, mut f: F) {
         f(&mut self.data[index])
     }
 

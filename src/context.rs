@@ -1,34 +1,41 @@
 use std::collections::HashMap;
 
-// use data::Data;
 use shared::{Size, Vector2};
 
+// mod data;
+pub mod layout;
+pub(crate) mod cursor;
+
 use crate::color::Pixel;
-use crate::cursor::{Cursor, MouseAction};
-use crate::renderer::gfx::Gfx;
+use cursor::{Cursor, MouseAction};
 use crate::renderer::util::IntoRenderSource;
 use crate::renderer::Renderer;
 use crate::properties::Properties;
 use crate::tree::{Entity, NodeId, Tree};
-
-// mod data;
-pub mod layout;
 
 use layout::{
     LayoutContext,
     Orientation,
 };
 
+pub(crate) enum UpdateMode {
+    HoverColor(NodeId),
+    ClickColor(NodeId),
+    RevertColor(NodeId),
+    Transform(NodeId),
+}
+
 pub struct Context {
     current: Option<NodeId>,
     pub(crate) tree: Tree<NodeId>,
     pub(crate) debug_name: Vec<Option<&'static str>>,
-    properties: Vec<Properties>,
+    pub(crate) properties: Vec<Properties>,
     pixels: Vec<Pixel<u8>>,
     // pub(crate) data: Data,
     style_fn: HashMap<NodeId, Box<dyn Fn(&mut Properties)>>,
     callbacks: HashMap<NodeId, Box<dyn Fn()>>,
-    pending_update: Vec<NodeId>,
+    pub(crate) cursor: Cursor,
+    pending_update: Vec<UpdateMode>,
 }
 
 impl Default for Context {
@@ -42,6 +49,7 @@ impl Default for Context {
             // data: Data::default(),
             style_fn: HashMap::new(),
             callbacks: HashMap::new(),
+            cursor: Cursor::new(),
             pending_update: Vec::with_capacity(10),
         }
     }
@@ -66,26 +74,25 @@ impl Context {
     fn recursive_print(&self, start: Option<NodeId>, indent: usize) {
         let acc = 3;
         if let Some(current) = start {
-            self.tree.get_all_children(&current)
-                .map(|children| {
-                    children.iter().for_each(|child| {
-                        let data = self.get_node_data(child).pos();
-                        let name = self.debug_name[child.index()];
-                        if self.tree.get_parent(child).is_some_and(|p| self.tree.get_parent(p).is_some()) {
-                            for i in 0..(indent - acc)/acc {
-                                let c = acc - i;
-                                eprint!("{:c$}|", "");
-                            }
-                            let j = acc - 1;
-                            eprintln!("{:j$}╰─ {child:?}: {data:?} | {name:?}", "");
-                        } else {
-                            eprintln!("{:indent$}╰─ {child:?}: {data:?} | {name:?}", "");
+            if let Some(children) = self.tree.get_all_children(&current) {
+                children.iter().for_each(|child| {
+                    let data = self.get_node_data(child).pos();
+                    let name = self.debug_name[child.index()];
+                    if self.tree.get_parent(child).is_some_and(|p| self.tree.get_parent(p).is_some()) {
+                        for i in 0..(indent - acc)/acc {
+                            let c = acc - i;
+                            eprint!("{:c$}|", "");
                         }
-                        if self.tree.get_first_child(child).is_some() {
-                            self.recursive_print(Some(*child), indent + acc);
-                        }
-                    });
+                        let j = acc - 1;
+                        eprintln!("{:j$}╰─ {child:?}: {data:?} | {name:?}", "");
+                    } else {
+                        eprintln!("{:indent$}╰─ {child:?}: {data:?} | {name:?}", "");
+                    }
+                    if self.tree.get_first_child(child).is_some() {
+                        self.recursive_print(Some(*child), indent + acc);
+                    }
                 });
+            }
         } else {
             self.tree.get_all_ancestor()
                 .iter()
@@ -191,18 +198,14 @@ impl Context {
                 self.calculate_size(node_id);
             });
 
-        self.recursive_layout(&NodeId::root());
+        self.recursive_layout(&NodeId::root(), false);
     }
 
-    pub(crate) fn recursive_layout(&mut self, node_id: &NodeId) {
+    pub(crate) fn recursive_layout(&mut self, node_id: &NodeId, from_drag: bool) {
         let children = LayoutContext::new(node_id, self).calculate();
-
-        if node_id != &NodeId::root() {
-            self.pending_update.push(*node_id);
-        }
-
+        if from_drag { self.pending_update.push(UpdateMode::Transform(*node_id)) }
         if let Some(children) = children {
-            children.iter().for_each(|child| self.recursive_layout(child));
+            children.iter().for_each(|child| self.recursive_layout(child, from_drag));
         }
     }
 
@@ -248,6 +251,80 @@ impl Context {
     }
 }
 
+// cursor
+impl Context {
+    pub(crate) fn detect_hovered_ancestor(&mut self) {
+        if let Some(current) = self.cursor.hover.curr.as_ref() {
+            if self.cursor.ancestor.as_ref() == self.tree.get_ancestor(current) {
+                return;
+            }
+        }
+        self.cursor.ancestor = self
+            .tree
+            .get_all_ancestor()
+            .iter().find_map(|ancestor| {
+                if self.get_node_data(ancestor).is_hovered(&self.cursor) {
+                    Some(**ancestor)
+                } else {
+                    None
+                }
+            })
+    }
+
+    fn detect_hover(&self, node_id: &NodeId, acc: &mut Vec<NodeId>) {
+        if let Some(children) = self.tree.get_all_children(node_id) {
+            children
+                .iter()
+                .filter(|child| self.get_node_data(child).is_hovered(&self.cursor))
+                .for_each(|child| {
+                    acc.push(*child);
+                    self.detect_hover(child, acc);
+                });
+        }
+    }
+
+    pub(crate) fn detect_hovered_child(&mut self) {
+        // let start = std::time::Instant::now();
+
+        // FIXME: idk if recursive is the best practice here
+        let hovered = self.cursor.ancestor
+            .map(|ancestor| {
+                let mut sub_children = vec![ancestor];
+                self.detect_hover(&ancestor, &mut sub_children);
+                sub_children
+            })
+            .and_then(|children| {
+                children.iter().filter_map(|node| {
+                    let prop = self.get_node_data(node);
+                    if prop.is_hovered(&self.cursor) {
+                        Some(*node)
+                    } else {
+                        None
+                    }
+                }).max()
+            });
+        // eprintln!("hovered: {hovered:?}");
+
+        // let hovered = self.tree.iter().skip(1).filter_map(|node| {
+        //     let prop = self.get_node_data(node.id());
+        //     if prop.is_hovered(cursor) {
+        //         Some(*node.id())
+        //     } else { None }
+        // }).max();
+
+        // eprintln!("{:?}", start.elapsed());
+
+        if let Some(id) = hovered {
+            if self.cursor.click.obj.is_none() {
+                self.cursor.hover.prev = self.cursor.hover.curr;
+                self.cursor.hover.curr = Some(id);
+            }
+        } else {
+            self.cursor.hover.prev = self.cursor.hover.curr.take();
+        }
+    }
+}
+
 // render
 impl Context {
     pub(crate) fn has_changed(&self) -> bool {
@@ -255,128 +332,107 @@ impl Context {
     }
 
     pub(crate) fn submit_update(&mut self, renderer: &mut Renderer) {
-        // let window_size = self.get_window_properties().size();
-        // self.pending_update.iter().for_each(|node_id| {
-        //     let mut prop = *self.get_node_data(node_id);
-        //     if let Some(style_fn) = self.style_fn.get(node_id) {
-        //         style_fn(&mut prop);
-        //     }
-        //     let transform = prop.transform(window_size.into());
-        //     if let Some(color) = prop.hover_color() {
-        //         renderer
-        //             .gfx
-        //             .elements
-        //             .update(node_id.index() - 1, |elem| elem.set_color(color));
-        //     }
-        //     renderer.gfx.transforms.update(node_id.index() - 1, |mat| *mat = transform);
-        // });
+        self.pending_update.iter().for_each(|mode| {
+            match mode {
+                UpdateMode::HoverColor(node_id) => {
+                    if let Some(color) = self.get_node_data(&node_id).hover_color() {
+                        renderer
+                            .gfx
+                            .elements
+                            .update(node_id.index() - 1, |elem| elem.set_color(color));
+                    }
+                },
+                UpdateMode::ClickColor(node_id) => {
+                    if let Some(color) = self.get_node_data(&node_id).click_color() {
+                        renderer
+                            .gfx
+                            .elements
+                            .update(node_id.index() - 1, |elem| elem.set_color(color));
+                    }
+                }
+                UpdateMode::RevertColor(node_id) => {
+                    let color = self.get_node_data(&node_id).fill_color();
+                    renderer
+                        .gfx
+                        .elements
+                        .update(node_id.index() - 1, |elem| elem.set_color(color));
+                },
+                UpdateMode::Transform(node_id) => {
+                    let pos = self.cursor.hover.pos - self.cursor.click.offset;
+                    let prop = self.get_node_data(&node_id);
+                    let size = prop.size();
+                    renderer
+                        .gfx
+                        .transforms
+                        .update(node_id.index() - 1, |mat| {
+                            let x = pos.x() / (size.width() as f32 / mat[0].x()) * 2.0 - 1.0;
+                            let y = 1.0 - pos.y() / (size.height() as f32 / mat[1].y()) * 2.0;
+                            mat.set_translate(x, y);
+                        });
+                },
+            }
+        });
         self.pending_update.clear();
         renderer.update();
     }
 
-    pub(crate) fn detect_hover(&self, cursor: &mut Cursor) {
-        // let start = std::time::Instant::now();
-
-        // let hovered = self.properties.iter().enumerate().skip(1).filter(|(_, prop)| {
-        //     prop.is_dragable()
-        //         || prop.hover_color().is_some()
-        //         || prop.click_color().is_some()
-        // })
-        // .filter(|(_, prop)| prop.is_hovered(cursor))
-        // .map(|(idx, _)| idx).min();
-
-        let hovered = self.tree.iter().skip(1).filter_map(|node| {
-            let prop = self.get_node_data(node.id());
-            if prop.is_hovered(cursor) {
-                Some(node.id())
-            } else { None }
-        }).max();
-
-        // eprintln!("{:?}", start.elapsed());
-        if let Some(id) = hovered {
-            if cursor.click.obj.is_none() {
-                cursor.hover.prev = cursor.hover.curr;
-                cursor.hover.curr = Some(*id);
-            }
-        } else {
-            cursor.hover.prev = cursor.hover.curr.take();
-        }
-    }
-
-    pub(crate) fn handle_hover(&mut self, cursor: &mut Cursor) {
-        if cursor.is_hovering_same_obj() && cursor.click.obj.is_none() {
+    pub(crate) fn handle_hover(&mut self) {
+        if self.cursor.is_hovering_same_obj() && self.cursor.click.obj.is_none() {
             return;
         }
-        if let Some(prev_id) = cursor.hover.prev.take() {
-            let properties = self.get_node_data(&prev_id);
-            if properties.hover_color().is_some() {
-                // let idx = prev_id.index();
-                // gfx.elements.update(idx - 1, |element| element.set_color(properties.fill_color()));
-                self.pending_update.push(prev_id);
+        if let Some(prev_id) = self.cursor.hover.prev.take() {
+            if let Some(style_fn) = self.style_fn.get(&prev_id) {
+                // FIXME: holly fuck copying the whole struct
+                let mut properties = *self.get_node_data(&prev_id);
+                style_fn(&mut properties);
+                *self.get_node_data_mut(&prev_id) = properties;
+                self.pending_update.push(UpdateMode::RevertColor(prev_id));
             }
         }
-        if let Some(hover_id) = cursor.hover.curr.as_ref() {
-            // let idx = hover_id.index();
-            let properties = self.get_node_data(hover_id);
+        if let Some(hover_id) = self.cursor.hover.curr {
+            // FIXME: holly fuck copying the whole struct
+            let mut properties = *self.get_node_data(&hover_id);
+            if let Some(style_fn) = self.style_fn.get(&hover_id) {
+                style_fn(&mut properties);
+                *self.get_node_data_mut(&hover_id) = properties;
+                self.pending_update.push(UpdateMode::HoverColor(hover_id));
+            }
             let dragable = properties.is_dragable();
-            // let hover_color = properties.hover_color();
-            // gfx.elements.update(idx - 1, |element| {
-            //     if let Some(color) = hover_color {
-            //         element.set_color(color);
-            //         self.pending_update.push(*hover_id);
-            //     }
-                if cursor.is_dragging(hover_id) && dragable {
-                    self.handle_drag(
-                        hover_id,
-                        cursor,
-                        // &mut gfx.transforms,
-                    );
-                    self.pending_update.push(*hover_id);
-                    eprintln!("updating drag: {hover_id:?}");
-                }
-            // });
+            if self.cursor.is_dragging(&hover_id) && dragable {
+                self.handle_drag(&hover_id);
+            }
         }
     }
 
-    fn handle_drag(
-        &mut self,
-        hover_id: &NodeId,
-        cursor: &Cursor,
-        // transforms: &mut Buffer<Matrix4x4>,
-    ) {
-        let props = self.get_node_data_mut(hover_id);
-        // transforms.update(hover_id.index() - 1, |transform| {
-        //     let delta = cursor.hover.pos - cursor.click.offset;
-        //     props.adjust_transform(delta, transform);
-        // });
-        self.recursive_layout(hover_id);
+    fn handle_drag(&mut self, hover_id: &NodeId) {
+        let pos = self.cursor.hover.pos - self.cursor.click.offset;
+        self.get_node_data_mut(hover_id).set_position(pos.into());
+        self.recursive_layout(hover_id, true);
     }
 
-    pub(crate) fn handle_click(&mut self, cursor: &mut Cursor, gfx: &mut Gfx) {
-        if let Some(ref click_id) = cursor.click.obj {
-            if let Some(callback) = self.callbacks.get(click_id) {
+    pub(crate) fn handle_click(&mut self) {
+        if let Some(click_id) = self.cursor.click.obj {
+            if let Some(callback) = self.callbacks.get(&click_id) {
                 callback();
             }
-            let idx = click_id.index();
-            let props = self.properties[idx];
-            cursor.click.offset = cursor.click.pos - Vector2::<f32>::from(props.pos());
-            self.pending_update.push(*click_id);
-            // gfx.elements.update(idx - 1, |element| {
-            //     if let Some(color) = props.click_color() {
-            //         element.set_color(color);
-            //     }
-            // });
+            // FIXME: holly fuck copying the whole struct
+            let mut props = *self.get_node_data(&click_id);
+            self.cursor.click.offset = self.cursor.click.pos - Vector2::<f32>::from(props.pos());
+            if let Some(style_fn) = self.style_fn.get(&click_id) {
+                style_fn(&mut props);
+                *self.get_node_data_mut(&click_id) = props;
+                self.pending_update.push(UpdateMode::ClickColor(click_id));
+            }
         }
-        if cursor.state.action == MouseAction::Released {
-            if let Some(ref hover_id) = cursor.hover.curr {
-                let idx = hover_id.index();
-                let props = self.properties[idx];
-                self.pending_update.push(*hover_id);
-                // gfx.elements.update(idx - 1, |element| {
-                //     if let Some(color) = props.hover_color() {
-                //         element.set_color(color);
-                //     }
-                // });
+        if self.cursor.state.action == MouseAction::Released {
+            if let Some(hover_id) = self.cursor.hover.curr {
+                // FIXME: holly fuck copying the whole struct
+                let mut props = *self.get_node_data(&hover_id);
+                if let Some(style_fn) = self.style_fn.get(&hover_id) {
+                    style_fn(&mut props);
+                    *self.get_node_data_mut(&hover_id) = props;
+                    self.pending_update.push(UpdateMode::HoverColor(hover_id));
+                }
             }
         }
     }
