@@ -1,6 +1,32 @@
 use winit::dpi::PhysicalSize;
 
-use super::{gcd, Fraction, GpuPrimitive, NumDebugger, Vector2};
+use super::{Fraction, GpuPrimitive, NumDebugger, Vector2};
+
+fn gcd(a: u32, b: u32) -> u32 {
+    let mut ret = a;
+    let mut rem = b;
+    loop {
+        if rem == 0 { break }
+        let temp = ret;
+        ret = rem;
+        rem = temp / rem;
+    }
+    ret
+}
+
+#[cfg(test)]
+mod gcd_test {
+    use super::gcd;
+
+    #[test]
+    fn test_gcd() {
+        let width = 1920;
+        let height = 1080;
+        let gcd = gcd(width, height);
+        let fraction = [width/gcd, height/gcd];
+        assert_eq!(fraction, [16, 9]);
+    }
+}
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -28,8 +54,10 @@ impl<T: GpuPrimitive> Size<T> {
         Self { inner: Vector2::new(width, height) }
     }
 
+    #[inline(always)]
     pub const fn width(&self) -> T { self.inner.x() }
 
+    #[inline(always)]
     pub const fn height(&self) -> T { self.inner.y() }
 
     pub fn set_width(&mut self, val: T) { self.inner.set_x(val) }
@@ -82,7 +110,7 @@ impl Size<u32> {
     }
 }
 
-// math operation
+// arithmetic operation
 
 impl<T: GpuPrimitive> std::ops::Mul<T> for Size<T> {
     type Output = Self;

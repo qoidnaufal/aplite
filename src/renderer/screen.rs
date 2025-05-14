@@ -29,6 +29,8 @@ impl Screen {
         }
     }
 
+    pub(crate) const fn scaler(&self) -> Size<f32> { self.scaler.data() }
+
     pub(crate) fn write(&mut self, queue: &wgpu::Queue) {
         self.transform.write(queue);
         if !self.initialized {

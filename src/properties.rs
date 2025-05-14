@@ -1,4 +1,4 @@
-use shared::{Fraction, Rgba, Size, Vector2};
+use shared::{Fraction, Rect, Rgba, Size, Vector2};
 
 use crate::context::layout::{Alignment, Orientation, Padding};
 use crate::context::cursor::Cursor;
@@ -22,8 +22,7 @@ impl AspectRatio {
 #[derive(Debug, Clone, Copy)]
 pub struct Properties {
     name: Option<&'static str>,
-    pos: Vector2<u32>,
-    size: Size<u32>,
+    rect: Rect<u32>,
     min_width: Option<u32>,
     min_height: Option<u32>,
     max_width: Option<u32>,
@@ -50,8 +49,7 @@ impl Properties {
     pub(crate) fn window_properties(size: Size<u32>) -> Self {
         Self {
             name: Some("ROOT"),
-            pos: (size / 2).into(),
-            size,
+            rect: Rect::new((size / 2).into(), size),
             min_width: None,
             min_height: None,
             max_width: None,
@@ -79,11 +77,11 @@ impl Properties {
     }
 
     pub(crate) fn adjust_width(&mut self, aspect_ratio: Fraction<u32>) {
-        self.size.adjust_width(aspect_ratio);
+        self.rect.size_mut().adjust_width(aspect_ratio);
     }
 
     pub(crate) fn adjust_height(&mut self, aspect_ratio: Fraction<u32>) {
-        self.size.adjust_height(aspect_ratio);
+        self.rect.size_mut().adjust_height(aspect_ratio);
     }
 
     // pub(crate) fn adjust_transform(&mut self, pos: Vector2<f32>, mat: &mut Matrix4x4) {
@@ -98,14 +96,14 @@ impl Properties {
         // let rotate = Matrix2x2::rotate(self.rotate);
         // let pos: Vector2<f32> = attr.pos.into();
         // let p = rotate * pos;
-        let x = self.pos.x() as f32;
-        let y = self.pos.y() as f32;
+        let x = self.rect.pos().x() as f32;
+        let y = self.rect.pos().y() as f32;
 
         let x_cursor = cursor.hover.pos.x();
         let y_cursor = cursor.hover.pos.y();
 
-        let width = self.size.width() as f32 / 2.0;
-        let height = self.size.height() as f32 / 2.0;
+        let width = self.rect.size().width() as f32 / 2.0;
+        let height = self.rect.size().height() as f32 / 2.0;
 
         // let angled = if self.shape.is_triangle() {
         //     let c_tangen = tan(x_cursor - x, y_cursor - y + height);
@@ -124,8 +122,7 @@ impl Properties {
     pub const fn new() -> Self {
         Self {
             name: None,
-            pos: Vector2::new(0, 0),
-            size: Size::new(0, 0),
+            rect: Rect::new(Vector2::new(0, 0), Size::new(0, 0)),
             min_width: Some(1),
             min_height: Some(1),
             max_width: None,
@@ -265,11 +262,11 @@ impl Properties {
     }
 
     pub fn set_size(&mut self, size: impl Into<Size<u32>>) {
-        self.size = size.into();
+        self.rect.set_size(size.into())
     }
 
     pub fn set_position(&mut self, pos: Vector2<u32>) {
-        self.pos = pos;
+        self.rect.set_pos(pos);
     }
 
     pub fn set_min_width(&mut self, value: u32) {
@@ -345,9 +342,11 @@ impl Properties {
 
     pub(crate) fn orientation(&self) -> Orientation { self.orientation }
 
-    pub(crate) fn pos(&self) -> Vector2<u32> { self.pos }
+    pub(crate) fn rect(&self) -> Rect<u32> { self.rect }
 
-    pub(crate) fn size(&self) -> Size<u32> { self.size }
+    pub(crate) fn pos(&self) -> Vector2<u32> { self.rect.pos() }
+
+    pub(crate) fn size(&self) -> Size<u32> { self.rect.size() }
 
     pub(crate) fn min_width(&self) -> Option<u32> { self.min_width }
 
@@ -389,7 +388,7 @@ impl RenderComponentSource for Properties {
 
     fn stroke_color(&self) -> Rgba<f32> { self.stroke_color().into() }
 
-    fn size(&self) -> Size<f32> { self.size.into() }
+    fn size(&self) -> Size<f32> { self.rect.size().into() }
 
     fn corners(&self) -> CornerRadius { self.corners() }
 

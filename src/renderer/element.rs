@@ -124,8 +124,8 @@ impl Element {
         self.fill_color = color.into();
     }
 
-    pub(crate) fn set_size(&mut self, size: Size<f32>) {
-        self.size = size;
+    pub(crate) fn set_size(&mut self, size: Size<u32>) {
+        self.size = size.into();
     }
 }
 

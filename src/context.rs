@@ -1,20 +1,19 @@
 use std::collections::HashMap;
 
-use shared::{Fraction, Size, Vector2};
+use shared::{Size, Vector2};
 
 // mod data;
 // mod callback;
 pub mod layout;
 pub(crate) mod cursor;
 
-use crate::app::DEFAULT_SCREEN_SIZE;
 use crate::image_data::ImageData;
 use crate::renderer::util::Render;
 use crate::renderer::Renderer;
 use crate::properties::{AspectRatio, Properties};
 use crate::tree::{Entity, NodeId, Tree};
 
-use cursor::{Cursor, MouseAction};
+use cursor::{Cursor, MouseAction, MouseButton};
 use layout::{
     LayoutContext,
     Orientation,
@@ -56,6 +55,7 @@ impl Default for Context {
 }
 
 // debug
+#[cfg(feature = "debug_tree")]
 impl Context {
     pub(crate) fn debug_tree(&self) {
         self.print_children_from(NodeId::root());
@@ -106,6 +106,42 @@ impl Context {
                     }
                 });
         }
+    }
+}
+
+// render
+impl Context {
+    pub(crate) fn has_changed(&self) -> bool {
+        !self.pending_update.is_empty()
+    }
+
+    pub(crate) fn submit_update(&mut self, renderer: &mut Renderer) {
+        self.pending_update.iter().for_each(|mode| {
+            match mode {
+                UpdateMode::HoverColor(node_id) => {
+                    if let Some(color) = self.get_node_data(&node_id).hover_color() {
+                        renderer.update_element_color(node_id.index() - 1, color);
+                    }
+                },
+                UpdateMode::ClickColor(node_id) => {
+                    if let Some(color) = self.get_node_data(&node_id).click_color() {
+                        renderer.update_element_color(node_id.index() - 1, color);
+                    }
+                }
+                UpdateMode::RevertColor(node_id) => {
+                    let color = self.get_node_data(&node_id).fill_color();
+                    renderer.update_element_color(node_id.index() - 1, color);
+                },
+                UpdateMode::Transform(node_id) => {
+                    let rect = self.get_node_data(&node_id).rect();
+
+                    renderer.update_element_transform(node_id.index() - 1, rect);
+                    renderer.update_element_size(node_id.index() - 1, rect.size());
+                }
+            }
+        });
+        self.pending_update.clear();
+        renderer.write_data();
     }
 }
 
@@ -204,8 +240,7 @@ impl Context {
         let padding = prop.padding();
         let mut size = prop.size();
 
-        let children = self.tree.get_all_children(node_id);
-        if let Some(children) = children {
+        if let Some(children) = self.tree.get_all_children(node_id) {
             children.iter().for_each(|child_id| {
                 let child_size = self.calculate_size_recursive(child_id);
                 match prop.orientation() {
@@ -231,29 +266,22 @@ impl Context {
             }
         }
 
-        match prop.image_aspect_ratio() {
-            AspectRatio::Defined(tuple) => {
-                let aspect_ratio: Fraction<u32> = tuple.into();
-                if let Some(parent) = self.tree.get_parent(node_id) {
-                    let orientation = self.get_node_data(parent).orientation();
-                    match orientation {
-                        Orientation::Vertical => size.adjust_height(aspect_ratio),
-                        Orientation::Horizontal => size.adjust_width(aspect_ratio),
-                    }
-                } else {
-                    size.adjust_width(aspect_ratio);
+        if let AspectRatio::Defined(tuple) = prop.image_aspect_ratio() {
+            if let Some(parent) = self.tree.get_parent(node_id) {
+                match self.get_node_data(parent).orientation() {
+                    Orientation::Vertical => size.adjust_height(tuple.into()),
+                    Orientation::Horizontal => size.adjust_width(tuple.into()),
                 }
-            },
-            AspectRatio::Source => {},
-            AspectRatio::Undefined => {},
+            } else {
+                size.adjust_width(tuple.into());
+            }
         }
 
         let final_size = size
             .max(prop.min_width(), prop.min_height())
             .min(prop.max_width(), prop.max_height());
 
-        let properties = self.get_node_data_mut(node_id);
-        properties.set_size(final_size);
+        self.get_node_data_mut(node_id).set_size(final_size);
         final_size
     }
 }
@@ -262,9 +290,7 @@ impl Context {
 impl Context {
     pub(crate) fn detect_hovered_ancestor(&mut self) {
         if let Some(current) = self.cursor.hover.curr.as_ref() {
-            if self.cursor.ancestor.as_ref() == self.tree.get_ancestor(current) {
-                return;
-            }
+            if self.cursor.ancestor.as_ref() == self.tree.get_ancestor(current) { return }
         }
         self.cursor.ancestor = self
             .tree
@@ -292,7 +318,7 @@ impl Context {
     }
 
     pub(crate) fn detect_hovered_child(&mut self) {
-        // let start = std::time::Instant::now();
+        #[cfg(feature = "stats")] let start = std::time::Instant::now();
 
         // FIXME: idk if recursive is the best practice here
         let hovered = self.cursor.ancestor
@@ -311,7 +337,6 @@ impl Context {
                     }
                 }).max()
             });
-        // eprintln!("hovered: {hovered:?}");
 
         // let hovered = self.tree.iter().skip(1).filter_map(|node| {
         //     let prop = self.get_node_data(node.id());
@@ -320,7 +345,7 @@ impl Context {
         //     } else { None }
         // }).max();
 
-        // eprintln!("{:?}", start.elapsed());
+        #[cfg(feature = "stats")] eprint!("{:?}\r", start.elapsed());
 
         if let Some(id) = hovered {
             if self.cursor.click.obj.is_none() {
@@ -333,89 +358,16 @@ impl Context {
     }
 }
 
-// render
+// event handling
 impl Context {
-    pub(crate) fn has_changed(&self) -> bool {
-        !self.pending_update.is_empty()
-    }
-
-    pub(crate) fn submit_update(&mut self, renderer: &mut Renderer) {
-        self.pending_update.iter().for_each(|mode| {
-            match mode {
-                UpdateMode::HoverColor(node_id) => {
-                    if let Some(color) = self.get_node_data(&node_id).hover_color() {
-                        renderer
-                            .gfx
-                            .elements
-                            .update(node_id.index() - 1, |elem| elem.set_color(color));
-                    }
-                },
-                UpdateMode::ClickColor(node_id) => {
-                    if let Some(color) = self.get_node_data(&node_id).click_color() {
-                        renderer
-                            .gfx
-                            .elements
-                            .update(node_id.index() - 1, |elem| elem.set_color(color));
-                    }
-                }
-                UpdateMode::RevertColor(node_id) => {
-                    let color = self.get_node_data(&node_id).fill_color();
-                    renderer
-                        .gfx
-                        .elements
-                        .update(node_id.index() - 1, |elem| elem.set_color(color));
-                },
-                UpdateMode::Transform(node_id) => {
-                    let scaler: Size<f32> = DEFAULT_SCREEN_SIZE.into();
-
-                    let prop = self.get_node_data(&node_id);
-                    let pos: Vector2<f32> = prop.pos().into();
-                    let size: Size<f32> = prop.size().into();
-
-                    renderer
-                        .gfx
-                        .transforms
-                        .update(node_id.index() - 1, |matrix| {
-                            let x = pos.x() / scaler.width() * 2.0 - 1.0;
-                            let y = 1.0 - pos.y() / scaler.height() * 2.0;
-                            let s = size / scaler;
-                            matrix.set_translate(x, y);
-                            matrix.set_scale(s.width(), s.height());
-                        });
-
-                    renderer
-                        .gfx
-                        .elements
-                        .update(node_id.index() - 1, |elem| {
-                            elem.set_size(size);
-                        });
-                }
-            }
-        });
-        self.pending_update.clear();
-        renderer.update();
-    }
-
     pub(crate) fn handle_hover(&mut self) {
         if self.cursor.is_hovering_same_obj() && self.cursor.click.obj.is_none() {
             return;
         }
         if let Some(prev_id) = self.cursor.hover.prev.take() {
-            // if let Some(style_fn) = self.style_fn.get(&prev_id) {
-            //     FIXME: holly fuck copying the whole struct
-            //     let mut properties = *self.get_node_data(&prev_id);
-            //     style_fn(&mut properties);
-            //     *self.get_node_data_mut(&prev_id) = properties;
-            // }
             self.pending_update.push(UpdateMode::RevertColor(prev_id));
         }
         if let Some(hover_id) = self.cursor.hover.curr {
-            // FIXME: holly fuck copying the whole struct
-            // let mut properties = *self.get_node_data(&hover_id);
-            // if let Some(style_fn) = self.style_fn.get(&hover_id) {
-            //     style_fn(&mut properties);
-            //     *self.get_node_data_mut(&hover_id) = properties;
-            // }
             self.pending_update.push(UpdateMode::HoverColor(hover_id));
             let dragable = self.get_node_data(&hover_id).is_dragable();
             if self.cursor.is_dragging(&hover_id) && dragable {
@@ -430,28 +382,18 @@ impl Context {
         self.recursive_layout(hover_id);
     }
 
-    pub(crate) fn handle_click(&mut self) {
+    pub(crate) fn handle_click(&mut self, action: impl Into<MouseAction>, button: impl Into<MouseButton>) {
+        self.cursor.set_click_state(action.into(), button.into());
         if let Some(click_id) = self.cursor.click.obj {
             if let Some(callback) = self.callbacks.get(&click_id) {
                 callback();
             }
-            // FIXME: holly fuck copying the whole struct
             let props = self.get_node_data(&click_id);
             self.cursor.click.offset = self.cursor.click.pos - Vector2::<f32>::from(props.pos());
-            // if let Some(style_fn) = self.style_fn.get(&click_id) {
-            //     style_fn(&mut props);
-            //     *self.get_node_data_mut(&click_id) = props;
-            // }
             self.pending_update.push(UpdateMode::ClickColor(click_id));
         }
         if self.cursor.state.action == MouseAction::Released {
             if let Some(hover_id) = self.cursor.hover.curr {
-                // FIXME: holly fuck copying the whole struct
-                // let mut props = *self.get_node_data(&hover_id);
-                // if let Some(style_fn) = self.style_fn.get(&hover_id) {
-                //     style_fn(&mut props);
-                //     *self.get_node_data_mut(&hover_id) = props;
-                // }
                 self.pending_update.push(UpdateMode::HoverColor(hover_id));
             }
         }

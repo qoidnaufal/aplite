@@ -1,4 +1,4 @@
-use super::util::cast_slice;
+use super::{gfx::Gfx, util::cast_slice};
 
 const INITIAL_CAPACITY: usize = 1024;
 
@@ -81,8 +81,8 @@ impl<T> Storage<T> {
 }
 
 pub(crate) struct Uniform<T: Copy> {
-    pub(crate) buffer: wgpu::Buffer,
-    pub(crate) data: T,
+    buffer: wgpu::Buffer,
+    data: T,
 }
 
 impl<T: Copy> Uniform<T> {
@@ -98,6 +98,8 @@ impl<T: Copy> Uniform<T> {
             data,
         }
     }
+
+    pub(crate) const fn data(&self) -> T { self.data }
 
     pub(crate) fn bind_group_layout_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
         wgpu::BindGroupLayoutEntry {
@@ -125,5 +127,40 @@ impl<T: Copy> Uniform<T> {
 
     pub(crate) fn update(&mut self, f: impl Fn(&mut T)) {
         f(&mut self.data)
+    }
+}
+
+pub(crate) enum MeshBuffer {
+    Uninitialized,
+    Initialized {
+        indices: wgpu::Buffer,
+        vertices: wgpu::Buffer,
+        instances: wgpu::Buffer,
+    }
+}
+
+impl MeshBuffer {
+    pub(crate) fn init(&mut self, gfx: &Gfx, device: &wgpu::Device) {
+        *self = Self::Initialized {
+            indices: gfx.indices(device),
+            vertices: gfx.vertices(device),
+            instances: gfx.instances(device),
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn is_uninit(&self) -> bool {
+        matches!(self, Self::Uninitialized)
+    }
+
+    pub(crate) fn get_buffer(&self) -> Option<(&wgpu::Buffer, &wgpu::Buffer, &wgpu::Buffer)> {
+        match self {
+            MeshBuffer::Uninitialized => None,
+            MeshBuffer::Initialized {
+                indices,
+                vertices,
+                instances
+            } => Some((indices, vertices, instances)),
+        }
     }
 }

@@ -1,51 +1,95 @@
 mod color;
-mod vector;
-mod size;
-mod matrix;
 mod fraction;
+mod matrix;
+mod size;
+mod traits;
+mod vector;
 
+pub use traits::*;
 pub use size::Size;
 pub use matrix::Matrix4x4;
 pub use fraction::Fraction;
 pub use color::Rgba;
+pub use rect::Rect;
 pub use vector::{
     Vector2,
     Vector3,
     Vector4,
 };
 
-pub trait GpuPrimitive where Self:
-    Copy + Clone + PartialEq + PartialOrd + Default
-    + std::ops::Add<Self, Output = Self> + std::ops::AddAssign<Self>
-    + std::ops::Div<Self, Output = Self> + std::ops::DivAssign<Self>
-    + std::ops::Mul<Self, Output = Self> + std::ops::MulAssign<Self>
-    + std::ops::Rem<Self, Output = Self> + std::ops::RemAssign<Self>
-    + std::ops::Sub<Self, Output = Self> + std::ops::SubAssign<Self>
-    + std::fmt::Debug + std::fmt::Display {}
+// pub fn tan(x: f32, y: f32) -> f32 {
+//     (y / x).abs()
+// }
 
-impl GpuPrimitive for u8 {}
-impl GpuPrimitive for u32 {}
-impl GpuPrimitive for f32 {}
+mod rect {
+    use super::{Vector2, Size, GpuPrimitive, NumDebugger};
 
-pub trait NumDebugger: GpuPrimitive {
-    fn is_signed(&self) -> bool { false }
-    fn is_float(&self) -> bool { false }
-}
-
-impl NumDebugger for u8 {}
-impl NumDebugger for u32 {}
-impl NumDebugger for f32 {
-    fn is_signed(&self) -> bool { self.is_sign_negative() }
-    fn is_float(&self) -> bool { true }
-}
-
-pub fn tan(x: f32, y: f32) -> f32 {
-    (y / x).abs()
-}
-
-pub(crate) fn gcd(a: u32, b: u32) -> u32 {
-    if b == 0 {
-        return a;
+    #[derive(Clone, Copy)]
+    pub struct Rect<T: GpuPrimitive> {
+        pos: Vector2<T>,
+        size: Size<T>,
     }
-    gcd(b, a % b)
+
+    impl<T: GpuPrimitive + NumDebugger> std::fmt::Debug for Rect<T> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(
+                f, "Rect {{ x: {}, y: {}, width: {}, height: {} }}",
+                self.pos.x(), self.pos.y(), self.size.width(), self.size.height()
+            )
+        }
+    }
+
+    impl<T: GpuPrimitive> Rect<T> {
+        pub const fn new(pos: Vector2<T>, size: Size<T>) -> Self {
+            Self { pos, size }
+        }
+
+        #[inline(always)]
+        pub const fn pos(&self) -> Vector2<T> { self.pos }
+
+        #[inline(always)]
+        pub const fn size(&self) -> Size<T> { self.size }
+
+        #[inline(always)]
+        pub fn pos_mut(&mut self) -> &mut Vector2<T> { &mut self.pos }
+
+        #[inline(always)]
+        pub fn size_mut(&mut self) -> &mut Size<T> { &mut self.size }
+
+        #[inline(always)]
+        pub fn set_pos(&mut self, pos: Vector2<T>) { self.pos = pos }
+
+        #[inline(always)]
+        pub fn set_size(&mut self, size: Size<T>) { self.size = size }
+
+        #[inline(always)]
+        pub const fn left(&self) -> T { self.pos.x() }
+
+        #[inline(always)]
+        pub fn bottom(&self) -> T { self.pos.x() + self.size.height() }
+
+        #[inline(always)]
+        pub fn right(&self) -> T { self.pos.x() + self.size.width() }
+
+        #[inline(always)]
+        pub const fn top(&self) -> T { self.pos.y() }
+    }
+
+    impl From<Rect<f32>> for Rect<u32> {
+        fn from(value: Rect<f32>) -> Self {
+            Self {
+                pos: value.pos.into(),
+                size: value.size.into(),
+            }
+        }
+    }
+
+    impl From<Rect<u32>> for Rect<f32> {
+        fn from(value: Rect<u32>) -> Self {
+            Self {
+                pos: value.pos.into(),
+                size: value.size.into(),
+            }
+        }
+    }
 }

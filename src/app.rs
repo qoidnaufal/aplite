@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use winit::event_loop::EventLoop;
+use winit::dpi::PhysicalPosition;
+use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
-use winit::event::WindowEvent;
+use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::application::ApplicationHandler;
 use shared::{Size, Vector2, Rgba};
 
@@ -115,9 +116,10 @@ pub struct Aplite<F: FnOnce(&mut Context)> {
     cx: Context,
     window: HashMap<WindowId, Arc<Window>>,
     window_fn: Option<fn(&mut WindowAttributes)>,
+    view_fn: Option<F>,
+
     #[cfg(feature = "stats")]
     stats: stats::Stats,
-    view_fn: Option<F>,
 }
 
 impl<F: FnOnce(&mut Context)> Aplite<F> {
@@ -135,9 +137,10 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
             cx,
             window: HashMap::with_capacity(4),
             window_fn: None,
+            view_fn: None,
+
             #[cfg(feature = "stats")]
             stats: stats::Stats::new(),
-            view_fn: None,
         }
     }
 
@@ -157,8 +160,10 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
         self.cx.update_window_properties(|prop| prop.set_fill_color(color));
         self
     }
+}
 
-    fn initialize_window(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) -> Result<Arc<Window>, ApliteError> {
+impl<F: FnOnce(&mut Context)> Aplite<F> {
+    fn initialize_window(&mut self, event_loop: &ActiveEventLoop) -> Result<Arc<Window>, ApliteError> {
         let mut attributes = WindowAttributes::default();
         if let Some(window_fn) = self.window_fn.take() {
             window_fn(&mut attributes);
@@ -179,7 +184,8 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
             view_fn(&mut self.cx);
             self.cx.render(&mut renderer);
             self.cx.layout();
-            self.cx.debug_tree();
+
+            #[cfg(feature = "debug_tree")] self.cx.debug_tree();
         }
         self.renderer = Some(renderer);
         Ok(())
@@ -189,27 +195,21 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
         self.window.insert(window.id(), window);
     }
 
-    fn request_redraw(&self, window_id: winit::window::WindowId) {
-        if let Some(window) = self.window.get(&window_id) {
-            window.request_redraw();
-        }
-    }
-
     fn resize(&mut self, size: impl Into<Size<u32>>) {
         if let Some(renderer) = self.renderer.as_mut() {
             let size: Size<u32> = size.into();
+            // FIXME: use top_left as (0, 0)
             self.cx.update_window_properties(|wp| {
                 wp.set_size(size);
                 wp.set_position((size / 2).into());
             });
-            // if !renderer.model.is_unitialized() { self.cx.recursive_layout(&NodeId::root()) }
             renderer.resize(size);
         }
     }
 
-    fn update(&mut self) {
-        if let Some(renderer) = self.renderer.as_mut() {
-            self.cx.submit_update(renderer);
+    fn request_redraw(&self, window_id: winit::window::WindowId) {
+        if let Some(window) = self.window.get(&window_id) {
+            window.request_redraw();
         }
     }
 
@@ -219,17 +219,55 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
         }
     }
 
-    fn render(&mut self) -> Result<(), ApliteError> {
+    fn update(&mut self) {
         if let Some(renderer) = self.renderer.as_mut() {
-            renderer.render(self.cx.get_window_properties().fill_color())
-        } else {
-            Err(ApliteError::UnitializedRenderer)
+            self.cx.submit_update(renderer);
+        }
+    }
+
+    fn render(&mut self, event_loop: &ActiveEventLoop) {
+        if self.renderer.is_none() { event_loop.exit() }
+        let renderer = self.renderer.as_mut().unwrap();
+        let size = renderer.window_size();
+        if let Err(err) = renderer.render(self.cx.get_window_properties().fill_color()) {
+            match err {
+                wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost => self.resize(size),
+                wgpu::SurfaceError::OutOfMemory | wgpu::SurfaceError::Other => event_loop.exit(),
+                wgpu::SurfaceError::Timeout => {},
+            }
+        }
+    }
+
+    fn handle_redraw_request(&mut self, event_loop: &ActiveEventLoop) {
+        self.update();
+
+        #[cfg(feature = "stats")] let start = std::time::Instant::now();
+
+        self.render(event_loop);
+
+        #[cfg(feature = "stats")] { self.stats.inc(start.elapsed()) }
+    }
+
+    fn handle_click(&mut self, state: ElementState, button: MouseButton) {
+        self.cx.handle_click(state, button);
+    }
+
+    fn handle_mouse_move(&mut self, pos: PhysicalPosition<f64>) {
+        if self.renderer.is_none() { return }
+        let renderer = self.renderer.as_mut().unwrap();
+        self.cx.cursor.hover.pos = Vector2::new(pos.x as _, pos.y as _);
+        if !renderer.is_empty() {
+            self.cx.detect_hovered_ancestor();
+            if self.cx.cursor.ancestor.is_some() {
+                self.cx.detect_hovered_child();
+                self.cx.handle_hover();
+            }
         }
     }
 }
 
 impl<F: FnOnce(&mut Context)> ApplicationHandler for Aplite<F> {
-    fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if let Ok(window) = self.initialize_window(event_loop) {
             match self.initialize_renderer(Arc::clone(&window)) {
                 Ok(_) => self.add_window(window),
@@ -238,74 +276,20 @@ impl<F: FnOnce(&mut Context)> ApplicationHandler for Aplite<F> {
         } else {
             event_loop.exit();
         }
-
-        // eprintln!("{:?}", self.cx.tree);
-        // eprintln!("current: {:?}", self.cx.current_entity());
     }
 
     fn window_event(
         &mut self,
-        event_loop: &winit::event_loop::ActiveEventLoop,
+        event_loop: &ActiveEventLoop,
         window_id: winit::window::WindowId,
         event: WindowEvent,
     ) {
-        let size = self.renderer.as_ref().unwrap().gpu.size();
         match event {
-            WindowEvent::CloseRequested => {
-                eprintln!();
-                event_loop.exit();
-            }
-            WindowEvent::RedrawRequested => {
-                self.update();
-
-                #[cfg(feature = "stats")]
-                let start = std::time::Instant::now();
-
-                match self.render() {
-                    Ok(_) => {},
-                    Err(ApliteError::SurfaceRendering(surface_err)) => {
-                        match surface_err {
-                            wgpu::SurfaceError::Outdated
-                            | wgpu::SurfaceError::Lost => {
-                                eprintln!("surface lost / outdated");
-                                self.resize(size);
-                            },
-                            wgpu::SurfaceError::OutOfMemory
-                            | wgpu::SurfaceError::Other => {
-                                eprintln!("Out of Memory / other error");
-                                event_loop.exit();
-                            },
-                            wgpu::SurfaceError::Timeout => {
-                                eprintln!("Surface Timeout")
-                            },
-                        }
-                    }
-                    Err(_) => event_loop.exit(),
-                }
-                #[cfg(feature = "stats")]
-                {
-                    let elapsed = start.elapsed();
-                    self.stats.inc(elapsed);
-                }
-            }
-            WindowEvent::Resized(new_size) => {
-                self.resize(new_size);
-            }
-            WindowEvent::MouseInput { state: action, button, .. } => {
-                self.cx.cursor.set_click_state(action.into(), button.into());
-                self.cx.handle_click();
-            }
-            WindowEvent::CursorMoved { position, .. } => {
-                let renderer = self.renderer.as_mut().unwrap();
-                self.cx.cursor.hover.pos = Vector2::new(position.x as _, position.y as _);
-                if !renderer.gfx.is_empty() {
-                    self.cx.detect_hovered_ancestor();
-                    if self.cx.cursor.ancestor.is_some() {
-                        self.cx.detect_hovered_child();
-                        self.cx.handle_hover();
-                    }
-                }
-            }
+            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::RedrawRequested => self.handle_redraw_request(event_loop),
+            WindowEvent::Resized(new_size) => self.resize(new_size),
+            WindowEvent::MouseInput { state, button, .. } => self.handle_click(state, button),
+            WindowEvent::CursorMoved { position, .. } => self.handle_mouse_move(position),
             _ => {}
         }
         self.detect_update(window_id);

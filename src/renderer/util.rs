@@ -119,43 +119,6 @@ impl std::fmt::Debug for Vertices {
 
 // ....................................
 
-pub(crate) enum Model {
-    Uninitialized,
-    Initialized {
-        indices: wgpu::Buffer,
-        vertices: wgpu::Buffer,
-        instances: wgpu::Buffer,
-    }
-}
-
-impl Model {
-    pub(crate) fn init(renderer: &Renderer) -> Self {
-        Self::Initialized {
-            indices: renderer.gfx.indices(&renderer.gpu.device),
-            vertices: renderer.gfx.vertices(&renderer.gpu.device),
-            instances: renderer.gfx.instances(&renderer.gpu.device),
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) fn is_unitialized(&self) -> bool {
-        matches!(self, Self::Uninitialized)
-    }
-
-    pub(crate) fn get_buffer(&self) -> Option<(&wgpu::Buffer, &wgpu::Buffer, &wgpu::Buffer)> {
-        match self {
-            Model::Uninitialized => None,
-            Model::Initialized {
-                indices,
-                vertices,
-                instances
-            } => Some((indices, vertices, instances)),
-        }
-    }
-}
-
-// ....................................
-
 pub(crate) struct Sampler {
     pub(crate) _inner: wgpu::Sampler,
     pub(crate) bind_group: wgpu::BindGroup,

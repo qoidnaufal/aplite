@@ -27,7 +27,7 @@ impl Gfx {
         Self { elements, transforms, bind_group }
     }
 
-    pub(crate) fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+    pub(crate) fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> bool {
         let mut realloc = false;
         realloc |= self.elements.write(device, queue);
         realloc |= self.transforms.write(device, queue);
@@ -38,6 +38,8 @@ impl Gfx {
                 self.transforms.bind_group_entry(1),
             ]);
         }
+
+        realloc
     }
 
     pub(crate) fn indices(&self, device: &wgpu::Device) -> wgpu::Buffer {

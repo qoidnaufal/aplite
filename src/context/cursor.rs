@@ -2,8 +2,6 @@ use shared::Vector2;
 
 use crate::tree::NodeId;
 
-use super::Context;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseAction {
     Pressed,
@@ -120,6 +118,6 @@ impl Cursor {
     }
 
     pub(crate) fn is_hovering_same_obj(&self) -> bool {
-        self.hover.curr == self.hover.prev
+        self.hover.curr == self.hover.prev && self.hover.curr.is_some()
     }
 }
