@@ -40,12 +40,7 @@ impl Renderer {
         // FIXME: use atlas
         let pseudo_texture = TextureData::new(&gpu, &ImageData::from(Rgba::WHITE));
         let sampler = Sampler::new(&gpu.device);
-        let mut screen = Screen::new(&gpu.device, gpu.size().into());
-        screen.write(&gpu.queue);
-        // gfx.write(&gpu.device, &gpu.queue);
-
-        // FIXME: oh shit, what now?
-        let model = Model::Uninitialized;
+        let screen = Screen::new(&gpu.device, gpu.size().into());
 
         let buffer_descriptors = &[Gfx::vertice_desc(), Gfx::instance_desc()];
         let bind_group_layouts = &[
@@ -56,6 +51,7 @@ impl Renderer {
         ];
         let pipeline = create_pipeline(&gpu, buffer_descriptors, bind_group_layouts);
         let textures = vec![];
+        let model = Model::Uninitialized;
 
         Ok(Self {
             gpu,
@@ -166,7 +162,7 @@ pub(crate) struct TextureInfo {
 }
 
 impl Renderer {
-    pub(crate) fn add_texture(&mut self, f: Box<dyn Fn() -> ImageData>) -> TextureInfo {
+    pub(crate) fn add_texture(&mut self, f: &Box<dyn Fn() -> ImageData>) -> TextureInfo {
         let image = f();
         let aspect_ratio = image.aspect_ratio();
         let id = self.textures.len() as i32;
@@ -176,10 +172,8 @@ impl Renderer {
     }
 
     pub(crate) fn add_component(&mut self, rc: &impl RenderComponentSource) {
-        let mut element = rc.element();
+        let element = rc.element().with_transform_id(self.gfx.count() as u32);
         let transform = Matrix4x4::IDENTITY;
-        let transform_id = self.gfx.transforms.len();
-        element.transform_id = transform_id as u32;
 
         self.gfx.elements.push(element);
         self.gfx.transforms.push(transform);

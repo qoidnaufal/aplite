@@ -1,15 +1,15 @@
- use std::{fs::File, io::Read, path::PathBuf};
+ use std::path::Path;
 
 use image::GenericImageView;
 use shared::{Fraction, Size, Rgba};
 
 use crate::renderer::util::TextureDataSource;
 
-pub fn image_reader<P: Into<PathBuf>>(path: P) -> ImageData {
-    let mut file = File::open(path.into()).unwrap();
-    let mut buf = Vec::new();
-    let len = file.read_to_end(&mut buf).unwrap();
-    let image = image::load_from_memory(&buf[..len]).unwrap();
+pub fn image_reader<P: AsRef<Path>>(path: P) -> ImageData {
+    let image = image::ImageReader::open(path)
+        .unwrap()
+        .decode()
+        .unwrap();
 
     ImageData::new(image.dimensions(), &image.to_rgba8())
 }
@@ -51,7 +51,7 @@ impl From<Rgba<u8>> for ImageData {
 }
 
 impl TextureDataSource for ImageData {
-    fn data(&self) -> &[u8] { self }
+    fn data(&self) -> &[u8] { &self.data }
 
-    fn dimensions(&self) -> Size<u32> { self.dimensions }
+    fn dimensions(&self) -> Size<u32> { self.dimensions() }
 }

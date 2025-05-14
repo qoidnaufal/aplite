@@ -1,9 +1,23 @@
-use shared::{Fraction, Matrix4x4, Size, Vector2, Rgba};
+use shared::{Fraction, Rgba, Size, Vector2};
 
 use crate::context::layout::{Alignment, Orientation, Padding};
 use crate::context::cursor::Cursor;
 use crate::renderer::element::{CornerRadius, Shape};
 use crate::renderer::util::RenderComponentSource;
+
+#[derive(Debug, Clone, Copy)]
+pub enum AspectRatio {
+    Defined((u32, u32)),
+    Source,
+    Undefined,
+}
+
+impl AspectRatio {
+    #[inline(always)]
+    pub(crate) fn is_source(&self) -> bool {
+        matches!(self, AspectRatio::Source)
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Properties {
@@ -24,6 +38,7 @@ pub struct Properties {
     stroke_color: Rgba<u8>,
     shape: Shape,
     corners: CornerRadius,
+    image_aspect_ratio: AspectRatio,
     rotation: f32,
     stroke_width: u32,
     texture_id: i32,
@@ -51,6 +66,7 @@ impl Properties {
             stroke_color: Rgba::BLACK,
             shape: Shape::Rect,
             corners: 0.into(),
+            image_aspect_ratio: AspectRatio::Undefined,
             rotation: 0.0,
             stroke_width: 0,
             texture_id: -1,
@@ -66,7 +82,6 @@ impl Properties {
         self.size.adjust_width(aspect_ratio);
     }
 
-    #[allow(unused)]
     pub(crate) fn adjust_height(&mut self, aspect_ratio: Fraction<u32>) {
         self.size.adjust_height(aspect_ratio);
     }
@@ -125,6 +140,7 @@ impl Properties {
             stroke_color: Rgba::WHITE,
             shape: Shape::RoundedRect,
             corners: CornerRadius::new_homogen(25),
+            image_aspect_ratio: AspectRatio::Undefined,
             rotation: 0.0,
             stroke_width: 0,
             texture_id: -1,
@@ -315,6 +331,10 @@ impl Properties {
     pub fn set_dragable(&mut self, value: bool) {
         self.dragable = value
     }
+
+    pub(crate) fn set_image_aspect_ratio(&mut self, aspect_ratio: AspectRatio) {
+        self.image_aspect_ratio = aspect_ratio;
+    }
 }
 
 // getter
@@ -348,6 +368,8 @@ impl Properties {
     pub(crate) fn shape(&self) -> Shape { self.shape }
 
     pub(crate) fn corners(&self) -> CornerRadius { self.corners }
+
+    pub(crate) fn image_aspect_ratio(&self) -> AspectRatio { self.image_aspect_ratio }
 
     pub(crate) fn rotation(&self) -> f32 { self.rotation }
 

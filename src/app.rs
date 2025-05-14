@@ -13,29 +13,59 @@ use crate::renderer::Renderer;
 use crate::context::Context;
 use crate::error::ApliteError;
 
-struct Stats {
-    counter: u32,
-    time: std::time::Duration,
-}
+#[cfg(feature = "stats")]
+mod stats {
+    pub(crate) struct Stats {
+        counter: u32,
+        render_time: std::time::Duration,
+        startup_time: std::time::Duration,
+        longest: std::time::Duration,
+        shortest: std::time::Duration,
+    }
 
-impl Stats {
-    fn new() -> Self {
-        Self {
-            counter: 0,
-            time: std::time::Duration::from_nanos(0),
+    impl Stats {
+        pub(crate) fn new() -> Self {
+            Self {
+                counter: 0,
+                render_time: std::time::Duration::from_nanos(0),
+                startup_time: std::time::Duration::from_nanos(0),
+                longest: std::time::Duration::from_nanos(0),
+                shortest: std::time::Duration::from_nanos(0),
+            }
+        }
+
+        pub(crate) fn inc(&mut self, d: std::time::Duration) {
+            if self.counter == 0 {
+                self.startup_time += d;
+            } else if self.counter == 1 {
+                self.longest = self.longest.max(d);
+                self.shortest = d;
+                self.render_time += d;
+            } else {
+                self.longest = self.longest.max(d);
+                self.shortest = self.shortest.min(d);
+                self.render_time += d;
+            }
+            self.counter += 1;
         }
     }
 
-    fn inc(&mut self, d: std::time::Duration) {
-        self.time += d;
-        self.counter += 1;
-    }
-}
-
-impl Drop for Stats {
-    fn drop(&mut self) {
-        let avg = self.time / self.counter;
-        println!("average render time: {avg:?}");
+    impl Drop for Stats {
+        fn drop(&mut self) {
+            if self.counter == 1 {
+                let startup = self.startup_time;
+                eprintln!("startup time: {startup:?}");
+            } else {
+                let counter = self.counter - 1;
+                let startup = self.startup_time;
+                let render = self.render_time / counter;
+                eprintln!("startup:             {startup:?}");
+                eprintln!("average:             {render:?}");
+                eprintln!("longest:             {:?}", self.longest);
+                eprintln!("shortest:            {:?}", self.shortest);
+                eprintln!("render amount:       {counter}");
+            }
+        }
     }
 }
 
@@ -85,7 +115,8 @@ pub struct Aplite<F: FnOnce(&mut Context)> {
     cx: Context,
     window: HashMap<WindowId, Arc<Window>>,
     window_fn: Option<fn(&mut WindowAttributes)>,
-    stats: Stats,
+    #[cfg(feature = "stats")]
+    stats: stats::Stats,
     view_fn: Option<F>,
 }
 
@@ -104,7 +135,8 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
             cx,
             window: HashMap::with_capacity(4),
             window_fn: None,
-            stats: Stats::new(),
+            #[cfg(feature = "stats")]
+            stats: stats::Stats::new(),
             view_fn: None,
         }
     }
@@ -226,7 +258,9 @@ impl<F: FnOnce(&mut Context)> ApplicationHandler for Aplite<F> {
             WindowEvent::RedrawRequested => {
                 self.update();
 
+                #[cfg(feature = "stats")]
                 let start = std::time::Instant::now();
+
                 match self.render() {
                     Ok(_) => {},
                     Err(ApliteError::SurfaceRendering(surface_err)) => {
@@ -248,8 +282,11 @@ impl<F: FnOnce(&mut Context)> ApplicationHandler for Aplite<F> {
                     }
                     Err(_) => event_loop.exit(),
                 }
-                let elapsed = start.elapsed();
-                self.stats.inc(elapsed);
+                #[cfg(feature = "stats")]
+                {
+                    let elapsed = start.elapsed();
+                    self.stats.inc(elapsed);
+                }
             }
             WindowEvent::Resized(new_size) => {
                 self.resize(new_size);

@@ -88,7 +88,7 @@ pub(crate) struct Element {
     rotation: f32,
     stroke_width: f32,
     pub(crate) texture_id: i32,
-    pub(crate) transform_id: u32,
+    transform_id: u32,
 }
 
 impl Element {
@@ -115,28 +115,10 @@ impl Element {
         }
     }
 
-    // pub(crate) fn update(&mut self, rcs: impl RenderComponentSource) {
-    //     self.fill_color =  rcs.fill_color();
-    //     self.stroke_color =  rcs.stroke_color();
-    //     self.corners =  rcs.corners();
-    //     self.shape =  rcs.shape();
-    //     self.rotation =  rcs.rotation();
-    //     self.stroke_width =  rcs.stroke_width();
-    // }
-
-    // pub(crate) fn indices<'a>(&self) -> Indices<'a> {
-    //     Indices::from(Shape::from(self.shape))
-    // }
-
-    // pub fn color(&self) -> Rgba<u8> {
-    //     self.fill_color.into()
-    // }
-
-    // pub fn update_color<F: FnOnce(&mut Rgba<u8>)>(&mut self, f: F) {
-    //     let mut rgba = self.fill_color.into();
-    //     f(&mut rgba);
-    //     self.fill_color = rgba.into();
-    // }
+    pub(crate) fn with_transform_id(mut self, id: u32) -> Self {
+        self.transform_id = id;
+        self
+    }
 
     pub(crate) fn set_color(&mut self, color: Rgba<u8>) {
         self.fill_color = color.into();

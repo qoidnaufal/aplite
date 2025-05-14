@@ -21,6 +21,15 @@ impl<T: GpuPrimitive> Fraction<T> {
     }
 }
 
+impl<T: GpuPrimitive> From<(T, T)> for Fraction<T> {
+    fn from(value: (T, T)) -> Self {
+        Self {
+            numerator: value.0,
+            denominator: value.1,
+        }
+    }
+}
+
 impl<T: GpuPrimitive> std::ops::Mul<Size<T>> for Fraction<T> {
     type Output = Size<T>;
     fn mul(self, rhs: Size<T>) -> Self::Output {

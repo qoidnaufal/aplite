@@ -3,6 +3,7 @@ use shared::Rgba;
 use crate::{image_data::ImageData, properties::Properties};
 use crate::context::Context;
 use crate::renderer::element::Shape;
+use crate::properties::AspectRatio;
 
 use super::{IntoView, View};
 
@@ -28,6 +29,11 @@ impl Image {
 impl View<'_, Image> {
     fn add_data<F: Fn() -> ImageData + 'static>(self, image_fn: F) -> Self {
         self.cx.add_image(self.id(), image_fn);
+        self
+    }
+
+    pub fn with_aspect_ratio(self, aspect_ratio: AspectRatio) -> Self {
+        self.cx.get_node_data_mut(&self.id()).set_image_aspect_ratio(aspect_ratio);
         self
     }
 }

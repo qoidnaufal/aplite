@@ -13,8 +13,9 @@ pub mod prelude {
 
     pub use shared::Rgba;
     pub use crate::app::Aplite;
-    pub use crate::image_data::image_reader;
     pub use crate::context::Context;
+    pub use crate::properties::AspectRatio;
+    pub use crate::image_data::image_reader;
     pub use crate::reactive::{arc_signal, signal, Get, Set};
     pub use crate::renderer::element::Shape;
     pub use crate::context::layout::{

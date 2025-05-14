@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use shared::{Size, Vector2};
+use shared::{Fraction, Size, Vector2};
 
 // mod data;
 // mod callback;
@@ -11,7 +11,7 @@ use crate::app::DEFAULT_SCREEN_SIZE;
 use crate::image_data::ImageData;
 use crate::renderer::util::Render;
 use crate::renderer::Renderer;
-use crate::properties::Properties;
+use crate::properties::{AspectRatio, Properties};
 use crate::tree::{Entity, NodeId, Tree};
 
 use cursor::{Cursor, MouseAction};
@@ -62,7 +62,7 @@ impl Context {
     }
 
     pub(crate) fn print_children_from(&self, start: NodeId) {
-        eprintln!(" > {start:?}: {:?}", self.get_window_properties().name());
+        eprintln!(" > {start:?}: {:?}", self.get_window_properties().name().unwrap_or_default());
         if start == NodeId::root() {
             self.recursive_print(None, 0);
         } else {
@@ -77,16 +77,16 @@ impl Context {
                 children.iter().for_each(|child| {
                     let prop = self.get_node_data(child);
                     let data = prop.size();
-                    let name = prop.name();
+                    let name = prop.name().unwrap_or_default();
                     if self.tree.get_parent(child).is_some_and(|p| self.tree.get_parent(p).is_some()) {
                         for i in 0..(indent - acc)/acc {
                             let c = acc - i;
                             eprint!("{:c$}|", "");
                         }
                         let j = acc - 1;
-                        eprintln!("{:j$}╰─ {child:?}: {data:?} | {name:?}", "");
+                        eprintln!("{:j$}╰─ {child:?}: {name:?} | {data:?}", "");
                     } else {
-                        eprintln!("{:indent$}╰─ {child:?}: {data:?} | {name:?}", "");
+                        eprintln!("{:indent$}╰─ {child:?}: {name:?} | {data:?}", "");
                     }
                     if self.tree.get_first_child(child).is_some() {
                         self.recursive_print(Some(*child), indent + acc);
@@ -99,8 +99,8 @@ impl Context {
                 .for_each(|node| {
                     let prop = self.get_node_data(*node);
                     let data = prop.size();
-                    let name = prop.name();
-                    eprintln!(" > {node:?}: {data:?} | {name:?}");
+                    let name = prop.name().unwrap_or_default();
+                    eprintln!(" > {node:?}: {name:?} | {data:?}");
                     if self.tree.get_first_child(node).is_some() {
                         self.recursive_print(Some(**node), indent + acc);
                     }
@@ -231,6 +231,23 @@ impl Context {
             }
         }
 
+        match prop.image_aspect_ratio() {
+            AspectRatio::Defined(tuple) => {
+                let aspect_ratio: Fraction<u32> = tuple.into();
+                if let Some(parent) = self.tree.get_parent(node_id) {
+                    let orientation = self.get_node_data(parent).orientation();
+                    match orientation {
+                        Orientation::Vertical => size.adjust_height(aspect_ratio),
+                        Orientation::Horizontal => size.adjust_width(aspect_ratio),
+                    }
+                } else {
+                    size.adjust_width(aspect_ratio);
+                }
+            },
+            AspectRatio::Source => {},
+            AspectRatio::Undefined => {},
+        }
+
         let final_size = size
             .max(prop.min_width(), prop.min_height())
             .min(prop.max_width(), prop.max_height());
@@ -349,7 +366,6 @@ impl Context {
                         .update(node_id.index() - 1, |elem| elem.set_color(color));
                 },
                 UpdateMode::Transform(node_id) => {
-                    let window_size: Size<f32> = renderer.gpu.size().into();
                     let scaler: Size<f32> = DEFAULT_SCREEN_SIZE.into();
 
                     let prop = self.get_node_data(&node_id);
@@ -362,7 +378,7 @@ impl Context {
                         .update(node_id.index() - 1, |matrix| {
                             let x = pos.x() / scaler.width() * 2.0 - 1.0;
                             let y = 1.0 - pos.y() / scaler.height() * 2.0;
-                            let s = size / window_size;
+                            let s = size / scaler;
                             matrix.set_translate(x, y);
                             matrix.set_scale(s.width(), s.height());
                         });
@@ -446,18 +462,27 @@ impl Render for Context {
     fn render(&mut self, renderer: &mut Renderer) {
         let nodes = self.tree.iter().skip(1).map(|node| *node.id()).collect::<Vec<_>>();
         nodes.iter().for_each(|node_id| {
-            let texture_info = if let Some(image_fn) = self.image_fn.remove(node_id) {
-                let texture_info = renderer.add_texture(image_fn);
-                Some(texture_info)
-            } else { None };
-
-            let prop = self.get_node_data_mut(node_id);
-
-            if let Some(info) = texture_info {
+            if let Some(image_fn) = self.image_fn.get(node_id) {
+                let parent_orientation = self
+                    .tree
+                    .get_parent(node_id)
+                    .map(|parent| self.get_node_data(&parent).orientation());
+                let info = renderer.add_texture(image_fn);
+                let prop = self.get_node_data_mut(node_id);
                 prop.set_texture_id(info.id);
-                // FIXME: recalculate size
-                prop.adjust_width(info.aspect_ratio);
+                if prop.image_aspect_ratio().is_source() {
+                    if let Some(orientation) = parent_orientation {
+                        match orientation {
+                            Orientation::Vertical => prop.adjust_height(info.aspect_ratio),
+                            Orientation::Horizontal => prop.adjust_width(info.aspect_ratio),
+                        }
+                    } else {
+                        prop.adjust_width(info.aspect_ratio);
+                    }
+                }
             }
+
+            let prop = self.get_node_data(node_id);
             renderer.add_component(prop);
         });
     }
