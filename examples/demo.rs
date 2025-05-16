@@ -26,7 +26,7 @@ fn root(cx: &mut Context) {
         });
     }).style(|style| {
         style.set_shape(Shape::RoundedRect);
-        style.set_corners(|corner| corner.set_each(30));
+        style.set_corners(|corner| corner.set_each(10));
         style.set_fill_color(Rgba::DARK_GRAY);
         style.set_stroke_color(Rgba::LIGHT_GRAY);
         style.set_stroke_width(5);
@@ -46,10 +46,10 @@ fn root(cx: &mut Context) {
                 .style(|style| {
                     style.set_hover_color(Rgba::BLUE);
                     style.set_click_color(Rgba::GREEN);
-                    style.set_stroke_width(10);
+                    style.set_stroke_width(2);
                     style.set_corners(|corners| {
-                        corners.set_top_left(40);
-                        corners.set_bot_left(40);
+                        corners.set_top_left(80);
+                        corners.set_bot_left(80);
                         corners.set_bot_right(0);
                         corners.set_top_right(0);
                     });
@@ -60,43 +60,42 @@ fn root(cx: &mut Context) {
                     style.set_fill_color(Rgba::GREEN);
                     style.set_hover_color(Rgba::WHITE);
                     style.set_click_color(Rgba::RED);
-                    style.set_stroke_width(5);
-                    style.set_corners(|r| r.set_each(25));
+                    style.set_stroke_width(2);
+                    style.set_corners(|r| r.set_each(50));
                 })
                 .on_click(dec);
             Button::new(cx)
                 .style(|style| {
                     style.set_fill_color(Rgba::BLUE);
                     style.set_hover_color(Rgba::YELLOW);
-                    style.set_stroke_width(5);
+                    style.set_stroke_width(2);
                     style.set_corners(|corners| {
                         corners.set_top_left(0);
-                        corners.set_bot_left(30);
+                        corners.set_bot_left(69);
                         corners.set_bot_right(0);
-                        corners.set_top_right(30);
+                        corners.set_top_right(69);
                     });
                 });
             Button::new(cx)
                 .style(|style| {
-                    style.set_corners(|corners| corners.set_each(50));
                     style.set_fill_color(Rgba::YELLOW);
                 });
         }).style(|style| {
             style.set_dragable(true);
             style.set_fill_color(Rgba::DARK_GREEN);
-            style.set_min_width(1000);
+            style.set_min_width(400);
             style.set_alignment(|align| {
                 align.set_h(HAlign::Left);
                 align.set_v(VAlign::Bottom);
             });
-            style.set_padding(|padding| padding.set_all(20));
-            style.set_spacing(10);
+            style.set_padding(|padding| padding.set_all(10));
+            style.set_spacing(5);
         });
 
         TestCircleWidget::new(cx)
             .style(|style| {
                 style.set_hover_color(Rgba::GREEN);
-                style.set_stroke_width(10);
+                style.set_stroke_width(3);
                 style.set_fill_color(Rgba::BLACK);
                 style.set_stroke_color(Rgba::RED);
             });
@@ -107,7 +106,7 @@ fn root(cx: &mut Context) {
         style.set_padding(|padding| {
             padding.set_all(30);
         });
-        style.set_spacing(30);
+        style.set_spacing(5);
     });
 
     TestCircleWidget::new(cx)
@@ -130,10 +129,10 @@ fn dummy(cx: &mut Context) {
 
     Button::new(cx)
         .style(|style| {
-            style.set_size((500, 200));
+            style.set_size((200, 69));
             style.set_stroke_color(Rgba::WHITE);
-            style.set_stroke_width(10);
-            style.set_corners(|r| r.set_each(40));
+            style.set_stroke_width(6);
+            style.set_corners(|r| r.set_each(47));
             style.set_dragable(true);
         })
         .on_click(click);

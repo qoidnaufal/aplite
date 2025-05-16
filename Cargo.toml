@@ -11,7 +11,8 @@ shared.workspace = true
 pollster.workspace = true
 winit.workspace = true
 wgpu.workspace = true
-image = { version = "0.25.5", features = ["png", "jpeg"] }
+image = { version = "0.25.6", features = ["rayon"] }
+fast_image_resize = { version = "5.1.3", features = ["rayon"] }
 
 [workspace.dependencies]
 wgpu = "25.0.0"

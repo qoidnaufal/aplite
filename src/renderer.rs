@@ -41,16 +41,16 @@ impl Renderer {
         // FIXME: use atlas
         let pseudo_texture = TextureData::new(&gpu, &ImageData::from(Rgba::WHITE));
         let sampler = Sampler::new(&gpu.device);
-        let screen = Screen::new(&gpu.device, gpu.size().into());
+        let screen = Screen::new(&gpu.device, gpu.size().into(), window.scale_factor());
 
-        let buffer_descriptors = &[Gfx::vertice_desc(), Gfx::instance_desc()];
-        let bind_group_layouts = &[
+        let buffers = &[Gfx::vertice_desc(), Gfx::instance_desc()];
+        let layouts = &[
             &Screen::bind_group_layout(&gpu.device),
             &Gfx::bind_group_layout(&gpu.device),
             &TextureData::bind_group_layout(&gpu.device),
             &Sampler::bind_group_layout(&gpu.device),
         ];
-        let pipeline = create_pipeline(&gpu, buffer_descriptors, bind_group_layouts);
+        let pipeline = create_pipeline(&gpu, buffers, layouts);
         let textures = vec![];
         let mesh = MeshBuffer::Uninitialized;
 
@@ -68,7 +68,14 @@ impl Renderer {
 
     pub(crate) fn is_empty(&self) -> bool { self.gfx.is_empty() }
 
-    pub(crate) fn window_size(&self) -> Size<u32> { self.gpu.size() }
+    pub(crate) const fn scale_factor(&self) -> f64 { self.screen.scale_factor }
+
+    pub(crate) fn set_scale_factor(&mut self, scale_factor: f64) {
+        self.screen.scale_factor = scale_factor;
+    }
+
+    /// this one corresponds to [`winit::dpi::LogicalSize<u32>`]
+    pub(crate) fn surface_size(&self) -> Size<u32> { self.gpu.size() }
 
     pub(crate) fn resize(&mut self, new_size: Size<u32>) {
         let ss = self.screen.initial_size();
@@ -76,9 +83,7 @@ impl Renderer {
         let s = ss / ns;
 
         if new_size.width() > 0 && new_size.height() > 0 {
-            self.gpu.config.width = new_size.width();
-            self.gpu.config.height = new_size.height();
-            self.gpu.configure();
+            self.gpu.reconfigure_size(new_size);
         }
 
         // FIXME: is it necessary to have a dummy root widget?
@@ -101,8 +106,8 @@ impl Renderer {
         if self.mesh.is_uninit() || realloc { self.mesh.init(&self.gfx, &self.gpu.device) }
     }
 
-    pub(crate) fn render(&mut self, color: Rgba<u8>) -> Result<(), wgpu::SurfaceError> {
-        let output = self.gpu.surface.get_current_texture()?;
+    pub(crate) fn submit_buffer(&mut self, color: Rgba<u8>) -> Result<(), wgpu::SurfaceError> {
+        let output = self.gpu.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
             .gpu
@@ -171,7 +176,7 @@ impl Renderer {
     }
 
     pub(crate) fn update_element_transform(&mut self, index: usize, rect: Rect<u32>) {
-        let scaler = self.screen.scaler();
+        let scaler = self.screen.initial_size();
         let size: Size<f32> = rect.size().into();
         self.gfx.transforms.update(index, |matrix| {
             let x = rect.pos().x() as f32 / scaler.width() * 2.0 - 1.0;

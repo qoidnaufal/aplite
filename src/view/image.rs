@@ -18,7 +18,7 @@ pub struct Image {
 impl Image {
     pub fn new<F: Fn() -> ImageData + 'static>(cx: &mut Context, f: F) -> View<Self> {
         let properties = Properties::new()
-            .with_size((300, 300))
+            .with_size((100, 100))
             .with_shape(Shape::Rect)
             .with_fill_color(Rgba::WHITE)
             .with_textured(true);

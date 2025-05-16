@@ -57,7 +57,7 @@ impl TextureData {
         })
     }
 
-    // FIXME: integrate this
+    // FIXME: integrate this, or better, create atlas & dynamic texture
     pub(crate) fn _update_texture(&mut self, gpu: &Gpu, td: &impl TextureDataSource) {
         let size = td.dimensions();
         if size.width() > self.texture.width() || size.height() > self.texture.height() {
@@ -66,6 +66,7 @@ impl TextureData {
         self.submit_texture(&gpu.queue, td);
     }
 
+    #[inline(always)]
     fn create_texture(device: &wgpu::Device, size: Size<u32>) -> wgpu::Texture {
         device.create_texture(&wgpu::TextureDescriptor {
             label: Some("texture"),

@@ -13,7 +13,7 @@ pub struct Button {
 impl Button {
     pub fn new(cx: &mut Context) -> View<Self> {
         let properties = Properties::new()
-            .with_size((200, 50))
+            .with_size((80, 30))
             .with_fill_color(Rgba::RED);
         Self { properties }.into_view(cx, |_| {})
     }

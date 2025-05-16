@@ -22,7 +22,8 @@ fn backend() -> wgpu::Backends {
 
 impl Gpu {
     pub(crate) fn new(window: Arc<Window>) -> Result<Self, ApliteError> {
-        let size = window.inner_size();
+        let scale_factor = window.scale_factor();
+        let size = window.inner_size().to_logical(scale_factor);
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: backend(),
             ..Default::default()
@@ -66,13 +67,28 @@ impl Gpu {
             device,
             queue,
             config,
+            // scale_factor,
         })
     }
 
+    pub(crate) fn reconfigure_size(&mut self, size: Size<u32>) {
+        self.config.width = size.width();
+        self.config.height = size.height();
+        self.configure();
+    }
+
+    #[inline(always)]
+    pub(crate) fn get_current_texture(&self) -> Result<wgpu::SurfaceTexture, wgpu::SurfaceError> {
+        self.surface.get_current_texture()
+    }
+
+    #[inline(always)]
     pub(crate) fn configure(&self) {
         self.surface.configure(&self.device, &self.config);
     }
 
+    /// this one uses [`winit::dpi::LogicalSize<u32>`]
+    #[inline(always)]
     pub(crate) fn size(&self) -> Size<u32> {
         Size::new(self.config.width, self.config.height)
     }

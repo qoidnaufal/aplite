@@ -1,4 +1,4 @@
-use shared::{Rgba, Size, Vector2};
+use shared::{Rect, Rgba, Size, Vector2};
 
 use super::shader::SHADER;
 use super::gpu::Gpu;
@@ -8,7 +8,8 @@ use super::Renderer;
 pub(crate) trait RenderComponentSource {
     fn fill_color(&self) -> Rgba<f32>;
     fn stroke_color(&self) -> Rgba<f32>;
-    fn size(&self) -> Size<f32>;
+    // FIXME: do something with the .pos() method, idk what
+    fn rect(&self) -> Rect<f32>;
     fn corners(&self) -> CornerRadius;
     fn shape(&self) -> Shape;
     fn rotation(&self) -> f32;
@@ -20,7 +21,7 @@ pub(crate) trait RenderComponentSource {
             self.fill_color(),
             self.stroke_color(),
             self.corners(),
-            self.size(),
+            self.rect(),
             self.shape(),
             self.rotation(),
             self.stroke_width(),

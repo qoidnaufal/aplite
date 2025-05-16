@@ -69,7 +69,7 @@ pub struct TestCircleWidget {
 impl TestCircleWidget {
     pub fn new(cx: &mut Context) -> View<Self> {
         let properties = Properties::new()
-            .with_size((300, 300))
+            .with_size((100, 100))
             .with_shape(Shape::Circle)
             .with_fill_color(Rgba::RED);
         Self { properties }.into_view(cx, |_| {})

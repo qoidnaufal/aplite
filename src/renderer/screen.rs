@@ -1,21 +1,20 @@
 use shared::{Matrix4x4, Size};
 
-use crate::app::DEFAULT_SCREEN_SIZE;
-
 use super::buffer::Uniform;
 
 pub(crate) struct Screen {
     transform: Uniform<Matrix4x4>,
     scaler: Uniform<Size<f32>>,
     pub(crate) bind_group: wgpu::BindGroup,
-    initial_size: Size<f32>,
+    pub(crate) scale_factor: f64,
     initialized: bool,
+    is_resized: bool,
 }
 
 impl Screen {
-    pub(crate) fn new(device: &wgpu::Device, initial_size: Size<f32>) -> Self {
+    pub(crate) fn new(device: &wgpu::Device, initial_size: Size<f32>, scale_factor: f64) -> Self {
         let transform = Uniform::new(device, Matrix4x4::IDENTITY, "screen transform");
-        let scaler = Uniform::new(device, DEFAULT_SCREEN_SIZE.into(), "screen scaler");
+        let scaler = Uniform::new(device, initial_size, "screen scaler");
         let bind_group = Self::bind_group(device, &[
             transform.bind_group_entry(0),
             scaler.bind_group_entry(1)
@@ -24,27 +23,26 @@ impl Screen {
             scaler,
             transform,
             bind_group,
-            initial_size,
+            scale_factor,
             initialized: false,
+            is_resized: true,
         }
     }
 
-    pub(crate) const fn scaler(&self) -> Size<f32> { self.scaler.data() }
-
     pub(crate) fn write(&mut self, queue: &wgpu::Queue) {
-        self.transform.write(queue);
-        if !self.initialized {
-            self.scaler.write(queue);
-        }
+        if self.is_resized { self.transform.write(queue) }
+        if !self.initialized { self.scaler.write(queue) }
         self.initialized = true;
+        self.is_resized = false;
     }
 
     pub(crate) fn initial_size(&self) -> Size<f32> {
-        self.initial_size
+        self.scaler.data()
     }
 
     pub(crate) fn update_transform<F: Fn(&mut Matrix4x4)>(&mut self, f: F) {
         self.transform.update(f);
+        self.is_resized = true;
     }
 
     pub(crate) fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {

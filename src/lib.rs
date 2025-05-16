@@ -41,4 +41,6 @@ pub mod prelude {
     };
 
     pub type ApliteResult = Result<(), ApliteError>;
+
+    pub use winit::window::Fullscreen;
 }

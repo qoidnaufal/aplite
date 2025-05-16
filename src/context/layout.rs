@@ -1,4 +1,4 @@
-use shared::{Size, Vector2};
+use shared::{Rect, Vector2};
 
 use crate::context::Context;
 use crate::properties::Properties;
@@ -93,8 +93,7 @@ impl Padding {
 
 #[derive(Debug)]
 pub(crate) struct Rules {
-    position: Vector2<u32>,
-    size: Size<u32>,
+    rect: Rect<u32>,
     orientation: Orientation,
     alignment: Alignment,
     padding: Padding,
@@ -104,8 +103,7 @@ pub(crate) struct Rules {
 impl Rules {
     pub(crate) fn new(prop: &Properties) -> Self {
         Self {
-            position: prop.pos(),
-            size: prop.size(),
+            rect: prop.rect(),
             orientation: prop.orientation(),
             alignment: prop.alignment(),
             padding: prop.padding(),
@@ -125,15 +123,15 @@ impl Rules {
         let pr = self.padding.right();
 
         match self.alignment.h_align {
-            HAlign::Left => self.position.x() - (self.size.width() / 2) + pl,
+            HAlign::Left => self.rect.pos().x() - (self.rect.size().width() / 2) + pl,
             HAlign::Center => {
                 if pl >= pr {
-                    self.position.x() + (pl - pr) / 2
+                    self.rect.pos().x() + (pl - pr) / 2
                 } else {
-                    self.position.x() - (pr - pl) / 2
+                    self.rect.pos().x() - (pr - pl) / 2
                 }
             }
-            HAlign::Right => self.position.x() + (self.size.width() / 2) - pr
+            HAlign::Right => self.rect.pos().x() + (self.rect.size().width() / 2) - pr
         }
     }
 
@@ -142,15 +140,15 @@ impl Rules {
         let pb = self.padding.bottom();
 
         match self.alignment.v_align {
-            VAlign::Top => self.position.y() - (self.size.height() / 2) + pt,
+            VAlign::Top => self.rect.pos().y() - (self.rect.size().height() / 2) + pt,
             VAlign::Middle => {
                 if pt >= pb {
-                    self.position.y() + (pt - pb) / 2
+                    self.rect.pos().y() + (pt - pb) / 2
                 } else {
-                    self.position.y() - (pb - pt) / 2
+                    self.rect.pos().y() - (pb - pt) / 2
                 }
             }
-            VAlign::Bottom => self.position.y() + (self.size.height() / 2) - pb,
+            VAlign::Bottom => self.rect.pos().y() + (self.rect.size().height() / 2) - pb,
         }
     }
 
@@ -193,7 +191,7 @@ pub(crate) struct LayoutContext<'a> {
     entity: &'a NodeId,
     cx: &'a mut Context,
     next_pos: Vector2<u32>,
-    // avalilable_space: Size<u32>,
+    // avalilable_space: Rect<u32>,
     rules: Rules,
 }
 

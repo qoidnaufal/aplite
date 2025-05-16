@@ -1,4 +1,4 @@
-use shared::{Rgba, Size};
+use shared::{Rect, Rgba, Size};
 // use super::{Indices, RenderComponentSource};
 
 #[repr(u32)]
@@ -75,6 +75,14 @@ impl CornerRadius {
     pub fn set_top_right(&mut self, r: u32) {
         self.tr = r as _;
     }
+
+    fn rescale(mut self, size: Size<f32>) -> Self {
+        self.tl *= size.width() / (100. * 2.);
+        self.bl *= size.width() / (100. * 2.);
+        self.br *= size.width() / (100. * 2.);
+        self.tr *= size.width() / (100. * 2.);
+        self
+    }
 }
 
 #[repr(C)]
@@ -96,12 +104,13 @@ impl Element {
         fill_color: Rgba<f32>,
         stroke_color: Rgba<f32>,
         corners: CornerRadius,
-        size: Size<f32>,
+        rect: Rect<f32>,
         shape: Shape,
         rotation: f32,
         stroke_width: f32,
         texture_id: i32,
     ) -> Self {
+        let size = rect.size();
         Self {
             fill_color,
             stroke_color,

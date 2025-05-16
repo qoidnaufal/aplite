@@ -13,12 +13,12 @@ struct Radius {
     top_right: f32,
 };
 
-fn scale_radius(r: Radius) -> Radius {
+fn scale_radius(r: Radius, ew: f32) -> Radius {
     var ret: Radius;
-    ret.top_left = r.top_left / scaler.x;
-    ret.bot_left = r.bot_left / scaler.x;
-    ret.bot_right = r.bot_right / scaler.x;
-    ret.top_right = r.top_right / scaler.x;
+    ret.top_left = (r.top_left * ew / (100.0 * 2.0)) / scaler.x;
+    ret.bot_left = (r.bot_left * ew / (100.0 * 2.0)) / scaler.x;
+    ret.bot_right = (r.bot_right * ew / (100.0 * 2.0)) / scaler.x;
+    ret.top_right = (r.top_right * ew / (100.0 * 2.0)) / scaler.x;
     return ret;
 }
 
@@ -129,7 +129,7 @@ fn sdf(uv: vec2<f32>, element: Element) -> f32 {
         case 2u: {
             let p = uv * size;
             let b = size - stroke_width;
-            let r = scale_radius(element.radius);
+            let r = scale_radius(element.radius, element.size.x);
             return sdRoundedRect(p, b, r);
         }
         default: { return -1.0; }

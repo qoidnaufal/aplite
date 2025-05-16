@@ -1,4 +1,4 @@
-use winit::dpi::PhysicalSize;
+use winit::dpi::LogicalSize;
 
 use super::{Fraction, GpuPrimitive, NumDebugger, Vector2};
 
@@ -20,14 +20,15 @@ mod gcd_test {
 
     #[test]
     fn test_gcd() {
-        let width = 1920;
-        let height = 1080;
+        let width = 2560;
+        let height = 1600;
         let gcd = gcd(width, height);
         let fraction = [width/gcd, height/gcd];
-        assert_eq!(fraction, [16, 9]);
+        assert_eq!(fraction, [5, 3]);
     }
 }
 
+/// corresponds to [`winit::dpi::LogicalSize<T>`]
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Size<T: GpuPrimitive> {
@@ -151,17 +152,29 @@ impl<T: GpuPrimitive + Eq> Eq for Size<T> {}
 
 // type conversion
 
-impl From<Size<u32>> for PhysicalSize<u32> {
-    fn from(size: Size<u32>) -> Self {
-        Self::new(size.width(), size.height())
+impl From<Size<u32>> for LogicalSize<u32> {
+    fn from(value: Size<u32>) -> Self {
+        Self::new(value.width(), value.height())
     }
 }
 
-impl From<PhysicalSize<u32>> for Size<u32> {
-    fn from(p: PhysicalSize<u32>) -> Self {
-        Self::new(p.width, p.height)
+impl From<LogicalSize<u32>> for Size<u32> {
+    fn from(value: LogicalSize<u32>) -> Self {
+        Self::new(value.width, value.height)
     }
 }
+
+// impl From<Size<u32>> for PhysicalSize<u32> {
+//     fn from(size: Size<u32>) -> Self {
+//         Self::new(size.width(), size.height())
+//     }
+// }
+
+// impl From<PhysicalSize<u32>> for Size<u32> {
+//     fn from(p: PhysicalSize<u32>) -> Self {
+//         Self::new(p.width, p.height)
+//     }
+// }
 
 impl From<Size<u32>> for Size<f32> {
     fn from(value: Size<u32>) -> Self {

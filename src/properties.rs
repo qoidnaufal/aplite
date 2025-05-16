@@ -305,6 +305,7 @@ impl Properties {
         self.shape = shape;
     }
 
+    /// value is 0-100, with 100 is fully rounded
     pub fn set_corners<F: FnOnce(&mut CornerRadius)>(&mut self, f: F) {
         f(&mut self.corners);
     }
@@ -336,6 +337,7 @@ impl Properties {
 
 // getter
 impl Properties {
+    #[allow(unused)]
     pub(crate) fn name(&self) -> Option<&str> { self.name }
 
     pub(crate) fn alignment(&self) -> Alignment { self.alignment }
@@ -388,7 +390,7 @@ impl RenderComponentSource for Properties {
 
     fn stroke_color(&self) -> Rgba<f32> { self.stroke_color().into() }
 
-    fn size(&self) -> Size<f32> { self.rect.size().into() }
+    fn rect(&self) -> Rect<f32> { self.rect.into() }
 
     fn corners(&self) -> CornerRadius { self.corners() }
 
