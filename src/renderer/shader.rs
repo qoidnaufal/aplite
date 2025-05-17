@@ -62,10 +62,7 @@ struct FragmentPayload {
 };
 
 @vertex
-fn vs_main(
-    vertex: VertexInput,
-    instance: Instance,
-) -> FragmentPayload {
+fn vs_main(vertex: VertexInput, instance: Instance) -> FragmentPayload {
     let element = elements[instance.index];
     let screen_t = screen.transform;
     let element_t = transforms[element.transform_id];

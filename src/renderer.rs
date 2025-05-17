@@ -17,15 +17,16 @@ use gfx::Gfx;
 use gpu::Gpu;
 use util::{create_pipeline, RenderComponentSource, Sampler};
 use shared::{Fraction, Matrix4x4, Rect, Rgba, Size};
-use texture::{TextureData, ImageData};
+use texture::{ImageData, TextureData};
+use texture::atlas::Atlas;
 use buffer::MeshBuffer;
 
 pub(crate) struct Renderer {
     gpu: Gpu,
     gfx: Gfx,
     sampler: Sampler,
-    textures: Vec<TextureData>,
-    pseudo_texture: TextureData,
+    atlas: Atlas,
+    images: Vec<TextureData>,
     pipeline: wgpu::RenderPipeline,
     mesh: MeshBuffer,
     screen: Screen,
@@ -37,8 +38,6 @@ impl Renderer {
         let gfx = Gfx::new(&gpu.device);
         gpu.configure();
 
-        // FIXME: use atlas
-        let pseudo_texture = TextureData::new(&gpu, &ImageData::from(Rgba::WHITE));
         let sampler = Sampler::new(&gpu.device);
         let screen = Screen::new(&gpu.device, gpu.size().into(), window.scale_factor());
 
@@ -46,19 +45,20 @@ impl Renderer {
         let layouts = &[
             &Screen::bind_group_layout(&gpu.device),
             &Gfx::bind_group_layout(&gpu.device),
-            &TextureData::bind_group_layout(&gpu.device),
+            &Atlas::bind_group_layout(&gpu.device),
             &Sampler::bind_group_layout(&gpu.device),
         ];
         let pipeline = create_pipeline(&gpu, buffers, layouts);
-        let textures = vec![];
+        let atlas = Atlas::new(&gpu.device);
         let mesh = MeshBuffer::Uninitialized;
+        let images = vec![];
 
         Ok(Self {
             gpu,
             gfx,
             sampler,
-            textures,
-            pseudo_texture,
+            atlas,
+            images,
             pipeline,
             mesh,
             screen,
@@ -113,6 +113,7 @@ impl Renderer {
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("render encoder") });
 
+        self.atlas.update(&self.gpu.device, &mut encoder);
         self.encode(&mut encoder, &view, color);
 
         self.gpu.queue.submit(std::iter::once(encoder.finish()));
@@ -143,7 +144,7 @@ impl Renderer {
             pass.set_vertex_buffer(1, itc.slice(..));
             pass.set_bind_group(0, &self.screen.bind_group, &[]);
             pass.set_bind_group(1, &self.gfx.bind_group, &[]);
-            pass.set_bind_group(2, &self.pseudo_texture.bind_group, &[]);
+            pass.set_bind_group(2, &self.atlas.bind_group, &[]);
             pass.set_bind_group(3, &self.sampler.bind_group, &[]);
 
             let mut start: u32 = 0;
@@ -153,10 +154,9 @@ impl Renderer {
                 let draw_offset = i as u32;
                 let end = start + 6;
 
-                // FIXME: bundle the texture into an atlas or something
                 if element.texture_id > -1 {
-                    let texture_data = &self.textures[element.texture_id as usize];
-                    pass.set_bind_group(2, &texture_data.bind_group, &[]);
+                    let image_bind_group = &self.images[element.texture_id as usize].bind_group;
+                    pass.set_bind_group(2, image_bind_group, &[]);
                 }
                 pass.draw_indexed(start..end, 0, draw_offset..draw_offset + 1);
                 start = end;
@@ -187,27 +187,29 @@ impl Renderer {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct TextureInfo {
+pub(crate) struct ImageInfo {
     pub(crate) id: i32,
     pub(crate) aspect_ratio: Fraction<u32>,
 }
 
 impl Renderer {
-    pub(crate) fn add_texture(&mut self, f: &Box<dyn Fn() -> ImageData>) -> TextureInfo {
+    pub(crate) fn push_image(&mut self, f: &Box<dyn Fn() -> ImageData>) -> ImageInfo {
         let image = f();
         let aspect_ratio = image.aspect_ratio();
-        let id = self.textures.len() as i32;
+        let id = self.images.len() as i32;
         let texture_data = TextureData::new(&self.gpu, &image);
-        self.textures.push(texture_data);
-        TextureInfo { id, aspect_ratio }
+        self.images.push(texture_data);
+        ImageInfo { id, aspect_ratio }
     }
 
-    pub(crate) fn add_component(&mut self, rc: &impl RenderComponentSource) {
+    pub(crate) fn add_component(&mut self, rc: &impl RenderComponentSource, uv: Option<Rect<f32>>) {
         let element = rc.element().with_transform_id(self.gfx.count() as u32);
         let transform = Matrix4x4::IDENTITY;
 
         self.gfx.elements.push(element);
         self.gfx.transforms.push(transform);
+        if let Some(uv) = uv {
+            self.gfx.uvs.push(uv);
+        }
     }
 }

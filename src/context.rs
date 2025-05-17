@@ -410,7 +410,8 @@ impl Render for Context {
                     .tree
                     .get_parent(node_id)
                     .map(|parent| self.get_node_data(&parent).orientation());
-                let info = renderer.add_texture(image_fn);
+
+                let info = renderer.push_image(image_fn);
                 let prop = self.get_node_data_mut(node_id);
                 prop.set_texture_id(info.id);
                 if prop.image_aspect_ratio().is_source() {
@@ -424,9 +425,8 @@ impl Render for Context {
                     }
                 }
             }
-
             let prop = self.get_node_data(node_id);
-            renderer.add_component(prop);
+            renderer.add_component(prop, None);
         });
     }
 }

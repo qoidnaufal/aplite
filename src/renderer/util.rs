@@ -92,9 +92,18 @@ impl Vertices {
     ]);
 
     #[inline(always)]
-    pub(crate) fn new() -> Self {
-        Self::VERTICES
-    }
+    pub(crate) const fn new() -> Self { Self::VERTICES }
+
+    // pub(crate) fn with_uv(mut self, rect: Rect<f32>) -> Self {
+    //     for i in 0..4 {
+    //         if self.0[i]._uv.x() == 0.0 { self.0[i]._uv.set_x(rect.x()) }
+    //         else { self.0[i]._uv.set_x(rect.x() + rect.width()) }
+
+    //         if self.0[i]._uv.y() == 0.0 { self.0[i]._uv.set_y(rect.y()) }
+    //         else { self.0[i]._uv.set_y(rect.y() + rect.width()) }
+    //     }
+    //     self
+    // }
 
     #[inline(always)]
     pub(crate) fn as_slice(&self) -> &[Vertex] {
@@ -108,10 +117,11 @@ impl std::fmt::Debug for Vertices {
         let len = self.0.len();
         for i in 0..len {
             let pos = self.0[i]._pos;
+            let uv = self.0[i]._uv;
             if i == len - 1 {
-                s.push_str(format!("{i}: {pos:?}").as_str());
+                s.push_str(format!("{i}: {pos:?} | {uv:?}").as_str());
             } else {
-                s.push_str(format!("{i}: {pos:?}\n").as_str());
+                s.push_str(format!("{i}: {pos:?} | {uv:?}\n").as_str());
             }
         }
         write!(f, "{s}")

@@ -61,6 +61,9 @@ impl<T: GpuPrimitive> Size<T> {
     #[inline(always)]
     pub const fn height(&self) -> T { self.inner.y() }
 
+    #[inline(always)]
+    pub fn area(&self) -> T { self.width() * self.height() }
+
     pub fn set_width(&mut self, val: T) { self.inner.set_x(val) }
 
     pub fn set_height(&mut self, val: T) { self.inner.set_y(val) }
