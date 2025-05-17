@@ -76,13 +76,13 @@ impl CornerRadius {
         self.tr = r as _;
     }
 
-    fn rescale(mut self, size: Size<f32>) -> Self {
-        self.tl *= size.width() / (100. * 2.);
-        self.bl *= size.width() / (100. * 2.);
-        self.br *= size.width() / (100. * 2.);
-        self.tr *= size.width() / (100. * 2.);
-        self
-    }
+    // fn rescale(mut self, size: Size<f32>) -> Self {
+    //     self.tl *= size.width() / (100. * 2.);
+    //     self.bl *= size.width() / (100. * 2.);
+    //     self.br *= size.width() / (100. * 2.);
+    //     self.tr *= size.width() / (100. * 2.);
+    //     self
+    // }
 }
 
 #[repr(C)]

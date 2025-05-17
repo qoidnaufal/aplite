@@ -5,10 +5,10 @@ mod stack;
 use std::marker::PhantomData;
 use shared::Rgba;
 
-use crate::properties::Properties;
 use crate::context::Context;
+use crate::context::properties::Properties;
+use crate::context::tree::NodeId;
 use crate::renderer::element::Shape;
-use crate::tree::NodeId;
 
 pub use {
     button::*,

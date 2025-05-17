@@ -1,8 +1,9 @@
 use shared::{Rect, Vector2};
 
 use crate::context::Context;
-use crate::properties::Properties;
-use crate::tree::NodeId;
+use crate::context::properties::Properties;
+
+use super::tree::NodeId;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HAlign {
@@ -123,15 +124,15 @@ impl Rules {
         let pr = self.padding.right();
 
         match self.alignment.h_align {
-            HAlign::Left => self.rect.pos().x() - (self.rect.size().width() / 2) + pl,
+            HAlign::Left => self.rect.x() - (self.rect.width() / 2) + pl,
             HAlign::Center => {
                 if pl >= pr {
-                    self.rect.pos().x() + (pl - pr) / 2
+                    self.rect.x() + (pl - pr) / 2
                 } else {
-                    self.rect.pos().x() - (pr - pl) / 2
+                    self.rect.x() - (pr - pl) / 2
                 }
             }
-            HAlign::Right => self.rect.pos().x() + (self.rect.size().width() / 2) - pr
+            HAlign::Right => self.rect.x() + (self.rect.width() / 2) - pr
         }
     }
 
@@ -140,15 +141,15 @@ impl Rules {
         let pb = self.padding.bottom();
 
         match self.alignment.v_align {
-            VAlign::Top => self.rect.pos().y() - (self.rect.size().height() / 2) + pt,
+            VAlign::Top => self.rect.y() - (self.rect.height() / 2) + pt,
             VAlign::Middle => {
                 if pt >= pb {
-                    self.rect.pos().y() + (pt - pb) / 2
+                    self.rect.y() + (pt - pb) / 2
                 } else {
-                    self.rect.pos().y() - (pb - pt) / 2
+                    self.rect.y() - (pb - pt) / 2
                 }
             }
-            VAlign::Bottom => self.rect.pos().y() + (self.rect.size().height() / 2) - pb,
+            VAlign::Bottom => self.rect.y() + (self.rect.height() / 2) - pb,
         }
     }
 

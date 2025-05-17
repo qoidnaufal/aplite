@@ -3,16 +3,17 @@ use std::collections::HashMap;
 use shared::{Size, Vector2};
 
 // mod data;
-// mod callback;
 pub mod layout;
+pub(crate) mod properties;
 pub(crate) mod cursor;
+pub(crate) mod tree;
 
-use crate::image_data::ImageData;
+use crate::renderer::texture::ImageData;
 use crate::renderer::util::Render;
 use crate::renderer::Renderer;
-use crate::properties::{AspectRatio, Properties};
-use crate::tree::{Entity, NodeId, Tree};
 
+use properties::{AspectRatio, Properties};
+use tree::{Entity, NodeId, Tree};
 use cursor::{Cursor, MouseAction, MouseButton};
 use layout::{
     LayoutContext,
@@ -305,14 +306,14 @@ impl Context {
             })
     }
 
-    fn detect_hover(&self, node_id: &NodeId, acc: &mut Vec<NodeId>) {
+    fn detect_hover_recursive(&self, node_id: &NodeId, acc: &mut Vec<NodeId>) {
         if let Some(children) = self.tree.get_all_children(node_id) {
             children
                 .iter()
                 .filter(|child| self.get_node_data(child).is_hovered(&self.cursor))
                 .for_each(|child| {
                     acc.push(*child);
-                    self.detect_hover(child, acc);
+                    self.detect_hover_recursive(child, acc);
                 });
         }
     }
@@ -324,7 +325,7 @@ impl Context {
         let hovered = self.cursor.ancestor
             .map(|ancestor| {
                 let mut sub_children = vec![ancestor];
-                self.detect_hover(&ancestor, &mut sub_children);
+                self.detect_hover_recursive(&ancestor, &mut sub_children);
                 sub_children
             })
             .and_then(|children| {

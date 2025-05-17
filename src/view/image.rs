@@ -1,9 +1,9 @@
 use shared::Rgba;
 
-use crate::{image_data::ImageData, properties::Properties};
+use crate::renderer::texture::ImageData;
 use crate::context::Context;
 use crate::renderer::element::Shape;
-use crate::properties::AspectRatio;
+use crate::context::properties::{AspectRatio, Properties};
 
 use super::{IntoView, View};
 

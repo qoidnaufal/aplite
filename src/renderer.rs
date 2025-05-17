@@ -2,7 +2,6 @@ use std::sync::Arc;
 use winit::window::Window;
 
 use crate::error::ApliteError;
-use crate::image_data::ImageData;
 
 pub(crate) mod gpu;
 pub(crate) mod buffer;
@@ -18,7 +17,7 @@ use gfx::Gfx;
 use gpu::Gpu;
 use util::{create_pipeline, RenderComponentSource, Sampler};
 use shared::{Fraction, Matrix4x4, Rect, Rgba, Size};
-use texture::TextureData;
+use texture::{TextureData, ImageData};
 use buffer::MeshBuffer;
 
 pub(crate) struct Renderer {
@@ -179,8 +178,8 @@ impl Renderer {
         let scaler = self.screen.initial_size();
         let size: Size<f32> = rect.size().into();
         self.gfx.transforms.update(index, |matrix| {
-            let x = rect.pos().x() as f32 / scaler.width() * 2.0 - 1.0;
-            let y = 1.0 - rect.pos().y() as f32 / scaler.height() * 2.0;
+            let x = rect.x() as f32 / scaler.width() * 2.0 - 1.0;
+            let y = 1.0 - rect.y() as f32 / scaler.height() * 2.0;
             let s = size / scaler;
             matrix.set_translate(x, y);
             matrix.set_scale(s.width(), s.height());

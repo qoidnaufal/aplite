@@ -164,18 +164,6 @@ impl From<LogicalSize<u32>> for Size<u32> {
     }
 }
 
-// impl From<Size<u32>> for PhysicalSize<u32> {
-//     fn from(size: Size<u32>) -> Self {
-//         Self::new(size.width(), size.height())
-//     }
-// }
-
-// impl From<PhysicalSize<u32>> for Size<u32> {
-//     fn from(p: PhysicalSize<u32>) -> Self {
-//         Self::new(p.width, p.height)
-//     }
-// }
-
 impl From<Size<u32>> for Size<f32> {
     fn from(value: Size<u32>) -> Self {
         Self::new(value.width() as _, value.height() as _)

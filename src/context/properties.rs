@@ -77,33 +77,26 @@ impl Properties {
     }
 
     pub(crate) fn adjust_width(&mut self, aspect_ratio: Fraction<u32>) {
-        self.rect.size_mut().adjust_width(aspect_ratio);
+        self.rect.adjust_width(aspect_ratio);
     }
 
     pub(crate) fn adjust_height(&mut self, aspect_ratio: Fraction<u32>) {
-        self.rect.size_mut().adjust_height(aspect_ratio);
+        self.rect.adjust_height(aspect_ratio);
     }
-
-    // pub(crate) fn adjust_transform(&mut self, pos: Vector2<f32>, mat: &mut Matrix4x4) {
-    //     let x = pos.x() / (self.size.width() as f32 / mat[0].x()) * 2.0 - 1.0;
-    //     let y = 1.0 - pos.y() / (self.size.height() as f32 / mat[1].y()) * 2.0;
-    //     self.set_position(pos.into());
-    //     mat.with_translate(x, y);
-    // }
 
     pub(crate) fn is_hovered(&self, cursor: &Cursor) -> bool {
         // FIXME: consider rotation
         // let rotate = Matrix2x2::rotate(self.rotate);
         // let pos: Vector2<f32> = attr.pos.into();
         // let p = rotate * pos;
-        let x = self.rect.pos().x() as f32;
-        let y = self.rect.pos().y() as f32;
+        let x = self.rect.x() as f32;
+        let y = self.rect.y() as f32;
 
         let x_cursor = cursor.hover.pos.x();
         let y_cursor = cursor.hover.pos.y();
 
-        let width = self.rect.size().width() as f32 / 2.0;
-        let height = self.rect.size().height() as f32 / 2.0;
+        let width = self.rect.width() as f32 / 2.0;
+        let height = self.rect.height() as f32 / 2.0;
 
         // let angled = if self.shape.is_triangle() {
         //     let c_tangen = tan(x_cursor - x, y_cursor - y + height);
