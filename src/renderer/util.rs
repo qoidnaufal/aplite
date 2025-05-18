@@ -1,4 +1,4 @@
-use shared::{Rect, Rgba, Size, Vector2};
+use shared::{Rect, Rgba, Vector2};
 
 use super::shader::SHADER;
 use super::gpu::Gpu;
@@ -8,7 +8,6 @@ use super::Renderer;
 pub(crate) trait RenderComponentSource {
     fn fill_color(&self) -> Rgba<f32>;
     fn stroke_color(&self) -> Rgba<f32>;
-    // FIXME: do something with the .pos() method, idk what
     fn rect(&self) -> Rect<f32>;
     fn corners(&self) -> CornerRadius;
     fn shape(&self) -> Shape;
@@ -17,22 +16,18 @@ pub(crate) trait RenderComponentSource {
     fn texture_id(&self) -> i32;
 
     fn element(&self) -> Element {
-        Element::new(
-            self.fill_color(),
-            self.stroke_color(),
-            self.corners(),
-            self.rect(),
-            self.shape(),
-            self.rotation(),
-            self.stroke_width(),
-            self.texture_id(),
-        )
+        Element {
+            fill_color: self.fill_color(),
+            stroke_color: self.stroke_color(),
+            corners: self.corners(),
+            size: self.rect().size(),
+            shape: self.shape(),
+            rotation: self.rotation(),
+            stroke_width: self.stroke_width(),
+            texture_id: self.texture_id(),
+            transform_id: 0,
+        }
     }
-}
-
-pub(crate) trait TextureDataSource {
-    fn data(&self) -> &[u8];
-    fn dimensions(&self) -> Size<u32>;
 }
 
 pub(crate) trait Render {

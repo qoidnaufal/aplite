@@ -1,4 +1,4 @@
-use shared::{Rect, Rgba, Size};
+use shared::{Rgba, Size};
 // use super::{Indices, RenderComponentSource};
 
 #[repr(u32)]
@@ -88,41 +88,41 @@ impl CornerRadius {
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub(crate) struct Element {
-    fill_color: Rgba<f32>,
-    stroke_color: Rgba<f32>,
-    corners: CornerRadius,
-    size: Size<f32>,
-    shape: Shape,
-    rotation: f32,
-    stroke_width: f32,
+    pub(crate) fill_color: Rgba<f32>,
+    pub(crate) stroke_color: Rgba<f32>,
+    pub(crate) corners: CornerRadius,
+    pub(crate) size: Size<f32>,
+    pub(crate) shape: Shape,
+    pub(crate) rotation: f32,
+    pub(crate) stroke_width: f32,
     pub(crate) texture_id: i32,
-    transform_id: u32,
+    pub(crate) transform_id: u32,
 }
 
 impl Element {
-    pub(crate) fn new(
-        fill_color: Rgba<f32>,
-        stroke_color: Rgba<f32>,
-        corners: CornerRadius,
-        rect: Rect<f32>,
-        shape: Shape,
-        rotation: f32,
-        stroke_width: f32,
-        texture_id: i32,
-    ) -> Self {
-        let size = rect.size();
-        Self {
-            fill_color,
-            stroke_color,
-            corners,
-            size,
-            shape,
-            rotation,
-            stroke_width,
-            texture_id,
-            transform_id: 0,
-        }
-    }
+    // pub(crate) fn new(
+    //     fill_color: Rgba<f32>,
+    //     stroke_color: Rgba<f32>,
+    //     corners: CornerRadius,
+    //     rect: Rect<f32>,
+    //     shape: Shape,
+    //     rotation: f32,
+    //     stroke_width: f32,
+    //     texture_id: i32,
+    // ) -> Self {
+    //     let size = rect.size();
+    //     Self {
+    //         fill_color,
+    //         stroke_color,
+    //         corners,
+    //         size,
+    //         shape,
+    //         rotation,
+    //         stroke_width,
+    //         texture_id,
+    //         transform_id: 0,
+    //     }
+    // }
 
     pub(crate) fn with_transform_id(mut self, id: u32) -> Self {
         self.transform_id = id;

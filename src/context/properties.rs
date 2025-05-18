@@ -36,6 +36,12 @@ pub struct Properties {
     dragable: bool,
 }
 
+impl Default for Properties {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // internal data management
 impl Properties {
     pub(crate) fn window_properties(size: Size<u32>) -> Self {

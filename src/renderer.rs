@@ -191,11 +191,11 @@ pub(crate) struct ImageInfo {
 }
 
 impl Renderer {
-    pub(crate) fn push_image(&mut self, f: &Box<dyn Fn() -> ImageData>) -> ImageInfo {
+    pub(crate) fn push_image(&mut self, f: &dyn Fn() -> ImageData) -> ImageInfo {
         let image = f();
         let aspect_ratio = image.aspect_ratio();
         let id = self.images.len() as i32;
-        let texture_data = TextureData::new(&self.gpu, &image);
+        let texture_data = TextureData::new(&self.gpu, image);
         self.images.push(texture_data);
         ImageInfo { id, aspect_ratio }
     }

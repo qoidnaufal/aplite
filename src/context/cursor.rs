@@ -1,6 +1,6 @@
 use shared::Vector2;
 
-use super::{tree::{NodeId, Tree}, Context};
+use super::tree::NodeId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseAction {
@@ -119,5 +119,13 @@ impl Cursor {
 
     pub(crate) fn is_hovering_same_obj(&self) -> bool {
         self.hover.curr == self.hover.prev && self.hover.curr.is_some()
+    }
+
+    pub(crate) fn is_idling(&self) -> bool {
+        self.is_hovering_same_obj() && self.click.obj.is_none()
+    }
+
+    pub(crate) fn is_unscoped(&self) -> bool {
+        self.hover.curr.is_none() && self.hover.prev.is_none()
     }
 }

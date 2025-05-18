@@ -135,8 +135,4 @@ impl Gfx {
     pub(crate) fn count(&self) -> usize {
         self.elements.len()
     }
-
-    pub(crate) fn is_empty(&self) -> bool {
-        self.elements.data.is_empty()
-    }
 }

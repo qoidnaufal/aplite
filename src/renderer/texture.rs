@@ -4,7 +4,6 @@ use image::imageops::FilterType;
 use image::{GenericImageView, ImageReader};
 use shared::{Fraction, Rect, Rgba, Size};
 
-use super::util::TextureDataSource;
 use super::Gpu;
 
 pub fn image_reader<P: AsRef<Path>>(path: P) -> ImageData {
@@ -63,12 +62,6 @@ impl From<Rgba<u8>> for ImageData {
     }
 }
 
-impl TextureDataSource for ImageData {
-    fn data(&self) -> &[u8] { &self.data }
-
-    fn dimensions(&self) -> Size<u32> { self.size() }
-}
-
 #[derive(Debug)]
 pub(crate) struct TextureData {
     texture: wgpu::Texture,
@@ -76,16 +69,16 @@ pub(crate) struct TextureData {
 }
 
 impl TextureData {
-    pub(crate) fn new(gpu: &Gpu, td: &impl TextureDataSource) -> Self {
+    pub(crate) fn new(gpu: &Gpu, image_data: ImageData) -> Self {
         let device = &gpu.device;
         let queue = &gpu.queue;
 
-        let texture = Self::create_texture(device, td.dimensions());
+        let texture = Self::create_texture(device, image_data.size());
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let bind_group = Self::bind_group(device, &view);
 
         let ret = Self { texture, bind_group };
-        ret.submit_texture(queue, td);
+        ret.submit_texture(queue, &image_data);
         ret
     }
 
@@ -121,12 +114,12 @@ impl TextureData {
     }
 
     // FIXME: integrate this, or better, create atlas & dynamic texture
-    pub(crate) fn _update_texture(&mut self, gpu: &Gpu, td: &impl TextureDataSource) {
-        let size = td.dimensions();
+    pub(crate) fn _update_texture(&mut self, gpu: &Gpu, image_data: &ImageData) {
+        let size = image_data.size();
         if size.width() > self.texture.width() || size.height() > self.texture.height() {
             self.texture = Self::create_texture(&gpu.device, size);
         }
-        self.submit_texture(&gpu.queue, td);
+        self.submit_texture(&gpu.queue, image_data);
     }
 
     #[inline(always)]
@@ -147,18 +140,18 @@ impl TextureData {
         })
     }
 
-    fn submit_texture(&self, queue: &wgpu::Queue, td: &impl TextureDataSource) {
+    fn submit_texture(&self, queue: &wgpu::Queue, image_data: &ImageData) {
         queue.write_texture(
             self.texture.as_image_copy(),
-            td.data(),
+            image_data,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(4 * td.dimensions().width()),
+                bytes_per_row: Some(4 * image_data.width()),
                 rows_per_image: None,
             },
             wgpu::Extent3d {
-                width: td.dimensions().width(),
-                height: td.dimensions().height(),
+                width: image_data.width(),
+                height: image_data.height(),
                 depth_or_array_layers: 1,
             }
         );
@@ -295,7 +288,7 @@ pub(crate) mod atlas {
                 let padding = (align - width % align) % align;
                 let padded_width = width + padding;
                 let dummy = vec![0_u8; (padded_width * Self::SIZE.height()) as usize];
-                // let dummy = vec![0u8; 1024 * 1024];
+
                 let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: None,
                     contents: &dummy,
@@ -325,8 +318,7 @@ pub(crate) mod atlas {
                 let width = data.width() * 4;
                 let padding = (align - width % align) % align;
                 let padded_width = width + padding;
-                let mut padded_data = vec![];
-                padded_data.reserve((padded_width * data.height()) as usize);
+                let mut padded_data = Vec::with_capacity((padded_width * data.height()) as usize);
 
                 let mut i = 0;
                 for _ in 0..data.height() {

@@ -1,3 +1,4 @@
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug)]
 pub enum ApliteError {
     EventLoopCreationFailed(winit::error::EventLoopError),

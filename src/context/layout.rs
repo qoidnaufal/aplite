@@ -198,7 +198,7 @@ pub(crate) struct LayoutContext<'a> {
 
 impl<'a> LayoutContext<'a> {
     pub(crate) fn new(entity: &'a NodeId, cx: &'a mut Context) -> Self {
-        let rules = Rules::new(cx.get_node_data(&entity));
+        let rules = Rules::new(cx.get_node_data(entity));
         Self {
             entity,
             cx,

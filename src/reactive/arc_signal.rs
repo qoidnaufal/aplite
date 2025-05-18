@@ -10,11 +10,10 @@ pub struct ArcSignal<T> {
 
 impl<T: Send + Sync + 'static> ArcSignal<T> {
     pub fn new(value: T) -> Self {
-        let signal = Self {
+        Self {
             id: SignalId::new(),
             value: Arc::new(RwLock::new(value)),
-        };
-        signal
+        }
     }
 }
 

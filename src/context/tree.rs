@@ -226,14 +226,9 @@ impl<E: Entity> Tree<E> {
         if self.get_first_child(entity).is_none() { return false; }
         let mut check = sub_child;
         let mut ret = false;
-        loop {
-            if let Some(parent) = self.get_parent(check) {
-                ret = parent == entity;
-                if parent != entity { check = parent }
-            } else {
-                break;
-            }
-            if ret { break }
+        while let Some(parent) = self.get_parent(check) {
+            ret = parent == entity;
+            if ret { break } else { check = parent }
         }
         ret
     }

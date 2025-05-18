@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use shared::{Size, Vector2};
 
-// mod data;
 pub mod layout;
 pub(crate) mod properties;
 pub(crate) mod cursor;
@@ -32,7 +31,6 @@ pub struct Context {
     pub(crate) tree: Tree<NodeId>,
     pub(crate) properties: Vec<Properties>,
     image_fn: HashMap<NodeId, Box<dyn Fn() -> ImageData>>,
-    // pub(crate) data: Data,
     style_fn: HashMap<NodeId, Box<dyn Fn(&mut Properties)>>,
     callbacks: HashMap<NodeId, Box<dyn Fn()>>,
     pub(crate) cursor: Cursor,
@@ -46,7 +44,6 @@ impl Default for Context {
             tree: Default::default(),
             properties: Vec::with_capacity(1024),
             image_fn: HashMap::new(),
-            // data: Data::default(),
             style_fn: HashMap::new(),
             callbacks: HashMap::new(),
             cursor: Cursor::new(),
@@ -120,21 +117,21 @@ impl Context {
         self.pending_update.iter().for_each(|mode| {
             match mode {
                 UpdateMode::HoverColor(node_id) => {
-                    if let Some(color) = self.get_node_data(&node_id).hover_color() {
+                    if let Some(color) = self.get_node_data(node_id).hover_color() {
                         renderer.update_element_color(node_id.index() - 1, color);
                     }
                 },
                 UpdateMode::ClickColor(node_id) => {
-                    if let Some(color) = self.get_node_data(&node_id).click_color() {
+                    if let Some(color) = self.get_node_data(node_id).click_color() {
                         renderer.update_element_color(node_id.index() - 1, color);
                     }
                 }
                 UpdateMode::RevertColor(node_id) => {
-                    let color = self.get_node_data(&node_id).fill_color();
+                    let color = self.get_node_data(node_id).fill_color();
                     renderer.update_element_color(node_id.index() - 1, color);
                 },
                 UpdateMode::Transform(node_id) => {
-                    let rect = self.get_node_data(&node_id).rect();
+                    let rect = self.get_node_data(node_id).rect();
 
                     renderer.update_element_transform(node_id.index() - 1, rect);
                     renderer.update_element_size(node_id.index() - 1, rect.size());
@@ -292,12 +289,17 @@ impl Context {
     pub(crate) fn handle_mouse_move(&mut self, pos: impl Into<Vector2<f32>>) {
         if self.properties.len() <= 1 { return }
         self.cursor.hover.pos = pos.into();
+
+        #[cfg(feature = "stats")] let start = std::time::Instant::now();
         self.detect_scope();
+
         if let Some(scope) = self.cursor.scope {
             self.detect_hovered_child(scope);
         } else {
             self.cursor.hover.prev = self.cursor.hover.curr.take();
         }
+        #[cfg(feature = "stats")] eprintln!("{:?}", start.elapsed());
+
         self.handle_hover();
     }
 
@@ -321,42 +323,20 @@ impl Context {
     }
 
     fn detect_hovered_child(&mut self, scope: NodeId) {
-        #[cfg(feature = "stats")] let start = std::time::Instant::now();
-
-        // FIXME: idk if recursive is the best practice here
-        let mut sub_children = vec![scope];
-        self.detect_hover_recursive(&scope, &mut sub_children);
-
-        let hovered = sub_children.iter().filter_map(|node| {
-            let prop = self.get_node_data(node);
-            if prop.is_hovered(self.cursor.hover.pos) {
-                Some(*node)
+        let mut curr = scope;
+        while let Some(children) = self.tree.get_all_children(&curr) {
+            if let Some(hovered) = children.iter().find(|child| {
+                self.get_node_data(child).is_hovered(self.cursor.hover.pos)
+            }) {
+                curr = *hovered;
             } else {
-                None
+                break
             }
-        }).max();
-
-        #[cfg(feature = "stats")] eprint!("{:?}\r", start.elapsed());
-
-        if let Some(id) = hovered {
-            if self.cursor.click.obj.is_none() {
-                self.cursor.hover.prev = self.cursor.hover.curr;
-                self.cursor.hover.curr = Some(id);
-            }
-        } else {
-            self.cursor.hover.prev = self.cursor.hover.curr.take();
         }
-    }
 
-    fn detect_hover_recursive(&self, node_id: &NodeId, acc: &mut Vec<NodeId>) {
-        if let Some(children) = self.tree.get_all_children(node_id) {
-            children
-                .iter()
-                .filter(|child| self.get_node_data(child).is_hovered(self.cursor.hover.pos))
-                .for_each(|child| {
-                    acc.push(*child);
-                    self.detect_hover_recursive(child, acc);
-                });
+        if self.cursor.click.obj.is_none() {
+            self.cursor.hover.prev = self.cursor.hover.curr;
+            self.cursor.hover.curr = Some(curr);
         }
     }
 }
@@ -364,9 +344,8 @@ impl Context {
 // event handling
 impl Context {
     pub(crate) fn handle_hover(&mut self) {
-        if self.cursor.is_hovering_same_obj() && self.cursor.click.obj.is_none() {
-            return;
-        }
+        if self.cursor.is_idling() || self.cursor.is_unscoped() { return }
+
         if let Some(prev_id) = self.cursor.hover.prev.take() {
             self.pending_update.push(UpdateMode::RevertColor(prev_id));
         }
@@ -411,7 +390,7 @@ impl Render for Context {
                 let parent_orientation = self
                     .tree
                     .get_parent(node_id)
-                    .map(|parent| self.get_node_data(&parent).orientation());
+                    .map(|parent| self.get_node_data(parent).orientation());
 
                 let info = renderer.push_image(image_fn);
                 let prop = self.get_node_data_mut(node_id);
