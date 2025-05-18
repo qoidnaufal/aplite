@@ -1,7 +1,6 @@
 use shared::{Fraction, Rect, Rgba, Size, Vector2};
 
 use crate::context::layout::{Alignment, Orientation, Padding};
-use crate::context::cursor::Cursor;
 use crate::renderer::element::{CornerRadius, Shape};
 use crate::renderer::util::RenderComponentSource;
 
@@ -10,13 +9,6 @@ pub enum AspectRatio {
     Defined((u32, u32)),
     Source,
     Undefined,
-}
-
-impl AspectRatio {
-    #[inline(always)]
-    pub(crate) fn is_source(&self) -> bool {
-        matches!(self, AspectRatio::Source)
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -84,7 +76,7 @@ impl Properties {
         self.rect.adjust_height(aspect_ratio);
     }
 
-    pub(crate) fn is_hovered(&self, cursor: &Cursor) -> bool {
+    pub(crate) fn is_hovered(&self, cursor: Vector2<f32>) -> bool {
         // FIXME: consider rotation
         // let rotate = Matrix2x2::rotate(self.rotate);
         // let pos: Vector2<f32> = attr.pos.into();
@@ -92,8 +84,8 @@ impl Properties {
         let x = self.rect.x() as f32;
         let y = self.rect.y() as f32;
 
-        let x_cursor = cursor.hover.pos.x();
-        let y_cursor = cursor.hover.pos.y();
+        let x_cursor = cursor.x();
+        let y_cursor = cursor.y();
 
         let width = self.rect.width() as f32 / 2.0;
         let height = self.rect.height() as f32 / 2.0;

@@ -68,9 +68,9 @@ mod stats {
                 let render = self.render_time / counter;
                 eprintln!("startup:             {startup:?}");
                 eprintln!("average:             {render:?}");
-                eprintln!("longest:             {:?}", self.longest);
-                eprintln!("shortest:            {:?}", self.shortest);
-                eprintln!("render amount:       {counter}");
+                eprintln!("hi:                  {:?}", self.longest);
+                eprintln!("lo:                  {:?}", self.shortest);
+                eprintln!("render:              {counter}x");
             }
         }
     }
@@ -313,14 +313,7 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
         if self.renderer.is_none() { return }
         let renderer = self.renderer.as_mut().unwrap();
         let logical_pos = pos.to_logical::<f32>(renderer.scale_factor());
-        self.cx.cursor.hover.pos = (logical_pos.x, logical_pos.y).into();
-        if !renderer.is_empty() {
-            self.cx.detect_hovered_ancestor();
-            if self.cx.cursor.ancestor.is_some() {
-                self.cx.detect_hovered_child();
-                self.cx.handle_hover();
-            }
-        }
+        self.cx.handle_mouse_move((logical_pos.x, logical_pos.y));
     }
 }
 

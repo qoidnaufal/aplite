@@ -1,4 +1,4 @@
-use shared::{Matrix4x4, Rect, Vector2};
+use shared::{Matrix4x4, Vector2};
 
 use super::element::Element;
 use super::buffer::Storage;
@@ -13,7 +13,6 @@ pub(crate) struct Gfx {
     pub(crate) elements: Storage<Element>,
     pub(crate) transforms: Storage<Matrix4x4>,
     pub(crate) bind_group: wgpu::BindGroup,
-    pub(crate) uvs: Vec<Rect<f32>>,
 }
 
 impl Gfx {
@@ -24,9 +23,8 @@ impl Gfx {
             elements.bind_group_entry(0),
             transforms.bind_group_entry(1),
         ]);
-        let uvs = vec![];
 
-        Self { elements, transforms, bind_group, uvs }
+        Self { elements, transforms, bind_group }
     }
 
     pub(crate) fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> bool {

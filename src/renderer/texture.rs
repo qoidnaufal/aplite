@@ -290,11 +290,11 @@ pub(crate) mod atlas {
             if self.image_data.is_empty() { return }
 
             if !self.initialized {
-                let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as i32;
-                let width = (Self::SIZE.width() * 4) as i32;
+                let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+                let width = Self::SIZE.width() * 4;
                 let padding = (align - width % align) % align;
                 let padded_width = width + padding;
-                let dummy = vec![0_u8; (padded_width as u32 * Self::SIZE.height()) as usize];
+                let dummy = vec![0_u8; (padded_width * Self::SIZE.height()) as usize];
                 // let dummy = vec![0u8; 1024 * 1024];
                 let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: None,
@@ -306,7 +306,7 @@ pub(crate) mod atlas {
                         buffer: &buffer,
                         layout: wgpu::TexelCopyBufferLayout {
                             offset: 0,
-                            bytes_per_row: Some(padded_width as u32),
+                            bytes_per_row: Some(padded_width),
                             rows_per_image: None,
                         },
                     },
@@ -321,12 +321,12 @@ pub(crate) mod atlas {
             }
 
             for data in &self.image_data {
-                let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as i32;
-                let width = data.width() as i32 * 4;
+                let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+                let width = data.width() * 4;
                 let padding = (align - width % align) % align;
                 let padded_width = width + padding;
                 let mut padded_data = vec![];
-                padded_data.reserve((padded_width * data.height() as i32) as usize);
+                padded_data.reserve((padded_width * data.height()) as usize);
 
                 let mut i = 0;
                 for _ in 0..data.height() {
@@ -349,7 +349,7 @@ pub(crate) mod atlas {
                         buffer: &buffer,
                         layout: wgpu::TexelCopyBufferLayout {
                             offset: 0,
-                            bytes_per_row: Some(padded_width as u32),
+                            bytes_per_row: Some(padded_width),
                             rows_per_image: None,
                         },
                     },

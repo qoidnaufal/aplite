@@ -1,6 +1,6 @@
 use shared::Vector2;
 
-use super::tree::NodeId;
+use super::{tree::{NodeId, Tree}, Context};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseAction {
@@ -62,7 +62,7 @@ pub struct MouseHover {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Cursor {
-    pub ancestor: Option<NodeId>,
+    pub scope: Option<NodeId>,
     pub hover: MouseHover,
     pub state: MouseState,
     pub click: MouseClick,
@@ -71,7 +71,7 @@ pub struct Cursor {
 impl Default for Cursor {
     fn default() -> Self {
         Self {
-            ancestor: None,
+            scope: None,
             hover: MouseHover {
                 pos: Vector2::default(),
                 curr: None,

@@ -289,62 +289,52 @@ impl Context {
 
 // cursor
 impl Context {
-    pub(crate) fn detect_hovered_ancestor(&mut self) {
-        if let Some(current) = self.cursor.hover.curr.as_ref() {
-            if self.cursor.ancestor.as_ref() == self.tree.get_ancestor(current) { return }
+    pub(crate) fn handle_mouse_move(&mut self, pos: impl Into<Vector2<f32>>) {
+        if self.properties.len() <= 1 { return }
+        self.cursor.hover.pos = pos.into();
+        self.detect_scope();
+        if let Some(scope) = self.cursor.scope {
+            self.detect_hovered_child(scope);
+        } else {
+            self.cursor.hover.prev = self.cursor.hover.curr.take();
         }
-        self.cursor.ancestor = self
+        self.handle_hover();
+    }
+
+    fn detect_scope(&mut self) {
+        if let Some(current) = self.cursor.hover.curr.as_ref() {
+            if let Some(scope) = self.cursor.scope.as_ref() {
+                if self.tree.is_member_of(current, scope) { return }
+            }
+        }
+        self.cursor.scope = self
             .tree
-            .get_all_ancestor()
             .iter()
-            .find_map(|ancestor| {
-                if self.get_node_data(ancestor).is_hovered(&self.cursor) {
-                    Some(**ancestor)
+            .skip(1)
+            .find_map(|node| {
+                if self.get_node_data(node.id()).is_hovered(self.cursor.hover.pos) {
+                    Some(*node.id())
                 } else {
                     None
                 }
-            })
+            });
     }
 
-    fn detect_hover_recursive(&self, node_id: &NodeId, acc: &mut Vec<NodeId>) {
-        if let Some(children) = self.tree.get_all_children(node_id) {
-            children
-                .iter()
-                .filter(|child| self.get_node_data(child).is_hovered(&self.cursor))
-                .for_each(|child| {
-                    acc.push(*child);
-                    self.detect_hover_recursive(child, acc);
-                });
-        }
-    }
-
-    pub(crate) fn detect_hovered_child(&mut self) {
+    fn detect_hovered_child(&mut self, scope: NodeId) {
         #[cfg(feature = "stats")] let start = std::time::Instant::now();
 
         // FIXME: idk if recursive is the best practice here
-        let hovered = self.cursor.ancestor
-            .map(|ancestor| {
-                let mut sub_children = vec![ancestor];
-                self.detect_hover_recursive(&ancestor, &mut sub_children);
-                sub_children
-            })
-            .and_then(|children| {
-                children.iter().filter_map(|node| {
-                    let prop = self.get_node_data(node);
-                    if prop.is_hovered(&self.cursor) {
-                        Some(*node)
-                    } else {
-                        None
-                    }
-                }).max()
-            });
+        let mut sub_children = vec![scope];
+        self.detect_hover_recursive(&scope, &mut sub_children);
 
-        // let hovered = self.tree.iter().skip(1).filter_map(|node| {
-        //     let prop = self.get_node_data(node.id());
-        //     if prop.is_hovered(cursor) {
-        //         Some(*node.id())
-        //     } else { None }
-        // }).max();
+        let hovered = sub_children.iter().filter_map(|node| {
+            let prop = self.get_node_data(node);
+            if prop.is_hovered(self.cursor.hover.pos) {
+                Some(*node)
+            } else {
+                None
+            }
+        }).max();
 
         #[cfg(feature = "stats")] eprint!("{:?}\r", start.elapsed());
 
@@ -355,6 +345,18 @@ impl Context {
             }
         } else {
             self.cursor.hover.prev = self.cursor.hover.curr.take();
+        }
+    }
+
+    fn detect_hover_recursive(&self, node_id: &NodeId, acc: &mut Vec<NodeId>) {
+        if let Some(children) = self.tree.get_all_children(node_id) {
+            children
+                .iter()
+                .filter(|child| self.get_node_data(child).is_hovered(self.cursor.hover.pos))
+                .for_each(|child| {
+                    acc.push(*child);
+                    self.detect_hover_recursive(child, acc);
+                });
         }
     }
 }
@@ -414,7 +416,8 @@ impl Render for Context {
                 let info = renderer.push_image(image_fn);
                 let prop = self.get_node_data_mut(node_id);
                 prop.set_texture_id(info.id);
-                if prop.image_aspect_ratio().is_source() {
+
+                if let AspectRatio::Source = prop.image_aspect_ratio() {
                     if let Some(orientation) = parent_orientation {
                         match orientation {
                             Orientation::Vertical => prop.adjust_height(info.aspect_ratio),
@@ -425,8 +428,9 @@ impl Render for Context {
                     }
                 }
             }
+
             let prop = self.get_node_data(node_id);
-            renderer.add_component(prop, None);
+            renderer.add_component(prop);
         });
     }
 }

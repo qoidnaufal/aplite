@@ -162,10 +162,6 @@ impl<E: Entity> Tree<E> {
         } else { Some(entity) }
     }
 
-    // pub(crate) fn is_ancestor(&self, entity: &E) -> bool {
-    //     self.get_parent(entity).is_none()
-    // }
-
     pub(crate) fn get_parent(&self, entity: &E) -> Option<&E> {
         self.parent.get(entity.index()).and_then(|e| e.as_ref())
     }
@@ -203,14 +199,6 @@ impl<E: Entity> Tree<E> {
         self.last_child.get_mut(entity.index()).and_then(|e| e.as_mut())
     }
 
-    // pub(crate) fn get_next_sibling_mut(&mut self, entity: &E) -> Option<&mut E> {
-    //     self.next_sibling.get_mut(entity.index()).and_then(|e| e.as_mut())
-    // }
-
-    // pub(crate) fn get_prev_sibling_mut(&mut self, entity: &E) -> Option<&mut E> {
-    //     self.prev_sibling.get_mut(entity.index()).and_then(|e| e.as_mut())
-    // }
-
     pub(crate) fn get_all_children(&self, entity: &E) -> Option<Vec<E>> {
         if let Some(first) = self.get_first_child(entity) {
             let last = self.get_last_child(entity).unwrap();
@@ -234,6 +222,22 @@ impl<E: Entity> Tree<E> {
         }
     }
 
+    pub(crate) fn is_member_of(&self, sub_child: &E, entity: &E) -> bool {
+        if self.get_first_child(entity).is_none() { return false; }
+        let mut check = sub_child;
+        let mut ret = false;
+        loop {
+            if let Some(parent) = self.get_parent(check) {
+                ret = parent == entity;
+                if parent != entity { check = parent }
+            } else {
+                break;
+            }
+            if ret { break }
+        }
+        ret
+    }
+
     pub(crate) fn set_first_child(&mut self, entity: &E, child: E) {
         self.first_child[entity.index()] = Some(child);
     }
@@ -252,11 +256,6 @@ impl<E: Entity> Tree<E> {
 
     pub(crate) fn len(&self) -> usize {
         self.entities.len()
-    }
-
-    #[allow(unused)]
-    pub(crate) fn is_empty(&self) -> bool {
-        self.entities.is_empty()
     }
 
     pub(crate) fn get_node_ref(&self, index: usize) -> NodeRef<'_, E> {
@@ -349,6 +348,8 @@ mod tree_test {
             tree.insert(node_id, parent);
             if i > 0 && i % 3 == 0 {
                 parent = Some(NodeId(1));
+            } else if i > 0 && i % 4 == 0 {
+                parent = tree.get_first_child(&NodeId(1)).map(|e| *e);
             } else {
                 parent = Some(node_id);
             }
@@ -361,8 +362,14 @@ mod tree_test {
         let tree = setup_tree();
 
         let ancestor = tree.get_ancestor(&NodeId(10));
+        let parent = tree.get_parent(&NodeId(6));
+        let is_member_of_two = tree.is_member_of(&NodeId(6), &NodeId(2));
+        let is_member_of_one = tree.is_member_of(&NodeId(6), &NodeId(1));
         let next_sibling = tree.get_next_sibling(&NodeId(5));
+
         assert_eq!(ancestor, Some(&NodeId(1)));
+        assert_eq!(parent, Some(&NodeId(2)));
+        assert_eq!(is_member_of_one, is_member_of_two);
         assert_eq!(next_sibling, Some(&NodeId(8)));
     }
 }

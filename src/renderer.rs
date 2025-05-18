@@ -65,8 +65,6 @@ impl Renderer {
         })
     }
 
-    pub(crate) fn is_empty(&self) -> bool { self.gfx.is_empty() }
-
     pub(crate) const fn scale_factor(&self) -> f64 { self.screen.scale_factor }
 
     pub(crate) fn set_scale_factor(&mut self, scale_factor: f64) {
@@ -202,14 +200,11 @@ impl Renderer {
         ImageInfo { id, aspect_ratio }
     }
 
-    pub(crate) fn add_component(&mut self, rc: &impl RenderComponentSource, uv: Option<Rect<f32>>) {
+    pub(crate) fn add_component(&mut self, rc: &impl RenderComponentSource) {
         let element = rc.element().with_transform_id(self.gfx.count() as u32);
         let transform = Matrix4x4::IDENTITY;
 
         self.gfx.elements.push(element);
         self.gfx.transforms.push(transform);
-        if let Some(uv) = uv {
-            self.gfx.uvs.push(uv);
-        }
     }
 }
