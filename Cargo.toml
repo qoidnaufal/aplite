@@ -20,5 +20,6 @@ shared = { path = "./shared" }
 pollster = { path = "./pollster" }
 
 [features]
-stats = []
+cursor_stats = []
 debug_tree = []
+render_stats = []

@@ -24,15 +24,22 @@ pub(crate) enum UpdateMode {
     ClickColor(NodeId),
     RevertColor(NodeId),
     Transform(NodeId),
+    Size(NodeId),
 }
+
+type ImageFnMap = HashMap<NodeId, Box<dyn Fn() -> ImageData>>;
+
+type StyleFnMap = HashMap<NodeId, Box<dyn Fn(&mut Properties)>>;
+
+type Callbacks = HashMap<NodeId, Box<dyn Fn()>>;
 
 pub struct Context {
     current: Option<NodeId>,
     pub(crate) tree: Tree<NodeId>,
     pub(crate) properties: Vec<Properties>,
-    image_fn: HashMap<NodeId, Box<dyn Fn() -> ImageData>>,
-    style_fn: HashMap<NodeId, Box<dyn Fn(&mut Properties)>>,
-    callbacks: HashMap<NodeId, Box<dyn Fn()>>,
+    image_fn: ImageFnMap,
+    style_fn: StyleFnMap,
+    callbacks: Callbacks,
     pub(crate) cursor: Cursor,
     pending_update: Vec<UpdateMode>,
 }
@@ -118,23 +125,25 @@ impl Context {
             match mode {
                 UpdateMode::HoverColor(node_id) => {
                     if let Some(color) = self.get_node_data(node_id).hover_color() {
-                        renderer.update_element_color(node_id.index() - 1, color);
+                        renderer.update_element_color(node_id.index(), color);
                     }
                 },
                 UpdateMode::ClickColor(node_id) => {
                     if let Some(color) = self.get_node_data(node_id).click_color() {
-                        renderer.update_element_color(node_id.index() - 1, color);
+                        renderer.update_element_color(node_id.index(), color);
                     }
                 }
                 UpdateMode::RevertColor(node_id) => {
                     let color = self.get_node_data(node_id).fill_color();
-                    renderer.update_element_color(node_id.index() - 1, color);
-                },
+                    renderer.update_element_color(node_id.index(), color);
+                }
                 UpdateMode::Transform(node_id) => {
                     let rect = self.get_node_data(node_id).rect();
-
-                    renderer.update_element_transform(node_id.index() - 1, rect);
-                    renderer.update_element_size(node_id.index() - 1, rect.size());
+                    renderer.update_element_transform(node_id.index(), rect);
+                }
+                UpdateMode::Size(node_id) => {
+                    let rect = self.get_node_data(node_id).rect();
+                    renderer.update_element_size(node_id.index(), rect.size());
                 }
             }
         });
@@ -158,6 +167,8 @@ impl Context {
         if let Some(prop) = self.properties.get_mut(0) {
             f(prop);
         }
+        self.pending_update.push(UpdateMode::Size(NodeId::root()));
+        self.pending_update.push(UpdateMode::Transform(NodeId::root()));
     }
 }
 
@@ -238,6 +249,8 @@ impl Context {
         let padding = prop.padding();
         let mut size = prop.size();
 
+        let mut resized = false;
+
         if let Some(children) = self.tree.get_all_children(node_id) {
             children.iter().for_each(|child_id| {
                 let child_size = self.calculate_size_recursive(child_id);
@@ -273,13 +286,20 @@ impl Context {
             } else {
                 size.adjust_width(tuple.into());
             }
+            self.get_node_data_mut(node_id).set_size(size);
+            self.pending_update.push(UpdateMode::Size(*node_id));
         }
 
         let final_size = size
             .max(prop.min_width(), prop.min_height())
             .min(prop.max_width(), prop.max_height());
 
-        self.get_node_data_mut(node_id).set_size(final_size);
+        resized |= final_size != prop.size();
+
+        if resized {
+            self.get_node_data_mut(node_id).set_size(final_size);
+            self.pending_update.push(UpdateMode::Size(*node_id));
+        }
         final_size
     }
 }
@@ -290,7 +310,7 @@ impl Context {
         if self.properties.len() <= 1 { return }
         self.cursor.hover.pos = pos.into();
 
-        #[cfg(feature = "stats")] let start = std::time::Instant::now();
+        #[cfg(feature = "cursor_stats")] let start = std::time::Instant::now();
         self.detect_scope();
 
         if let Some(scope) = self.cursor.scope {
@@ -298,7 +318,7 @@ impl Context {
         } else {
             self.cursor.hover.prev = self.cursor.hover.curr.take();
         }
-        #[cfg(feature = "stats")] eprintln!("{:?}", start.elapsed());
+        #[cfg(feature = "cursor_stats")] eprintln!("{:?}", start.elapsed());
 
         self.handle_hover();
     }
@@ -313,13 +333,13 @@ impl Context {
             .tree
             .iter()
             .skip(1)
-            .find_map(|node| {
+            .filter_map(|node| {
                 if self.get_node_data(node.id()).is_hovered(self.cursor.hover.pos) {
                     Some(*node.id())
                 } else {
                     None
                 }
-            });
+            }).max();
     }
 
     fn detect_hovered_child(&mut self, scope: NodeId) {
@@ -384,7 +404,7 @@ impl Context {
 
 impl Render for Context {
     fn render(&mut self, renderer: &mut Renderer) {
-        let nodes = self.tree.iter().skip(1).map(|node| *node.id()).collect::<Vec<_>>();
+        let nodes = self.tree.iter().map(|node| *node.id()).collect::<Vec<_>>();
         nodes.iter().for_each(|node_id| {
             if let Some(image_fn) = self.image_fn.get(node_id) {
                 let parent_orientation = self
@@ -405,6 +425,8 @@ impl Render for Context {
                     } else {
                         prop.adjust_width(info.aspect_ratio);
                     }
+                    eprintln!("image size: {:?}", prop.size());
+                    self.pending_update.push(UpdateMode::Size(*node_id));
                 }
             }
 

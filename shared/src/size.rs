@@ -175,7 +175,7 @@ impl From<Size<u32>> for Size<f32> {
 
 impl From<Size<f32>> for Size<u32> {
     fn from(value: Size<f32>) -> Self {
-        Self::new(value.width() as _, value.height() as _)
+        Self::new(value.width().round() as _, value.height().round() as _)
     }
 }
 

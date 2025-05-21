@@ -1,4 +1,6 @@
 use shared::{Rgba, Size};
+
+use super::util::RenderComponentSource;
 // use super::{Indices, RenderComponentSource};
 
 #[repr(u32)]
@@ -46,14 +48,14 @@ impl CornerRadius {
         }
     }
 
-    pub fn set_all(&mut self, tl: u32, bl: u32, br: u32, tr: u32) {
+    pub fn set_each(&mut self, tl: u32, bl: u32, br: u32, tr: u32) {
         self.tl = tl as _;
         self.bl = bl as _;
         self.br = br as _;
         self.tr = tr as _;
     }
 
-    pub fn set_each(&mut self, r: u32) {
+    pub fn set_all(&mut self, r: u32) {
         self.tl = r as _;
         self.bl = r as _;
         self.br = r as _;
@@ -75,14 +77,6 @@ impl CornerRadius {
     pub fn set_top_right(&mut self, r: u32) {
         self.tr = r as _;
     }
-
-    // fn rescale(mut self, size: Size<f32>) -> Self {
-    //     self.tl *= size.width() / (100. * 2.);
-    //     self.bl *= size.width() / (100. * 2.);
-    //     self.br *= size.width() / (100. * 2.);
-    //     self.tr *= size.width() / (100. * 2.);
-    //     self
-    // }
 }
 
 #[repr(C)]
@@ -100,29 +94,19 @@ pub(crate) struct Element {
 }
 
 impl Element {
-    // pub(crate) fn new(
-    //     fill_color: Rgba<f32>,
-    //     stroke_color: Rgba<f32>,
-    //     corners: CornerRadius,
-    //     rect: Rect<f32>,
-    //     shape: Shape,
-    //     rotation: f32,
-    //     stroke_width: f32,
-    //     texture_id: i32,
-    // ) -> Self {
-    //     let size = rect.size();
-    //     Self {
-    //         fill_color,
-    //         stroke_color,
-    //         corners,
-    //         size,
-    //         shape,
-    //         rotation,
-    //         stroke_width,
-    //         texture_id,
-    //         transform_id: 0,
-    //     }
-    // }
+    pub(crate) fn new(rcs: &impl RenderComponentSource) -> Self {
+        Self {
+            fill_color: rcs.fill_color(),
+            stroke_color: rcs.stroke_color(),
+            corners: rcs.corners(),
+            size: rcs.rect().size(),
+            shape: rcs.shape(),
+            rotation: rcs.rotation(),
+            stroke_width: rcs.stroke_width(),
+            texture_id: rcs.texture_id(),
+            transform_id: 0,
+        }
+    }
 
     pub(crate) fn with_transform_id(mut self, id: u32) -> Self {
         self.transform_id = id;

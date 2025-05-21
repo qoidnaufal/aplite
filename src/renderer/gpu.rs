@@ -62,13 +62,10 @@ impl Gpu {
             view_formats: vec![],
         };
 
-        Ok(Self {
-            surface,
-            device,
-            queue,
-            config,
-            // scale_factor,
-        })
+        let gpu = Self { surface, device, queue, config, };
+        gpu.configure();
+
+        Ok(gpu)
     }
 
     pub(crate) fn reconfigure_size(&mut self, size: Size<u32>) {
@@ -83,7 +80,7 @@ impl Gpu {
     }
 
     #[inline(always)]
-    pub(crate) fn configure(&self) {
+    fn configure(&self) {
         self.surface.configure(&self.device, &self.config);
     }
 

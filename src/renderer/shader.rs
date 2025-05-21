@@ -1,10 +1,6 @@
 pub const SHADER: &str = r"
-struct Screen {
-    transform: mat4x4<f32>,
-};
-
-@group(0) @binding(0) var<uniform> screen: Screen;
-@group(0) @binding(1) var<uniform> scaler: vec2<f32>;
+@group(0) @binding(0) var<uniform> screen: mat4x4f;
+@group(0) @binding(1) var<uniform> resolution: vec2<f32>;
 
 struct Radius {
     top_left: f32,
@@ -15,10 +11,10 @@ struct Radius {
 
 fn scale_radius(r: Radius, ew: f32) -> Radius {
     var ret: Radius;
-    ret.top_left = (r.top_left * ew / (100.0 * 2.0)) / scaler.x;
-    ret.bot_left = (r.bot_left * ew / (100.0 * 2.0)) / scaler.x;
-    ret.bot_right = (r.bot_right * ew / (100.0 * 2.0)) / scaler.x;
-    ret.top_right = (r.top_right * ew / (100.0 * 2.0)) / scaler.x;
+    ret.top_left = (r.top_left * ew / (100.0 * 2.0)) / resolution.x;
+    ret.bot_left = (r.bot_left * ew / (100.0 * 2.0)) / resolution.x;
+    ret.bot_right = (r.bot_right * ew / (100.0 * 2.0)) / resolution.x;
+    ret.top_right = (r.top_right * ew / (100.0 * 2.0)) / resolution.x;
     return ret;
 }
 
@@ -51,10 +47,6 @@ struct VertexInput {
     @location(1) uv: vec2<f32>,
 }
 
-struct Instance {
-    @location(2) index: u32,
-};
-
 struct FragmentPayload {
     @builtin(position) position: vec4<f32>,
     @location(0) @interpolate(flat) index: u32,
@@ -62,16 +54,19 @@ struct FragmentPayload {
 };
 
 @vertex
-fn vs_main(vertex: VertexInput, instance: Instance) -> FragmentPayload {
-    let element = elements[instance.index];
-    let screen_t = screen.transform;
+fn vs_main(vertex: VertexInput, @builtin(instance_index) instance: u32) -> FragmentPayload {
+    let element = elements[instance];
     let element_t = transforms[element.transform_id];
-    let pos = rotate(element.rotate, vertex.pos);
+
+    var pos = vec4f(vertex.pos, 0.0, 1.0);
+    if element.rotate != 0.0 {
+        pos = rotate(element.rotate, vertex.pos);
+    }
 
     var out: FragmentPayload;
     out.uv = select(vertex.uv, vertex.uv * 2 - 1, element.texture_id < 0);
-    out.index = instance.index;
-    out.position = screen_t * element_t * pos;
+    out.index = instance;
+    out.position = screen * element_t * pos;
     return out;
 }
 
@@ -104,18 +99,13 @@ fn sdSegment(p: vec2f, a: vec2f, b: vec2f) -> f32 {
     return length(pa - ba * h);
 }
 
-fn sdf(uv: vec2<f32>, element: Element) -> f32 {
-    let transform = transforms[element.transform_id];
-    let size = element.size / scaler;
-    let stroke_width = vec2f(
-        element.stroke_width / scaler.x,
-        element.stroke_width / scaler.y,
-    );
+fn sdf(uv: vec2<f32>, element: Element, stroke_width: f32) -> f32 {
+    let size = element.size / resolution;
 
     switch element.shape {
         case 0u: {
             let p = uv * size.x;
-            let r = size.x - stroke_width.x;
+            let r = size.x - stroke_width;
             return sdCircle(p, r);
         }
         case 1u: {
@@ -133,22 +123,34 @@ fn sdf(uv: vec2<f32>, element: Element) -> f32 {
     }
 }
 
+struct Stroke {
+    width: f32,
+    color: vec4f,
+};
+
+fn get_stroke(element: Element) -> Stroke {
+    var stroke: Stroke;
+    stroke.color = element.stroke_color;
+    stroke.width = element.stroke_width / resolution.x;
+    if element.stroke_width == 0 {
+        stroke.color = element.color;
+        stroke.width = 5.0 / resolution.x;
+    }
+    return stroke;
+}
+
 @fragment
 fn fs_main(in: FragmentPayload) -> @location(0) vec4<f32> {
     let element = elements[in.index];
-    let color = element.color;
-    let border = element.stroke_color;
 
-    let transform = transforms[element.transform_id];
-    let stroke_width = element.stroke_width / scaler.x;
+    if in.index == 0 { return element.color; }
+    if element.texture_id > -1 { return textureSample(t, s, in.uv); }
 
-    let sdf = sdf(in.uv, element);
-    let fill = select(vec4f(0.0), color, sdf < 0.0);
+    let stroke = get_stroke(element);
+    let sdf = sdf(in.uv, element, stroke.width);
+    let fill = select(vec4f(0.0), element.color, sdf < 0.0);
+    let blend = 1.0 - smoothstep(0.0, stroke.width, abs(sdf));
 
-    let blend = 1.0 - smoothstep(0.0, stroke_width, abs(sdf));
-    let color_mask = mix(fill, border, select(0.0, 1.0, blend > 0.0));
-    let texture_mask = textureSample(t, s, in.uv);
-
-    return select(color_mask, texture_mask, element.texture_id > -1);
+    return mix(fill, stroke.color, blend);
 }
 ";

@@ -57,6 +57,10 @@ impl<const M: usize, const N: usize, T: GpuPrimitive> Matrix<M, N, T> {
         Self { inner: [ Vector::default(); N ] }
     }
 
+    pub fn scale(&self) -> [T; 2] {
+        [self.inner[0].x(), self.inner[1].y()]
+    }
+
     #[inline(always)]
     pub fn with_translate(mut self, x: T, y: T) -> Self {
         self[N - 1].set_x(x);

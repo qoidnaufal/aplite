@@ -1,4 +1,4 @@
-use super::{gfx::Gfx, util::cast_slice};
+use super::util::cast_slice;
 
 const INITIAL_CAPACITY: usize = 1024;
 
@@ -66,18 +66,15 @@ impl<T> Storage<T> {
         realloc
     }
 
-    pub(crate) fn push(&mut self, data: T) {
-        self.data.push(data);
-    }
+    pub(crate) fn push(&mut self, data: T) { self.data.push(data) }
 
-    #[allow(unused)]
     pub(crate) fn update<F: FnMut(&mut T)>(&mut self, index: usize, mut f: F) {
         f(&mut self.data[index])
     }
 
-    pub(crate) fn len(&self) -> usize {
-        self.data.len()
-    }
+    pub(crate) fn clear(&mut self) { self.data.clear() }
+
+    pub(crate) fn len(&self) -> usize { self.data.len() }
 }
 
 pub(crate) struct Uniform<T: Copy> {
@@ -127,40 +124,5 @@ impl<T: Copy> Uniform<T> {
 
     pub(crate) fn update(&mut self, f: impl Fn(&mut T)) {
         f(&mut self.data)
-    }
-}
-
-pub(crate) enum MeshBuffer {
-    Uninitialized,
-    Initialized {
-        indices: wgpu::Buffer,
-        vertices: wgpu::Buffer,
-        instances: wgpu::Buffer,
-    }
-}
-
-impl MeshBuffer {
-    pub(crate) fn init(&mut self, gfx: &Gfx, device: &wgpu::Device) {
-        *self = Self::Initialized {
-            indices: gfx.indices(device),
-            vertices: gfx.vertices(device),
-            instances: gfx.instances(device),
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) fn is_uninit(&self) -> bool {
-        matches!(self, Self::Uninitialized)
-    }
-
-    pub(crate) fn get_buffer(&self) -> Option<(&wgpu::Buffer, &wgpu::Buffer, &wgpu::Buffer)> {
-        match self {
-            MeshBuffer::Uninitialized => None,
-            MeshBuffer::Initialized {
-                indices,
-                vertices,
-                instances
-            } => Some((indices, vertices, instances)),
-        }
     }
 }

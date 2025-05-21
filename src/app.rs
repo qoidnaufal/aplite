@@ -11,6 +11,7 @@ use shared::{Size, Rgba};
 use crate::prelude::ApliteResult;
 use crate::renderer::util::Render;
 use crate::renderer::Renderer;
+// use crate::renderer::screen::ScreenResolution;
 use crate::context::Context;
 use crate::error::ApliteError;
 
@@ -20,7 +21,7 @@ enum WinitSize {
     Physical(PhysicalSize<u32>),
 }
 
-#[cfg(feature = "stats")]
+#[cfg(feature = "render_stats")]
 mod stats {
     pub(crate) struct Stats {
         counter: u32,
@@ -63,14 +64,17 @@ mod stats {
                 let startup = self.startup_time;
                 eprintln!("startup time: {startup:?}");
             } else {
-                let counter = self.counter - 1;
                 let startup = self.startup_time;
-                let render = self.render_time / counter;
+                let counter = self.counter - 1;
+                let average = self.render_time / counter;
+                let fps = counter as f64 / self.render_time.as_secs_f64();
                 eprintln!("startup:             {startup:?}");
-                eprintln!("average:             {render:?}");
+                eprintln!("average:             {average:?}");
                 eprintln!("hi:                  {:?}", self.longest);
                 eprintln!("lo:                  {:?}", self.shortest);
-                eprintln!("render:              {counter}x");
+                eprintln!("frames rendered:     {counter}");
+                eprintln!("total time:          {:?}", self.render_time);
+                eprintln!("fps:                 {:?}", fps.round() as usize);
             }
         }
     }
@@ -144,8 +148,9 @@ pub struct Aplite<F: FnOnce(&mut Context)> {
     window: HashMap<WindowId, Arc<Window>>,
     window_fn: Option<fn(&mut WindowAttributes)>,
     view_fn: Option<F>,
+    // screen_resolution: ScreenResolution,
 
-    #[cfg(feature = "stats")]
+    #[cfg(feature = "render_stats")]
     stats: stats::Stats,
 }
 
@@ -166,8 +171,9 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
             window: HashMap::with_capacity(4),
             window_fn: None,
             view_fn: None,
+            // screen_resolution: ScreenResolution::default(),
 
-            #[cfg(feature = "stats")]
+            #[cfg(feature = "render_stats")]
             stats: stats::Stats::new(),
         }
     }
@@ -194,16 +200,13 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
 impl<F: FnOnce(&mut Context)> Aplite<F> {
     fn initialize_window(&mut self, event_loop: &ActiveEventLoop) -> Result<Arc<Window>, ApliteError> {
         let mut attributes = WindowAttributes::default();
-        if let Some(window_fn) = self.window_fn.take() {
-            window_fn(&mut attributes);
-        }
+        if let Some(window_fn) = self.window_fn.take() { window_fn(&mut attributes) }
         let window = event_loop.create_window(attributes.into())?;
-        let inner_size = window.inner_size();
-        let sf = window.scale_factor() as u32;
-        let size: Size<u32> = (inner_size.width, inner_size.height).into();
+        let sf = window.scale_factor();
+        let size: Size<u32> = window.inner_size().to_logical(sf).into();
         self.cx.update_window_properties(|prop| {
             prop.set_size(size);
-            prop.set_position((size / (2 * sf)).into());
+            prop.set_position((size / 2).into());
         });
         Ok(Arc::new(window))
     }
@@ -212,8 +215,8 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
         let mut renderer = Renderer::new(Arc::clone(&window))?;
         if let Some(view_fn) = self.view_fn.take() {
             view_fn(&mut self.cx);
-            self.cx.render(&mut renderer);
             self.cx.layout();
+            self.cx.render(&mut renderer);
 
             #[cfg(feature = "debug_tree")] self.cx.debug_tree();
         }
@@ -237,12 +240,11 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
                     (logical.width, logical.height).into()
                 },
             };
-            // FIXME: use top_left as (0, 0)
             self.cx.update_window_properties(|wp| {
                 wp.set_size(size);
                 wp.set_position((size / 2).into());
             });
-            renderer.resize(size);
+            renderer.resize(self.cx.get_window_properties().size());
         }
     }
 
@@ -260,20 +262,20 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
 
     fn detect_update(&mut self, window_id: &WindowId) {
         if self.cx.has_changed() {
+            self.submit_update();
             self.request_redraw(window_id);
         }
     }
 
     fn handle_redraw_request(&mut self, window_id: &WindowId, event_loop: &ActiveEventLoop) {
-        self.submit_update();
         if let Some(window) = self.window.get(window_id) {
             window.pre_present_notify();
 
-            #[cfg(feature = "stats")] let start = std::time::Instant::now();
+            #[cfg(feature = "render_stats")] let start = std::time::Instant::now();
 
-            self.submit_buffer(event_loop);
+            self.render(event_loop);
 
-            #[cfg(feature = "stats")] self.stats.inc(start.elapsed())
+            #[cfg(feature = "render_stats")] self.stats.inc(start.elapsed())
         }
     }
 
@@ -283,11 +285,11 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
         }
     }
 
-    fn submit_buffer(&mut self, event_loop: &ActiveEventLoop) {
+    fn render(&mut self, event_loop: &ActiveEventLoop) {
         if self.renderer.is_none() { event_loop.exit() }
         let renderer = self.renderer.as_mut().unwrap();
         let size = renderer.surface_size();
-        if let Err(err) = renderer.submit_buffer(self.cx.get_window_properties().fill_color()) {
+        if let Err(err) = renderer.render(self.cx.get_window_properties().fill_color()) {
             match err {
                 wgpu::SurfaceError::Outdated
                 | wgpu::SurfaceError::Lost => self.handle_resize(WinitSize::Logical(size)),
