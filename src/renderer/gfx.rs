@@ -1,18 +1,18 @@
-use shared::Matrix4x4;
+use shared::Matrix3x2;
 
 use super::element::Element;
 use super::buffer::Storage;
 
 pub(crate) struct Gfx {
     pub(crate) elements: Storage<Element>,
-    pub(crate) transforms: Storage<Matrix4x4>,
+    pub(crate) transforms: Storage<Matrix3x2>,
     pub(crate) bind_group: wgpu::BindGroup,
 }
 
 impl Gfx {
     pub(crate) fn new(device: &wgpu::Device) -> Self {
         let elements = Storage::<Element>::new(device, "element");
-        let transforms = Storage::<Matrix4x4>::new(device, "transforms");
+        let transforms = Storage::<Matrix3x2>::new(device, "transforms");
         let bind_group = Self::bind_group(device, &[
             elements.bind_group_entry(0),
             transforms.bind_group_entry(1),
@@ -41,7 +41,7 @@ impl Gfx {
             label: Some("gfx bind group layout"),
             entries: &[
                 Storage::<Element>::bind_group_layout_entry(0),
-                Storage::<Matrix4x4>::bind_group_layout_entry(1),
+                Storage::<Matrix3x2>::bind_group_layout_entry(1),
             ],
         })
     }
@@ -58,9 +58,4 @@ impl Gfx {
     }
 
     pub(crate) fn count(&self) -> usize { self.elements.len() }
-
-    pub(crate) fn clear(&mut self) {
-        self.elements.clear();
-        self.transforms.clear();
-    }
 }

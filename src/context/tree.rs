@@ -200,26 +200,15 @@ impl<E: Entity> Tree<E> {
     }
 
     pub(crate) fn get_all_children(&self, entity: &E) -> Option<Vec<E>> {
-        if let Some(first) = self.get_first_child(entity) {
-            let last = self.get_last_child(entity).unwrap();
-            if first == last {
-                Some(vec![*first])
-            } else {
-                let mut children = vec![];
-                let mut curr = *first;
-                loop {
-                    children.push(curr);
-                    if let Some(next) = self.get_next_sibling(&curr) {
-                        curr = *next;
-                    } else {
-                        break;
-                    }
-                }
-                Some(children)
+        self.get_first_child(entity).map(|first| {
+            let mut curr = *first;
+            let mut children = vec![curr];
+            while let Some(next) = self.get_next_sibling(&curr) {
+                children.push(*next);
+                curr = *next;
             }
-        } else {
-            None
-        }
+            children
+        })
     }
 
     pub(crate) fn is_member_of(&self, sub_child: &E, entity: &E) -> bool {

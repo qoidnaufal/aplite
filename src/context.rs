@@ -2,14 +2,15 @@ use std::collections::HashMap;
 
 use shared::{Size, Vector2};
 
+use crate::renderer::texture::ImageData;
+use crate::renderer::util::Render;
+use crate::renderer::Renderer;
+// use crate::reactive::ReactiveGraph;
+
 pub mod layout;
 pub(crate) mod properties;
 pub(crate) mod cursor;
 pub(crate) mod tree;
-
-use crate::renderer::texture::ImageData;
-use crate::renderer::util::Render;
-use crate::renderer::Renderer;
 
 use properties::{AspectRatio, Properties};
 use tree::{Entity, NodeId, Tree};
@@ -27,19 +28,18 @@ pub(crate) enum UpdateMode {
     Size(NodeId),
 }
 
-type ImageFnMap = HashMap<NodeId, Box<dyn Fn() -> ImageData>>;
-
-type StyleFnMap = HashMap<NodeId, Box<dyn Fn(&mut Properties)>>;
-
-type Callbacks = HashMap<NodeId, Box<dyn Fn()>>;
+type ImageFn = Box<dyn Fn() -> ImageData>;
+type StyleFn = Box<dyn Fn(&mut Properties)>;
+type ActionFn = Box<dyn Fn()>;
 
 pub struct Context {
     current: Option<NodeId>,
     pub(crate) tree: Tree<NodeId>,
     pub(crate) properties: Vec<Properties>,
-    image_fn: ImageFnMap,
-    style_fn: StyleFnMap,
-    callbacks: Callbacks,
+    image_fn: HashMap<NodeId, ImageFn>,
+    style_fn: HashMap<NodeId, StyleFn>,
+    callbacks: HashMap<NodeId, ActionFn>,
+    // pub(crate) reactive: ReactiveGraph,
     pub(crate) cursor: Cursor,
     pending_update: Vec<UpdateMode>,
 }
@@ -53,6 +53,7 @@ impl Default for Context {
             image_fn: HashMap::new(),
             style_fn: HashMap::new(),
             callbacks: HashMap::new(),
+            // reactive: ReactiveGraph::new(),
             cursor: Cursor::new(),
             pending_update: Vec::with_capacity(10),
         }
@@ -125,25 +126,25 @@ impl Context {
             match mode {
                 UpdateMode::HoverColor(node_id) => {
                     if let Some(color) = self.get_node_data(node_id).hover_color() {
-                        renderer.update_element_color(node_id.index(), color);
+                        renderer.update_element_color(node_id.index() - 1, color);
                     }
                 },
                 UpdateMode::ClickColor(node_id) => {
                     if let Some(color) = self.get_node_data(node_id).click_color() {
-                        renderer.update_element_color(node_id.index(), color);
+                        renderer.update_element_color(node_id.index() - 1, color);
                     }
                 }
                 UpdateMode::RevertColor(node_id) => {
                     let color = self.get_node_data(node_id).fill_color();
-                    renderer.update_element_color(node_id.index(), color);
+                    renderer.update_element_color(node_id.index() - 1, color);
                 }
                 UpdateMode::Transform(node_id) => {
                     let rect = self.get_node_data(node_id).rect();
-                    renderer.update_element_transform(node_id.index(), rect);
+                    renderer.update_element_transform(node_id.index() - 1, rect);
                 }
                 UpdateMode::Size(node_id) => {
                     let rect = self.get_node_data(node_id).rect();
-                    renderer.update_element_size(node_id.index(), rect.size());
+                    renderer.update_element_size(node_id.index() - 1, rect.size());
                 }
             }
         });
@@ -167,8 +168,6 @@ impl Context {
         if let Some(prop) = self.properties.get_mut(0) {
             f(prop);
         }
-        self.pending_update.push(UpdateMode::Size(NodeId::root()));
-        self.pending_update.push(UpdateMode::Transform(NodeId::root()));
     }
 }
 
@@ -193,7 +192,6 @@ impl Context {
         properties: Properties,
     ) {
         self.tree.insert(node_id, parent);
-        // self.data.insert(&properties);
         self.properties.push(properties);
     }
 
@@ -404,7 +402,7 @@ impl Context {
 
 impl Render for Context {
     fn render(&mut self, renderer: &mut Renderer) {
-        let nodes = self.tree.iter().map(|node| *node.id()).collect::<Vec<_>>();
+        let nodes = self.tree.iter().skip(1).map(|node| *node.id()).collect::<Vec<_>>();
         nodes.iter().for_each(|node_id| {
             if let Some(image_fn) = self.image_fn.get(node_id) {
                 let parent_orientation = self

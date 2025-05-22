@@ -23,18 +23,19 @@ pub struct ImageData {
 }
 
 impl ImageData {
-    pub fn new(dimensions: impl Into<Size<u32>>, data: &[u8]) -> Self {
+    pub fn new(size: impl Into<Size<u32>>, data: &[u8]) -> Self {
+        let size: Size<u32> = size.into();
         Self {
-            rect: Rect::new((0, 0).into(), dimensions.into()),
+            rect: Rect::new((0, 0), (size.width(), size.height())),
             data: data.to_vec(),
         }
     }
 
-    pub(crate) fn aspect_ratio(&self) -> Fraction<u32> {
+    pub const fn rect(&self) -> Rect<u32> { self.rect }
+
+    pub fn aspect_ratio(&self) -> Fraction<u32> {
         self.rect.size().aspect_ratio()
     }
-
-    // pub(crate) const fn rect(&self) -> Rect<u32> { self.rect }
 
     pub(crate) const fn size(&self) -> Size<u32> { self.rect.size() }
 
@@ -45,8 +46,6 @@ impl ImageData {
     // pub(crate) const fn x(&self) -> u32 { self.rect.x() }
 
     // pub(crate) const fn y(&self) -> u32 { self.rect.y() }
-
-    // pub(crate) fn rect_mut(&mut self) -> &mut Rect<u32> { &mut self.rect }
 }
 
 impl std::ops::Deref for ImageData {
@@ -185,7 +184,7 @@ pub(crate) mod atlas {
         const SPACING: u32 = 1;
 
         pub(crate) fn new(device: &wgpu::Device) -> Self {
-            let used = Rect::new(Vector2::new(0, 0), Size::new(0, 0));
+            let used = Rect::new((0, 0), (0, 0));
             let texture = device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("texture atlas"),
                 size: wgpu::Extent3d {
@@ -381,7 +380,7 @@ pub(crate) mod atlas {
             fn new() -> Self {
                 Self {
                     max: Size::<u32>::new(900, 1350),
-                    used: Rect::<u32>::new(Vector2::new(0, 0), Size::new(0, 0)),
+                    used: Rect::<u32>::new((0, 0), (0, 0)),
                     data: vec![],
                 }
             }
@@ -415,7 +414,7 @@ pub(crate) mod atlas {
             let mut packer = Packer::new();
             let mut ids = vec![];
             for _ in 0..8 {
-                let data = Rect::<u32>::new(Vector2::new(0, 0), Size::new(450, 450));
+                let data = Rect::<u32>::new((0, 0), (450, 450));
                 let id = packer.push(data);
                 ids.push(id);
             }

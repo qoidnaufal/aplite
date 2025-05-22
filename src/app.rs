@@ -46,7 +46,7 @@ mod stats {
             if self.counter == 0 {
                 self.startup_time += d;
             } else if self.counter == 1 {
-                self.longest = self.longest.max(d);
+                self.longest = d;
                 self.shortest = d;
                 self.render_time += d;
             } else {
@@ -68,12 +68,13 @@ mod stats {
                 let counter = self.counter - 1;
                 let average = self.render_time / counter;
                 let fps = counter as f64 / self.render_time.as_secs_f64();
+                eprintln!();
                 eprintln!("startup:             {startup:?}");
                 eprintln!("average:             {average:?}");
                 eprintln!("hi:                  {:?}", self.longest);
                 eprintln!("lo:                  {:?}", self.shortest);
                 eprintln!("frames rendered:     {counter}");
-                eprintln!("total time:          {:?}", self.render_time);
+                eprintln!("total time spent:    {:?}", self.render_time);
                 eprintln!("fps:                 {:?}", fps.round() as usize);
             }
         }
@@ -244,7 +245,7 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
                 wp.set_size(size);
                 wp.set_position((size / 2).into());
             });
-            renderer.resize(self.cx.get_window_properties().size());
+            renderer.resize(size);
         }
     }
 
@@ -262,18 +263,17 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
 
     fn detect_update(&mut self, window_id: &WindowId) {
         if self.cx.has_changed() {
-            self.submit_update();
             self.request_redraw(window_id);
         }
     }
 
     fn handle_redraw_request(&mut self, window_id: &WindowId, event_loop: &ActiveEventLoop) {
-        if let Some(window) = self.window.get(window_id) {
-            window.pre_present_notify();
+        if let Some(window) = self.window.get(window_id).cloned() {
+            self.submit_update();
 
             #[cfg(feature = "render_stats")] let start = std::time::Instant::now();
 
-            self.render(event_loop);
+            self.render(event_loop, || window.pre_present_notify());
 
             #[cfg(feature = "render_stats")] self.stats.inc(start.elapsed())
         }
@@ -285,11 +285,12 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
         }
     }
 
-    fn render(&mut self, event_loop: &ActiveEventLoop) {
+    fn render<P: FnOnce()>(&mut self, event_loop: &ActiveEventLoop, pre_present_notify: P) {
         if self.renderer.is_none() { event_loop.exit() }
         let renderer = self.renderer.as_mut().unwrap();
         let size = renderer.surface_size();
-        if let Err(err) = renderer.render(self.cx.get_window_properties().fill_color()) {
+        let color = self.cx.get_window_properties().fill_color();
+        if let Err(err) = renderer.render(color, pre_present_notify) {
             match err {
                 wgpu::SurfaceError::Outdated
                 | wgpu::SurfaceError::Lost => self.handle_resize(WinitSize::Logical(size)),

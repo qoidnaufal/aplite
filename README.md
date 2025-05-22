@@ -28,22 +28,23 @@ fn root(cx: &mut Context) {
 
     Button::new(cx)
         .style(|style| {
-            style.set_size((500, 200));
+            style.set_size((200, 69));
             style.set_stroke_color(Rgba::WHITE);
-            style.set_stroke_width(10.);
-            style.set_corners(|r| r.set_each(0.15));
+            style.set_stroke_width(6);
+            style.set_corners(|r| r.set_all(47));
             style.set_dragable(true);
         })
         .on_click(click);
     TestCircleWidget::new(cx)
         .style(|style| {
+            style.set_stroke_width(6);
             style.set_size((150, 150));
             style.set_dragable(true);
         });
 }
 
 fn main() -> AppResult {
-    Aplite::new(dummy)
+    Aplite::new(root)
         .set_window_attributes(|window| {
             window.set_title("Dummy");
             window.set_inner_size((500, 500));

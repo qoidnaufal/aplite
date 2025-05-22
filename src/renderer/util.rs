@@ -1,6 +1,6 @@
 use shared::{Rect, Rgba};
 
-use super::shader::SHADER;
+use super::shader::SDF_SHADER;
 use super::gpu::Gpu;
 use super::element::{CornerRadius, Element, Shape};
 use super::Renderer;
@@ -84,7 +84,7 @@ pub(crate) fn create_pipeline(
     let device = &gpu.device;
     let format = gpu.config.format;
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some("shader"), source: wgpu::ShaderSource::Wgsl(SHADER.into())
+        label: Some("shader"), source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(SDF_SHADER))
     });
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("pipeline layout"),

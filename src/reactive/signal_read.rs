@@ -1,18 +1,18 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use super::{Reactive, SignalId};
+use super::{Reactive, ReactiveId};
 use super::traits::Get;
 
 #[derive(Debug)]
 pub struct SignalRead<T> {
-    id: SignalId,
+    id: ReactiveId,
     value: Rc<RefCell<T>>,
     // subscriber: Vec<SignalId>,
 }
 
 impl<T: 'static> SignalRead<T> {
-    pub fn new(id: SignalId, value: Rc<RefCell<T>>) -> Self {
+    pub fn new(id: ReactiveId, value: Rc<RefCell<T>>) -> Self {
         Self {
             id,
             value,
@@ -30,7 +30,7 @@ impl<T> Clone for SignalRead<T> {
 }
 
 impl<T> Reactive for SignalRead<T> {
-    fn id(&self) -> SignalId {
+    fn id(&self) -> ReactiveId {
         self.id
     }
 }

@@ -18,7 +18,7 @@ use gfx::Gfx;
 use gpu::Gpu;
 use mesh::MeshBuffer;
 use util::{create_pipeline, RenderComponentSource, Sampler};
-use shared::{Fraction, Matrix4x4, Rect, Rgba, Size};
+use shared::{Fraction, Matrix3x2, Rect, Rgba, Size};
 use texture::{ImageData, TextureData};
 use texture::atlas::Atlas;
 
@@ -95,16 +95,31 @@ impl Renderer {
         if self.mesh.is_uninit() || realloc { self.mesh.init(&self.gpu.device, self.gfx.count()) }
     }
 
-    pub(crate) fn render(&mut self, color: Rgba<u8>) -> Result<(), wgpu::SurfaceError> {
+    pub(crate) fn render<P: FnOnce()>(
+        &mut self,
+        color: Rgba<u8>,
+        pre_present_notify: P
+    ) -> Result<(), wgpu::SurfaceError> {
         let frame = self.gpu.get_current_texture()?;
-        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let view = &frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
             .gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("render encoder") });
 
-        self.atlas.update(&self.gpu.device, &mut encoder);
-        self.encode(&mut encoder, &view, color);
+        let desc = wgpu::RenderPassColorAttachment {
+            view,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(color.into()),
+                store: wgpu::StoreOp::Store,
+            }
+        };
+
+        // self.atlas.update(&self.gpu.device, &mut encoder);
+        self.encode(&mut encoder, desc);
+
+        pre_present_notify();
 
         self.gpu.queue.submit(std::iter::once(encoder.finish()));
         frame.present();
@@ -113,17 +128,10 @@ impl Renderer {
     }
 
     #[inline(always)]
-    fn encode(&self, encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView, color: Rgba<u8>) {
+    fn encode(&self, encoder: &mut wgpu::CommandEncoder, desc: wgpu::RenderPassColorAttachment) {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("render pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(color.into()),
-                    store: wgpu::StoreOp::Store,
-                }
-            })],
+            color_attachments: &[Some(desc)],
             ..Default::default()
         });
 
@@ -140,6 +148,7 @@ impl Renderer {
 
             let mut start: u32 = 0;
 
+            // FIXME: batch rendering
             for i in 0..self.gfx.count() {
                 let element = &self.gfx.elements.data[i];
                 let instance = i as u32;
@@ -195,7 +204,7 @@ impl Renderer {
 
     pub(crate) fn add_component(&mut self, rc: &impl RenderComponentSource) {
         let element = rc.element().with_transform_id(self.gfx.count() as u32);
-        let transform = Matrix4x4::IDENTITY;
+        let transform = Matrix3x2::IDENTITY;
 
         self.gfx.elements.push(element);
         self.gfx.transforms.push(transform);

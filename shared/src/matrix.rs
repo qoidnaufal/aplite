@@ -1,12 +1,11 @@
 use std::ops::{Index, IndexMut};
 
-use crate::vector::Vector;
+use crate::{vector::Vector, Vector2};
 
 use super::{Vector4, GpuPrimitive, NumDebugger};
 
-/// In GPU Matrix 2x3 means 3 `Vector<2, T>` stacked in horizontal order.
-/// Matrix 4x2 means 2 rows of `[x, y, z, w]`.
-/// So, [`Matrix<M, N, T>`] in CPU should be constructed by \[[`Vector<M, T>`]; `N`\].
+/// In GPU mat3x2 is actually a 3 [`Vector<2, T>`] in CPU
+/// So, [`Matrix<N, M, T>`] should be constructed by a \[[`Vector<M, T>`]; `N`\].
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Matrix<const M: usize, const N: usize, T: GpuPrimitive> {
     inner: [Vector<M, T>; N]
@@ -125,7 +124,7 @@ impl<const M: usize, const N: usize, T: GpuPrimitive> Matrix<M, N, T> {
 
 pub type Matrix4x4 = Matrix<4, 4, f32>;
 
-impl Matrix<4, 4, f32> {
+impl Matrix4x4 {
     pub const IDENTITY: Self = Self {
         inner: [
             Vector4::new(1.0, 0.0, 0.0, 0.0),
@@ -134,36 +133,16 @@ impl Matrix<4, 4, f32> {
             Vector4::new(0.0, 0.0, 0.0, 1.0),
         ]
     };
-
-    // pub fn transform(&mut self, tx: f32, ty: f32, sw: f32, sh: f32) {
-    //     self[0].x = sw;
-    //     self[1].y = sh;
-    //     self[3].x = tx;
-    //     self[3].y = ty;
-    // }
 }
 
-// #[cfg(test)]
-// mod matrix_test {
-//     use super::*;
+pub type Matrix3x2 = Matrix<2, 3, f32>;
 
-//     #[test]
-//     fn matrix_test() {
-//         let mut i = Matrix::IDENTITY;
-//         i.translate(1., 2.);
-//         let vec4f = Vec4f32::new(0., 1., 2., 3.);
-//         let r1 = i.dot_vec(vec4f);
-//         assert_eq!(Vector4::new(3., 7., 2., 3.), r1);
-
-//         let mat4x4 = Matrix::<Vector4<f32>, 4>::IDENTITY;
-//         let r2 = mat4x4.dot_mat(i);
-//         assert_eq!(r2, Matrix {
-//             data: [
-//                 Vector4::new(1., 0., 0., 0.),
-//                 Vector4::new(0., 1., 0., 0.),
-//                 Vector4::new(0., 0., 1., 0.),
-//                 Vector4::new(1., 2., 0., 1.),
-//             ]
-//         });
-//     }
-// }
+impl Matrix3x2 {
+    pub const IDENTITY: Self = Self {
+        inner: [
+            Vector2::new(1.0, 0.0),
+            Vector2::new(0.0, 1.0),
+            Vector2::new(0.0, 0.0),
+        ]
+    };
+}

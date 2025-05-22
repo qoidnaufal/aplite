@@ -1,5 +1,5 @@
-pub const SHADER: &str = r"
-@group(0) @binding(0) var<uniform> screen: mat4x4f;
+pub const SDF_SHADER: &str = r"
+@group(0) @binding(0) var<uniform> screen: mat3x2f;
 @group(0) @binding(1) var<uniform> resolution: vec2<f32>;
 
 struct Radius {
@@ -31,15 +31,14 @@ struct Element {
 };
 
 @group(1) @binding(0) var<storage> elements: array<Element>;
-@group(1) @binding(1) var<storage> transforms: array<mat4x4<f32>>;
+@group(1) @binding(1) var<storage> transforms: array<mat3x2<f32>>;
 
-fn rotate(r: f32, pos: vec2<f32>) -> vec4<f32> {
+fn rotate(r: f32, pos: vec2<f32>) -> vec2<f32> {
     let rotation = mat2x2<f32>(
         cos(r), -sin(r),
         sin(r),  cos(r),
     );
-    let xy = rotation * pos;
-    return vec4<f32>(xy, 0.0, 1.0);
+    return rotation * pos;
 }
 
 struct VertexInput {
@@ -58,20 +57,20 @@ fn vs_main(vertex: VertexInput, @builtin(instance_index) instance: u32) -> Fragm
     let element = elements[instance];
     let element_t = transforms[element.transform_id];
 
-    var pos = vec4f(vertex.pos, 0.0, 1.0);
+    var pos = vertex.pos;
     if element.rotate != 0.0 {
         pos = rotate(element.rotate, vertex.pos);
     }
 
+    let t_pos = element_t * vec3f(pos, 1.0);
+    let s_pos = screen * vec3f(t_pos, 1.0);
+
     var out: FragmentPayload;
     out.uv = select(vertex.uv, vertex.uv * 2 - 1, element.texture_id < 0);
     out.index = instance;
-    out.position = screen * element_t * pos;
+    out.position = vec4f(s_pos, 0.0, 1.0);
     return out;
 }
-
-@group(2) @binding(0) var t: texture_2d<f32>;
-@group(3) @binding(0) var s: sampler;
 
 fn sdCircle(p: vec2<f32>, r: f32) -> f32 {
     return length(p) - r;
@@ -123,6 +122,9 @@ fn sdf(uv: vec2<f32>, element: Element, stroke_width: f32) -> f32 {
     }
 }
 
+@group(2) @binding(0) var t: texture_2d<f32>;
+@group(3) @binding(0) var s: sampler;
+
 struct Stroke {
     width: f32,
     color: vec4f,
@@ -143,7 +145,6 @@ fn get_stroke(element: Element) -> Stroke {
 fn fs_main(in: FragmentPayload) -> @location(0) vec4<f32> {
     let element = elements[in.index];
 
-    if in.index == 0 { return element.color; }
     if element.texture_id > -1 { return textureSample(t, s, in.uv); }
 
     let stroke = get_stroke(element);

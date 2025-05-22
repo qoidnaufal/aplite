@@ -1,7 +1,7 @@
-use super::SignalId;
+use super::ReactiveId;
 
 pub trait Reactive {
-    fn id(&self) -> SignalId;
+    fn id(&self) -> ReactiveId;
 }
 
 pub trait Get: Reactive {

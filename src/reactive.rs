@@ -4,10 +4,9 @@ mod arc_signal;
 mod signal_read;
 mod signal_write;
 
-// use std::cell::RefCell;
 use std::collections::HashMap;
-// use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 pub use rw_signal::*;
 pub use signal_read::*;
@@ -30,9 +29,9 @@ where T: Send + Sync + 'static
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct SignalId(u64);
+pub struct ReactiveId(u64);
 
-impl SignalId {
+impl ReactiveId {
     fn new() -> Self {
         static SIGNAL_ID: AtomicU64 = AtomicU64::new(0);
         Self(SIGNAL_ID.fetch_add(1, Ordering::Relaxed))
@@ -41,14 +40,36 @@ impl SignalId {
 
 pub(crate) struct AnySignal(Box<dyn Reactive>);
 
-#[derive(Default)]
-pub(crate) struct ReactiveRuntime {
-    storage: HashMap<SignalId, AnySignal>,
-    pending_update: Vec<SignalId>,
+impl std::ops::Deref for AnySignal {
+    type Target = Box<dyn Reactive>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
-impl ReactiveRuntime {
-    pub(crate) fn insert(&mut self, id: SignalId, signal: impl Into<AnySignal>) {
-        self.storage.insert(id, signal.into());
+pub(crate) struct ReactiveGraph {
+    storage: HashMap<ReactiveId, AnySignal>,
+    observer: Arc<std::sync::mpsc::Sender<()>>,
+    subscriber: Arc<std::sync::mpsc::Receiver<()>>,
+    pending_update: Vec<ReactiveId>,
+}
+
+impl ReactiveGraph {
+    pub(crate) fn new() -> Self {
+        let (tx, rx) = std::sync::mpsc::channel();
+        Self {
+            storage: HashMap::new(),
+            observer: Arc::new(tx),
+            subscriber: Arc::new(rx),
+            pending_update: Vec::new(),
+        }
+    }
+
+    pub(crate) fn get_observer(&self) -> Arc<std::sync::mpsc::Sender<()>> {
+        Arc::clone(&self.observer)
+    }
+
+    pub(crate) fn insert(&mut self, id: ReactiveId, signal: impl Reactive + 'static) {
+        self.storage.insert(id, AnySignal(Box::new(signal)));
     }
 }

@@ -1,17 +1,17 @@
 use std::sync::{Arc, RwLock};
 
-use super::{AnySignal, Get, Reactive, Set, SignalId};
+use super::{AnySignal, Get, Reactive, Set, ReactiveId};
 
 #[derive(Debug)]
 pub struct ArcSignal<T> {
-    id: SignalId,
+    id: ReactiveId,
     value: Arc<RwLock<T>>,
 }
 
 impl<T: Send + Sync + 'static> ArcSignal<T> {
     pub fn new(value: T) -> Self {
         Self {
-            id: SignalId::new(),
+            id: ReactiveId::new(),
             value: Arc::new(RwLock::new(value)),
         }
     }
@@ -27,7 +27,7 @@ impl<T> Clone for ArcSignal<T> {
 }
 
 impl<T> Reactive for ArcSignal<T> {
-    fn id(&self) -> SignalId {
+    fn id(&self) -> ReactiveId {
         self.id
     }
 }

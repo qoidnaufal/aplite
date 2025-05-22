@@ -1,4 +1,4 @@
-use shared::{Matrix4x4, Size};
+use shared::{Matrix3x2, Size};
 
 use super::buffer::Uniform;
 
@@ -27,7 +27,7 @@ use super::buffer::Uniform;
 // }
 
 pub(crate) struct Screen {
-    pub(crate) transform: Uniform<Matrix4x4>,
+    pub(crate) transform: Uniform<Matrix3x2>,
     pub(crate) resolution: Uniform<Size<f32>>,
     pub(crate) bind_group: wgpu::BindGroup,
     pub(crate) scale_factor: f64,
@@ -37,13 +37,7 @@ pub(crate) struct Screen {
 
 impl Screen {
     pub(crate) fn new(device: &wgpu::Device, initial_size: Size<f32>, scale_factor: f64) -> Self {
-        // let sr = ScreenResolution::default().size_f32();
-        // let sc = sr / (initial_size * scale_factor as f32);
-        // let mat = Matrix4x4::IDENTITY
-        //     .with_scale(sc.width(), sc.height())
-        //     .with_translate(sc.width() - 1., 1. - sc.height());
-
-        let transform = Uniform::new(device, Matrix4x4::IDENTITY, "screen transform");
+        let transform = Uniform::new(device, Matrix3x2::IDENTITY, "screen transform");
         let resolution = Uniform::new(device, initial_size, "screen scaler");
         let bind_group = Self::bind_group(device, &[
             transform.bind_group_entry(0),
@@ -73,21 +67,16 @@ impl Screen {
         }
     }
 
-    pub(crate) fn update_transform<F: Fn(&mut Matrix4x4)>(&mut self, f: F) {
+    pub(crate) fn update_transform<F: Fn(&mut Matrix3x2)>(&mut self, f: F) {
         self.transform.update(f);
         self.is_resized = true;
     }
-
-    // pub(crate) fn update_screen_resolution<F: Fn(&mut Size<f32>)>(&mut self, f: F) {
-    //     self.resolution.update(f);
-    //     self.res_changed = true;
-    // }
 
     pub(crate) fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("screen bind group layout"),
             entries: &[
-                Uniform::<Matrix4x4>::bind_group_layout_entry(0),
+                Uniform::<Matrix3x2>::bind_group_layout_entry(0),
                 Uniform::<Size<f32>>::bind_group_layout_entry(1),
             ],
         })

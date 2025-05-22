@@ -5,6 +5,7 @@ const INITIAL_CAPACITY: usize = 1024;
 #[derive(Debug)]
 pub(crate) struct Storage<T> {
     pub(crate) buffer: wgpu::Buffer,
+    // FIXME: maybe don't need this?
     pub(crate) data: Vec<T>,
     capacity: usize,
     label: String,
@@ -71,8 +72,6 @@ impl<T> Storage<T> {
     pub(crate) fn update<F: FnMut(&mut T)>(&mut self, index: usize, mut f: F) {
         f(&mut self.data[index])
     }
-
-    pub(crate) fn clear(&mut self) { self.data.clear() }
 
     pub(crate) fn len(&self) -> usize { self.data.len() }
 }

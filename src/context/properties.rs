@@ -47,7 +47,7 @@ impl Properties {
     pub(crate) fn window_properties(size: Size<u32>) -> Self {
         Self {
             name: Some("ROOT"),
-            rect: Rect::new((size / 2).into(), size),
+            rect: Rect::new((size.width() / 2, size.height() / 2), (size.width(), size.height())),
             min_width: None,
             min_height: None,
             max_width: None,
@@ -113,7 +113,7 @@ impl Properties {
     pub const fn new() -> Self {
         Self {
             name: None,
-            rect: Rect::new(Vector2::new(0, 0), Size::new(0, 0)),
+            rect: Rect::new((0, 0), (0, 0)),
             min_width: Some(1),
             min_height: Some(1),
             max_width: None,
