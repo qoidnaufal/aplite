@@ -1,4 +1,4 @@
-use shared::Matrix3x2;
+use aplite_types::Matrix3x2;
 
 use super::element::Element;
 use super::buffer::Storage;

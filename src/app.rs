@@ -6,12 +6,11 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::application::ApplicationHandler;
-use shared::{Size, Rgba};
+
+use aplite_types::{Size, Rgba};
+use aplite_renderer::{Render, Renderer, RendererError};
 
 use crate::prelude::ApliteResult;
-use crate::renderer::util::Render;
-use crate::renderer::Renderer;
-// use crate::renderer::screen::ScreenResolution;
 use crate::context::Context;
 use crate::error::ApliteError;
 
@@ -19,66 +18,6 @@ use crate::error::ApliteError;
 enum WinitSize {
     Logical(Size<u32>),
     Physical(PhysicalSize<u32>),
-}
-
-#[cfg(feature = "render_stats")]
-mod stats {
-    pub(crate) struct Stats {
-        counter: u32,
-        render_time: std::time::Duration,
-        startup_time: std::time::Duration,
-        longest: std::time::Duration,
-        shortest: std::time::Duration,
-    }
-
-    impl Stats {
-        pub(crate) fn new() -> Self {
-            Self {
-                counter: 0,
-                render_time: std::time::Duration::from_nanos(0),
-                startup_time: std::time::Duration::from_nanos(0),
-                longest: std::time::Duration::from_nanos(0),
-                shortest: std::time::Duration::from_nanos(0),
-            }
-        }
-
-        pub(crate) fn inc(&mut self, d: std::time::Duration) {
-            if self.counter == 0 {
-                self.startup_time += d;
-            } else if self.counter == 1 {
-                self.longest = d;
-                self.shortest = d;
-                self.render_time += d;
-            } else {
-                self.longest = self.longest.max(d);
-                self.shortest = self.shortest.min(d);
-                self.render_time += d;
-            }
-            self.counter += 1;
-        }
-    }
-
-    impl Drop for Stats {
-        fn drop(&mut self) {
-            if self.counter == 1 {
-                let startup = self.startup_time;
-                eprintln!("startup time: {startup:?}");
-            } else {
-                let startup = self.startup_time;
-                let counter = self.counter - 1;
-                let average = self.render_time / counter;
-                let fps = counter as f64 / self.render_time.as_secs_f64();
-                eprintln!();
-                eprintln!("startup:             {startup:?}");
-                eprintln!("average:             {average:?}");
-                eprintln!("hi:                  {:?}", self.longest);
-                eprintln!("lo:                  {:?}", self.shortest);
-                eprintln!("frames rendered:     {counter}");
-                eprintln!("total time spent:    {:?}", self.render_time);
-                eprintln!("fps:                 {:?}", fps.round() as usize);
-            }
-        }
-    }
 }
 
 pub(crate) const DEFAULT_SCREEN_SIZE: Size<u32> = Size::new(800, 600);
@@ -152,7 +91,7 @@ pub struct Aplite<F: FnOnce(&mut Context)> {
     // screen_resolution: ScreenResolution,
 
     #[cfg(feature = "render_stats")]
-    stats: stats::Stats,
+    stats: aplite_stats::Stats,
 }
 
 // user API
@@ -202,13 +141,18 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
     fn initialize_window(&mut self, event_loop: &ActiveEventLoop) -> Result<Arc<Window>, ApliteError> {
         let mut attributes = WindowAttributes::default();
         if let Some(window_fn) = self.window_fn.take() { window_fn(&mut attributes) }
+
         let window = event_loop.create_window(attributes.into())?;
-        let sf = window.scale_factor();
-        let size: Size<u32> = window.inner_size().to_logical(sf).into();
+        let size: Size<u32> = window
+            .inner_size()
+            .to_logical(window.scale_factor())
+            .into();
+
         self.cx.update_window_properties(|prop| {
             prop.set_size(size);
             prop.set_position((size / 2).into());
         });
+
         Ok(Arc::new(window))
     }
 
@@ -292,11 +236,9 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
         let color = self.cx.get_window_properties().fill_color();
         if let Err(err) = renderer.render(color, pre_present_notify) {
             match err {
-                wgpu::SurfaceError::Outdated
-                | wgpu::SurfaceError::Lost => self.handle_resize(WinitSize::Logical(size)),
-                wgpu::SurfaceError::OutOfMemory
-                | wgpu::SurfaceError::Other => event_loop.exit(),
-                wgpu::SurfaceError::Timeout => {},
+                RendererError::ShouldResize => self.handle_resize(WinitSize::Logical(size)),
+                RendererError::ShouldExit => event_loop.exit(),
+                _ => {}
             }
         }
     }

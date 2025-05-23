@@ -1,4 +1,4 @@
-use shared::{Rect, Vector2};
+use aplite_types::{Rect, Vector2};
 
 use crate::context::Context;
 use crate::context::properties::Properties;

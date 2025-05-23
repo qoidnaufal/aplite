@@ -1,6 +1,7 @@
-use shared::Rgba;
+use aplite_types::Rgba;
+use aplite_renderer::Shape;
+
 use crate::prelude::Orientation;
-use crate::renderer::element::Shape;
 use crate::context::Context;
 use crate::context::properties::Properties;
 

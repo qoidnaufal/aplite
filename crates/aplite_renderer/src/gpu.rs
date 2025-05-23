@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
-use shared::Size;
+use aplite_types::Size;
+use aplite_pollster::block_on;
 use winit::window::Window;
 
-use crate::error::ApliteError;
+use super::RendererError;
 
 pub(crate) struct Gpu {
     pub(crate) surface: wgpu::Surface<'static>,
@@ -21,7 +22,7 @@ fn backend() -> wgpu::Backends {
 }
 
 impl Gpu {
-    pub(crate) fn new(window: Arc<Window>) -> Result<Self, ApliteError> {
+    pub(crate) fn new(window: Arc<Window>) -> Result<Self, RendererError> {
         let scale_factor = window.scale_factor();
         let size = window.inner_size().to_logical(scale_factor);
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
@@ -30,18 +31,18 @@ impl Gpu {
         });
         let surface = instance.create_surface(window)?;
 
-        let (adapter, device, queue) = pollster::block_on(async {
+        let (adapter, device, queue) = block_on(async {
             let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions {
                 compatible_surface: Some(&surface),
                 ..Default::default()
-            }).await.map_err(ApliteError::AdapterRequestFailed)?;
+            }).await?;
             let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor {
                     required_features: wgpu::Features::empty(),
                     ..Default::default()
                 },
             ).await?;
 
-            Ok::<(wgpu::Adapter, wgpu::Device, wgpu::Queue), ApliteError>((adapter, device, queue))
+            Ok::<(wgpu::Adapter, wgpu::Device, wgpu::Queue), RendererError>((adapter, device, queue))
         })?;
 
         let surface_capabilites = surface.get_capabilities(&adapter);

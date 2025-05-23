@@ -1,6 +1,6 @@
-use shared::{Rgba, Size};
+use aplite_types::{Rgba, Size};
 
-use super::util::RenderComponentSource;
+use super::util::RenderElementSource;
 // use super::{Indices, RenderComponentSource};
 
 #[repr(u32)]
@@ -94,7 +94,7 @@ pub(crate) struct Element {
 }
 
 impl Element {
-    pub(crate) fn new(rcs: &impl RenderComponentSource) -> Self {
+    pub(crate) fn new(rcs: &impl RenderElementSource) -> Self {
         Self {
             fill_color: rcs.fill_color(),
             stroke_color: rcs.stroke_color(),

@@ -1,8 +1,8 @@
-use shared::Rgba;
+use aplite_types::Rgba;
+use aplite_renderer::ImageData;
+use aplite_renderer::Shape;
 
-use crate::renderer::texture::ImageData;
 use crate::context::Context;
-use crate::renderer::element::Shape;
 use crate::context::properties::{AspectRatio, Properties};
 
 use super::{IntoView, View};
@@ -16,13 +16,13 @@ pub struct Image {
 }
 
 impl Image {
-    pub fn new<F: Fn() -> ImageData + 'static>(cx: &mut Context, f: F) -> View<Self> {
+    pub fn new<F: Fn() -> ImageData + 'static>(cx: &mut Context, image_fn: F) -> View<Self> {
         let properties = Properties::new()
             .with_size((100, 100))
             .with_shape(Shape::Rect)
             .with_fill_color(Rgba::WHITE)
             .with_textured(true);
-        Self { properties }.into_view(cx, |_| {}).add_data(f)
+        Self { properties }.into_view(cx, |_| {}).add_data(image_fn)
     }
 }
 

@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-use shared::{Size, Vector2};
+use aplite_types::{Size, Vector2};
 
-use crate::renderer::texture::ImageData;
-use crate::renderer::util::Render;
-use crate::renderer::Renderer;
+use aplite_renderer::ImageData;
+use aplite_renderer::Render;
+use aplite_renderer::Renderer;
 // use crate::reactive::ReactiveGraph;
 
 pub mod layout;

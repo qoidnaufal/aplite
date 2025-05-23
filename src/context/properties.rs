@@ -1,8 +1,8 @@
-use shared::{Fraction, Rect, Rgba, Size, Vector2};
+use aplite_types::{Fraction, Rect, Rgba, Size, Vector2};
 
 use crate::context::layout::{Alignment, Orientation, Padding};
-use crate::renderer::element::{CornerRadius, Shape};
-use crate::renderer::util::RenderComponentSource;
+use aplite_renderer::{CornerRadius, Shape};
+use aplite_renderer::RenderElementSource;
 
 #[derive(Debug, Clone, Copy)]
 pub enum AspectRatio {
@@ -376,7 +376,7 @@ impl Properties {
     pub(crate) fn texture_id(&self) -> i32 { self.texture_id }
 }
 
-impl RenderComponentSource for Properties {
+impl RenderElementSource for Properties {
     fn fill_color(&self) -> Rgba<f32> { self.fill_color().into() }
 
     fn stroke_color(&self) -> Rgba<f32> { self.stroke_color().into() }

@@ -1,4 +1,4 @@
-use shared::Vector2;
+use aplite_types::Vector2;
 
 use super::tree::NodeId;
 

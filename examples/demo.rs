@@ -18,8 +18,8 @@ fn root(cx: &mut Context) {
 
     HStack::new(cx, |cx| {
         use AspectRatio::Defined;
-        Image::new(cx, || image_reader("assets/image1.jpg")).with_aspect_ratio(Defined((8, 5)));
-        Image::new(cx, || image_reader("assets/image2.jpg")).style(|s| s.set_dragable(true));
+        Image::new(cx, || image_reader("examples/assets/image1.jpg")).with_aspect_ratio(Defined((8, 5)));
+        Image::new(cx, || image_reader("examples/assets/image2.jpg")).style(|s| s.set_dragable(true));
         TestCircleWidget::new(cx).style(|style| {
             style.set_hover_color(Rgba::BLUE);
             style.set_fill_color(Rgba::PURPLE);

@@ -1,30 +1,21 @@
 use std::sync::Arc;
 use winit::window::Window;
+use aplite_types::{Fraction, Matrix3x2, Rect, Rgba, Size};
 
-use crate::error::ApliteError;
+use super::RendererError;
 
-pub(crate) mod gpu;
-pub(crate) mod buffer;
-pub(crate) mod shader;
-pub(crate) mod util;
-pub(crate) mod texture;
-pub(crate) mod element;
-pub(crate) mod gfx;
-pub(crate) mod screen;
-mod mesh;
+use crate::element::Element;
+use crate::screen::Screen;
+use crate::gfx::Gfx;
+use crate::gpu::Gpu;
+use crate::mesh::MeshBuffer;
+use crate::util::{create_pipeline, RenderElementSource, Sampler};
+use crate::texture::{ImageData, TextureData};
+use crate::texture::atlas::Atlas;
 
-use screen::Screen;
-use gfx::Gfx;
-use gpu::Gpu;
-use mesh::MeshBuffer;
-use util::{create_pipeline, RenderComponentSource, Sampler};
-use shared::{Fraction, Matrix3x2, Rect, Rgba, Size};
-use texture::{ImageData, TextureData};
-use texture::atlas::Atlas;
-
-pub(crate) struct Renderer {
+pub struct Renderer {
     gpu: Gpu,
-    gfx: Gfx,
+    gfx: Gfx, // FIXME: change this into vertex buffer to enable batching
     sampler: Sampler,
     atlas: Atlas,
     images: Vec<TextureData>,
@@ -34,7 +25,7 @@ pub(crate) struct Renderer {
 }
 
 impl Renderer {
-    pub(crate) fn new(window: Arc<Window>) -> Result<Self, ApliteError> {
+    pub fn new(window: Arc<Window>) -> Result<Self, RendererError> {
         let gpu = Gpu::new(Arc::clone(&window))?;
         let gfx = Gfx::new(&gpu.device);
 
@@ -65,16 +56,16 @@ impl Renderer {
         })
     }
 
-    pub(crate) const fn scale_factor(&self) -> f64 { self.screen.scale_factor }
+    pub const fn scale_factor(&self) -> f64 { self.screen.scale_factor }
 
-    pub(crate) fn set_scale_factor(&mut self, scale_factor: f64) {
+    pub fn set_scale_factor(&mut self, scale_factor: f64) {
         self.screen.scale_factor = scale_factor;
     }
 
     /// this one corresponds to [`winit::dpi::LogicalSize<u32>`]
-    pub(crate) fn surface_size(&self) -> Size<u32> { self.gpu.size() }
+    pub fn surface_size(&self) -> Size<u32> { self.gpu.size() }
 
-    pub(crate) fn resize(&mut self, new_size: Size<u32>) {
+    pub fn resize(&mut self, new_size: Size<u32>) {
         let res = self.screen.resolution();
         let ns: Size<f32> = new_size.into();
         let s = res / ns;
@@ -89,17 +80,17 @@ impl Renderer {
         });
     }
 
-    pub(crate) fn write_data(&mut self) {
+    pub fn write_data(&mut self) {
         self.screen.write(&self.gpu.queue);
         let realloc = self.gfx.write(&self.gpu.device, &self.gpu.queue);
         if self.mesh.is_uninit() || realloc { self.mesh.init(&self.gpu.device, self.gfx.count()) }
     }
 
-    pub(crate) fn render<P: FnOnce()>(
+    pub fn render<P: FnOnce()>(
         &mut self,
         color: Rgba<u8>,
         pre_present_notify: P
-    ) -> Result<(), wgpu::SurfaceError> {
+    ) -> Result<(), RendererError> {
         let frame = self.gpu.get_current_texture()?;
         let view = &frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
@@ -166,15 +157,15 @@ impl Renderer {
 }
 
 impl Renderer {
-    pub(crate) fn update_element_color(&mut self, index: usize, color: Rgba<u8>) {
+    pub fn update_element_color(&mut self, index: usize, color: Rgba<u8>) {
         self.gfx.elements.update(index, |elem| elem.set_color(color));
     }
 
-    pub(crate) fn update_element_size(&mut self, index: usize, size: Size<u32>) {
+    pub fn update_element_size(&mut self, index: usize, size: Size<u32>) {
         self.gfx.elements.update(index, |elem| elem.set_size(size));
     }
 
-    pub(crate) fn update_element_transform(&mut self, index: usize, rect: Rect<u32>) {
+    pub fn update_element_transform(&mut self, index: usize, rect: Rect<u32>) {
         let res = self.screen.resolution();
         let size: Size<f32> = rect.size().into();
         self.gfx.transforms.update(index, |matrix| {
@@ -187,13 +178,13 @@ impl Renderer {
     }
 }
 
-pub(crate) struct ImageInfo {
-    pub(crate) id: i32,
-    pub(crate) aspect_ratio: Fraction<u32>,
+pub struct ImageInfo {
+    pub id: i32,
+    pub aspect_ratio: Fraction<u32>,
 }
 
 impl Renderer {
-    pub(crate) fn push_image(&mut self, f: &dyn Fn() -> ImageData) -> ImageInfo {
+    pub fn push_image(&mut self, f: &dyn Fn() -> ImageData) -> ImageInfo {
         let image = f();
         let aspect_ratio = image.aspect_ratio();
         let id = self.images.len() as i32;
@@ -202,8 +193,8 @@ impl Renderer {
         ImageInfo { id, aspect_ratio }
     }
 
-    pub(crate) fn add_component(&mut self, rc: &impl RenderComponentSource) {
-        let element = rc.element().with_transform_id(self.gfx.count() as u32);
+    pub fn add_component(&mut self, rc: &impl RenderElementSource) {
+        let element = Element::new(rc).with_transform_id(self.gfx.count() as u32);
         let transform = Matrix3x2::IDENTITY;
 
         self.gfx.elements.push(element);

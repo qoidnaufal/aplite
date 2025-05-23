@@ -1,11 +1,11 @@
-use shared::{Rect, Rgba};
+use aplite_types::{Rect, Rgba};
 
-use super::shader::SDF_SHADER;
+use super::shader::{create_shader, VERTEX, SDF, FRAGMENT};
 use super::gpu::Gpu;
-use super::element::{CornerRadius, Element, Shape};
+use super::element::{CornerRadius, Shape};
 use super::Renderer;
 
-pub(crate) trait RenderComponentSource: Sized {
+pub trait RenderElementSource: Sized {
     fn fill_color(&self) -> Rgba<f32>;
     fn stroke_color(&self) -> Rgba<f32>;
     fn rect(&self) -> Rect<f32>;
@@ -14,11 +14,9 @@ pub(crate) trait RenderComponentSource: Sized {
     fn rotation(&self) -> f32;
     fn stroke_width(&self) -> f32;
     fn texture_id(&self) -> i32;
-
-    fn element(&self) -> Element { Element::new(self) }
 }
 
-pub(crate) trait Render { fn render(&mut self, renderer: &mut Renderer); }
+pub trait Render { fn render(&mut self, renderer: &mut Renderer); }
 
 pub(crate) struct Sampler {
     pub(crate) bind_group: wgpu::BindGroup,
@@ -71,7 +69,7 @@ impl Sampler {
     }
 }
 
-pub(crate) fn cast_slice<SRC: Sized, DST: Sized>(src: &[SRC]) -> &[DST] {
+pub fn cast_slice<SRC: Sized, DST: Sized>(src: &[SRC]) -> &[DST] {
     let len = size_of_val(src);
     unsafe { core::slice::from_raw_parts(src.as_ptr() as *const DST, len) }
 }
@@ -84,7 +82,7 @@ pub(crate) fn create_pipeline(
     let device = &gpu.device;
     let format = gpu.config.format;
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some("shader"), source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(SDF_SHADER))
+        label: Some("shader"), source: wgpu::ShaderSource::Wgsl(create_shader(&[VERTEX, SDF, FRAGMENT]))
     });
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("pipeline layout"),

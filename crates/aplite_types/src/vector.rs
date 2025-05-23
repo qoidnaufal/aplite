@@ -155,7 +155,7 @@ impl<T: GpuPrimitive> Vector4<T> {
     pub fn div_w(&mut self, w: T) { self.inner[3] /= w }
 }
 
-// math operations
+// arithmethic operations
 
 impl<const N: usize, T: GpuPrimitive> std::ops::Add<Self> for Vector<N, T> {
     type Output = Self;
@@ -210,7 +210,7 @@ impl<const N: usize, T: GpuPrimitive> Eq for Vector<N, T> {}
 impl<const N: usize> From<Vector<N, f32>> for Vector<N, u32> {
     fn from(value: Vector<N, f32>) -> Self {
         let mut ret = Self::default();
-        for i in 0..N { ret.inner[i] = value.inner[i] as _ }
+        for i in 0..N { ret.inner[i] = value.inner[i].round() as _ }
         ret
     }
 }

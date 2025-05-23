@@ -1,30 +1,6 @@
-use shared::{Matrix3x2, Size};
+use aplite_types::{Matrix3x2, Size};
 
 use super::buffer::Uniform;
-
-// #[derive(Debug, Default, Clone, Copy)]
-// pub enum ScreenResolution {
-//     SD480p,
-//     HD720p,
-//     FullHD1K,
-//     FullHD2K,
-//     #[default]
-//     UltraHD4K,
-//     UltraHD8K,
-// }
-
-// impl ScreenResolution {
-//     pub(crate) fn size_f32(&self) -> Size<f32> {
-//         match self {
-//             ScreenResolution::SD480p => Size::new(640., 480.),
-//             ScreenResolution::HD720p => Size::new(1280., 720.),
-//             ScreenResolution::FullHD1K => Size::new(1920., 1080.),
-//             ScreenResolution::FullHD2K => Size::new(2560., 1440.),
-//             ScreenResolution::UltraHD4K => Size::new(3840., 2160.),
-//             ScreenResolution::UltraHD8K => Size::new(7680., 4320.),
-//         }
-//     }
-// }
 
 pub(crate) struct Screen {
     pub(crate) transform: Uniform<Matrix3x2>,
@@ -94,3 +70,26 @@ impl Screen {
     }
 }
 
+// #[derive(Debug, Default, Clone, Copy)]
+// pub enum ScreenResolution {
+//     SD480p,
+//     HD720p,
+//     FullHD1K,
+//     FullHD2K,
+//     #[default]
+//     UltraHD4K,
+//     UltraHD8K,
+// }
+
+// impl ScreenResolution {
+//     pub(crate) fn size_f32(&self) -> Size<f32> {
+//         match self {
+//             ScreenResolution::SD480p => Size::new(640., 480.),
+//             ScreenResolution::HD720p => Size::new(1280., 720.),
+//             ScreenResolution::FullHD1K => Size::new(1920., 1080.),
+//             ScreenResolution::FullHD2K => Size::new(2560., 1440.),
+//             ScreenResolution::UltraHD4K => Size::new(3840., 2160.),
+//             ScreenResolution::UltraHD8K => Size::new(7680., 4320.),
+//         }
+//     }
+// }

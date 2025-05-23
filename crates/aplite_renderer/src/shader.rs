@@ -1,6 +1,12 @@
-pub const SDF_SHADER: &str = r"
-@group(0) @binding(0) var<uniform> screen: mat3x2f;
-@group(0) @binding(1) var<uniform> resolution: vec2<f32>;
+pub(crate) fn create_shader<'a>(input: &'a [&str]) -> std::borrow::Cow<'a, str> {
+    let mut s = String::new();
+    input.iter().for_each(|shader| s.push_str(shader));
+    s.into()
+}
+
+pub const VERTEX: &str = r"
+@group(0) @binding(0) var<uniform> screen_t: mat3x2f;
+@group(0) @binding(1) var<uniform> screen_s: vec2<f32>;
 
 struct Radius {
     top_left: f32,
@@ -11,10 +17,10 @@ struct Radius {
 
 fn scale_radius(r: Radius, ew: f32) -> Radius {
     var ret: Radius;
-    ret.top_left = (r.top_left * ew / (100.0 * 2.0)) / resolution.x;
-    ret.bot_left = (r.bot_left * ew / (100.0 * 2.0)) / resolution.x;
-    ret.bot_right = (r.bot_right * ew / (100.0 * 2.0)) / resolution.x;
-    ret.top_right = (r.top_right * ew / (100.0 * 2.0)) / resolution.x;
+    ret.top_left = (r.top_left * ew / (100.0 * 2.0)) / screen_s.x;
+    ret.bot_left = (r.bot_left * ew / (100.0 * 2.0)) / screen_s.x;
+    ret.bot_right = (r.bot_right * ew / (100.0 * 2.0)) / screen_s.x;
+    ret.top_right = (r.top_right * ew / (100.0 * 2.0)) / screen_s.x;
     return ret;
 }
 
@@ -63,7 +69,7 @@ fn vs_main(vertex: VertexInput, @builtin(instance_index) instance: u32) -> Fragm
     }
 
     let t_pos = element_t * vec3f(pos, 1.0);
-    let s_pos = screen * vec3f(t_pos, 1.0);
+    let s_pos = screen_t * vec3f(t_pos, 1.0);
 
     var out: FragmentPayload;
     out.uv = select(vertex.uv, vertex.uv * 2 - 1, element.texture_id < 0);
@@ -71,7 +77,9 @@ fn vs_main(vertex: VertexInput, @builtin(instance_index) instance: u32) -> Fragm
     out.position = vec4f(s_pos, 0.0, 1.0);
     return out;
 }
+";
 
+pub const SDF: &str = r"
 fn sdCircle(p: vec2<f32>, r: f32) -> f32 {
     return length(p) - r;
 }
@@ -99,7 +107,7 @@ fn sdSegment(p: vec2f, a: vec2f, b: vec2f) -> f32 {
 }
 
 fn sdf(uv: vec2<f32>, element: Element, stroke_width: f32) -> f32 {
-    let size = element.size / resolution;
+    let size = element.size / screen_s;
 
     switch element.shape {
         case 0u: {
@@ -121,7 +129,9 @@ fn sdf(uv: vec2<f32>, element: Element, stroke_width: f32) -> f32 {
         default: { return -1.0; }
     }
 }
+";
 
+pub const FRAGMENT: &str = r"
 @group(2) @binding(0) var t: texture_2d<f32>;
 @group(3) @binding(0) var s: sampler;
 
@@ -133,10 +143,10 @@ struct Stroke {
 fn get_stroke(element: Element) -> Stroke {
     var stroke: Stroke;
     stroke.color = element.stroke_color;
-    stroke.width = element.stroke_width / resolution.x;
+    stroke.width = element.stroke_width / screen_s.x;
     if element.stroke_width == 0 {
         stroke.color = element.color;
-        stroke.width = 5.0 / resolution.x;
+        stroke.width = 5.0 / screen_s.x;
     }
     return stroke;
 }

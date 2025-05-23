@@ -1,12 +1,15 @@
 use std::path::Path;
 
-use image::imageops::FilterType;
-use image::{GenericImageView, ImageReader};
-use shared::{Fraction, Rect, Rgba, Size};
+use aplite_types::{Fraction, Rect, Rgba, Size};
 
-use super::Gpu;
+use crate::gpu::Gpu;
 
+/// This function will resize the image to 450x450 by default to optimize gpu performance.
+/// If you want to have your image bytes fully rendered, consider to use your own function
 pub fn image_reader<P: AsRef<Path>>(path: P) -> ImageData {
+    use image::imageops::FilterType;
+    use image::{GenericImageView, ImageReader};
+
     let img = ImageReader::open(path)
         .unwrap()
         .decode()
@@ -159,7 +162,7 @@ impl TextureData {
 
 pub(crate) mod atlas {
     use wgpu::util::DeviceExt;
-    use shared::{Rect, Size, Vector2, Fraction};
+    use aplite_types::{Rect, Size, Fraction};
     use super::ImageData;
 
     #[derive(Debug)]

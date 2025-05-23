@@ -1,6 +1,6 @@
-use shared::Vector2;
+use aplite_types::Vector2;
 
-use crate::renderer::util::cast_slice;
+use crate::util::cast_slice;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Indices<'a>(&'a [u32]);

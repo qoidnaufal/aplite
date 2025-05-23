@@ -1,3 +1,5 @@
+use std::future::Future;
+
 enum State {
     Empty,
     Waiting,
@@ -55,8 +57,6 @@ impl std::task::Wake for Signal {
 }
 
 pub fn block_on<F: std::future::IntoFuture>(fut: F) -> F::Output {
-    use std::future::Future;
-
     let mut fut = core::pin::pin!(fut.into_future());
     let signal = std::sync::Arc::new(Signal::new());
     let waker = std::task::Waker::from(std::sync::Arc::clone(&signal));

@@ -1,0 +1,11 @@
+[package]
+name = "aplite_types"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+winit.workspace = true
+wgpu.workspace = true

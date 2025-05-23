@@ -1,4 +1,4 @@
-use shared::Rgba;
+use aplite_types::Rgba;
 use crate::context::Context;
 use crate::context::properties::Properties;
 

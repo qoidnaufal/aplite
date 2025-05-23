@@ -169,13 +169,13 @@ impl From<LogicalSize<u32>> for Size<u32> {
 
 impl From<Size<u32>> for Size<f32> {
     fn from(value: Size<u32>) -> Self {
-        Self::new(value.width() as _, value.height() as _)
+        Self { inner: value.inner.into() }
     }
 }
 
 impl From<Size<f32>> for Size<u32> {
     fn from(value: Size<f32>) -> Self {
-        Self::new(value.width().round() as _, value.height().round() as _)
+        Self { inner: value.inner.into() }
     }
 }
 
