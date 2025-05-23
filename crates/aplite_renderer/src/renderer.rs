@@ -10,8 +10,7 @@ use crate::gfx::Gfx;
 use crate::gpu::Gpu;
 use crate::mesh::MeshBuffer;
 use crate::util::{create_pipeline, RenderElementSource, Sampler};
-use crate::texture::{ImageData, TextureData};
-use crate::texture::atlas::Atlas;
+use crate::texture::{Atlas, ImageData, TextureData};
 
 pub struct Renderer {
     gpu: Gpu,

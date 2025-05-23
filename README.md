@@ -2,8 +2,8 @@
 In geological term [Aplite](https://en.wikipedia.org/wiki/Aplite) is a fine grained igneous rock.
 My previous background as a geological engineering student, as well as my admiration toward [`leptos`](https://github.com/leptos-rs/leptos) guided me to pick this name.
 
-This repo mainly serve me as a learning process to make a GPU-rendered GUI (graphical user interface).
-I intended only to use [`wgpu`](https://github.com/gfx-rs/wgpu) and [`winit`](https://github.com/rust-windowing/winit) to be the only third party dependecies.
+This repo mainly serve as a learning process for me on retained mode GPU-rendered GUI (graphical user interface) with fine grained reactivity as the driver to trigger ui update.
+I intended only to use [`wgpu`](https://github.com/gfx-rs/wgpu), [`winit`](https://github.com/rust-windowing/winit), and [`image`](https://github.com/image-rs/image) to be the only third party dependecies.
 Everything else are written from scratch, which took a lot of inspiration from:
 - [`leptos`](https://github.com/leptos-rs/leptos), their concept of fine grained reactivity which was inspired by [`solidjs`](https://github.com/solidjs/solid)
 - [`floem`](https://github.com/lapce/floem), which take inspiration from `leptos`
@@ -11,6 +11,9 @@ Everything else are written from scratch, which took a lot of inspiration from:
 - [`vizia`](https://github.com/vizia/vizia), I took their ecs-based system to manage the data
 - [`kludgine`](https://github.com/khonsulabs/kludgine), and
 - [`vger-rs`](https://github.com/audulus/vger-rs), which I read their whole codebase on how to do GPU-based rendering using `wgpu`
+- [`Yarrow`](https://github.com/MeadowlarkDAW/Yarrow), and
+- [`rootvg`](https://github.com/MeadowlarkDAW/rootvg), for the different ideas on managing primitives
+- and many more
 
 ### Example
 This is an example from the current (incomplete) works I've accomplished so far:

@@ -122,3 +122,6 @@ impl Element {
     }
 }
 
+#[repr(C)]
+#[derive(Debug, Clone)]
+struct ElementVertex {}
