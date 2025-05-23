@@ -1,50 +1,54 @@
 use aplite_types::{Matrix3x2, Size};
 
-use super::buffer::Uniform;
+use super::buffer::Buffer;
 
 pub(crate) struct Screen {
-    pub(crate) transform: Uniform<Matrix3x2>,
-    pub(crate) resolution: Uniform<Size<f32>>,
+    pub(crate) transform: Buffer<Matrix3x2>,
+    pub(crate) size: Buffer<Size<f32>>,
     pub(crate) bind_group: wgpu::BindGroup,
+    pub(crate) screen_transform: Matrix3x2,
+    pub(crate) screen_size: Size<f32>,
     pub(crate) scale_factor: f64,
     res_changed: bool,
     is_resized: bool,
 }
 
 impl Screen {
-    pub(crate) fn new(device: &wgpu::Device, initial_size: Size<f32>, scale_factor: f64) -> Self {
-        let transform = Uniform::new(device, Matrix3x2::IDENTITY, "screen transform");
-        let resolution = Uniform::new(device, initial_size, "screen scaler");
+    pub(crate) fn new(device: &wgpu::Device, screen_size: Size<f32>, scale_factor: f64) -> Self {
+        let transform = Buffer::<Matrix3x2>::new(device, 1, wgpu::BufferUsages::UNIFORM, "screen transform");
+        let size = Buffer::<Size<f32>>::new(device, 1, wgpu::BufferUsages::UNIFORM, "screen scaler");
         let bind_group = Self::bind_group(device, &[
             transform.bind_group_entry(0),
-            resolution.bind_group_entry(1)
+            size.bind_group_entry(1)
         ]);
 
         Self {
-            resolution,
             transform,
+            size,
             bind_group,
+            screen_transform: Matrix3x2::IDENTITY,
+            screen_size,
             scale_factor,
             res_changed: true,
             is_resized: true,
         }
     }
 
-    pub(crate) fn resolution(&self) -> Size<f32> { self.resolution.data() }
+    pub(crate) fn screen_size(&self) -> Size<f32> { self.screen_size }
 
-    pub(crate) fn write(&mut self, queue: &wgpu::Queue) {
+    pub(crate) fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
         if self.res_changed {
-            self.resolution.write(queue);
+            self.size.write(device, queue, 0, &[self.screen_size]);
             self.res_changed = false;
         }
         if self.is_resized {
-            self.transform.write(queue);
+            self.transform.write(device, queue, 0, &[self.screen_transform]);
             self.is_resized = false;
         }
     }
 
     pub(crate) fn update_transform<F: Fn(&mut Matrix3x2)>(&mut self, f: F) {
-        self.transform.update(f);
+        f(&mut self.screen_transform);
         self.is_resized = true;
     }
 
@@ -52,8 +56,8 @@ impl Screen {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("screen bind group layout"),
             entries: &[
-                Uniform::<Matrix3x2>::bind_group_layout_entry(0),
-                Uniform::<Size<f32>>::bind_group_layout_entry(1),
+                Buffer::<Matrix3x2>::bind_group_layout_entry(wgpu::BufferBindingType::Uniform, 0),
+                Buffer::<Size<f32>>::bind_group_layout_entry(wgpu::BufferBindingType::Uniform, 1),
             ],
         })
     }

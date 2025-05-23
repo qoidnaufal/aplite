@@ -84,16 +84,16 @@ impl<T: GpuPrimitive> Rect<T> {
     pub fn add_height(&mut self, height: T) { self.inner.add_w(height) }
 
     #[inline(always)]
-    pub const fn left(&self) -> T { self.inner.x() }
+    pub const fn l(&self) -> T { self.inner.x() }
 
     #[inline(always)]
-    pub fn bottom(&self) -> T { self.x() + self.height() }
+    pub fn r(&self) -> T { self.x() + self.width() }
 
     #[inline(always)]
-    pub fn right(&self) -> T { self.x() + self.width() }
+    pub const fn t(&self) -> T { self.inner.y() }
 
     #[inline(always)]
-    pub const fn top(&self) -> T { self.inner.y() }
+    pub fn b(&self) -> T { self.y() + self.height() }
 }
 
 impl Rect<u32> {

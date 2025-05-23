@@ -3,10 +3,10 @@ use aplite_types::{Rect, Size, Fraction};
 use super::ImageData;
 
 #[derive(Debug)]
-pub(crate) struct TextureInfo {
-    pub(crate) id: i32,
-    pub(crate) aspect_ratio: Fraction<u32>,
-    pub(crate) rect: Rect<f32>,
+pub struct AtlasInfo {
+    pub id: i32,
+    pub aspect_ratio: Fraction<u32>,
+    pub rect: Rect<f32>,
 }
 
 #[derive(Debug)]
@@ -19,10 +19,9 @@ pub(crate) struct Atlas {
     pushed: i32,
 }
 
-#[allow(unused)]
 impl Atlas {
-    const SIZE: Size<u32> = Size::new(1024, 1024);
-    const SPACING: u32 = 1;
+    const SIZE: Size<u32> = Size::new(2048, 2048);
+    // const SPACING: u32 = 1;
 
     pub(crate) fn new(device: &wgpu::Device) -> Self {
         let used = Rect::new((0, 0), (0, 0));
@@ -52,37 +51,45 @@ impl Atlas {
         }
     }
 
-    pub(crate) fn push_image(&mut self, mut data: ImageData) -> Option<TextureInfo> {
+    pub(crate) fn push(&mut self, mut data: ImageData) -> Option<AtlasInfo> {
         let is_w_contained = self.used.width() + data.width() <= Self::SIZE.width();
         let is_h_contained = self.used.height() + data.height() <= Self::SIZE.height();
 
         if is_w_contained && is_h_contained {
-            self.used
-                .set_height(
-                    self.used
-                        .height()
-                        .max(self.used.y() + data.height())
-                );
+            self.used.set_height(
+                self.used
+                    .height()
+                    .max(self.used.y() + data.height())
+            );
         } else if is_h_contained {
             self.used.set_x(0);
             self.used.set_width(0);
-            self.used.set_y(self.used.height() + Self::SPACING);
+            self.used.set_y(self.used.height() /* + Self::SPACING */);
         } else {
             return None;
         }
 
         data.rect.set_pos(self.used.pos());
-        self.used.add_x(data.width() + Self::SPACING);
-        self.used.add_width(data.width() + Self::SPACING);
+        self.used.add_x(data.width() /* + Self::SPACING */);
+        self.used.add_width(data.width() /* + Self::SPACING */);
 
-        let mut rect: Rect<f32> = data.rect.into();
-        rect.set_pos(rect.pos() / Self::SIZE.width() as f32);
-        rect.set_size(rect.size() / Self::SIZE.width() as f32);
-        let info = TextureInfo {
+        let rect: Rect<f32> = Rect::new(
+            (
+                data.rect.l() as f32 / Self::SIZE.width() as f32,
+                data.rect.t() as f32 / Self::SIZE.width() as f32
+            ),
+            (
+                data.rect.width() as f32 / Self::SIZE.width() as f32,
+                data.rect.height() as f32 / Self::SIZE.width() as f32
+            )
+        );
+
+        let info = AtlasInfo {
             id: self.pushed,
             aspect_ratio: data.aspect_ratio(),
             rect,
         };
+
         self.image_data.push(data);
         self.pushed += 1;
         Some(info)

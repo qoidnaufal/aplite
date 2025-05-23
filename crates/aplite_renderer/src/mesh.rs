@@ -1,21 +1,35 @@
-use aplite_types::Vector2;
+use aplite_types::{Rect, Vector2};
 
-use crate::util::cast_slice;
+use crate::buffer::Buffer;
 
 #[derive(Debug, Clone)]
-pub(crate) struct Indices<'a>(&'a [u32]);
+pub(crate) struct Indices([u32; 6]);
 
-impl std::ops::Deref for Indices<'_> {
+impl std::ops::Deref for Indices {
     type Target = [u32];
     fn deref(&self) -> &Self::Target {
-        self.0
+        &self.0
     }
 }
 
-impl Indices<'_> {
+impl std::ops::DerefMut for Indices {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Indices {
     #[inline(always)]
     pub(crate) const fn new() -> Self {
-        Self(&[0, 1, 2, 2, 3, 0])
+        Self([0, 1, 2, 2, 3, 0])
+    }
+
+    /// if need_adjust, the offset will be add by 4
+    /// otherwise, each index will be add_assigned directly with the offset
+    pub(crate) fn with_offset(mut self, mut offset: u32, need_adjust: bool) -> Self {
+        if need_adjust { offset += 4 }
+        self.iter_mut().for_each(|i| *i += offset);
+        self
     }
 }
 
@@ -50,18 +64,34 @@ impl Vertices {
     ]);
 
     #[inline(always)]
-    pub(crate) const fn new() -> Self { Self::VERTICES }
+    pub(crate) const fn basic() -> Self { Self::VERTICES }
 
-    // pub(crate) fn with_uv(mut self, rect: Rect<f32>) -> Self {
-    //     for i in 0..4 {
-    //         if self.0[i]._uv.x() == 0.0 { self.0[i]._uv.set_x(rect.x()) }
-    //         else { self.0[i]._uv.set_x(rect.x() + rect.width()) }
+    pub(crate) fn new(rect: Rect<u32>) -> Self {
+        let l = rect.l() as f32;
+        let r = rect.r() as f32;
+        let t = rect.t() as f32;
+        let b = rect.b() as f32;
+        Self ([
+            Vertex { _pos: Vector2::new( -l,  t ), _uv: Vector2::new( 0.0, 0.0 ) },
+            Vertex { _pos: Vector2::new( -l, -b ), _uv: Vector2::new( 0.0, 1.0 ) },
+            Vertex { _pos: Vector2::new(  r, -b ), _uv: Vector2::new( 1.0, 1.0 ) },
+            Vertex { _pos: Vector2::new(  r,  t ), _uv: Vector2::new( 1.0, 0.0 ) },
+        ])
+    }
 
-    //         if self.0[i]._uv.y() == 0.0 { self.0[i]._uv.set_y(rect.y()) }
-    //         else { self.0[i]._uv.set_y(rect.y() + rect.width()) }
-    //     }
-    //     self
-    // }
+    pub(crate) fn with_uv(rect: Rect<f32>) -> Self {
+        let l = rect.l() as f32;
+        let r = rect.r() as f32;
+        let t = rect.t() as f32;
+        let b = rect.b() as f32;
+
+        Self([
+            Vertex { _pos: Vector2::new( -1.0,  1.0 ), _uv: Vector2::new( l, t ) },
+            Vertex { _pos: Vector2::new( -1.0, -1.0 ), _uv: Vector2::new( l, b ) },
+            Vertex { _pos: Vector2::new(  1.0, -1.0 ), _uv: Vector2::new( r, b ) },
+            Vertex { _pos: Vector2::new(  1.0,  1.0 ), _uv: Vector2::new( r, t ) },
+        ])
+    }
 
     #[inline(always)]
     pub(crate) fn as_slice(&self) -> &[Vertex] {
@@ -86,58 +116,38 @@ impl std::fmt::Debug for Vertices {
     }
 }
 
-pub(crate) enum MeshBuffer {
-    Uninitialized,
-    Initialized {
-        indices: wgpu::Buffer,
-        vertices: wgpu::Buffer,
-    }
+pub(crate) struct MeshBuffer {
+    pub(crate) indices: Buffer<u32>,
+    pub(crate) vertices: Buffer<Vertex>,
+    pub(crate) offset: u64,
+    pub(crate) rects: Vec<Rect<f32>>,
 }
 
 impl MeshBuffer {
-    pub(crate) fn init(&mut self, device: &wgpu::Device, n: usize) {
-        *self = Self::Initialized {
-            indices: Self::indices(device, n),
-            vertices: Self::vertices(device, n),
+    pub(crate) fn new(device: &wgpu::Device) -> Self {
+        Self {
+            indices: Buffer::new(device, 1024 * 6, wgpu::BufferUsages::INDEX, "index"),
+            vertices: Buffer::new(device, 1024 * 4, wgpu::BufferUsages::VERTEX, "vertex"),
+            offset: 0,
+            rects: Vec::with_capacity(1024),
         }
     }
 
-    #[inline(always)]
-    pub(crate) fn is_uninit(&self) -> bool {
-        matches!(self, Self::Uninitialized)
-    }
+    pub(crate) fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        if self.rects.is_empty() { return; }
 
-    pub(crate) fn get_buffer(&self) -> Option<(&wgpu::Buffer, &wgpu::Buffer)> {
-        match self {
-            MeshBuffer::Uninitialized => None,
-            MeshBuffer::Initialized { indices, vertices } => Some((indices, vertices))
+        let mut idx = vec![];
+        let mut vtx = vec![];
+        for rect in &self.rects {
+            idx.extend_from_slice(&Indices::new());
+            vtx.extend_from_slice(&Vertices::with_uv(*rect));
         }
-    }
 
-    pub(crate) fn indices(device: &wgpu::Device, n: usize) -> wgpu::Buffer {
-        use wgpu::util::DeviceExt;
+        self.indices.write(device, queue, self.offset, &idx);
+        self.vertices.write(device, queue, self.offset, &vtx);
 
-        let mut indices = vec![];
-        for _ in 0..n { indices.extend_from_slice(&Indices::new()) }
-        
-        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("indices buffer"),
-            contents: cast_slice(&indices),
-            usage: wgpu::BufferUsages::INDEX,
-        })
-    }
-
-    pub(crate) fn vertices(device: &wgpu::Device, n: usize) -> wgpu::Buffer {
-        use wgpu::util::DeviceExt;
-
-        let mut vertices = vec![];
-        for _ in 0..n { vertices.extend_from_slice(&Vertices::new()) }
-
-        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vertex buffer"),
-            contents: cast_slice(&vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        })
+        self.offset += self.rects.len() as u64;
+        self.rects.clear();
     }
 
     pub(crate) fn vertice_desc<'a>() -> wgpu::VertexBufferLayout<'a> {

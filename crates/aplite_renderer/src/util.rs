@@ -69,11 +69,6 @@ impl Sampler {
     }
 }
 
-pub fn cast_slice<SRC: Sized, DST: Sized>(src: &[SRC]) -> &[DST] {
-    let len = size_of_val(src);
-    unsafe { core::slice::from_raw_parts(src.as_ptr() as *const DST, len) }
-}
-
 pub(crate) fn create_pipeline(
     gpu: &Gpu,
     buffers: &[wgpu::VertexBufferLayout<'_>],

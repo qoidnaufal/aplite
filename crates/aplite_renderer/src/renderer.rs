@@ -30,6 +30,7 @@ impl Renderer {
 
         let sampler = Sampler::new(&gpu.device);
         let screen = Screen::new(&gpu.device, gpu.size().into(), window.scale_factor());
+        let mesh = MeshBuffer::new(&gpu.device);
 
         let buffers = &[MeshBuffer::vertice_desc()];
         let layouts = &[
@@ -40,7 +41,6 @@ impl Renderer {
         ];
         let pipeline = create_pipeline(&gpu, buffers, layouts);
         let atlas = Atlas::new(&gpu.device);
-        let mesh = MeshBuffer::Uninitialized;
         let images = vec![];
 
         Ok(Self {
@@ -65,7 +65,7 @@ impl Renderer {
     pub fn surface_size(&self) -> Size<u32> { self.gpu.size() }
 
     pub fn resize(&mut self, new_size: Size<u32>) {
-        let res = self.screen.resolution();
+        let res = self.screen.screen_size();
         let ns: Size<f32> = new_size.into();
         let s = res / ns;
 
@@ -80,9 +80,9 @@ impl Renderer {
     }
 
     pub fn write_data(&mut self) {
-        self.screen.write(&self.gpu.queue);
-        let realloc = self.gfx.write(&self.gpu.device, &self.gpu.queue);
-        if self.mesh.is_uninit() || realloc { self.mesh.init(&self.gpu.device, self.gfx.count()) }
+        self.screen.write(&self.gpu.device, &self.gpu.queue);
+        self.gfx.write(&self.gpu.device, &self.gpu.queue);
+        self.mesh.write(&self.gpu.device, &self.gpu.queue);
     }
 
     pub fn render<P: FnOnce()>(
@@ -106,7 +106,7 @@ impl Renderer {
             }
         };
 
-        // self.atlas.update(&self.gpu.device, &mut encoder);
+        self.atlas.update(&self.gpu.device, &mut encoder);
         self.encode(&mut encoder, desc);
 
         pre_present_notify();
@@ -119,55 +119,55 @@ impl Renderer {
 
     #[inline(always)]
     fn encode(&self, encoder: &mut wgpu::CommandEncoder, desc: wgpu::RenderPassColorAttachment) {
+        if self.mesh.offset == 0 { return }
+
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("render pass"),
             color_attachments: &[Some(desc)],
             ..Default::default()
         });
 
-        if let Some((idx, vtx)) = self.mesh.get_buffer() {
-            pass.set_pipeline(&self.pipeline);
+        pass.set_pipeline(&self.pipeline);
 
-            pass.set_index_buffer(idx.slice(..), wgpu::IndexFormat::Uint32);
-            pass.set_vertex_buffer(0, vtx.slice(..));
+        pass.set_index_buffer(self.mesh.indices.slice(0..self.mesh.offset * 6), wgpu::IndexFormat::Uint32);
+        pass.set_vertex_buffer(0, self.mesh.vertices.slice(0..self.mesh.offset * 4));
 
-            pass.set_bind_group(0, &self.screen.bind_group, &[]);
-            pass.set_bind_group(1, &self.gfx.bind_group, &[]);
-            pass.set_bind_group(2, &self.atlas.bind_group, &[]);
-            pass.set_bind_group(3, &self.sampler.bind_group, &[]);
+        pass.set_bind_group(0, &self.screen.bind_group, &[]);
+        pass.set_bind_group(1, &self.gfx.bind_group, &[]);
+        pass.set_bind_group(2, &self.atlas.bind_group, &[]);
+        pass.set_bind_group(3, &self.sampler.bind_group, &[]);
 
-            let mut start: u32 = 0;
+        let mut start: u32 = 0;
 
-            // FIXME: batch rendering
-            for i in 0..self.gfx.count() {
-                let element = &self.gfx.elements.data[i];
-                let instance = i as u32;
-                let end = start + 6;
+        // FIXME: batch rendering
+        for i in 0..self.gfx.count() {
+            let element = &self.gfx.element_data[i];
+            let instance = i as u32;
+            let end = start + 6;
 
-                if element.texture_id > -1 {
-                    let image_bind_group = &self.images[element.texture_id as usize].bind_group;
-                    pass.set_bind_group(2, image_bind_group, &[]);
-                }
-                pass.draw_indexed(start..end, 0, instance..instance + 1);
-                start = end;
+            if element.texture_id > -1 {
+                let image_bind_group = &self.images[element.texture_id as usize].bind_group;
+                pass.set_bind_group(2, image_bind_group, &[]);
             }
+            pass.draw_indexed(start..end, 0, instance..instance + 1);
+            start = end;
         }
     }
 }
 
 impl Renderer {
     pub fn update_element_color(&mut self, index: usize, color: Rgba<u8>) {
-        self.gfx.elements.update(index, |elem| elem.set_color(color));
+        self.gfx.update_element(index, |elem| elem.set_color(color));
     }
 
     pub fn update_element_size(&mut self, index: usize, size: Size<u32>) {
-        self.gfx.elements.update(index, |elem| elem.set_size(size));
+        self.gfx.update_element(index, |elem| elem.set_size(size));
     }
 
     pub fn update_element_transform(&mut self, index: usize, rect: Rect<u32>) {
-        let res = self.screen.resolution();
+        let res = self.screen.screen_size();
         let size: Size<f32> = rect.size().into();
-        self.gfx.transforms.update(index, |matrix| {
+        self.gfx.update_transform(index, |matrix| {
             let x = rect.x() as f32 / res.width() * 2.0 - 1.0;
             let y = 1.0 - rect.y() as f32 / res.height() * 2.0;
             let s = size / res;
@@ -182,6 +182,8 @@ pub struct ImageInfo {
     pub aspect_ratio: Fraction<u32>,
 }
 
+// use crate::texture::AtlasInfo;
+
 impl Renderer {
     pub fn push_image(&mut self, f: &dyn Fn() -> ImageData) -> ImageInfo {
         let image = f();
@@ -189,14 +191,26 @@ impl Renderer {
         let id = self.images.len() as i32;
         let texture_data = TextureData::new(&self.gpu, image);
         self.images.push(texture_data);
+        // self.atlas.push(image)
         ImageInfo { id, aspect_ratio }
     }
 
-    pub fn add_component(&mut self, rc: &impl RenderElementSource) {
-        let element = Element::new(rc).with_transform_id(self.gfx.count() as u32);
-        let transform = Matrix3x2::IDENTITY;
+    // pub fn add_component_with_rect(&mut self, rcs: &impl RenderElementSource, rect: Rect<f32>) {
+    //     let element = Element::new(rcs).with_transform_id(self.gfx.count() as u32);
+    //     let transform = Matrix3x2::IDENTITY;
 
-        self.gfx.elements.push(element);
-        self.gfx.transforms.push(transform);
+    //     self.gfx.element_data.push(element);
+    //     self.gfx.transform_data.push(transform);
+    //     self.mesh.rects.push(rect);
+    // }
+
+    pub fn add_component(&mut self, rcs: &impl RenderElementSource) {
+        let element = Element::new(rcs).with_transform_id(self.gfx.count() as u32);
+        let transform = Matrix3x2::IDENTITY;
+        let rect = Rect::new((0.0, 0.0), (1.0, 1.0));
+
+        self.gfx.element_data.push(element);
+        self.gfx.transform_data.push(transform);
+        self.mesh.rects.push(rect);
     }
 }

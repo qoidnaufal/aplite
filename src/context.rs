@@ -405,31 +405,33 @@ impl Render for Context {
         let nodes = self.tree.iter().skip(1).map(|node| *node.id()).collect::<Vec<_>>();
         nodes.iter().for_each(|node_id| {
             if let Some(image_fn) = self.image_fn.get(node_id) {
-                let parent_orientation = self
-                    .tree
-                    .get_parent(node_id)
-                    .map(|parent| self.get_node_data(parent).orientation());
+                // let parent_orientation = self
+                //     .tree
+                //     .get_parent(node_id)
+                //     .map(|parent| self.get_node_data(parent).orientation());
 
                 let info = renderer.push_image(image_fn);
                 let prop = self.get_node_data_mut(node_id);
                 prop.set_texture_id(info.id);
 
-                if let AspectRatio::Source = prop.image_aspect_ratio() {
-                    if let Some(orientation) = parent_orientation {
-                        match orientation {
-                            Orientation::Vertical => prop.adjust_height(info.aspect_ratio),
-                            Orientation::Horizontal => prop.adjust_width(info.aspect_ratio),
-                        }
-                    } else {
-                        prop.adjust_width(info.aspect_ratio);
-                    }
-                    eprintln!("image size: {:?}", prop.size());
-                    self.pending_update.push(UpdateMode::Size(*node_id));
-                }
-            }
+                // if let AspectRatio::Source = prop.image_aspect_ratio() {
+                //     if let Some(orientation) = parent_orientation {
+                //         match orientation {
+                //             Orientation::Vertical => prop.adjust_height(info.aspect_ratio),
+                //             Orientation::Horizontal => prop.adjust_width(info.aspect_ratio),
+                //         }
+                //     } else {
+                //         prop.adjust_width(info.aspect_ratio);
+                //     }
+                //     eprintln!("image size: {:?}", prop.size());
+                //     self.pending_update.push(UpdateMode::Size(*node_id));
+                // }
 
-            let prop = self.get_node_data(node_id);
-            renderer.add_component(prop);
+                renderer.add_component(prop);
+            } else {
+                let prop = self.get_node_data(node_id);
+                renderer.add_component(prop);
+            }
         });
     }
 }

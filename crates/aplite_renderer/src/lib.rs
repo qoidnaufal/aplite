@@ -14,7 +14,6 @@ pub use element::{Shape, CornerRadius};
 pub use util::{Render, RenderElementSource};
 pub use texture::ImageData;
 pub use texture::image_reader;
-pub use util::cast_slice;
 
 #[derive(Debug)]
 pub enum RendererError {
