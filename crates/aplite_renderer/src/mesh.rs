@@ -113,6 +113,8 @@ pub(crate) struct MeshBuffer {
     pub(crate) indices: Buffer<u32>,
     pub(crate) vertices: Buffer<Vertex>,
     pub(crate) offset: u64,
+
+    // FIXME: this is for rebuild or expand only?
     pub(crate) uvs: Vec<Rect<f32>>,
 }
 

@@ -3,7 +3,7 @@ use aplite_types::Matrix3x2;
 use super::element::Element;
 use super::buffer::Buffer;
 
-pub(crate) struct Gfx {
+pub(crate) struct Storage {
     pub(crate) elements: Buffer<Element>,
     pub(crate) transforms: Buffer<Matrix3x2>,
     pub(crate) bind_group: wgpu::BindGroup,
@@ -11,7 +11,7 @@ pub(crate) struct Gfx {
     pub(crate) transform_data: Vec<Matrix3x2>,
 }
 
-impl Gfx {
+impl Storage {
     pub(crate) fn new(device: &wgpu::Device) -> Self {
         let elements = Buffer::<Element>::new(device, 1024, wgpu::BufferUsages::STORAGE, "element");
         let transforms = Buffer::<Matrix3x2>::new(device, 1024, wgpu::BufferUsages::STORAGE, "transforms");

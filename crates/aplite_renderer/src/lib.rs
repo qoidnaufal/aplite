@@ -4,7 +4,7 @@ mod shader;
 mod util;
 mod texture;
 mod element;
-mod gfx;
+mod storage;
 mod screen;
 mod renderer;
 mod mesh;

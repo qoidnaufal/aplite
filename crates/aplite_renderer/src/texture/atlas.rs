@@ -1,12 +1,6 @@
 use wgpu::util::DeviceExt;
 use aplite_types::{Rect, Size, Vector2};
-use super::ImageData;
-
-#[derive(Debug)]
-pub struct AtlasInfo {
-    pub id: i32,
-    pub uv_bound: Rect<f32>,
-}
+use super::{ImageData, TextureInfo};
 
 #[derive(Debug)]
 pub(crate) struct Atlas {
@@ -51,7 +45,7 @@ impl Atlas {
         }
     }
 
-    pub(crate) fn push(&mut self, data: ImageData) -> Option<AtlasInfo> {
+    pub(crate) fn push(&mut self, data: ImageData) -> Option<TextureInfo> {
         let width = data.width();
         let height = data.height();
 
@@ -77,9 +71,9 @@ impl Atlas {
         let max_x = width as f32 / Self::SIZE.width() as f32;
         let max_y = height as f32 / Self::SIZE.width() as f32;
 
-        let info = AtlasInfo {
+        let info = TextureInfo::AtlasId {
             id: self.pushed,
-            uv_bound: Rect::new( ( min_x, min_y ), ( max_x, max_y ) ),
+            uv: Rect::new( ( min_x, min_y ), ( max_x, max_y ) ),
         };
 
         self.image_data.push((self.used.pos(), data));

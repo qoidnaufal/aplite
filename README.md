@@ -1,5 +1,5 @@
 # Aplite
-In geological term [Aplite](https://en.wikipedia.org/wiki/Aplite) is a fine grained igneous rock.
+In geological term [`Aplite`](https://en.wikipedia.org/wiki/Aplite) is a fine grained igneous rock.
 My previous background as a geological engineering student, as well as my admiration toward [`leptos`](https://github.com/leptos-rs/leptos) guided me to pick this name.
 
 This repo mainly serve as a learning process for me on retained mode GPU-rendered GUI (graphical user interface) with fine grained reactivity as the driver to trigger ui update.
@@ -14,6 +14,10 @@ Everything else are written from scratch, which took a lot of inspiration from:
 - [`Yarrow`](https://github.com/MeadowlarkDAW/Yarrow), and
 - [`rootvg`](https://github.com/MeadowlarkDAW/rootvg), for the different ideas on managing primitives
 - and many more
+
+### Basic Architecture
+`Renderer` is decoupled from view data management by `Context`, to make it easier to experiment on each side without changing so much on the other side.
+Both of them are connected via `trait Render` & `fn submit_data(&mut Renderer) {}` which is kind of minimal i think. That's all.
 
 ### Example
 This is an example from the current (incomplete) works I've accomplished so far:

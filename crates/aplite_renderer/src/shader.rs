@@ -32,7 +32,8 @@ struct Element {
     shape: u32,
     rotate: f32,
     stroke_width: f32,
-    texture_id: i32,
+    image_id: i32,
+    atlas_id: i32,
     transform_id: u32,
 };
 
@@ -73,7 +74,7 @@ fn vs_main(vertex: VertexInput) -> FragmentPayload {
     let s_pos = screen_t * vec3f(t_pos, 1.0);
 
     var out: FragmentPayload;
-    out.uv = select(vertex.uv, vertex.uv * 2 - 1, element.texture_id < 0);
+    out.uv = select(vertex.uv * 2 - 1, vertex.uv, element.image_id > -1 || element.atlas_id > -1);
     out.index = vertex.id;
     out.position = vec4f(s_pos, 0.0, 1.0);
     return out;
@@ -156,7 +157,7 @@ fn get_stroke(element: Element) -> Stroke {
 fn fs_main(in: FragmentPayload) -> @location(0) vec4<f32> {
     let element = elements[in.index];
 
-    if element.texture_id > -1 { return textureSample(t, s, in.uv); }
+    if element.image_id > -1 || element.atlas_id > -1 { return textureSample(t, s, in.uv); }
 
     let stroke = get_stroke(element);
     let sdf = sdf(in.uv, element, stroke.width);

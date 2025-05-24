@@ -404,31 +404,28 @@ impl Render for Context {
     fn render(&self, renderer: &mut Renderer) {
         self.tree.iter().skip(1).for_each(|node| {
             if let Some(image_fn) = self.image_fn.get(node.id()) {
-                if let Some(atlas_info) = renderer.push_atlas(image_fn) {
+                // if node.id().index() == 3 {
+                //     let info = renderer.push_image(image_fn);
+                //     let prop = self.get_node_data(node.id());
+                //     renderer.add_component(prop, Some(info));
+                // } else {
+                //     let info = renderer.push_atlas(image_fn);
+                //     let prop = self.get_node_data(node.id());
+                //     renderer.add_component(prop, info);
+                // }
+
+                if let Some(info) = renderer.push_atlas(image_fn) {
                     let prop = self.get_node_data(node.id());
-                    renderer.add_component(prop, Some(atlas_info.uv_bound), atlas_info.id);
+                    renderer.add_component(prop, Some(info));
                 } else {
-                    let image_info = renderer.push_image(image_fn);
+                    let info = renderer.push_image(image_fn);
                     let prop = self.get_node_data(node.id());
-                    renderer.add_component(prop, None, image_info.id);
+                    renderer.add_component(prop, Some(info));
                 }
             } else {
                 let prop = self.get_node_data(node.id());
-                renderer.add_component(prop, None, -1);
+                renderer.add_component(prop, None);
             }
         });
     }
 }
-
-// if let AspectRatio::Source = prop.image_aspect_ratio() {
-//     if let Some(orientation) = parent_orientation {
-//         match orientation {
-//             Orientation::Vertical => prop.adjust_height(info.aspect_ratio),
-//             Orientation::Horizontal => prop.adjust_width(info.aspect_ratio),
-//         }
-//     } else {
-//         prop.adjust_width(info.aspect_ratio);
-//     }
-//     eprintln!("image size: {:?}", prop.size());
-//     self.pending_update.push(UpdateMode::Size(*node_id));
-// }

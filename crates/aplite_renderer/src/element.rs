@@ -89,7 +89,8 @@ pub(crate) struct Element {
     pub(crate) shape: Shape,
     pub(crate) rotation: f32,
     pub(crate) stroke_width: f32,
-    pub(crate) texture_id: i32,
+    pub(crate) image_id: i32,
+    pub(crate) atlas_id: i32,
     pub(crate) transform_id: u32,
 }
 
@@ -103,7 +104,8 @@ impl Element {
             shape: rcs.shape(),
             rotation: rcs.rotation(),
             stroke_width: rcs.stroke_width(),
-            texture_id: -1,
+            image_id: -1,
+            atlas_id: -1,
             transform_id: 0,
         }
     }
@@ -113,8 +115,13 @@ impl Element {
         self
     }
 
-    pub(crate) fn with_texture_id(mut self, id: i32) -> Self {
-        self.texture_id = id;
+    pub(crate) fn with_atlas_id(mut self, id: i32) -> Self {
+        self.atlas_id = id;
+        self
+    }
+
+    pub(crate) fn with_image_id(mut self, id: i32) -> Self {
+        self.image_id = id;
         self
     }
 

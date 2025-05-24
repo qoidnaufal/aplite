@@ -1,51 +1,51 @@
 use std::sync::Arc;
 use winit::window::Window;
-use aplite_types::{Fraction, Matrix3x2, Rect, Rgba, Size};
+use aplite_types::{Matrix3x2, Rect, Rgba, Size};
 
 use super::RendererError;
 
 use crate::element::Element;
 use crate::screen::Screen;
-use crate::gfx::Gfx;
+use crate::storage::Storage;
 use crate::gpu::Gpu;
 use crate::mesh::MeshBuffer;
 use crate::util::{create_pipeline, RenderElementSource, Sampler};
-use crate::texture::{Atlas, AtlasInfo, ImageData, TextureData};
+use crate::texture::{Atlas, ImageData, TextureData, TextureInfo};
 
 pub struct Renderer {
     gpu: Gpu,
-    gfx: Gfx, // FIXME: change this into vertex buffer to enable batching
-    sampler: Sampler,
+    screen: Screen,
+    storage: Storage, // FIXME: change this into vertex buffer to enable batching
     atlas: Atlas,
+    sampler: Sampler,
     images: Vec<TextureData>,
     pipeline: wgpu::RenderPipeline,
     mesh: MeshBuffer,
-    screen: Screen,
 }
 
 impl Renderer {
     pub fn new(window: Arc<Window>) -> Result<Self, RendererError> {
         let gpu = Gpu::new(Arc::clone(&window))?;
-        let gfx = Gfx::new(&gpu.device);
-
-        let sampler = Sampler::new(&gpu.device);
-        let screen = Screen::new(&gpu.device, gpu.size().into(), window.scale_factor());
-        let mesh = MeshBuffer::new(&gpu.device);
 
         let buffers = &[MeshBuffer::vertice_desc()];
         let layouts = &[
             &Screen::bind_group_layout(&gpu.device),
-            &Gfx::bind_group_layout(&gpu.device),
+            &Storage::bind_group_layout(&gpu.device),
             &Atlas::bind_group_layout(&gpu.device),
             &Sampler::bind_group_layout(&gpu.device),
         ];
         let pipeline = create_pipeline(&gpu, buffers, layouts);
+
+        let screen = Screen::new(&gpu.device, gpu.size().into(), window.scale_factor());
+        let storage = Storage::new(&gpu.device);
         let atlas = Atlas::new(&gpu.device);
+        let sampler = Sampler::new(&gpu.device);
+        let mesh = MeshBuffer::new(&gpu.device);
         let images = vec![];
 
         Ok(Self {
             gpu,
-            gfx,
+            storage,
             sampler,
             atlas,
             images,
@@ -81,7 +81,7 @@ impl Renderer {
 
     pub fn write_data(&mut self) {
         self.screen.write(&self.gpu.device, &self.gpu.queue);
-        self.gfx.write(&self.gpu.device, &self.gpu.queue);
+        self.storage.write(&self.gpu.device, &self.gpu.queue);
         self.mesh.write(&self.gpu.device, &self.gpu.queue);
     }
 
@@ -111,7 +111,7 @@ impl Renderer {
 
         pre_present_notify();
 
-        self.gpu.queue.submit(std::iter::once(encoder.finish()));
+        self.gpu.queue.submit([encoder.finish()]);
         frame.present();
 
         Ok(())
@@ -132,27 +132,46 @@ impl Renderer {
         pass.set_vertex_buffer(0, self.mesh.vertices.slice(0..self.mesh.offset * 4));
 
         pass.set_bind_group(0, &self.screen.bind_group, &[]);
-        pass.set_bind_group(1, &self.gfx.bind_group, &[]);
+        pass.set_bind_group(1, &self.storage.bind_group, &[]);
         pass.set_bind_group(2, &self.atlas.bind_group, &[]);
         pass.set_bind_group(3, &self.sampler.bind_group, &[]);
 
         pass.draw_indexed(0..self.mesh.offset as u32 * 6, 0, 0..1);
+
+        // TODO: organize how to render "non-atlased" image
+        // self
+        //     .storage
+        //     .element_data
+        //     .iter()
+        //     .enumerate()
+        //     .filter_map(|(idx, element)| {
+        //         if element.image_id > -1 {
+        //             Some((idx as u64, element.image_id as usize))
+        //         } else { None }
+        //     })
+        //     .for_each(|(idx, image_id)| {
+        //         let bind_group = &self.images[image_id].bind_group;
+        //         pass.set_index_buffer(self.mesh.indices.slice(idx + 6..idx * 6), wgpu::IndexFormat::Uint32);
+        //         pass.set_vertex_buffer(0, self.mesh.vertices.slice(idx + 4..idx * 4));
+        //         pass.set_bind_group(2, bind_group, &[]);
+        //         pass.draw_indexed(0..4, 0, 0..1);
+        //     });
     }
 }
 
 impl Renderer {
     pub fn update_element_color(&mut self, index: usize, color: Rgba<u8>) {
-        self.gfx.update_element(index, |elem| elem.set_color(color));
+        self.storage.update_element(index, |elem| elem.set_color(color));
     }
 
     pub fn update_element_size(&mut self, index: usize, size: Size<u32>) {
-        self.gfx.update_element(index, |elem| elem.set_size(size));
+        self.storage.update_element(index, |elem| elem.set_size(size));
     }
 
     pub fn update_element_transform(&mut self, index: usize, rect: Rect<u32>) {
         let res = self.screen.screen_size();
         let size: Size<f32> = rect.size().into();
-        self.gfx.update_transform(index, |matrix| {
+        self.storage.update_transform(index, |matrix| {
             let x = rect.x() as f32 / res.width() * 2.0 - 1.0;
             let y = 1.0 - rect.y() as f32 / res.height() * 2.0;
             let s = size / res;
@@ -162,37 +181,38 @@ impl Renderer {
     }
 }
 
-pub struct ImageInfo {
-    pub id: i32,
-    pub aspect_ratio: Fraction<u32>,
-}
-
 impl Renderer {
-    pub fn push_image(&mut self, f: &dyn Fn() -> ImageData) -> ImageInfo {
+    pub fn push_image(&mut self, f: &dyn Fn() -> ImageData) -> TextureInfo {
         let image = f();
-        let aspect_ratio = image.aspect_ratio();
-        let id = self.images.len() as i32;
+        let info = TextureInfo::ImageId(self.images.len() as _);
         let texture_data = TextureData::new(&self.gpu, image);
         self.images.push(texture_data);
-        ImageInfo { id, aspect_ratio }
+        info
     }
 
-    pub fn push_atlas(&mut self, f: &dyn Fn() -> ImageData) -> Option<AtlasInfo> {
+    pub fn push_atlas(&mut self, f: &dyn Fn() -> ImageData) -> Option<TextureInfo> {
         let image = f();
         self.atlas.push(image)
     }
 
     pub fn add_component(&mut self,
         rcs: &impl RenderElementSource,
-        uv: Option<Rect<f32>>,
-        texture_id: i32
+        texture_info: Option<TextureInfo>,
     ) {
-        let element = Element::new(rcs)
-            .with_transform_id(self.gfx.count() as u32)
-            .with_texture_id(texture_id);
+        let (image_id, atlas_id, uv) = texture_info.map(|i| {
+            let image_id = i.get_image_id().unwrap_or(-1);
+            let atlas_id = i.get_atlas_id().unwrap_or(-1);
+            let uv = i.get_uv().unwrap_or(Rect::new((0.0, 0.0), (1.0, 1.0)));
+            (image_id, atlas_id, uv)
+        }).unwrap_or((-1, -1, Rect::new((0.0, 0.0), (1.0, 1.0))));
 
-        self.gfx.element_data.push(element);
-        self.gfx.transform_data.push(Matrix3x2::IDENTITY);
-        self.mesh.uvs.push(uv.unwrap_or(Rect::new((0.0, 0.0), (1.0, 1.0))));
+        let element = Element::new(rcs)
+            .with_transform_id(self.storage.count() as u32)
+            .with_image_id(image_id)
+            .with_atlas_id(atlas_id);
+
+        self.storage.element_data.push(element);
+        self.storage.transform_data.push(Matrix3x2::IDENTITY);
+        self.mesh.uvs.push(uv);
     }
 }
