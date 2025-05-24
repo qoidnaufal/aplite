@@ -37,8 +37,8 @@ impl Indices {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Vertex {
     _pos: Vector2<f32>,
-    _uv: Vector2<f32>,
-    _id: u32,
+    uv: Vector2<f32>,
+    id: u32,
 }
 
 pub(crate) struct Vertices([Vertex; 4]);
@@ -58,44 +58,31 @@ impl std::ops::DerefMut for Vertices {
 
 impl Vertices {
     const VERTICES: Self = Self ([
-        Vertex { _pos: Vector2::new( -1.0,  1.0 ), _uv: Vector2::new( 0.0, 0.0 ), _id: 0 },
-        Vertex { _pos: Vector2::new( -1.0, -1.0 ), _uv: Vector2::new( 0.0, 1.0 ), _id: 0 },
-        Vertex { _pos: Vector2::new(  1.0, -1.0 ), _uv: Vector2::new( 1.0, 1.0 ), _id: 0 },
-        Vertex { _pos: Vector2::new(  1.0,  1.0 ), _uv: Vector2::new( 1.0, 0.0 ), _id: 0 },
+        Vertex { _pos: Vector2::new( -1.0,  1.0 ), uv: Vector2::new( 0.0, 0.0 ), id: 0 },
+        Vertex { _pos: Vector2::new( -1.0, -1.0 ), uv: Vector2::new( 0.0, 1.0 ), id: 0 },
+        Vertex { _pos: Vector2::new(  1.0, -1.0 ), uv: Vector2::new( 1.0, 1.0 ), id: 0 },
+        Vertex { _pos: Vector2::new(  1.0,  1.0 ), uv: Vector2::new( 1.0, 0.0 ), id: 0 },
     ]);
 
     #[inline(always)]
-    pub(crate) const fn basic() -> Self { Self::VERTICES }
+    pub(crate) const fn new() -> Self { Self::VERTICES }
 
-    // pub(crate) fn new(rect: Rect<u32>) -> Self {
-    //     let l = rect.l() as f32;
-    //     let r = rect.r() as f32;
-    //     let t = rect.t() as f32;
-    //     let b = rect.b() as f32;
-    //     Self ([
-    //         Vertex { _pos: Vector2::new( -l,  t ), _uv: Vector2::new( 0.0, 0.0 ) },
-    //         Vertex { _pos: Vector2::new( -l, -b ), _uv: Vector2::new( 0.0, 1.0 ) },
-    //         Vertex { _pos: Vector2::new(  r, -b ), _uv: Vector2::new( 1.0, 1.0 ) },
-    //         Vertex { _pos: Vector2::new(  r,  t ), _uv: Vector2::new( 1.0, 0.0 ) },
-    //     ])
-    // }
-
-    pub(crate) fn with_uv(rect: Rect<f32>) -> Self {
+    pub(crate) fn with_uv(mut self, rect: Rect<f32>) -> Self {
         let l = rect.l() as f32;
         let r = rect.r() as f32;
         let t = rect.t() as f32;
         let b = rect.b() as f32;
 
-        Self([
-            Vertex { _pos: Vector2::new( -1.0,  1.0 ), _uv: Vector2::new( l, t ), _id: 0 },
-            Vertex { _pos: Vector2::new( -1.0, -1.0 ), _uv: Vector2::new( l, b ), _id: 0 },
-            Vertex { _pos: Vector2::new(  1.0, -1.0 ), _uv: Vector2::new( r, b ), _id: 0 },
-            Vertex { _pos: Vector2::new(  1.0,  1.0 ), _uv: Vector2::new( r, t ), _id: 0 },
-        ])
+        self.iter_mut().for_each(|v| {
+            if v.uv.x() == 0.0 { v.uv.set_x(l) } else { v.uv.set_x(r) }
+            if v.uv.y() == 0.0 { v.uv.set_y(t) } else { v.uv.set_y(b) }
+        });
+
+        self
     }
 
     fn with_id(mut self, id: u32) -> Self {
-        self.iter_mut().for_each(|v| v._id = id);
+        self.iter_mut().for_each(|v| v.id = id);
         self
     }
 
@@ -111,7 +98,7 @@ impl std::fmt::Debug for Vertices {
         let len = self.0.len();
         for i in 0..len {
             let pos = self.0[i]._pos;
-            let uv = self.0[i]._uv;
+            let uv = self.0[i].uv;
             if i == len - 1 {
                 s.push_str(format!("{i}: {pos:?} | {uv:?}").as_str());
             } else {
@@ -147,7 +134,7 @@ impl MeshBuffer {
         for i in 0..self.uvs.len() {
             let uv = self.uvs[i];
             idx.extend_from_slice(&Indices::new().with_offset(i as _, true));
-            vtx.extend_from_slice(&Vertices::with_uv(uv).with_id(i as _));
+            vtx.extend_from_slice(&Vertices::new().with_uv(uv).with_id(i as _));
         }
 
         self.indices.write(device, queue, self.offset, &idx);

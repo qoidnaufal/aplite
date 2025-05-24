@@ -46,8 +46,8 @@ impl Drop for Stats {
             eprintln!();
             eprintln!(" > startup:             {startup:?}");
             eprintln!(" > average:             {average:?}");
-            eprintln!(" - hi:                  {:?}", self.longest);
-            eprintln!(" + lo:                  {:?}", self.shortest);
+            eprintln!("   - hi:                {:?}", self.longest);
+            eprintln!("   + lo:                {:?}", self.shortest);
             eprintln!(" > frames rendered:     {counter}");
             eprintln!(" > total time spent:    {:?}", self.render_time);
             eprintln!(" > fps:                 {:?}", fps.round() as usize);
