@@ -1,12 +1,11 @@
 use wgpu::util::DeviceExt;
-use aplite_types::{Rect, Size, Fraction};
+use aplite_types::{Rect, Size, Vector2};
 use super::ImageData;
 
 #[derive(Debug)]
 pub struct AtlasInfo {
     pub id: i32,
-    pub aspect_ratio: Fraction<u32>,
-    pub rect: Rect<f32>,
+    pub uv_bound: Rect<f32>,
 }
 
 #[derive(Debug)]
@@ -14,14 +13,13 @@ pub(crate) struct Atlas {
     used: Rect<u32>,
     texture: wgpu::Texture,
     pub(crate) bind_group: wgpu::BindGroup,
-    image_data: Vec<ImageData>,
+    image_data: Vec<(Vector2<u32>, ImageData)>,
     initialized: bool,
     pushed: i32,
 }
 
 impl Atlas {
-    const SIZE: Size<u32> = Size::new(2048, 2048);
-    // const SPACING: u32 = 1;
+    const SIZE: Size<u32> = Size::new(2000, 2000);
 
     pub(crate) fn new(device: &wgpu::Device) -> Self {
         let used = Rect::new((0, 0), (0, 0));
@@ -36,7 +34,9 @@ impl Atlas {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_DST
+                | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -51,48 +51,47 @@ impl Atlas {
         }
     }
 
-    pub(crate) fn push(&mut self, mut data: ImageData) -> Option<AtlasInfo> {
-        let is_w_contained = self.used.width() + data.width() <= Self::SIZE.width();
-        let is_h_contained = self.used.height() + data.height() <= Self::SIZE.height();
+    pub(crate) fn push(&mut self, data: ImageData) -> Option<AtlasInfo> {
+        let width = data.width();
+        let height = data.height();
+
+        let is_w_contained = self.used.width() + width <= Self::SIZE.width();
+        let is_h_contained = self.used.height() + height <= Self::SIZE.height();
 
         if is_w_contained && is_h_contained {
             self.used.set_height(
                 self.used
                     .height()
-                    .max(self.used.y() + data.height())
+                    .max(self.used.y() + height)
             );
         } else if is_h_contained {
             self.used.set_x(0);
             self.used.set_width(0);
-            self.used.set_y(self.used.height() /* + Self::SPACING */);
+            self.used.set_y(self.used.height());
         } else {
             return None;
         }
 
-        data.rect.set_pos(self.used.pos());
-        self.used.add_x(data.width() /* + Self::SPACING */);
-        self.used.add_width(data.width() /* + Self::SPACING */);
-
-        let rect: Rect<f32> = Rect::new(
-            (
-                data.rect.l() as f32 / Self::SIZE.width() as f32,
-                data.rect.t() as f32 / Self::SIZE.width() as f32
-            ),
-            (
-                data.rect.width() as f32 / Self::SIZE.width() as f32,
-                data.rect.height() as f32 / Self::SIZE.width() as f32
-            )
-        );
+        let min_x = self.used.l() as f32 / Self::SIZE.width() as f32;
+        let min_y = self.used.t() as f32 / Self::SIZE.width() as f32;
+        let max_x = width as f32 / Self::SIZE.width() as f32;
+        let max_y = height as f32 / Self::SIZE.width() as f32;
 
         let info = AtlasInfo {
             id: self.pushed,
-            aspect_ratio: data.aspect_ratio(),
-            rect,
+            uv_bound: Rect::new( ( min_x, min_y ), ( max_x, max_y ) ),
         };
 
-        self.image_data.push(data);
+        self.image_data.push((self.used.pos(), data));
+        self.occupy(width);
         self.pushed += 1;
+
         Some(info)
+    }
+
+    fn occupy(&mut self, width: u32) {
+        self.used.add_x(width);
+        self.used.add_width(width);
     }
 
     pub(crate) fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
@@ -160,7 +159,7 @@ impl Atlas {
             self.initialized = true;
         }
 
-        for data in &self.image_data {
+        for (pos, data) in &self.image_data {
             let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
             let width = data.width() * 4;
             let padding = (align - width % align) % align;
@@ -197,8 +196,8 @@ impl Atlas {
                     aspect: wgpu::TextureAspect::All,
                     mip_level: 0,
                     origin: wgpu::Origin3d {
-                        x: data.rect.x(),
-                        y: data.rect.y(),
+                        x: pos.x(),
+                        y: pos.y(),
                         z: 0,
                     },
                 },

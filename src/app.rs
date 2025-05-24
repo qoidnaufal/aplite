@@ -114,7 +114,7 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
             // screen_resolution: ScreenResolution::default(),
 
             #[cfg(feature = "render_stats")]
-            stats: stats::Stats::new(),
+            stats: aplite_stats::Stats::new(),
         }
     }
 

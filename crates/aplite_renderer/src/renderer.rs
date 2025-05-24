@@ -10,7 +10,7 @@ use crate::gfx::Gfx;
 use crate::gpu::Gpu;
 use crate::mesh::MeshBuffer;
 use crate::util::{create_pipeline, RenderElementSource, Sampler};
-use crate::texture::{Atlas, ImageData, TextureData};
+use crate::texture::{Atlas, AtlasInfo, ImageData, TextureData};
 
 pub struct Renderer {
     gpu: Gpu,
@@ -117,7 +117,6 @@ impl Renderer {
         Ok(())
     }
 
-    #[inline(always)]
     fn encode(&self, encoder: &mut wgpu::CommandEncoder, desc: wgpu::RenderPassColorAttachment) {
         if self.mesh.offset == 0 { return }
 
@@ -137,21 +136,7 @@ impl Renderer {
         pass.set_bind_group(2, &self.atlas.bind_group, &[]);
         pass.set_bind_group(3, &self.sampler.bind_group, &[]);
 
-        let mut start: u32 = 0;
-
-        // FIXME: batch rendering
-        for i in 0..self.gfx.count() {
-            let element = &self.gfx.element_data[i];
-            let instance = i as u32;
-            let end = start + 6;
-
-            if element.texture_id > -1 {
-                let image_bind_group = &self.images[element.texture_id as usize].bind_group;
-                pass.set_bind_group(2, image_bind_group, &[]);
-            }
-            pass.draw_indexed(start..end, 0, instance..instance + 1);
-            start = end;
-        }
+        pass.draw_indexed(0..self.mesh.offset as u32 * 6, 0, 0..1);
     }
 }
 
@@ -182,8 +167,6 @@ pub struct ImageInfo {
     pub aspect_ratio: Fraction<u32>,
 }
 
-// use crate::texture::AtlasInfo;
-
 impl Renderer {
     pub fn push_image(&mut self, f: &dyn Fn() -> ImageData) -> ImageInfo {
         let image = f();
@@ -191,26 +174,25 @@ impl Renderer {
         let id = self.images.len() as i32;
         let texture_data = TextureData::new(&self.gpu, image);
         self.images.push(texture_data);
-        // self.atlas.push(image)
         ImageInfo { id, aspect_ratio }
     }
 
-    // pub fn add_component_with_rect(&mut self, rcs: &impl RenderElementSource, rect: Rect<f32>) {
-    //     let element = Element::new(rcs).with_transform_id(self.gfx.count() as u32);
-    //     let transform = Matrix3x2::IDENTITY;
+    pub fn push_atlas(&mut self, f: &dyn Fn() -> ImageData) -> Option<AtlasInfo> {
+        let image = f();
+        self.atlas.push(image)
+    }
 
-    //     self.gfx.element_data.push(element);
-    //     self.gfx.transform_data.push(transform);
-    //     self.mesh.rects.push(rect);
-    // }
-
-    pub fn add_component(&mut self, rcs: &impl RenderElementSource) {
-        let element = Element::new(rcs).with_transform_id(self.gfx.count() as u32);
-        let transform = Matrix3x2::IDENTITY;
-        let rect = Rect::new((0.0, 0.0), (1.0, 1.0));
+    pub fn add_component(&mut self,
+        rcs: &impl RenderElementSource,
+        uv: Option<Rect<f32>>,
+        texture_id: i32
+    ) {
+        let element = Element::new(rcs)
+            .with_transform_id(self.gfx.count() as u32)
+            .with_texture_id(texture_id);
 
         self.gfx.element_data.push(element);
-        self.gfx.transform_data.push(transform);
-        self.mesh.rects.push(rect);
+        self.gfx.transform_data.push(Matrix3x2::IDENTITY);
+        self.mesh.uvs.push(uv.unwrap_or(Rect::new((0.0, 0.0), (1.0, 1.0))));
     }
 }

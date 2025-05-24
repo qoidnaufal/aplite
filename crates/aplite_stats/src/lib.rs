@@ -44,13 +44,13 @@ impl Drop for Stats {
             let average = self.render_time / counter;
             let fps = counter as f64 / self.render_time.as_secs_f64();
             eprintln!();
-            eprintln!("startup:             {startup:?}");
-            eprintln!("average:             {average:?}");
-            eprintln!("hi:                  {:?}", self.longest);
-            eprintln!("lo:                  {:?}", self.shortest);
-            eprintln!("frames rendered:     {counter}");
-            eprintln!("total time spent:    {:?}", self.render_time);
-            eprintln!("fps:                 {:?}", fps.round() as usize);
+            eprintln!(" > startup:             {startup:?}");
+            eprintln!(" > average:             {average:?}");
+            eprintln!(" - hi:                  {:?}", self.longest);
+            eprintln!(" + lo:                  {:?}", self.shortest);
+            eprintln!(" > frames rendered:     {counter}");
+            eprintln!(" > total time spent:    {:?}", self.render_time);
+            eprintln!(" > fps:                 {:?}", fps.round() as usize);
         }
     }
 }

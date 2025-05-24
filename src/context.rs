@@ -401,37 +401,34 @@ impl Context {
 }
 
 impl Render for Context {
-    fn render(&mut self, renderer: &mut Renderer) {
-        let nodes = self.tree.iter().skip(1).map(|node| *node.id()).collect::<Vec<_>>();
-        nodes.iter().for_each(|node_id| {
-            if let Some(image_fn) = self.image_fn.get(node_id) {
-                // let parent_orientation = self
-                //     .tree
-                //     .get_parent(node_id)
-                //     .map(|parent| self.get_node_data(parent).orientation());
-
-                let info = renderer.push_image(image_fn);
-                let prop = self.get_node_data_mut(node_id);
-                prop.set_texture_id(info.id);
-
-                // if let AspectRatio::Source = prop.image_aspect_ratio() {
-                //     if let Some(orientation) = parent_orientation {
-                //         match orientation {
-                //             Orientation::Vertical => prop.adjust_height(info.aspect_ratio),
-                //             Orientation::Horizontal => prop.adjust_width(info.aspect_ratio),
-                //         }
-                //     } else {
-                //         prop.adjust_width(info.aspect_ratio);
-                //     }
-                //     eprintln!("image size: {:?}", prop.size());
-                //     self.pending_update.push(UpdateMode::Size(*node_id));
-                // }
-
-                renderer.add_component(prop);
+    fn render(&self, renderer: &mut Renderer) {
+        self.tree.iter().skip(1).for_each(|node| {
+            if let Some(image_fn) = self.image_fn.get(node.id()) {
+                if let Some(atlas_info) = renderer.push_atlas(image_fn) {
+                    let prop = self.get_node_data(node.id());
+                    renderer.add_component(prop, Some(atlas_info.uv_bound), atlas_info.id);
+                } else {
+                    let image_info = renderer.push_image(image_fn);
+                    let prop = self.get_node_data(node.id());
+                    renderer.add_component(prop, None, image_info.id);
+                }
             } else {
-                let prop = self.get_node_data(node_id);
-                renderer.add_component(prop);
+                let prop = self.get_node_data(node.id());
+                renderer.add_component(prop, None, -1);
             }
         });
     }
 }
+
+// if let AspectRatio::Source = prop.image_aspect_ratio() {
+//     if let Some(orientation) = parent_orientation {
+//         match orientation {
+//             Orientation::Vertical => prop.adjust_height(info.aspect_ratio),
+//             Orientation::Horizontal => prop.adjust_width(info.aspect_ratio),
+//         }
+//     } else {
+//         prop.adjust_width(info.aspect_ratio);
+//     }
+//     eprintln!("image size: {:?}", prop.size());
+//     self.pending_update.push(UpdateMode::Size(*node_id));
+// }

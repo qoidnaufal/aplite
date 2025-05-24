@@ -50,6 +50,7 @@ fn rotate(r: f32, pos: vec2<f32>) -> vec2<f32> {
 struct VertexInput {
     @location(0) pos: vec2<f32>,
     @location(1) uv: vec2<f32>,
+    @location(2) id: u32,
 }
 
 struct FragmentPayload {
@@ -59,8 +60,8 @@ struct FragmentPayload {
 };
 
 @vertex
-fn vs_main(vertex: VertexInput, @builtin(instance_index) instance: u32) -> FragmentPayload {
-    let element = elements[instance];
+fn vs_main(vertex: VertexInput) -> FragmentPayload {
+    let element = elements[vertex.id];
     let element_t = transforms[element.transform_id];
 
     var pos = vertex.pos;
@@ -73,7 +74,7 @@ fn vs_main(vertex: VertexInput, @builtin(instance_index) instance: u32) -> Fragm
 
     var out: FragmentPayload;
     out.uv = select(vertex.uv, vertex.uv * 2 - 1, element.texture_id < 0);
-    out.index = instance;
+    out.index = vertex.id;
     out.position = vec4f(s_pos, 0.0, 1.0);
     return out;
 }

@@ -103,13 +103,18 @@ impl Element {
             shape: rcs.shape(),
             rotation: rcs.rotation(),
             stroke_width: rcs.stroke_width(),
-            texture_id: rcs.texture_id(),
+            texture_id: -1,
             transform_id: 0,
         }
     }
 
     pub(crate) fn with_transform_id(mut self, id: u32) -> Self {
         self.transform_id = id;
+        self
+    }
+
+    pub(crate) fn with_texture_id(mut self, id: i32) -> Self {
+        self.texture_id = id;
         self
     }
 
@@ -121,7 +126,3 @@ impl Element {
         self.size = size.into();
     }
 }
-
-#[repr(C)]
-#[derive(Debug, Clone)]
-struct ElementVertex {}

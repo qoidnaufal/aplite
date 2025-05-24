@@ -13,10 +13,9 @@ pub trait RenderElementSource: Sized {
     fn shape(&self) -> Shape;
     fn rotation(&self) -> f32;
     fn stroke_width(&self) -> f32;
-    fn texture_id(&self) -> i32;
 }
 
-pub trait Render { fn render(&mut self, renderer: &mut Renderer); }
+pub trait Render { fn render(&self, renderer: &mut Renderer); }
 
 pub(crate) struct Sampler {
     pub(crate) bind_group: wgpu::BindGroup,

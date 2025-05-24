@@ -1,35 +1,40 @@
-use aplite_types::{Fraction, Rect, Rgba, Size};
+use std::path::Path;
+
+use aplite_types::{Fraction, Rgba, Size};
+
+/// This function will resize the image to 500x500 by default to optimize gpu performance.
+/// If you want to have your image bytes fully rendered, consider to use your own function
+pub fn image_reader<P: AsRef<Path>>(path: P) -> ImageData {
+    use image::imageops::FilterType;
+    use image::{GenericImageView, ImageReader};
+
+    let img = ImageReader::open(path)
+        .unwrap()
+        .decode()
+        .unwrap()
+        .resize_to_fill(500, 500, FilterType::Lanczos3);
+
+    ImageData::new(img.dimensions(), &img.to_rgba8())
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImageData {
-    pub(crate) rect: Rect<u32>,
+    pub(crate) size: Size<u32>,
     pub(crate) data: Vec<u8>,
 }
 
 impl ImageData {
     pub fn new(size: impl Into<Size<u32>>, data: &[u8]) -> Self {
-        let size: Size<u32> = size.into();
-        Self {
-            rect: Rect::new((0, 0), (size.width(), size.height())),
-            data: data.to_vec(),
-        }
+        Self { size: size.into(), data: data.to_vec() }
     }
 
-    pub const fn rect(&self) -> Rect<u32> { self.rect }
+    pub const fn size(&self) -> Size<u32> { self.size }
 
-    pub fn aspect_ratio(&self) -> Fraction<u32> {
-        self.rect.size().aspect_ratio()
-    }
+    pub fn aspect_ratio(&self) -> Fraction<u32> { self.size.aspect_ratio() }
 
-    pub(crate) const fn size(&self) -> Size<u32> { self.rect.size() }
+    pub(crate) const fn width(&self) -> u32 { self.size.width() }
 
-    pub(crate) const fn width(&self) -> u32 { self.rect.width() }
-
-    pub(crate) const fn height(&self) -> u32 { self.rect.height() }
-
-    // pub(crate) const fn x(&self) -> u32 { self.rect.x() }
-
-    // pub(crate) const fn y(&self) -> u32 { self.rect.y() }
+    pub(crate) const fn height(&self) -> u32 { self.size.height() }
 }
 
 impl std::ops::Deref for ImageData {

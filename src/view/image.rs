@@ -20,8 +20,7 @@ impl Image {
         let properties = Properties::new()
             .with_size((100, 100))
             .with_shape(Shape::Rect)
-            .with_fill_color(Rgba::WHITE)
-            .with_textured(true);
+            .with_fill_color(Rgba::WHITE);
         Self { properties }.into_view(cx, |_| {}).add_data(image_fn)
     }
 }

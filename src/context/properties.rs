@@ -1,4 +1,4 @@
-use aplite_types::{Fraction, Rect, Rgba, Size, Vector2};
+use aplite_types::{/* Fraction, */ Rect, Rgba, Size, Vector2};
 
 use crate::context::layout::{Alignment, Orientation, Padding};
 use aplite_renderer::{CornerRadius, Shape};
@@ -32,7 +32,6 @@ pub struct Properties {
     image_aspect_ratio: AspectRatio,
     rotation: f32,
     stroke_width: u32,
-    texture_id: i32,
     dragable: bool,
 }
 
@@ -65,22 +64,21 @@ impl Properties {
             image_aspect_ratio: AspectRatio::Undefined,
             rotation: 0.0,
             stroke_width: 0,
-            texture_id: -1,
             dragable: false,
         }
     }
 
-    pub(crate) fn set_texture_id(&mut self, value: i32) {
-        self.texture_id = value;
-    }
+    // pub(crate) fn set_texture_id(&mut self, value: i32) {
+    //     self.texture_id = value;
+    // }
 
-    pub(crate) fn adjust_width(&mut self, aspect_ratio: Fraction<u32>) {
-        self.rect.adjust_width(aspect_ratio);
-    }
+    // pub(crate) fn adjust_width(&mut self, aspect_ratio: Fraction<u32>) {
+    //     self.rect.adjust_width(aspect_ratio);
+    // }
 
-    pub(crate) fn adjust_height(&mut self, aspect_ratio: Fraction<u32>) {
-        self.rect.adjust_height(aspect_ratio);
-    }
+    // pub(crate) fn adjust_height(&mut self, aspect_ratio: Fraction<u32>) {
+    //     self.rect.adjust_height(aspect_ratio);
+    // }
 
     pub(crate) fn is_hovered(&self, cursor: Vector2<f32>) -> bool {
         // FIXME: consider rotation
@@ -131,7 +129,6 @@ impl Properties {
             image_aspect_ratio: AspectRatio::Undefined,
             rotation: 0.0,
             stroke_width: 0,
-            texture_id: -1,
             dragable: false,
         }
     }
@@ -231,11 +228,11 @@ impl Properties {
         self
     }
 
-    pub fn with_textured(mut self, value: bool) -> Self {
-        let value = if value { 0 } else { -1 };
-        self.set_texture_id(value);
-        self
-    }
+    // pub fn with_textured(mut self, value: bool) -> Self {
+    //     let value = if value { 0 } else { -1 };
+    //     self.set_texture_id(value);
+    //     self
+    // }
 }
 
 // modifier
@@ -373,7 +370,7 @@ impl Properties {
 
     pub(crate) fn is_dragable(&self) -> bool { self.dragable }
 
-    pub(crate) fn texture_id(&self) -> i32 { self.texture_id }
+    // pub(crate) fn texture_id(&self) -> i32 { self.texture_id }
 }
 
 impl RenderElementSource for Properties {
@@ -390,6 +387,4 @@ impl RenderElementSource for Properties {
     fn rotation(&self) -> f32 { self.rotation() }
 
     fn stroke_width(&self) -> f32 { self.stroke_width() as _ }
-
-    fn texture_id(&self) -> i32 { self.texture_id() }
 }
