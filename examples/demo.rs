@@ -1,20 +1,18 @@
 use aplite::prelude::*;
 
 fn root(cx: &mut Context) {
-    let (counter, set_counter) = signal(0i32);
+    let (counter, set_counter) = Signal::new(0i32);
     eprintln!("{}", counter.get());
 
-    let c1 = counter.clone();
-    let s1 = set_counter.clone();
     let inc = move || {
-        s1.set(|num| *num += 1);
-        eprintln!("inc {}", c1.get());
+        set_counter.update(|num| *num += 1);
     };
 
     let dec = move || {
-        set_counter.set(|num| *num -= 1);
-        eprintln!("dec {}", counter.get());
+        set_counter.update(|num| *num -= 1);
     };
+
+    Effect::new(move || eprintln!("{}", counter.get()));
 
     HStack::new(cx, |cx| {
         use AspectRatio::Defined;
@@ -121,12 +119,13 @@ fn root(cx: &mut Context) {
 }
 
 fn dummy(cx: &mut Context) {
-    let (counter, set_counter) = signal(0i32);
+    let (counter, set_counter) = Signal::new(0i32);
 
     let click = move || {
-        set_counter.set(|num| *num += 1);
-        eprintln!("counter: {}", counter.get());
+        set_counter.update(|num| *num += 1);
     };
+
+    Effect::new(move || eprintln!("{}", counter.get()));
 
     Button::new(cx)
         .style(|style| {

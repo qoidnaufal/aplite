@@ -1,5 +1,14 @@
 use super::{Vector4, GpuPrimitive, NumDebugger};
 
+pub const fn color_u8(r: u8, g: u8, b: u8, a: u8) -> Rgba<u8> {
+    Rgba::new(r, g, b, a)
+}
+
+/// value must be between 0.0 and 1.0
+pub const fn color_f32(r: f32, g: f32, b: f32, a: f32) -> Rgba<f32> {
+    Rgba::new(r, g, b, a)
+}
+
 #[derive(Clone, Copy)]
 pub struct Rgba<T: GpuPrimitive> {
     inner: Vector4<T>
@@ -94,10 +103,10 @@ impl From<Rgba<u8>> for Rgba<f32> {
 impl From<Rgba<f32>> for Rgba<u8> {
     fn from(val: Rgba<f32>) -> Self {
         Self::new(
-            (val.r() * u8::MAX as f32) as u8,
-            (val.g() * u8::MAX as f32) as u8,
-            (val.b() * u8::MAX as f32) as u8,
-            (val.a() * u8::MAX as f32) as u8,
+            (val.r() * u8::MAX as f32).round() as u8,
+            (val.g() * u8::MAX as f32).round() as u8,
+            (val.b() * u8::MAX as f32).round() as u8,
+            (val.a() * u8::MAX as f32).round() as u8,
         )
     }
 }
@@ -105,10 +114,10 @@ impl From<Rgba<f32>> for Rgba<u8> {
 impl From<Vector4<f32>> for Rgba<u8> {
     fn from(val: Vector4<f32>) -> Self {
         Self::new(
-            (val.x() * u8::MAX as f32) as u8,
-            (val.y() * u8::MAX as f32) as u8,
-            (val.z() * u8::MAX as f32) as u8,
-            (val.w() * u8::MAX as f32) as u8,
+            (val.x() * u8::MAX as f32).round() as u8,
+            (val.y() * u8::MAX as f32).round() as u8,
+            (val.z() * u8::MAX as f32).round() as u8,
+            (val.w() * u8::MAX as f32).round() as u8,
         )
     }
 }
