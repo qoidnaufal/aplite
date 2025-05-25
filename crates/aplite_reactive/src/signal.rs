@@ -18,7 +18,7 @@ impl<T: 'static> Signal<T> {
     }
 }
 
-impl<T: Clone + 'static> Reactive for Signal<T> {
+impl<T: 'static> Reactive for Signal<T> {
     type Value = T;
     fn id(&self) -> ReactiveId { self.id }
 }
@@ -35,7 +35,7 @@ impl<T: Clone + 'static> Get for Signal<T> {
     }
 }
 
-impl<T: Clone + 'static> With for Signal<T> {
+impl<T: 'static> With for Signal<T> {
     fn with<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
         RUNTIME.with(|rt| {
             rt.add_subscriber(self.id());
@@ -46,7 +46,7 @@ impl<T: Clone + 'static> With for Signal<T> {
     }
 }
 
-impl<T: Clone + 'static> Set for Signal<T> {
+impl<T: 'static> Set for Signal<T> {
     fn set(&self, value: Self::Value) {
         RUNTIME.with(|rt| {
             let mut storage = rt.storage.borrow_mut();
@@ -60,7 +60,7 @@ impl<T: Clone + 'static> Set for Signal<T> {
     }
 }
 
-impl<T: Clone + 'static> Update for Signal<T> {
+impl<T: 'static> Update for Signal<T> {
     fn update(&self, f: impl FnOnce(&mut Self::Value)) {
         RUNTIME.with(|rt| {
             let mut storage = rt.storage.borrow_mut();

@@ -26,12 +26,13 @@ This is an example from the current (incomplete) works I've accomplished so far:
 use aplite::prelude::*;
 
 fn root(cx: &mut Context) {
-    let (counter, set_counter) = signal(0i32);
+    let (counter, set_counter) = Signal::new(0i32);
 
     let click = move || {
-        set_counter.set(|num| *num += 1);
-        eprintln!("counter: {}", counter.get());
+        set_counter.update(|num| *num += 1);
     };
+
+    Effect::new(move || eprintln!("{}", counter.get()));
 
     Button::new(cx)
         .style(|style| {

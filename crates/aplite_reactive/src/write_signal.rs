@@ -10,17 +10,17 @@ pub struct SignalWrite<T> {
 }
 
 impl<T: 'static> SignalWrite<T> {
-    pub fn new(id: ReactiveId) -> Self {
+    pub(crate) fn new(id: ReactiveId) -> Self {
         Self { id, phantom: PhantomData }
     }
 }
 
-impl<T: Clone + 'static> Reactive for SignalWrite<T> {
+impl<T: 'static> Reactive for SignalWrite<T> {
     type Value = T;
     fn id(&self) -> ReactiveId { self.id }
 }
 
-impl<T: Clone + 'static> Set for SignalWrite<T> {
+impl<T: 'static> Set for SignalWrite<T> {
     fn set(&self, value: Self::Value) {
         RUNTIME.with(|rt| {
             let mut storage = rt.storage.borrow_mut();
@@ -34,7 +34,7 @@ impl<T: Clone + 'static> Set for SignalWrite<T> {
     }
 }
 
-impl<T: Clone + 'static> Update for SignalWrite<T> {
+impl<T: 'static> Update for SignalWrite<T> {
     fn update(&self, f: impl FnOnce(&mut Self::Value)) {
         RUNTIME.with(|rt| {
             let mut storage = rt.storage.borrow_mut();

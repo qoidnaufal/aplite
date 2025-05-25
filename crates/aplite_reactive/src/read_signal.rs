@@ -11,12 +11,12 @@ pub struct SignalRead<T> {
 }
 
 impl<T: 'static> SignalRead<T> {
-    pub fn new(id: ReactiveId) -> Self {
+    pub(crate) fn new(id: ReactiveId) -> Self {
         Self { id, phantom: PhantomData }
     }
 }
 
-impl<T: Clone + 'static> Reactive for SignalRead<T> {
+impl<T: 'static> Reactive for SignalRead<T> {
     type Value = T;
     fn id(&self) -> ReactiveId { self.id }
 }
@@ -33,7 +33,7 @@ impl<T: Clone + 'static> Get for SignalRead<T> {
     }
 }
 
-impl<T: Clone + 'static> With for SignalRead<T> {
+impl<T: 'static> With for SignalRead<T> {
     fn with<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
         RUNTIME.with(|rt| {
             rt.add_subscriber(self.id());

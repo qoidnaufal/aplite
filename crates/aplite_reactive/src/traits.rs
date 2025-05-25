@@ -1,7 +1,7 @@
 use crate::runtime::ReactiveId;
 
 pub trait Reactive {
-    type Value: Clone + 'static;
+    type Value: 'static;
     fn id(&self) -> ReactiveId;
 }
 

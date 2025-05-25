@@ -26,7 +26,7 @@ impl<T: 'static> RwSignal<T> {
     pub fn write_only(&self) -> SignalWrite<T> { SignalWrite::new(self.id) }
 }
 
-impl<T: Clone + 'static> Reactive for RwSignal<T> {
+impl<T: 'static> Reactive for RwSignal<T> {
     type Value = T;
     fn id(&self) -> ReactiveId { self.id }
 }
@@ -43,7 +43,7 @@ impl<T: Clone + 'static> Get for RwSignal<T> {
     }
 }
 
-impl<T: Clone + 'static> With for RwSignal<T> {
+impl<T: 'static> With for RwSignal<T> {
     fn with<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
         RUNTIME.with(|rt| {
             rt.add_subscriber(self.id());
@@ -54,7 +54,7 @@ impl<T: Clone + 'static> With for RwSignal<T> {
     }
 }
 
-impl<T: Clone + 'static> Set for RwSignal<T> {
+impl<T: 'static> Set for RwSignal<T> {
     fn set(&self, value: Self::Value) {
         RUNTIME.with(|rt| {
             let mut storage = rt.storage.borrow_mut();
@@ -68,7 +68,7 @@ impl<T: Clone + 'static> Set for RwSignal<T> {
     }
 }
 
-impl<T: Clone + 'static> Update for RwSignal<T> {
+impl<T: 'static> Update for RwSignal<T> {
     fn update(&self, f: impl FnOnce(&mut Self::Value)) {
         RUNTIME.with(|rt| {
             let mut storage = rt.storage.borrow_mut();
