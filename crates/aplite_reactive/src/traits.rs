@@ -13,6 +13,16 @@ pub trait Track: Reactive {
     }
 }
 
+pub trait Notify: Reactive {
+    type Value: 'static;
+    fn notify(&self) {
+        RUNTIME.with(|rt| rt.notify_subscribers(self.id()))
+    }
+}
+
+// .........................................................
+// .........................................................
+
 pub trait Get: Track {
     type Value: Clone;
     fn get(&self) -> <Self as Get>::Value;
@@ -23,13 +33,15 @@ where
     T: Track,
     T::Value: Clone,
 {
-    type Value = <T as Track>::Value;
+    type Value = T::Value;
     fn get(&self) -> <Self as Get>::Value {
         self.track();
         RUNTIME.with(|rt| {
             let storage = rt.storage.borrow();
             let signal = storage.get(&self.id()).unwrap();
-            let v = signal.downcast_ref::<RefCell<<Self as Get>::Value>>().unwrap();
+            let v = signal
+                .downcast_ref::<RefCell<<Self as Get>::Value>>()
+                .unwrap();
             v.borrow().clone()
         })
     }
@@ -45,17 +57,17 @@ impl<T: Track> With for T {
         RUNTIME.with(|rt| {
             let storage = rt.storage.borrow();
             let signal = storage.get(&self.id()).unwrap();
-            f(&signal.downcast_ref::<RefCell<Self::Value>>().unwrap().borrow())
+            let v = signal
+                .downcast_ref::<RefCell<Self::Value>>()
+                .unwrap()
+                .borrow();
+            f(&v)
         })
     }
 }
 
-pub trait Notify: Reactive {
-    type Value: 'static;
-    fn notify(&self) {
-        RUNTIME.with(|rt| rt.notify_subscribers(self.id()))
-    }
-}
+// .........................................................
+// .........................................................
 
 pub trait Set: Notify {
     fn set(&self, value: Self::Value);
@@ -66,7 +78,9 @@ impl<T: Notify> Set for T {
         RUNTIME.with(|rt| {
             let mut storage = rt.storage.borrow_mut();
             if let Some(signal) = storage.get_mut(&self.id()) {
-                let v = signal.downcast_mut::<RefCell<Self::Value>>().unwrap();
+                let v = signal
+                    .downcast_mut::<RefCell<Self::Value>>()
+                    .unwrap();
                 *v.get_mut() = value;
             }
         });
@@ -83,7 +97,11 @@ impl<T: Notify> Update for T {
         RUNTIME.with(|rt| {
             let mut storage = rt.storage.borrow_mut();
             if let Some(signal) = storage.get_mut(&self.id()) {
-                f(signal.downcast_mut::<RefCell<Self::Value>>().unwrap().get_mut());
+                let v = signal
+                    .downcast_mut::<RefCell<Self::Value>>()
+                    .unwrap()
+                    .get_mut();
+                f(v);
             }
         });
         self.notify();

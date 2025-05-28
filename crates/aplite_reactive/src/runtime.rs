@@ -9,7 +9,7 @@ use crate::signal::Signal;
 use crate::RwSignal;
 
 thread_local! {
-    pub static RUNTIME: Runtime = Runtime::new();
+    pub static RUNTIME: ReactiveGraph = ReactiveGraph::new();
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -32,14 +32,14 @@ impl EffectId {
     }
 }
 
-pub(crate) struct Runtime {
+pub(crate) struct ReactiveGraph {
     pub(crate) storage: RefCell<HashMap<ReactiveId, Signal>>,
     pub(crate) current: RefCell<Option<EffectId>>,
     pub(crate) subscribers: RefCell<HashMap<ReactiveId, HashSet<EffectId>>>,
     pub(crate) effects: RefCell<HashMap<EffectId, Effect>>,
 }
 
-impl Runtime {
+impl ReactiveGraph {
     pub(crate) fn new() -> Self {
         Self {
             storage: RefCell::new(HashMap::new()),
