@@ -1,7 +1,7 @@
-use std::{cell::RefCell, marker::PhantomData};
+use std::marker::PhantomData;
 
-use crate::runtime::{ReactiveId, RUNTIME};
-use super::traits::{Reactive, Set, Update};
+use crate::runtime::ReactiveId;
+use super::traits::*;
 
 #[derive(Clone, Copy)]
 pub struct SignalWrite<T> {
@@ -16,33 +16,36 @@ impl<T: 'static> SignalWrite<T> {
 }
 
 impl<T: 'static> Reactive for SignalWrite<T> {
-    type Value = T;
     fn id(&self) -> ReactiveId { self.id }
 }
 
-impl<T: 'static> Set for SignalWrite<T> {
-    fn set(&self, value: Self::Value) {
-        RUNTIME.with(|rt| {
-            let mut storage = rt.storage.borrow_mut();
-            if let Some(v) = storage.get_mut(&self.id()) {
-                let v = v.downcast_mut::<RefCell<T>>().unwrap();
-                *v.get_mut() = value;
-            }
-            drop(storage);
-            rt.notify_subscribers(self.id);
-        })
-    }
+impl<T: 'static> Notify for SignalWrite<T> {
+    type Value = T;
 }
 
-impl<T: 'static> Update for SignalWrite<T> {
-    fn update(&self, f: impl FnOnce(&mut Self::Value)) {
-        RUNTIME.with(|rt| {
-            let mut storage = rt.storage.borrow_mut();
-            if let Some(v) = storage.get_mut(&self.id()) {
-                f(v.downcast_mut::<RefCell<T>>().unwrap().get_mut());
-            }
-            drop(storage);
-            rt.notify_subscribers(self.id);
-        })
-    }
-}
+// impl<T: 'static> Set for SignalWrite<T> {
+//     fn set(&self, value: Self::Value) {
+//         RUNTIME.with(|rt| {
+//             let mut storage = rt.storage.borrow_mut();
+//             if let Some(v) = storage.get_mut(&self.id()) {
+//                 let v = v.downcast_mut::<RefCell<T>>().unwrap();
+//                 *v.get_mut() = value;
+//             }
+//             drop(storage);
+//             rt.notify_subscribers(self.id);
+//         })
+//     }
+// }
+
+// impl<T: 'static> Update for SignalWrite<T> {
+//     fn update(&self, f: impl FnOnce(&mut Self::Value)) {
+//         RUNTIME.with(|rt| {
+//             let mut storage = rt.storage.borrow_mut();
+//             if let Some(v) = storage.get_mut(&self.id()) {
+//                 f(v.downcast_mut::<RefCell<T>>().unwrap().get_mut());
+//             }
+//             drop(storage);
+//             rt.notify_subscribers(self.id);
+//         })
+//     }
+// }

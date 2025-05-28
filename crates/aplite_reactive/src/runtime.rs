@@ -1,11 +1,11 @@
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::effect::Effect;
-// use crate::signal::Signal;
+use crate::signal::Signal;
 use crate::RwSignal;
 
 thread_local! {
@@ -32,27 +32,25 @@ impl EffectId {
     }
 }
 
-type ReactiveValue = Box<dyn Any>;
-
 pub(crate) struct Runtime {
-    pub(crate) storage: RefCell<HashMap<ReactiveId, ReactiveValue>>,
-    pub(crate) current_effect: RefCell<Option<EffectId>>,
+    pub(crate) storage: RefCell<HashMap<ReactiveId, Signal>>,
+    pub(crate) current: RefCell<Option<EffectId>>,
     pub(crate) subscribers: RefCell<HashMap<ReactiveId, HashSet<EffectId>>>,
-    pub(crate) effect_storage: RefCell<HashMap<EffectId, Effect>>,
+    pub(crate) effects: RefCell<HashMap<EffectId, Effect>>,
 }
 
 impl Runtime {
     pub(crate) fn new() -> Self {
         Self {
             storage: RefCell::new(HashMap::new()),
-            current_effect: RefCell::new(None),
+            current: RefCell::new(None),
             subscribers: RefCell::new(HashMap::new()),
-            effect_storage: RefCell::new(HashMap::new()),
+            effects: RefCell::new(HashMap::new()),
         }
     }
 
     pub(crate) fn create_rw_signal<T: Any + 'static>(&self, id: ReactiveId, value: T) -> RwSignal<T> {
-        self.storage.borrow_mut().insert(id, Box::new(RefCell::new(value)));
+        self.storage.borrow_mut().insert(id, Signal::stored(value));
         RwSignal { id, phantom: PhantomData }
     }
 
@@ -61,21 +59,21 @@ impl Runtime {
         let effect = Effect {
             f: Box::new(f),
         };
-        self.effect_storage.borrow_mut().insert(id, effect);
+        self.effects.borrow_mut().insert(id, effect);
         self.run_effect(&id);
     }
 
     fn run_effect(&self, effect_id: &EffectId) {
-        let pref_effect = self.current_effect.take();
-        *self.current_effect.borrow_mut() = Some(*effect_id);
-        if let Some(effect) = self.effect_storage.borrow().get(effect_id) {
+        let pref_effect = self.current.take();
+        *self.current.borrow_mut() = Some(*effect_id);
+        if let Some(effect) = self.effects.borrow().get(effect_id) {
             effect.run();
         }
-        *self.current_effect.borrow_mut() = pref_effect;
+        *self.current.borrow_mut() = pref_effect;
     }
 
     pub(crate) fn add_subscriber(&self, id: ReactiveId) {
-        let current = self.current_effect.borrow();
+        let current = self.current.borrow();
         if let Some(effect_id) = current.as_ref() {
             let mut subscribers = self.subscribers.borrow_mut();
             subscribers.entry(id).or_default().insert(*effect_id);
@@ -83,11 +81,10 @@ impl Runtime {
     }
 
     pub(crate) fn notify_subscribers(&self, id: ReactiveId) {
-        let subs = {
-            let subs = self.subscribers.borrow();
-            subs.get(&id).cloned()
-        };
-        if let Some(subscribers) = subs {
+        let subsribers = self.subscribers.borrow();
+        let maybe_subs = subsribers.get(&id).cloned();
+        drop(subsribers);
+        if let Some(subscribers) = maybe_subs {
             subscribers
                 .iter()
                 .for_each(|effect_id| self.run_effect(effect_id));

@@ -19,6 +19,7 @@ members = [
   "crates/aplite_renderer",
   "crates/aplite_stats",
   "crates/aplite_reactive",
+  "crates/aplite_storage",
 ]
 
 [dependencies]

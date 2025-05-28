@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::marker::PhantomData;
 
 use super::traits::*;
@@ -27,56 +26,63 @@ impl<T: 'static> RwSignal<T> {
 }
 
 impl<T: 'static> Reactive for RwSignal<T> {
-    type Value = T;
     fn id(&self) -> ReactiveId { self.id }
 }
 
-impl<T: Clone + 'static> Get for RwSignal<T> {
-    fn get(&self) -> Self::Value {
-        RUNTIME.with(|rt| {
-            rt.add_subscriber(self.id());
-            let storage = rt.storage.borrow();
-            let v = storage.get(&self.id()).unwrap();
-            let v = v.downcast_ref::<RefCell<T>>().unwrap();
-            v.clone().into_inner()
-        })
-    }
+impl<T: 'static> Track for RwSignal<T> {
+    type Value = T;
 }
 
-impl<T: 'static> With for RwSignal<T> {
-    fn with<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
-        RUNTIME.with(|rt| {
-            rt.add_subscriber(self.id());
-            let storage = rt.storage.borrow();
-            let v = storage.get(&self.id()).unwrap();
-            f(&v.downcast_ref::<RefCell<T>>().unwrap().borrow())
-        })
-    }
+impl<T: 'static> Notify for RwSignal<T> {
+    type Value = T;
 }
 
-impl<T: 'static> Set for RwSignal<T> {
-    fn set(&self, value: Self::Value) {
-        RUNTIME.with(|rt| {
-            let mut storage = rt.storage.borrow_mut();
-            if let Some(v) = storage.get_mut(&self.id()) {
-                let v = v.downcast_mut::<RefCell<T>>().unwrap();
-                *v.get_mut() = value;
-            }
-            drop(storage);
-            rt.notify_subscribers(self.id);
-        })
-    }
-}
+// impl<T: Clone + 'static> Get for RwSignal<T> {
+//     fn get(&self) -> Self::Value {
+//         RUNTIME.with(|rt| {
+//             rt.add_subscriber(self.id());
+//             let storage = rt.storage.borrow();
+//             let v = storage.get(&self.id()).unwrap();
+//             let v = v.downcast_ref::<RefCell<T>>().unwrap();
+//             v.clone().into_inner()
+//         })
+//     }
+// }
 
-impl<T: 'static> Update for RwSignal<T> {
-    fn update(&self, f: impl FnOnce(&mut Self::Value)) {
-        RUNTIME.with(|rt| {
-            let mut storage = rt.storage.borrow_mut();
-            if let Some(v) = storage.get_mut(&self.id()) {
-                f(v.downcast_mut::<RefCell<T>>().unwrap().get_mut());
-            }
-            drop(storage);
-            rt.notify_subscribers(self.id);
-        })
-    }
-}
+// impl<T: 'static> With for RwSignal<T> {
+//     fn with<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
+//         RUNTIME.with(|rt| {
+//             rt.add_subscriber(self.id());
+//             let storage = rt.storage.borrow();
+//             let v = storage.get(&self.id()).unwrap();
+//             f(&v.downcast_ref::<RefCell<T>>().unwrap().borrow())
+//         })
+//     }
+// }
+
+// impl<T: 'static> Set for RwSignal<T> {
+//     fn set(&self, value: Self::Value) {
+//         RUNTIME.with(|rt| {
+//             let mut storage = rt.storage.borrow_mut();
+//             if let Some(v) = storage.get_mut(&self.id()) {
+//                 let v = v.downcast_mut::<RefCell<T>>().unwrap();
+//                 *v.get_mut() = value;
+//             }
+//             drop(storage);
+//             rt.notify_subscribers(self.id);
+//         })
+//     }
+// }
+
+// impl<T: 'static> Update for RwSignal<T> {
+//     fn update(&self, f: impl FnOnce(&mut Self::Value)) {
+//         RUNTIME.with(|rt| {
+//             let mut storage = rt.storage.borrow_mut();
+//             if let Some(v) = storage.get_mut(&self.id()) {
+//                 f(v.downcast_mut::<RefCell<T>>().unwrap().get_mut());
+//             }
+//             drop(storage);
+//             rt.notify_subscribers(self.id);
+//         })
+//     }
+// }

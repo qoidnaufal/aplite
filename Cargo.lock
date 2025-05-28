@@ -121,6 +121,10 @@ name = "aplite_stats"
 version = "0.1.0"
 
 [[package]]
+name = "aplite_storage"
+version = "0.1.0"
+
+[[package]]
 name = "aplite_types"
 version = "0.1.0"
 dependencies = [
