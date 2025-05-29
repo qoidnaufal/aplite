@@ -104,6 +104,9 @@ version = "0.1.0"
 [[package]]
 name = "aplite_reactive"
 version = "0.1.0"
+dependencies = [
+ "aplite_storage",
+]
 
 [[package]]
 name = "aplite_renderer"

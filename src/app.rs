@@ -159,6 +159,8 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
     fn initialize_renderer(&mut self, window: Arc<Window>) -> Result<(), ApliteError> {
         let mut renderer = Renderer::new(Arc::clone(&window))?;
         if let Some(view_fn) = self.view_fn.take() {
+            // FIXME: somehow this runs 2x on startup
+            // TODO: turn this into reactive node
             view_fn(&mut self.cx);
             self.cx.layout();
             self.cx.render(&mut renderer);

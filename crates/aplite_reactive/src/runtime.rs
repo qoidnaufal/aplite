@@ -2,7 +2,8 @@ use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::cell::RefCell;
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicU64, Ordering};
+
+use aplite_storage::{Key, VecMap};
 
 use crate::effect::Effect;
 use crate::signal::Signal;
@@ -13,57 +14,42 @@ thread_local! {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ReactiveId(u64);
-
-impl ReactiveId {
-    pub(crate) fn new() -> Self {
-        static REACTIVE_ID: AtomicU64 = AtomicU64::new(0);
-        Self(REACTIVE_ID.fetch_add(1, Ordering::Relaxed))
-    }
-}
+pub struct ReactiveId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct EffectId(u64);
+pub(crate) struct EffectId;
 
-impl EffectId {
-    pub(crate) fn new() -> Self {
-        static EFFECT_ID: AtomicU64 = AtomicU64::new(0);
-        Self(EFFECT_ID.fetch_add(1, Ordering::Relaxed))
-    }
-}
+type Subscribers = HashMap<Key<ReactiveId>, HashSet<Key<EffectId>>>;
 
 pub(crate) struct ReactiveGraph {
-    pub(crate) storage: RefCell<HashMap<ReactiveId, Signal>>,
-    pub(crate) current: RefCell<Option<EffectId>>,
-    pub(crate) subscribers: RefCell<HashMap<ReactiveId, HashSet<EffectId>>>,
-    pub(crate) effects: RefCell<HashMap<EffectId, Effect>>,
+    pub(crate) storage: RefCell<VecMap<ReactiveId, Signal>>,
+    pub(crate) current: RefCell<Option<Key<EffectId>>>,
+    pub(crate) subscribers: RefCell<Subscribers>,
+    pub(crate) effects: RefCell<VecMap<EffectId, Effect>>,
 }
 
 impl ReactiveGraph {
     pub(crate) fn new() -> Self {
         Self {
-            storage: RefCell::new(HashMap::new()),
+            storage: RefCell::new(VecMap::new()),
             current: RefCell::new(None),
             subscribers: RefCell::new(HashMap::new()),
-            effects: RefCell::new(HashMap::new()),
+            effects: RefCell::new(VecMap::new()),
         }
     }
 
-    pub(crate) fn create_rw_signal<T: Any + 'static>(&self, id: ReactiveId, value: T) -> RwSignal<T> {
-        self.storage.borrow_mut().insert(id, Signal::stored(value));
+    pub(crate) fn create_rw_signal<T: Any + 'static>(&self, value: T) -> RwSignal<T> {
+        let id = self.storage.borrow_mut().insert(Signal::stored(value));
         RwSignal { id, phantom: PhantomData }
     }
 
     pub(crate) fn create_effect<F: Fn() + 'static>(&self, f: F) {
-        let id = EffectId::new();
-        let effect = Effect {
-            f: Box::new(f),
-        };
-        self.effects.borrow_mut().insert(id, effect);
+        let effect = Effect { f: Box::new(f) };
+        let id = self.effects.borrow_mut().insert(effect);
         self.run_effect(&id);
     }
 
-    fn run_effect(&self, effect_id: &EffectId) {
+    fn run_effect(&self, effect_id: &Key<EffectId>) {
         let pref_effect = self.current.take();
         *self.current.borrow_mut() = Some(*effect_id);
         if let Some(effect) = self.effects.borrow().get(effect_id) {
@@ -72,7 +58,7 @@ impl ReactiveGraph {
         *self.current.borrow_mut() = pref_effect;
     }
 
-    pub(crate) fn add_subscriber(&self, id: ReactiveId) {
+    pub(crate) fn add_subscriber(&self, id: Key<ReactiveId>) {
         let current = self.current.borrow();
         if let Some(effect_id) = current.as_ref() {
             let mut subscribers = self.subscribers.borrow_mut();
@@ -80,7 +66,7 @@ impl ReactiveGraph {
         }
     }
 
-    pub(crate) fn notify_subscribers(&self, id: ReactiveId) {
+    pub(crate) fn notify_subscribers(&self, id: Key<ReactiveId>) {
         let subsribers = self.subscribers.borrow();
         let maybe_subs = subsribers.get(&id).cloned();
         drop(subsribers);

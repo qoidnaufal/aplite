@@ -121,11 +121,11 @@ fn root(cx: &mut Context) {
 fn dummy(cx: &mut Context) {
     let (counter, set_counter) = Signal::new(0i32);
 
-    let click = move || {
-        set_counter.update(|num| *num += 1);
-    };
+    let click = move || { set_counter.update(|num| *num += 1) };
 
-    Effect::new(move || eprintln!("{}", counter.get()));
+    Effect::new(move || {
+        eprintln!("{}", counter.get());
+    });
 
     Button::new(cx)
         .style(|style| {

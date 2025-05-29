@@ -2,7 +2,7 @@ use std::any::Any;
 use std::cell::RefCell;
 
 use crate::read_signal::SignalRead;
-use crate::runtime::{ReactiveId, RUNTIME};
+use crate::runtime::RUNTIME;
 use crate::write_signal::SignalWrite;
 
 type ReactiveValue = Box<dyn Any>;
@@ -13,7 +13,7 @@ pub struct Signal {
 
 impl Signal {
     pub fn new<T: 'static>(value: T) -> (SignalRead<T>, SignalWrite<T>) {
-        RUNTIME.with(|rt| rt.create_rw_signal(ReactiveId::new(), value)).split()
+        RUNTIME.with(|rt| rt.create_rw_signal(value)).split()
     }
 
     pub(crate) fn stored<T: Any + 'static>(value: T) -> Self {
@@ -30,15 +30,3 @@ impl Signal {
         self.value.downcast_mut::<T>()
     }
 }
-
-// impl<T: 'static> Reactive for Signal<T> {
-//     fn id(&self) -> ReactiveId { self.id }
-// }
-
-// impl<T: 'static> Track for Signal<T> {
-//     type Value = T;
-// }
-
-// impl<T: 'static> Notify for Signal<T> {
-//     type Value = T;
-// }
