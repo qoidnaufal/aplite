@@ -1,5 +1,4 @@
 use std::marker::PhantomData;
-use aplite_storage::Key;
 
 use super::traits::*;
 use crate::read_signal::SignalRead;
@@ -8,7 +7,7 @@ use crate::write_signal::SignalWrite;
 
 #[derive(Clone, Copy)]
 pub struct RwSignal<T> {
-    pub(crate) id: Key<ReactiveId>,
+    pub(crate) id: ReactiveId,
     pub(crate) phantom: PhantomData<T>
 }
 
@@ -27,7 +26,7 @@ impl<T: 'static> RwSignal<T> {
 }
 
 impl<T: 'static> Reactive for RwSignal<T> {
-    fn id(&self) -> Key<ReactiveId> { self.id }
+    fn id(&self) -> ReactiveId { self.id }
 }
 
 impl<T: 'static> Track for RwSignal<T> {

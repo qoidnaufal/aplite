@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{iter::Enumerate, marker::PhantomData, slice::{Iter, IterMut}};
 
 #[derive(Debug)]
 pub struct MaxCapacityReached;
@@ -19,21 +19,21 @@ pub(crate) enum SlotContent<V> {
 }
 
 impl<V> SlotContent<V> {
-    fn get(&self) -> Option<&V> {
+    pub(crate) fn get(&self) -> Option<&V> {
         match self {
             SlotContent::Occupied(v) => Some(v),
             SlotContent::Vacant(_) => None,
         }
     }
 
-    fn get_mut(&mut self) -> Option<&mut V> {
+    pub(crate) fn get_mut(&mut self) -> Option<&mut V> {
         match self {
             SlotContent::Occupied(v) => Some(v),
             SlotContent::Vacant(_) => None,
         }
     }
 
-    fn set_vacant(&mut self, idx: u32) -> Option<V> {
+    pub(crate) fn set_vacant(&mut self, idx: u32) -> Option<V> {
         let swap = std::mem::replace(self, Self::Vacant(idx));
         if let SlotContent::Occupied(v) = swap {
             Some(v)
@@ -41,23 +41,32 @@ impl<V> SlotContent<V> {
             None
         }
     }
+
+    // pub(crate) fn occupy(&mut self, v: V) -> Option<V> {
+    //     let old = std::mem::replace(self, Self::Occupied(v));
+    //     if let SlotContent::Occupied(v) = old {
+    //         Some(v)
+    //     } else {
+    //         None
+    //     }
+    // }
 }
 
 #[derive(Debug, Clone)]
 pub struct Slot<V> {
-    content: SlotContent<V>,
-    version: u32,
+    pub(crate) content: SlotContent<V>,
+    pub(crate) version: u32,
 }
 
 impl<V> Slot<V> {
-    fn vacant(pref_free_slot: u32) -> Self {
+    pub(crate) fn vacant(pref_free_slot: u32) -> Self {
         Self {
             content: SlotContent::Vacant(pref_free_slot),
             version: 0,
         }
     }
 
-    fn occupied(v: V) -> Self {
+    pub(crate) fn occupied(v: V) -> Self {
         Self {
             content: SlotContent::Occupied(v),
             version: 0,
@@ -67,8 +76,8 @@ impl<V> Slot<V> {
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Key<K: Sized> {
-    idx: u32,
-    version: u32,
+    pub(crate) idx: u32,
+    pub(crate) version: u32,
     phantom: PhantomData<K>,
 }
 
@@ -83,7 +92,7 @@ impl<K: Sized> std::fmt::Debug for Key<K> {
 }
 
 impl<K: Sized> Key<K> {
-    fn new(idx: u32, version: u32) -> Self {
+    pub(crate) fn new(idx: u32, version: u32) -> Self {
         Self {
             idx,
             version,
@@ -100,29 +109,32 @@ pub struct VecMap<K: Sized, V: Sized> {
     phantom: PhantomData<K>,
 }
 
-impl<K: Sized, V: std::fmt::Debug> std::fmt::Debug for VecMap<K, V> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.count == 0 {
-            write!(f, "[]")
+impl<K: Sized, V: Sized> Default for VecMap<K, V> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<K: Sized, V: Sized> std::ops::Index<Key<K>> for VecMap<K, V> {
+    type Output = V;
+    fn index(&self, key: Key<K>) -> &Self::Output {
+        let slot = &self.inner[key.idx as usize];
+        if key.version == slot.version {
+            slot.content.get().unwrap()
         } else {
-            let to_write = self
-                .inner
-                .iter()
-                .filter_map(|slot| {
-                    match &slot.content {
-                        SlotContent::Occupied(v) => Some(v),
-                        SlotContent::Vacant(_) => None,
-                    }
-                })
-                .collect::<Vec<_>>();
-            write!(f, "{to_write:?}")
+            unreachable!()
         }
     }
 }
 
-impl<K: Sized, V: Sized> Default for VecMap<K, V> {
-    fn default() -> Self {
-        Self::new()
+impl<K: Sized, V: Sized> std::ops::IndexMut<Key<K>> for VecMap<K, V> {
+    fn index_mut(&mut self, key: Key<K>) -> &mut Self::Output {
+        let slot = &mut self.inner[key.idx as usize];
+        if key.version == slot.version {
+            slot.content.get_mut().unwrap()
+        } else {
+            unreachable!()
+        }
     }
 }
 
@@ -251,80 +263,108 @@ impl<K: Sized, V: Sized> VecMap<K, V> {
         self.free_slot = 0;
     }
 
-    pub fn iter(&self) -> VecMapIterator<'_, K, V> {
+    pub fn iter(&self) -> VecMapIter<'_, K, V> {
         self.into_iter()
     }
 
-    // pub fn iter_mut(&mut self) -> VecMapIteratorMut<'_, K, V> {
-    //     self.into_iter()
-    // }
-}
-
-pub struct VecMapIterator<'a, K: Sized, V: Sized> {
-    inner: &'a VecMap<K, V>,
-    counter: u32,
-}
-
-impl<'a, K: Sized, V: Sized> Iterator for VecMapIterator<'a, K, V> {
-    type Item = (Key<K>, &'a V);
-    fn next(&mut self) -> Option<Self::Item> {
-        self.counter += 1;
-        self
-            .inner
-            .inner
-            .get(self.counter as usize - 1)
-            .and_then(|slot| {
-                slot.content
-                    .get()
-                    .map(|v| (Key::new(self.counter, slot.version), v))
-            })
+    pub fn iter_mut(&mut self) -> VecMapIterMut<'_, K, V> {
+        self.into_iter()
     }
 }
 
-impl<'a, K: Sized, V: Sized> IntoIterator for &'a VecMap<K, V> {
-    type Item = (Key<K>, &'a V);
-    type IntoIter = VecMapIterator<'a, K, V>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        VecMapIterator {
-            inner: self,
-            counter: 0,
+impl<K: Sized, V: std::fmt::Debug> std::fmt::Debug for VecMap<K, V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.count == 0 {
+            write!(f, "[]")
+        } else {
+            let to_write = self
+                .inner
+                .iter()
+                .filter_map(|slot| {
+                    match &slot.content {
+                        SlotContent::Occupied(v) => Some(v),
+                        SlotContent::Vacant(_) => None,
+                    }
+                })
+                .collect::<Vec<_>>();
+            write!(f, "{to_write:?}")
         }
     }
 }
 
-// pub struct VecMapIteratorMut<'a, K: Sized, V: Sized> {
-//     inner: &'a mut VecMap<K, V>,
-//     counter: u32,
-// }
+pub struct VecMapIter<'a, K, V> {
+    pub(crate) inner: Enumerate<Iter<'a, Slot<V>>>,
+    pub(crate) counter: usize,
+    pub(crate) phantom: PhantomData<K>,
+}
 
-// impl<'a, K: Sized, V: Sized> Iterator for VecMapIteratorMut<'a, K, V> {
-//     type Item = (Key<K>, &'a mut V);
-//     fn next(&mut self) -> Option<Self::Item> {
-//         self.counter += 1;
-//         self
-//             .inner
-//             .inner
-//             .get_mut(self.counter as usize - 1)
-//             .and_then(|slot| {
-//                 slot.content
-//                     .get_mut()
-//                     .map(|v| (Key::new(self.counter, slot.version), v))
-//             })
-//     }
-// }
+impl<'a, K, V> Iterator for VecMapIter<'a, K, V> {
+    type Item = (Key<K>, &'a V);
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner
+            .next()
+            .and_then(|(idx, slot)| {
+                slot.content
+                    .get()
+                    .map(|v| {
+                        self.counter -= 1;
+                        (Key::new(idx as u32, slot.version), v)
+                    })
+            })
+    }
 
-// impl<'a, K: Sized, V: Sized> IntoIterator for &'a mut VecMap<K, V> {
-//     type Item = (Key<K>, &'a mut V);
-//     type IntoIter = VecMapIteratorMut<'a, K, V>;
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.counter, Some(self.counter))
+    }
+}
 
-//     fn into_iter(self) -> Self::IntoIter {
-//         VecMapIteratorMut {
-//             inner: self,
-//             counter: 0,
-//         }
-//     }
-// }
+impl<'a, K, V> IntoIterator for &'a VecMap<K, V> {
+    type Item = (Key<K>, &'a V);
+    type IntoIter = VecMapIter<'a, K, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        VecMapIter {
+            inner: self.inner.iter().enumerate(),
+            counter: self.len(),
+            phantom: PhantomData
+        }
+    }
+}
+
+pub struct VecMapIterMut<'a, K, V> {
+    pub(crate) inner: Enumerate<IterMut<'a, Slot<V>>>,
+    pub(crate) counter: usize,
+    pub(crate) phantom: PhantomData<K>,
+}
+
+impl<'a, K, V> Iterator for VecMapIterMut<'a, K, V> {
+    type Item = (Key<K>, &'a mut V);
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner
+            .next()
+            .and_then(|(idx, slot)| {
+                slot.content
+                    .get_mut()
+                    .map(|v| {
+                        self.counter -= 1;
+                        (Key::new(idx as u32, slot.version), v)
+                    })
+            })
+    }
+}
+
+impl<'a, K, V> IntoIterator for &'a mut VecMap<K, V> {
+    type Item = (Key<K>, &'a mut V);
+    type IntoIter = VecMapIterMut<'a, K, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        VecMapIterMut {
+            counter: self.len(),
+            inner: self.inner.iter_mut().enumerate(),
+            phantom: PhantomData,
+        }
+    }
+}
 
 #[cfg(test)]
 mod vecmap {

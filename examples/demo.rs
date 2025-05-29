@@ -118,10 +118,58 @@ fn root(cx: &mut Context) {
         });
 }
 
+struct Stats {
+    duration: std::time::Duration,
+    longest: std::time::Duration,
+    shortest: std::time::Duration,
+    counter: u32,
+}
+
+impl Stats {
+    fn new() -> Self {
+        Self {
+            duration: std::time::Duration::from_nanos(0),
+            longest: std::time::Duration::from_nanos(0),
+            shortest: std::time::Duration::from_nanos(0),
+            counter: 0,
+        }
+    }
+
+    fn inc(&mut self, d: std::time::Duration) {
+        if self.counter == 1 {
+            self.longest = d;
+            self.shortest = d;
+            self.duration += d;
+        } else {
+            self.longest = self.longest.max(d);
+            self.shortest = self.shortest.min(d);
+            self.duration += d;
+        }
+        self.counter += 1;
+    }
+}
+
+impl Drop for Stats {
+    fn drop(&mut self) {
+        let counter = self.counter - 1;
+        let average = self.duration / counter;
+        eprintln!();
+        eprintln!(" > average:             {average:?}");
+        eprintln!("   - hi:                {:?}", self.longest);
+        eprintln!("   + lo:                {:?}", self.shortest);
+        eprintln!(" > update amount:       {counter}");
+    }
+}
+
 fn dummy(cx: &mut Context) {
     let (counter, set_counter) = Signal::new(0i32);
+    let (_, set_time) = Signal::new(Stats::new());
 
-    let click = move || { set_counter.update(|num| *num += 1) };
+    let click = move || {
+        let start = std::time::Instant::now();
+        set_counter.update(|num| *num += 1);
+        set_time.update(|s| s.inc(start.elapsed()));
+    };
 
     Effect::new(move || {
         eprintln!("{}", counter.get());

@@ -1,10 +1,17 @@
 use std::cell::RefCell;
-use aplite_storage::Key;
 
 use crate::runtime::{ReactiveId, RUNTIME};
 
+// ........................................................ //
+// ........................................................ //
+//                                                          //
+//                           CORE                           //
+//                                                          //
+// ........................................................ //
+// ........................................................ //
+
 pub trait Reactive {
-    fn id(&self) -> Key<ReactiveId>;
+    fn id(&self) -> ReactiveId;
 }
 
 pub trait Track: Reactive {
