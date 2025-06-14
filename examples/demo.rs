@@ -12,7 +12,7 @@ fn root(cx: &mut Context) {
         set_counter.update(|num| *num -= 1);
     };
 
-    Effect::new(move || eprintln!("{}", counter.get()));
+    Effect::new(move |_| eprintln!("{}", counter.get()));
 
     HStack::new(cx, |cx| {
         use AspectRatio::Defined;
@@ -171,8 +171,8 @@ fn dummy(cx: &mut Context) {
         set_time.update(|s| s.inc(start.elapsed()));
     };
 
-    Effect::new(move || {
-        eprintln!("{}", counter.get());
+    Effect::new(move |_| {
+        counter.with(|num| eprintln!("{num}"))
     });
 
     Button::new(cx)

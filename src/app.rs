@@ -88,7 +88,6 @@ pub struct Aplite<F: FnOnce(&mut Context)> {
     window: HashMap<WindowId, Arc<Window>>,
     window_fn: Option<fn(&mut WindowAttributes)>,
     view_fn: Option<F>,
-    // screen_resolution: ScreenResolution,
 
     #[cfg(feature = "render_stats")]
     stats: aplite_stats::Stats,
@@ -103,15 +102,12 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
     }
 
     pub fn new_empty() -> Self {
-        let mut cx = Context::default();
-        cx.initialize_root(DEFAULT_SCREEN_SIZE);
         Self {
             renderer: None,
-            cx,
+            cx: Context::new(DEFAULT_SCREEN_SIZE),
             window: HashMap::with_capacity(4),
             window_fn: None,
             view_fn: None,
-            // screen_resolution: ScreenResolution::default(),
 
             #[cfg(feature = "render_stats")]
             stats: aplite_stats::Stats::new(),
@@ -159,8 +155,7 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
     fn initialize_renderer(&mut self, window: Arc<Window>) -> Result<(), ApliteError> {
         let mut renderer = Renderer::new(Arc::clone(&window))?;
         if let Some(view_fn) = self.view_fn.take() {
-            // FIXME: somehow this runs 2x on startup
-            // TODO: turn this into reactive node
+            // FIXME: turn this into reactive node
             view_fn(&mut self.cx);
             self.cx.layout();
             self.cx.render(&mut renderer);

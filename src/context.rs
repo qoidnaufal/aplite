@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
+use aplite_reactive::Effect;
 use aplite_types::{Size, Vector2};
 
 use aplite_renderer::ImageData;
 use aplite_renderer::Render;
 use aplite_renderer::Renderer;
-// use crate::reactive::ReactiveGraph;
 
 pub mod layout;
 pub(crate) mod properties;
@@ -39,7 +39,6 @@ pub struct Context {
     image_fn: HashMap<NodeId, ImageFn>,
     style_fn: HashMap<NodeId, StyleFn>,
     callbacks: HashMap<NodeId, ActionFn>,
-    // pub(crate) reactive: ReactiveGraph,
     pub(crate) cursor: Cursor,
     pending_update: Vec<UpdateMode>,
 }
@@ -53,14 +52,39 @@ impl Default for Context {
             image_fn: HashMap::new(),
             style_fn: HashMap::new(),
             callbacks: HashMap::new(),
-            // reactive: ReactiveGraph::new(),
             cursor: Cursor::new(),
             pending_update: Vec::with_capacity(10),
         }
     }
 }
 
-// debug
+impl Context {
+    pub(crate) fn new(size: Size<u32>) -> Self {
+        let mut cx = Self::default();
+        cx.tree.insert(NodeId::root(), None);
+        cx.properties.push(Properties::window_properties(size));
+        cx
+    }
+
+    // pub(crate) fn add_view<F, IV>(&mut self, view_fn: F)
+    // where
+    //     F: Fn() -> IV + 'static,
+    //     IV: crate::view::IntoView + 'static,
+    // {
+    //     Effect::new(move |_| {
+    //         view_fn().into_view(self, |_| {});
+    //     });
+    // }
+}
+
+// ........................................................ //
+// ........................................................ //
+//                                                          //
+//                         Debug                            //
+//                                                          //
+// ........................................................ //
+// ........................................................ //
+
 #[cfg(feature = "debug_tree")]
 impl Context {
     pub(crate) fn debug_tree(&self) {
@@ -115,51 +139,8 @@ impl Context {
     }
 }
 
-// render
-impl Context {
-    pub(crate) fn has_changed(&self) -> bool {
-        !self.pending_update.is_empty()
-    }
-
-    pub(crate) fn submit_update(&mut self, renderer: &mut Renderer) {
-        self.pending_update.iter().for_each(|mode| {
-            match mode {
-                UpdateMode::HoverColor(node_id) => {
-                    if let Some(color) = self.get_node_data(node_id).hover_color() {
-                        renderer.update_element_color(node_id.index() - 1, color);
-                    }
-                },
-                UpdateMode::ClickColor(node_id) => {
-                    if let Some(color) = self.get_node_data(node_id).click_color() {
-                        renderer.update_element_color(node_id.index() - 1, color);
-                    }
-                }
-                UpdateMode::RevertColor(node_id) => {
-                    let color = self.get_node_data(node_id).fill_color();
-                    renderer.update_element_color(node_id.index() - 1, color);
-                }
-                UpdateMode::Transform(node_id) => {
-                    let rect = self.get_node_data(node_id).rect();
-                    renderer.update_element_transform(node_id.index() - 1, rect);
-                }
-                UpdateMode::Size(node_id) => {
-                    let rect = self.get_node_data(node_id).rect();
-                    renderer.update_element_size(node_id.index() - 1, rect.size());
-                }
-            }
-        });
-        self.pending_update.clear();
-        renderer.write_data();
-    }
-}
-
 // window
 impl Context {
-    pub(crate) fn initialize_root(&mut self, size: Size<u32>) {
-        self.tree.insert(NodeId::root(), None);
-        self.properties.push(Properties::window_properties(size));
-    }
-
     pub(crate) fn get_window_properties(&self) -> &Properties {
         &self.properties[0]
     }
@@ -171,7 +152,14 @@ impl Context {
     }
 }
 
-// data
+// ........................................................ //
+// ........................................................ //
+//                                                          //
+//                          Data                            //
+//                                                          //
+// ........................................................ //
+// ........................................................ //
+
 impl Context {
     pub(crate) fn create_entity(&self) -> NodeId {
         self.tree.create_entity()
@@ -216,7 +204,14 @@ impl Context {
     }
 }
 
-// layout
+// ........................................................ //
+// ........................................................ //
+//                                                          //
+//                          Layout                          //
+//                                                          //
+// ........................................................ //
+// ........................................................ //
+
 impl Context {
     pub(crate) fn layout(&mut self) {
         let ancestors = self.tree
@@ -302,7 +297,14 @@ impl Context {
     }
 }
 
-// cursor
+// ........................................................ //
+// ........................................................ //
+//                                                          //
+//                          Cursor                          //
+//                                                          //
+// ........................................................ //
+// ........................................................ //
+
 impl Context {
     pub(crate) fn handle_mouse_move(&mut self, pos: impl Into<Vector2<f32>>) {
         if self.properties.len() <= 1 { return }
@@ -359,7 +361,14 @@ impl Context {
     }
 }
 
-// event handling
+// ........................................................ //
+// ........................................................ //
+//                                                          //
+//                     Event Handling                       //
+//                                                          //
+// ........................................................ //
+// ........................................................ //
+
 impl Context {
     pub(crate) fn handle_hover(&mut self) {
         if self.cursor.is_idling() || self.cursor.is_unscoped() { return }
@@ -397,6 +406,51 @@ impl Context {
                 self.pending_update.push(UpdateMode::HoverColor(hover_id));
             }
         }
+    }
+}
+
+// ........................................................ //
+// ........................................................ //
+//                                                          //
+//                        Render                            //
+//                                                          //
+// ........................................................ //
+// ........................................................ //
+
+impl Context {
+    pub(crate) fn has_changed(&self) -> bool {
+        !self.pending_update.is_empty()
+    }
+
+    pub(crate) fn submit_update(&mut self, renderer: &mut Renderer) {
+        self.pending_update.iter().for_each(|mode| {
+            match mode {
+                UpdateMode::HoverColor(node_id) => {
+                    if let Some(color) = self.get_node_data(node_id).hover_color() {
+                        renderer.update_element_color(node_id.index() - 1, color);
+                    }
+                },
+                UpdateMode::ClickColor(node_id) => {
+                    if let Some(color) = self.get_node_data(node_id).click_color() {
+                        renderer.update_element_color(node_id.index() - 1, color);
+                    }
+                }
+                UpdateMode::RevertColor(node_id) => {
+                    let color = self.get_node_data(node_id).fill_color();
+                    renderer.update_element_color(node_id.index() - 1, color);
+                }
+                UpdateMode::Transform(node_id) => {
+                    let rect = self.get_node_data(node_id).rect();
+                    renderer.update_element_transform(node_id.index() - 1, rect);
+                }
+                UpdateMode::Size(node_id) => {
+                    let rect = self.get_node_data(node_id).rect();
+                    renderer.update_element_size(node_id.index() - 1, rect.size());
+                }
+            }
+        });
+        self.pending_update.clear();
+        renderer.write_data();
     }
 }
 

@@ -16,6 +16,14 @@ impl Signal {
         RUNTIME.with(|rt| rt.create_rw_signal(value)).split()
     }
 
+    pub fn read_only<T: 'static>(value: T) -> SignalRead<T> {
+        RUNTIME.with(|rt| rt.create_rw_signal(value)).read_only()
+    }
+
+    pub fn write_only<T: 'static>(value: T) -> SignalWrite<T> {
+        RUNTIME.with(|rt| rt.create_rw_signal(value)).write_only()
+    }
+
     pub(crate) fn stored<T: Any + 'static>(value: T) -> Self {
         Self {
             value: Box::new(RefCell::new(value)),

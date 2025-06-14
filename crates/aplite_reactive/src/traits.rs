@@ -2,13 +2,13 @@ use std::cell::RefCell;
 
 use crate::runtime::{ReactiveId, RUNTIME};
 
-// ........................................................ //
-// ........................................................ //
+// -------------------------------------------------------- //
+// -------------------------------------------------------- //
 //                                                          //
 //                           CORE                           //
 //                                                          //
-// ........................................................ //
-// ........................................................ //
+// -------------------------------------------------------- //
+// -------------------------------------------------------- //
 
 pub trait Reactive {
     fn id(&self) -> ReactiveId;
@@ -28,13 +28,13 @@ pub trait Notify: Reactive {
     }
 }
 
-// ........................................................ //
-// ........................................................ //
+// -------------------------------------------------------- //
+// -------------------------------------------------------- //
 //                                                          //
 //                          TRACK                           //
 //                                                          //
-// ........................................................ //
-// ........................................................ //
+// -------------------------------------------------------- //
+// -------------------------------------------------------- //
 
 pub trait Get: Track {
     type Value: Clone;
@@ -50,7 +50,7 @@ where
     fn get(&self) -> <Self as Get>::Value {
         self.track();
         RUNTIME.with(|rt| {
-            let storage = rt.storage.borrow();
+            let storage = rt.signals.borrow();
             let signal = storage.get(&self.id()).unwrap();
             let v = signal
                 .downcast_ref::<RefCell<<Self as Get>::Value>>()
@@ -68,7 +68,7 @@ impl<T: Track> With for T {
     fn with<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
         self.track();
         RUNTIME.with(|rt| {
-            let storage = rt.storage.borrow();
+            let storage = rt.signals.borrow();
             let signal = storage.get(&self.id()).unwrap();
             let v = signal
                 .downcast_ref::<RefCell<Self::Value>>()
@@ -79,13 +79,13 @@ impl<T: Track> With for T {
     }
 }
 
-// ........................................................ //
-// ........................................................ //
+// -------------------------------------------------------- //
+// -------------------------------------------------------- //
 //                                                          //
 //                         NOTIFY                           //
 //                                                          //
-// ........................................................ //
-// ........................................................ //
+// -------------------------------------------------------- //
+// -------------------------------------------------------- //
 
 pub trait Set: Notify {
     fn set(&self, value: Self::Value);
@@ -94,7 +94,7 @@ pub trait Set: Notify {
 impl<T: Notify> Set for T {
     fn set(&self, value: Self::Value) {
         RUNTIME.with(|rt| {
-            let mut storage = rt.storage.borrow_mut();
+            let mut storage = rt.signals.borrow_mut();
             if let Some(signal) = storage.get_mut(&self.id()) {
                 let v = signal
                     .downcast_mut::<RefCell<Self::Value>>()
@@ -113,7 +113,7 @@ pub trait Update: Notify {
 impl<T: Notify> Update for T {
     fn update(&self, f: impl FnOnce(&mut Self::Value)) {
         RUNTIME.with(|rt| {
-            let mut storage = rt.storage.borrow_mut();
+            let mut storage = rt.signals.borrow_mut();
             if let Some(signal) = storage.get_mut(&self.id()) {
                 let v = signal
                     .downcast_mut::<RefCell<Self::Value>>()
@@ -125,3 +125,23 @@ impl<T: Notify> Update for T {
         self.notify();
     }
 }
+
+// -------------------------------------------------------- //
+// -------------------------------------------------------- //
+//                                                          //
+//                         Observer                         //
+//                                                          //
+// -------------------------------------------------------- //
+// -------------------------------------------------------- //
+
+// trait Observer: Reactive {}
+
+// -------------------------------------------------------- //
+// -------------------------------------------------------- //
+//                                                          //
+//                       SUBSCRIBER                         //
+//                                                          //
+// -------------------------------------------------------- //
+// -------------------------------------------------------- //
+
+// trait Subscriber: Reactive {}
