@@ -1,4 +1,5 @@
 use crate::runtime::RUNTIME;
+use crate::traits::Subscriber;
 
 pub struct Effect<R> {
     pub(crate) f: Box<dyn FnMut(Option<R>) -> R>,
@@ -18,17 +19,13 @@ impl<R> Effect<R> {
     }
 }
 
-pub trait Subscriber {
-    fn run(&mut self);
-}
-
 impl<R> Subscriber for Effect<R> {
     fn run(&mut self) {
         self.run();
     }
 }
 
-pub struct AnySubscriber(pub(crate) Box<dyn Subscriber>);
+pub struct AnySubscriber(Box<dyn Subscriber>);
 
 impl AnySubscriber {
     pub(crate) fn run(&mut self) {
@@ -36,12 +33,12 @@ impl AnySubscriber {
     }
 }
 
-pub trait ToAnySubscriber {
-    fn into_any_subscriber(self) -> AnySubscriber;
+pub(crate) trait ToAnySubscriber {
+    fn to_any_subscriber(self) -> AnySubscriber;
 }
 
 impl<T: Subscriber + 'static> ToAnySubscriber for T {
-    fn into_any_subscriber(self) -> AnySubscriber {
+    fn to_any_subscriber(self) -> AnySubscriber {
         AnySubscriber(Box::new(self))
     }
 }

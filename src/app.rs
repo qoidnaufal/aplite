@@ -70,34 +70,34 @@ impl WindowAttributes {
     }
 }
 
-impl From<WindowAttributes> for winit::window::WindowAttributes {
-    fn from(w: WindowAttributes) -> Self {
+impl From<&WindowAttributes> for winit::window::WindowAttributes {
+    fn from(w: &WindowAttributes) -> Self {
         Self::default()
             .with_inner_size::<winit::dpi::LogicalSize<u32>>(w.inner_size.into())
-            .with_title(w.title)
+            .with_title(&w.title)
             .with_decorations(w.decorations)
             .with_transparent(w.transparent)
             .with_maximized(w.maximized)
-            .with_fullscreen(w.fullscreen)
+            .with_fullscreen(w.fullscreen.clone())
     }
 }
 
-pub struct Aplite<F: FnOnce(&mut Context)> {
+pub struct Aplite {
     renderer: Option<Renderer>,
     cx: Context,
     window: HashMap<WindowId, Arc<Window>>,
-    window_fn: Option<fn(&mut WindowAttributes)>,
-    view_fn: Option<F>,
+    window_attributes: WindowAttributes,
 
     #[cfg(feature = "render_stats")]
     stats: aplite_stats::Stats,
 }
 
 // user API
-impl<F: FnOnce(&mut Context)> Aplite<F> {
-    pub fn new(view_fn: F) -> Self {
+impl Aplite {
+    pub fn new<F: FnOnce(&mut Context)>(view_fn: F) -> Self {
         let mut app = Self::new_empty();
-        app.view_fn = Some(view_fn);
+        view_fn(&mut app.cx);
+        app.cx.layout();
         app
     }
 
@@ -106,8 +106,7 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
             renderer: None,
             cx: Context::new(DEFAULT_SCREEN_SIZE),
             window: HashMap::with_capacity(4),
-            window_fn: None,
-            view_fn: None,
+            window_attributes: WindowAttributes::default(),
 
             #[cfg(feature = "render_stats")]
             stats: aplite_stats::Stats::new(),
@@ -122,7 +121,7 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
     }
 
     pub fn set_window_attributes(mut self, f: fn(&mut WindowAttributes)) -> Self {
-        self.window_fn = Some(f);
+        f(&mut self.window_attributes);
         self
     }
 
@@ -133,11 +132,9 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
 }
 
 // initialization
-impl<F: FnOnce(&mut Context)> Aplite<F> {
+impl Aplite {
     fn initialize_window(&mut self, event_loop: &ActiveEventLoop) -> Result<Arc<Window>, ApliteError> {
-        let mut attributes = WindowAttributes::default();
-        if let Some(window_fn) = self.window_fn.take() { window_fn(&mut attributes) }
-
+        let attributes = &self.window_attributes;
         let window = event_loop.create_window(attributes.into())?;
         let size: Size<u32> = window
             .inner_size()
@@ -154,14 +151,10 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
 
     fn initialize_renderer(&mut self, window: Arc<Window>) -> Result<(), ApliteError> {
         let mut renderer = Renderer::new(Arc::clone(&window))?;
-        if let Some(view_fn) = self.view_fn.take() {
-            // FIXME: turn this into reactive node
-            view_fn(&mut self.cx);
-            self.cx.layout();
-            self.cx.render(&mut renderer);
+        self.cx.render(&mut renderer);
 
-            #[cfg(feature = "debug_tree")] self.cx.debug_tree();
-        }
+        #[cfg(feature = "debug_tree")] self.cx.debug_tree();
+
         self.renderer = Some(renderer);
         Ok(())
     }
@@ -172,7 +165,7 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
 }
 
 // window event
-impl<F: FnOnce(&mut Context)> Aplite<F> {
+impl Aplite {
     fn handle_resize(&mut self, winit_size: WinitSize) {
         if let Some(renderer) = self.renderer.as_mut() {
             let size = match winit_size {
@@ -259,7 +252,7 @@ impl<F: FnOnce(&mut Context)> Aplite<F> {
     }
 }
 
-impl<F: FnOnce(&mut Context)> ApplicationHandler for Aplite<F> {
+impl ApplicationHandler for Aplite {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if let Ok(window) = self.initialize_window(event_loop) {
             match self.initialize_renderer(Arc::clone(&window)) {

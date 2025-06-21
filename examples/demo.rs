@@ -2,7 +2,6 @@ use aplite::prelude::*;
 
 fn root(cx: &mut Context) {
     let (counter, set_counter) = Signal::new(0i32);
-    eprintln!("{}", counter.get());
 
     let inc = move || {
         set_counter.update(|num| *num += 1);
@@ -205,7 +204,7 @@ fn main() -> ApliteResult {
                 .launch()
         },
         Some(arg) if arg == "empty" => {
-            Aplite::<fn(&mut Context)>::new_empty()
+            Aplite::new_empty()
                 .set_window_attributes(|window| {
                     window.set_title("Empty");
                 })

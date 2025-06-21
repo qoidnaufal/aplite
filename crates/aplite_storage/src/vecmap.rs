@@ -19,20 +19,6 @@ pub(crate) enum SlotContent<V> {
 }
 
 impl<V> SlotContent<V> {
-    pub(crate) fn get(&self) -> Option<&V> {
-        match self {
-            SlotContent::Occupied(v) => Some(v),
-            SlotContent::Vacant(_) => None,
-        }
-    }
-
-    pub(crate) fn get_mut(&mut self) -> Option<&mut V> {
-        match self {
-            SlotContent::Occupied(v) => Some(v),
-            SlotContent::Vacant(_) => None,
-        }
-    }
-
     pub(crate) fn set_vacant(&mut self, idx: u32) -> Option<V> {
         let swap = std::mem::replace(self, Self::Vacant(idx));
         if let SlotContent::Occupied(v) = swap {
@@ -70,6 +56,20 @@ impl<V> Slot<V> {
         Self {
             content: SlotContent::Occupied(v),
             version: 0,
+        }
+    }
+
+    pub(crate) fn get_content(&self) -> Option<&V> {
+        match &self.content {
+            SlotContent::Occupied(v) => Some(v),
+            SlotContent::Vacant(_) => None,
+        }
+    }
+
+    pub(crate) fn get_content_mut(&mut self) -> Option<&mut V> {
+        match &mut self.content {
+            SlotContent::Occupied(v) => Some(v),
+            SlotContent::Vacant(_) => None,
         }
     }
 }
@@ -120,7 +120,7 @@ impl<K: Sized, V: Sized> std::ops::Index<Key<K>> for VecMap<K, V> {
     fn index(&self, key: Key<K>) -> &Self::Output {
         let slot = &self.inner[key.idx as usize];
         if key.version == slot.version {
-            slot.content.get().unwrap()
+            slot.get_content().unwrap()
         } else {
             unreachable!()
         }
@@ -131,7 +131,7 @@ impl<K: Sized, V: Sized> std::ops::IndexMut<Key<K>> for VecMap<K, V> {
     fn index_mut(&mut self, key: Key<K>) -> &mut Self::Output {
         let slot = &mut self.inner[key.idx as usize];
         if key.version == slot.version {
-            slot.content.get_mut().unwrap()
+            slot.get_content_mut().unwrap()
         } else {
             unreachable!()
         }
@@ -206,33 +206,26 @@ impl<K: Sized, V: Sized> VecMap<K, V> {
     }
 
     pub fn get(&self, key: &Key<K>) -> Option<&V> {
-        self.inner
-            .get(key.idx as usize)
-            .and_then(|slot| {
-                if key.version == slot.version {
-                    slot.content.get()
-                } else {
-                    None
-                }
-            })
+        let slot = &self.inner[key.idx as usize];
+        if slot.version == key.version {
+            slot.get_content()
+        } else {
+            None
+        }
     }
 
     pub fn get_mut(&mut self, key: &Key<K>) -> Option<&mut V> {
-        self.inner
-            .get_mut(key.idx as usize)
-            .and_then(|slot| {
-                if key.version == slot.version {
-                    slot.content.get_mut()
-                } else {
-                    None
-                }
-            })
+        let slot = &mut self.inner[key.idx as usize];
+        if slot.version == key.version {
+            slot.get_content_mut()
+        } else {
+            None
+        }
     }
 
     pub fn contains(&self, key: &Key<K>) -> bool {
-        self.inner
-            .get(key.idx as usize)
-            .is_some_and(|slot| key.version == slot.version)
+        let slot = &self.inner[key.idx as usize];
+        slot.version == key.version
     }
 
     pub fn remove(&mut self, key: &Key<K>) -> Option<V> {
@@ -304,8 +297,7 @@ impl<'a, K, V> Iterator for VecMapIter<'a, K, V> {
         self.inner
             .next()
             .and_then(|(idx, slot)| {
-                slot.content
-                    .get()
+                slot.get_content()
                     .map(|v| {
                         self.counter -= 1;
                         (Key::new(idx as u32, slot.version), v)
@@ -343,11 +335,11 @@ impl<'a, K, V> Iterator for VecMapIterMut<'a, K, V> {
         self.inner
             .next()
             .and_then(|(idx, slot)| {
-                slot.content
-                    .get_mut()
+                let version = slot.version;
+                slot.get_content_mut()
                     .map(|v| {
                         self.counter -= 1;
-                        (Key::new(idx as u32, slot.version), v)
+                        (Key::new(idx as u32, version), v)
                     })
             })
     }
@@ -396,7 +388,7 @@ mod vecmap {
             let key = storage.insert(i);
             keys.push(key);
         }
-        assert!(storage.inner.last().is_some_and(|slot| *slot.content.get().unwrap() == 9));
+        assert!(storage.inner.last().is_some_and(|slot| *slot.get_content().unwrap() == 9));
 
         let key = &keys[3];
         let removed = storage.remove(key);

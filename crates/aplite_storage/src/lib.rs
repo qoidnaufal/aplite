@@ -1,6 +1,5 @@
 mod vecmap;
 mod derived;
-mod tree;
 
 pub use vecmap::{
     Key,

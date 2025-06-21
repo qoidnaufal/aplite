@@ -111,9 +111,8 @@ impl ReactiveGraph {
         R: 'static,
     {
         let id = EffectId::new();
-        let effect = Effect { f: Box::new(f) };
-        let subscriber = effect.into_any_subscriber();
-        self.subscribers.borrow_mut().insert(id, subscriber);
+        let effect = Effect { f: Box::new(f) }.to_any_subscriber();
+        self.subscribers.borrow_mut().insert(id, effect);
         self.run_effect(&id);
     }
 }
