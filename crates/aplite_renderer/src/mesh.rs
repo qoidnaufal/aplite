@@ -31,6 +31,10 @@ impl Indices {
         self.iter_mut().for_each(|i| *i += offset);
         self
     }
+
+    pub(crate) fn as_slice(&self) -> [u32; 6] {
+        self.0
+    }
 }
 
 #[repr(C)]
@@ -68,17 +72,8 @@ impl Vertices {
     #[inline(always)]
     pub const fn new() -> Self { Self::VERTICES }
 
-    pub fn with_uv(mut self, rect: Rect<f32>) -> Self {
-        let l = rect.l();
-        let r = rect.r();
-        let t = rect.t();
-        let b = rect.b();
-
-        self.iter_mut().for_each(|v| {
-            if v.uv.x() == 0.0 { v.uv.set_x(l) } else { v.uv.set_x(r) }
-            if v.uv.y() == 0.0 { v.uv.set_y(t) } else { v.uv.set_y(b) }
-        });
-
+    pub fn with_uv(mut self, uv: Rect<f32>) -> Self {
+        self.set_uv(uv);
         self
     }
 
@@ -95,7 +90,7 @@ impl Vertices {
     }
 
     pub fn with_id(mut self, id: u32) -> Self {
-        self.iter_mut().for_each(|v| v.id = id);
+        self.set_id(id);
         self
     }
 
@@ -151,6 +146,14 @@ impl MeshBuffer {
         self.offset = indices.len() as u64 / 6;
         self.indices.write(device, queue, 0, indices);
         self.vertices.write(device, queue, 0, vertices);
+    }
+
+    pub(crate) fn indices_slice(&self) -> wgpu::BufferSlice {
+        self.indices.slice(0..self.offset * 6)
+    }
+
+    pub(crate) fn vertices_slice(&self) -> wgpu::BufferSlice {
+        self.vertices.slice(0..self.offset * 6)
     }
 
     pub(crate) fn vertice_desc<'a>() -> wgpu::VertexBufferLayout<'a> {

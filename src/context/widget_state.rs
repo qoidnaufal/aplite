@@ -24,7 +24,7 @@ pub struct WidgetState {
     pub(crate) orientation: Orientation,
     pub(crate) padding: Padding,
     pub(crate) spacing: u32,
-    pub(crate) z_index: u32,
+    pub(crate) z_index: RwSignal<u32>,
     pub(crate) image_aspect_ratio: AspectRatio,
     pub(crate) dragable: RwSignal<bool>,
     pub(crate) hoverable: RwSignal<bool>,
@@ -56,7 +56,7 @@ impl WidgetState {
             alignment: Default::default(),
             orientation: Default::default(),
             spacing: 10,
-            z_index: 0,
+            z_index: RwSignal::new(0),
             padding: Default::default(),
             image_aspect_ratio: AspectRatio::Undefined,
             dragable: RwSignal::new(false),
@@ -80,7 +80,7 @@ impl WidgetState {
         // let pos: Vector2<f32> = attr.pos.into();
         // let p = rotate * pos;
         let pos = cursor.hover.pos;
-        let rect = self.rect.read_untracked(|rect| *rect);
+        let rect = self.rect.get_untracked();
         let x = rect.x() as f32;
         let y = rect.y() as f32;
 
@@ -98,16 +98,17 @@ impl WidgetState {
 
         self.is_hovered.set((y - height..y + height).contains(&y_cursor)
             && (x - width..x + width).contains(&x_cursor)
-            && cursor.hover.z_index.read_untracked(|num| num <= &self.z_index));
+            && cursor.hover.z_index.get_untracked() <= self.z_index.get_untracked());
 
-        if self.is_hovered.read_untracked(|val| *val) {
+        if self.is_hovered.get_untracked() {
             cursor.hover.prev = cursor.hover.curr.replace(*id);
+            cursor.hover.z_index.set(self.z_index.get_untracked());
         }
     }
 
-    pub(crate) fn toggle_click(&mut self) {
-        self.is_clicked.update(|click| *click = !*click);
-    }
+    // pub(crate) fn toggle_click(&mut self) {
+    //     self.is_clicked.update(|click| *click = !*click);
+    // }
 }
 
 // creation
@@ -123,7 +124,7 @@ impl WidgetState {
             alignment: Alignment::new(),
             orientation: Orientation::Vertical,
             spacing: 0,
-            z_index: 1,
+            z_index: RwSignal::new(0),
             padding: Padding::new(5, 5, 5, 5),
             image_aspect_ratio: AspectRatio::Undefined,
             dragable: RwSignal::new(false),
@@ -236,10 +237,6 @@ impl WidgetState {
         self.spacing = value
     }
 
-    pub fn set_z_index(&mut self, value: u32) {
-        self.z_index = value;
-    }
-
     pub(crate) fn set_image_aspect_ratio(&mut self, aspect_ratio: AspectRatio) {
         self.image_aspect_ratio = aspect_ratio;
     }
@@ -264,8 +261,6 @@ impl WidgetState {
     pub(crate) fn padding(&self) -> Padding { self.padding }
 
     pub(crate) fn spacing(&self) -> u32 { self.spacing }
-
-    pub(crate) fn z_index(&self) -> u32 { self.z_index }
 
     pub(crate) fn get_transform(&self, screen: Size<f32>) -> Matrix3x2 {
         let rect = self.rect.read_untracked(|rect| rect.f32());

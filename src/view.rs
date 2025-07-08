@@ -1,4 +1,3 @@
-use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::collections::HashMap;
 use std::cell::RefCell;
@@ -23,8 +22,9 @@ entity! {
     pub ViewId;
 }
 
+// FIXME: this is kinda cheating, and not fun at all
 thread_local! {
-    pub(crate) static VIEW_STORAGE: Rc<ViewStorage> = Rc::new(ViewStorage::new());
+    pub(crate) static VIEW_STORAGE: ViewStorage = ViewStorage::new();
 }
 
 pub(crate) struct ViewStorage {
@@ -87,7 +87,7 @@ impl ViewStorage {
 
     pub(crate) fn invoke_callback(&self, id: &ViewId) {
         if let Some(callback) = self.callbacks.borrow().get(id) {
-            callback()
+            callback();
         }
     }
 
@@ -104,37 +104,6 @@ impl ViewStorage {
     pub(crate) fn get_all_members_of(&self, root_id: &ViewId) -> Vec<ViewId> {
         self.tree.borrow().get_all_members_of(root_id)
     }
-
-    // pub(crate) fn get_all_elements(&self, root_id: &ViewId) -> Vec<Element> {
-    //     self.get_all_members_of(root_id)
-    //         .iter()
-    //         .enumerate()
-    //         .filter_map(|(idx, view_id)| {
-    //             self.storage
-    //                 .borrow()
-    //                 .get(view_id)
-    //                 .map(|v| {
-    //                     v.node.0.update(|elem| elem.set_transform_id(idx as _));
-    //                     v.node.get()
-    //                 })
-    //         })
-    //         .collect()
-    // }
-
-    // pub(crate) fn get_all_transforms(&self, root_id: &ViewId, screen: Size<f32>) -> Vec<Matrix3x2> {
-    //     self.get_all_members_of(root_id)
-    //         .iter()
-    //         .filter_map(|view_id| {
-    //             self.storage
-    //                 .borrow()
-    //                 .get(view_id)
-    //                 .map(|v| {
-    //                     v.widget_state()
-    //                         .read_untracked(|s| s.get_transform(screen))
-    //                 })
-    //         })
-    //         .collect()
-    // }
 
     pub(crate) fn get_render_components(
         &self,
@@ -217,10 +186,8 @@ impl View {
 
 impl std::fmt::Debug for View {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = self
-            .widget_state()
-            .name
-            .read_untracked(|s| *s);
+        let state = self.widget_state();
+        let name = state.name.get_untracked();
 
         f.debug_struct("View")
             .field("name", &name)
@@ -280,15 +247,15 @@ impl TestCircleWidget {
         }
     }
 
-    pub fn append_child(self, child: impl IntoView) -> Self {
-        VIEW_STORAGE.with(|s| s.append_child(&self.id, child));
-        self
-    }
+    // pub fn append_child(self, child: impl IntoView) -> Self {
+    //     VIEW_STORAGE.with(|s| s.append_child(&self.id, child));
+    //     self
+    // }
 
-    pub fn and(self, sibling: impl IntoView) -> Self {
-        VIEW_STORAGE.with(|s| s.add_sibling(&self.id, sibling));
-        self
-    }
+    // pub fn and(self, sibling: impl IntoView) -> Self {
+    //     VIEW_STORAGE.with(|s| s.add_sibling(&self.id, sibling));
+    //     self
+    // }
 
     pub fn state(self, f: impl Fn(&WidgetState) + 'static) -> Self {
         f(&self.state);
@@ -316,10 +283,6 @@ pub struct Node(RwSignal<Element>);
 impl Node {
     pub fn new() -> Self {
         Self(RwSignal::new(Element::new()))
-    }
-
-    pub(crate) fn get(&self) -> Element {
-        self.0.read_untracked(|el| *el)
     }
 
     pub fn with_fill_color(self, color: Rgba<u8>) -> Self {
@@ -395,9 +358,12 @@ pub trait Style: Widget + Sized {
         F: FnEl<Rgba<u8>> + 'static,
     {
         let node = self.node();
+        let dirty = VIEW_STORAGE.with(|s| s.dirty);
+
         Effect::new(move |prev| {
             let color = f(prev);
             node.set_fill_color(color);
+            dirty.set(true);
             color
         });
         self
@@ -531,3 +497,31 @@ pub trait Style: Widget + Sized {
 }
 
 impl<T> Style for T where T: Widget + Sized {}
+
+pub trait Layout: Widget + Sized {
+    fn append_child(self, child: impl IntoView) -> Self {
+        let self_z_index = self.widget_state().z_index;
+        let child_z_index = child.widget_state().z_index;
+
+        Effect::new(move |_| {
+            child_z_index.set(self_z_index.get() + 1);
+        });
+
+        VIEW_STORAGE.with(|s| s.append_child(&self.id(), child));
+        self
+    }
+
+    fn and(self, sibling: impl IntoView) -> Self {
+        let self_z_index = self.widget_state().z_index;
+        let sibling_z_index = sibling.widget_state().z_index;
+
+        Effect::new(move |_| {
+            sibling_z_index.set(self_z_index.get());
+        });
+
+        VIEW_STORAGE.with(|s| s.add_sibling(&self.id(), sibling));
+        self
+    }
+}
+
+impl<T> Layout for T where T: Widget + Sized {}

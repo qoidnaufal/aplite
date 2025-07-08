@@ -82,6 +82,10 @@ where
     /// track the signal & clone the value
     fn get(&self) -> <Self as Read>::Value {
         self.track();
+        self.get_untracked()
+    }
+
+    fn get_untracked(&self) -> <Self as Read>::Value {
         self.read_untracked(|val| val.clone())
     }
 }

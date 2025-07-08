@@ -3,7 +3,7 @@ use aplite_renderer::Shape;
 
 use crate::{context::widget_state::WidgetState, prelude::Orientation};
 
-use super::{IntoView, Node, ViewId, Widget, VIEW_STORAGE};
+use super::{Node, ViewId, Widget, VIEW_STORAGE};
 
 pub fn v_stack<F>() -> VStack {
     VStack::new()
@@ -32,15 +32,15 @@ impl VStack {
         }
     }
 
-    pub fn append_child(self, child: impl IntoView) -> Self {
-        VIEW_STORAGE.with(|s| s.append_child(&self.id, child));
-        self
-    }
+    // pub fn append_child(self, child: impl IntoView) -> Self {
+    //     VIEW_STORAGE.with(|s| s.append_child(&self.id, child));
+    //     self
+    // }
 
-    pub fn and(self, sibling: impl IntoView) -> Self {
-        VIEW_STORAGE.with(|s| s.add_sibling(&self.id, sibling));
-        self
-    }
+    // pub fn and(self, sibling: impl IntoView) -> Self {
+    //     VIEW_STORAGE.with(|s| s.add_sibling(&self.id, sibling));
+    //     self
+    // }
 
     pub fn state(mut self, mut f: impl FnMut(&mut WidgetState) + 'static) -> Self {
         f(&mut self.state);
@@ -90,15 +90,15 @@ impl HStack {
         }
     }
 
-    pub fn append_child(self, child: impl IntoView) -> Self {
-        VIEW_STORAGE.with(|s| s.append_child(&self.id, child));
-        self
-    }
+    // pub fn append_child(self, child: impl IntoView) -> Self {
+    //     VIEW_STORAGE.with(|s| s.append_child(&self.id, child));
+    //     self
+    // }
 
-    pub fn and(self, sibling: impl IntoView) -> Self {
-        VIEW_STORAGE.with(|s| s.add_sibling(&self.id, sibling));
-        self
-    }
+    // pub fn and(self, sibling: impl IntoView) -> Self {
+    //     VIEW_STORAGE.with(|s| s.add_sibling(&self.id, sibling));
+    //     self
+    // }
 
     pub fn state(mut self, mut f: impl FnMut(&mut WidgetState) + 'static) -> Self {
         f(&mut self.state);

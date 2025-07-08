@@ -65,7 +65,7 @@ fn root() -> impl IntoView {
                 .set_corners(|_| CornerRadius::homogen(70))
                 .set_color(|_| Rgba::YELLOW)
         )
-        .set_color(|_| Rgba::DARK_GREEN)
+        .set_color(|_| Rgba::TRANSPARENT)
         .set_dragable(true)
         .state(|s| {
             s.set_min_width(400);
@@ -102,70 +102,39 @@ fn root() -> impl IntoView {
         .and(circle)
 }
 
-struct Stats {
-    duration: std::time::Duration,
-    longest: std::time::Duration,
-    shortest: std::time::Duration,
-    counter: u32,
-}
-
-impl Stats {
-    fn new() -> Self {
-        Self {
-            duration: std::time::Duration::from_nanos(0),
-            longest: std::time::Duration::from_nanos(0),
-            shortest: std::time::Duration::from_nanos(0),
-            counter: 0,
-        }
-    }
-
-    fn inc(&mut self, d: std::time::Duration) {
-        if self.counter == 1 {
-            self.longest = d;
-            self.shortest = d;
-            self.duration += d;
-        } else {
-            self.longest = self.longest.max(d);
-            self.shortest = self.shortest.min(d);
-            self.duration += d;
-        }
-        self.counter += 1;
-    }
-}
-
-impl Drop for Stats {
-    fn drop(&mut self) {
-        let counter = self.counter - 1;
-        let average = self.duration / counter;
-        eprintln!();
-        eprintln!(" > average:             {average:?}");
-        eprintln!("   - hi:                {:?}", self.longest);
-        eprintln!("   + lo:                {:?}", self.shortest);
-        eprintln!(" > update amount:       {counter}");
-    }
-}
-
 fn dummy() -> impl IntoView {
     let (counter, set_counter) = Signal::new(0i32);
-    let set_time = RwSignal::new(Stats::new()).write_only();
+    // let evaluator = RwSignal::new(0i32);
+
+    Effect::new(move |_| {
+        counter.with(|val| {
+            let color = if val % 3 == 0 {
+                "Rgba::RED"
+            } else if val % 2 == 0 {
+                "Rgba::GREEN"
+            } else {
+                "Rgba::BLUE"
+            };
+            eprintln!("{val}: {color}");
+            // evaluator.set(*val);
+        });
+    });
 
     let click = move || {
-        let start = std::time::Instant::now();
         set_counter.update(|num| *num += 1);
-        set_time.update(|s| s.inc(start.elapsed()));
     };
 
     let color = move |_| {
-        if counter.get() % 2 == 0 {
-            Rgba::GREEN
-        } else {
-            Rgba::BLUE
-        }
+        counter.with(|val| {
+            if val % 3 == 0 {
+                Rgba::RED
+            } else if val % 2 == 0 {
+                Rgba::GREEN
+            } else {
+                Rgba::BLUE
+            }
+        })
     };
-
-    Effect::new(move |_| {
-        counter.with(|num| eprintln!("{num}"))
-    });
 
     let button = Button::new()
         .set_stroke_color(|_| Rgba::WHITE)

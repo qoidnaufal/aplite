@@ -145,14 +145,14 @@ impl Aplite {
         let window_id = window.id();
 
         let view_id = VIEW_STORAGE.with(|s| {
-            let root = s.create_entity();
-
             let size = window
                 .inner_size()
                 .to_logical(window.scale_factor());
-            let root_view = View::window(size.into());
-            s.storage.borrow_mut().insert(root, root_view);
 
+            let root = s.create_entity();
+            let root_view = View::window(size.into());
+
+            s.storage.borrow_mut().insert(root, root_view);
             self.cx.root_window.insert(root, window_id);
 
             if let Some(view_fn) = self.views.pop() {

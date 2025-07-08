@@ -29,6 +29,7 @@ pub mod prelude {
         IntoView,
         View,
         Style,
+        Layout,
         Node,
         TestCircleWidget,
         HStack,

@@ -4,7 +4,6 @@ use aplite_renderer::ImageData;
 use crate::context::widget_state::WidgetState;
 use crate::prelude::AspectRatio;
 
-use super::IntoView;
 use super::Node;
 use super::ViewId;
 use super::Widget;
@@ -40,15 +39,15 @@ impl Image {
         }
     }
 
-    pub fn append_child(self, child: impl IntoView) -> Self {
-        VIEW_STORAGE.with(|s| s.append_child(&self.id, child));
-        self
-    }
+    // pub fn append_child(self, child: impl IntoView) -> Self {
+    //     VIEW_STORAGE.with(|s| s.append_child(&self.id, child));
+    //     self
+    // }
 
-    pub fn and(self, sibling: impl IntoView) -> Self {
-        VIEW_STORAGE.with(|s| s.add_sibling(&self.id, sibling));
-        self
-    }
+    // pub fn and(self, sibling: impl IntoView) -> Self {
+    //     VIEW_STORAGE.with(|s| s.add_sibling(&self.id, sibling));
+    //     self
+    // }
 
     pub fn with_aspect_ratio(mut self, aspect_ratio: AspectRatio) -> Self {
         self.state.set_image_aspect_ratio(aspect_ratio);

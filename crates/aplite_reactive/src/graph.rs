@@ -105,10 +105,10 @@ impl ReactiveGraph {
 
     pub(crate) fn notify_subscribers(&self, id: &ReactiveId) {
         if let Some(subscribers) = self.get_subscribers(id) {
+            self.untrack(id);
             subscribers
                 .iter()
                 .for_each(|effect| {
-                    self.untrack(id);
                     self.run_effect(*effect);
                 });
         }

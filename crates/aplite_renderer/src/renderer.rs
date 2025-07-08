@@ -124,8 +124,8 @@ impl Renderer {
 
         pass.set_pipeline(&self.pipeline);
 
-        pass.set_index_buffer(self.mesh[self.current].indices.slice(0..self.mesh[self.current].offset * 6), wgpu::IndexFormat::Uint32);
-        pass.set_vertex_buffer(0, self.mesh[self.current].vertices.slice(0..self.mesh[self.current].offset * 4));
+        pass.set_index_buffer(self.mesh[self.current].indices_slice(), wgpu::IndexFormat::Uint32);
+        pass.set_vertex_buffer(0, self.mesh[self.current].vertices_slice());
 
         pass.set_bind_group(0, &self.screen.bind_group, &[]);
         pass.set_bind_group(1, &self.storage[self.current].bind_group, &[]);
@@ -133,25 +133,6 @@ impl Renderer {
         pass.set_bind_group(3, &self.sampler.bind_group, &[]);
 
         pass.draw_indexed(0..self.mesh[self.current].offset as u32 * 6, 0, 0..1);
-
-        // TODO: organize how to render "non-atlased" image
-        // self
-        //     .storage
-        //     .element_data
-        //     .iter()
-        //     .enumerate()
-        //     .filter_map(|(idx, element)| {
-        //         if element.image_id > -1 {
-        //             Some((idx as u64, element.image_id as usize))
-        //         } else { None }
-        //     })
-        //     .for_each(|(idx, image_id)| {
-        //         let bind_group = &self.images[image_id].bind_group;
-        //         pass.set_index_buffer(self.mesh.indices.slice(idx + 6..idx * 6), wgpu::IndexFormat::Uint32);
-        //         pass.set_vertex_buffer(0, self.mesh.vertices.slice(idx + 4..idx * 4));
-        //         pass.set_bind_group(2, bind_group, &[]);
-        //         pass.draw_indexed(0..4, 0, 0..1);
-        //     });
     }
 }
 
@@ -186,12 +167,9 @@ impl Renderer {
         transforms: &[Matrix3x2],
         vertices: &[Vertex],
     ) {
-        let mut indices = vec![];
-
-        for i in 0..elements.len() {
-            let idx = Indices::new().with_offset(i as _, true);
-            indices.extend_from_slice(&idx);
-        }
+        let indices = (0..elements.len())
+            .flat_map(|i| Indices::new().with_offset(i as _, true).as_slice())
+            .collect::<Vec<_>>();
 
         self.mesh[self.current].write_data(&self.gpu.device, &self.gpu.queue, &indices, vertices);
         self.storage[self.current].write_data(&self.gpu.device, &self.gpu.queue, elements, transforms);

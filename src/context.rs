@@ -187,7 +187,7 @@ impl Context {
             let dragable = VIEW_STORAGE.with(|s| {
                 s.get_widget_state(&hover_id)
                     .dragable
-                    .read_untracked(|val| *val)
+                    .get_untracked()
             });
             if self.cursor.is_dragging(&hover_id) && dragable {
                 self.handle_drag(&hover_id);
@@ -260,8 +260,8 @@ impl Context {
                 };
                 vert.write_untracked(|v| v.set_id(idx as _));
                 transforms.push(*mat);
-                elements.push(elem.read_untracked(|el| *el));
-                mesh.extend_from_slice(&vert.read_untracked(|v| *v));
+                elements.push(elem.get_untracked());
+                mesh.extend_from_slice(&vert.get_untracked());
             });
 
             renderer.submit_data_batched(&elements, &transforms, &mesh);

@@ -51,7 +51,7 @@ impl<R> EffectInner<R> {
 }
 
 impl<R> Subscriber for RefCell<EffectInner<R>> {
-    fn run(&self) {
+    fn invoke(&self) {
         let mut inner = self.borrow_mut();
         inner.run();
     }
