@@ -1,14 +1,17 @@
-use std::marker::PhantomData;
-use aplite_types::Rgba;
-use aplite_renderer::Shape;
+use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::collections::HashMap;
+use std::cell::RefCell;
+use aplite_reactive::*;
+use aplite_types::{Matrix3x2, Rgba, Size};
+use aplite_renderer::{CornerRadius, Element, ImageData, Shape, Vertices};
+use aplite_storage::{entity, Entity, Tree};
+
+use crate::context::widget_state::WidgetState;
 
 mod button;
 mod image;
 mod stack;
-
-use crate::context::Context;
-use crate::context::properties::Properties;
-use crate::context::tree::NodeId;
 
 pub use {
     button::*,
@@ -16,87 +19,515 @@ pub use {
     stack::*,
 };
 
-pub trait IntoView: Sized {
-    fn debug_name(&self) -> Option<&'static str> { None }
-    fn properties(&self) -> Properties;
-
-    fn into_view<F>(self, cx: &mut Context, child_fn: F) -> View<Self>
-    where F: FnOnce(&mut Context),
-    {
-        let node_id = cx.create_entity();
-        let parent = cx.current_entity();
-        cx.insert(node_id, parent, self.properties().with_name(self.debug_name()));
-        cx.set_current_entity(Some(node_id));
-        child_fn(cx);
-        cx.set_current_entity(parent);
-
-        View::new(node_id, cx)
-    }
+entity! {
+    pub ViewId;
 }
 
-pub struct View<'a, IV: IntoView> {
-    entity: NodeId,
-    cx: &'a mut Context,
-    inner: PhantomData<IV>,
+thread_local! {
+    pub(crate) static VIEW_STORAGE: Rc<ViewStorage> = Rc::new(ViewStorage::new());
 }
 
-impl<'a, IV: IntoView> View<'a, IV> {
-    fn new(entity: NodeId, cx: &'a mut Context) -> Self {
+pub(crate) struct ViewStorage {
+    pub(crate) tree: RefCell<Tree<ViewId>>,
+    pub(crate) storage: RefCell<HashMap<ViewId, View>>,
+    pub(crate) image_fn: RefCell<HashMap<ViewId, Box<dyn Fn() -> ImageData>>>,
+    pub(crate) callbacks: RefCell<HashMap<ViewId, Box<dyn Fn()>>>,
+    pub(crate) hoverable: RefCell<Vec<ViewId>>,
+    pub(crate) dirty: RwSignal<bool>,
+}
+
+impl ViewStorage {
+    fn new() -> Self {
         Self {
-            entity,
-            cx,
-            inner: PhantomData,
+            tree: RefCell::new(Tree::with_capacity(1024)),
+            storage: RefCell::new(HashMap::new()),
+            image_fn: RefCell::new(HashMap::new()),
+            callbacks: RefCell::new(HashMap::new()),
+            hoverable: RefCell::new(Vec::new()),
+            dirty: RwSignal::new(false),
         }
     }
 
-    pub(crate) fn id(&self) -> NodeId {
-        self.entity
+    pub(crate) fn create_entity(&self) -> ViewId {
+        self.tree.borrow_mut().create_entity()
     }
 
-    pub fn style<F: Fn(&mut Properties) + 'static>(self, style_fn: F) -> Self {
-        let prop = self.cx.get_node_data_mut(&self.id());
-        style_fn(prop);
-        self.cx.add_style_fn(self.id(), style_fn);
+    pub(crate) fn append_child(&self, id: &ViewId, child: impl IntoView) {
+        let child_id = child.id();
+        let state = child.widget_state();
+        if state.hoverable.get() || state.dragable.get() {
+            let mut hoverable = self.hoverable.borrow_mut();
+            if !hoverable.contains(&child_id) {
+                hoverable.push(child_id);
+            }
+        }
+        self.tree.borrow_mut().add_child(id, child_id);
+        self.storage.borrow_mut().insert(child_id, child.into_view());
+    }
+
+    pub(crate) fn add_sibling(&self, id: &ViewId, sibling: impl IntoView) {
+        let sibling_id = sibling.id();
+        let state = sibling.widget_state();
+        if state.hoverable.get() || state.dragable.get() {
+            let mut hoverable = self.hoverable.borrow_mut();
+            if !hoverable.contains(&sibling_id) {
+                hoverable.push(sibling_id);
+            }
+        }
+        self.tree.borrow_mut().add_sibling(id, sibling_id);
+        self.storage.borrow_mut().insert(sibling_id, sibling.into_view());
+    }
+
+    pub(crate) fn add_on_click<F>(&self, id: ViewId, f: F)
+    where
+        F: Fn() + 'static,
+    {
+        self.callbacks.borrow_mut().insert(id, Box::new(f));
+    }
+
+    pub(crate) fn invoke_callback(&self, id: &ViewId) {
+        if let Some(callback) = self.callbacks.borrow().get(id) {
+            callback()
+        }
+    }
+
+    // pub(crate) fn get_element(&self, id: &ViewId) -> Element {
+    //     let storage = self.storage.borrow();
+    //     storage[id].node().get()
+    // }
+
+    pub(crate) fn get_widget_state(&self, id: &ViewId) -> WidgetState {
+        let storage = self.storage.borrow();
+        storage[id].widget_state()
+    }
+
+    pub(crate) fn get_all_members_of(&self, root_id: &ViewId) -> Vec<ViewId> {
+        self.tree.borrow().get_all_members_of(root_id)
+    }
+
+    // pub(crate) fn get_all_elements(&self, root_id: &ViewId) -> Vec<Element> {
+    //     self.get_all_members_of(root_id)
+    //         .iter()
+    //         .enumerate()
+    //         .filter_map(|(idx, view_id)| {
+    //             self.storage
+    //                 .borrow()
+    //                 .get(view_id)
+    //                 .map(|v| {
+    //                     v.node.0.update(|elem| elem.set_transform_id(idx as _));
+    //                     v.node.get()
+    //                 })
+    //         })
+    //         .collect()
+    // }
+
+    // pub(crate) fn get_all_transforms(&self, root_id: &ViewId, screen: Size<f32>) -> Vec<Matrix3x2> {
+    //     self.get_all_members_of(root_id)
+    //         .iter()
+    //         .filter_map(|view_id| {
+    //             self.storage
+    //                 .borrow()
+    //                 .get(view_id)
+    //                 .map(|v| {
+    //                     v.widget_state()
+    //                         .read_untracked(|s| s.get_transform(screen))
+    //                 })
+    //         })
+    //         .collect()
+    // }
+
+    pub(crate) fn get_render_components(
+        &self,
+        root_id: &ViewId,
+        screen: Size<f32>
+    ) -> Vec<(RwSignal<Element>, RwSignal<Vertices>, Matrix3x2, Option<Box<dyn Fn() -> ImageData>>)> {
+        self.get_all_members_of(root_id)
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, view_id)| {
+                self.storage
+                    .borrow()
+                    .get(view_id)
+                    .map(|view| {
+                        view.node.0.update(|elem| elem.set_transform_id(idx as _));
+                        let image = self.image_fn.borrow_mut().remove(view_id);
+                        let element = view.node.0;
+                        let vertices = view.vertices;
+                        let transform = view.widget_state.get_transform(screen);
+                        (element, vertices, transform, image)
+                    })
+            })
+            .collect()
+    }
+}
+
+pub trait IntoView: Widget {
+    fn into_view(self) -> View;
+}
+
+impl<T: Widget + 'static> IntoView for T {
+    fn into_view(self) -> View {
+        View::new(self)
+    }
+}
+
+impl Widget for Box<dyn IntoView> {
+    fn id(&self) -> ViewId {
+        self.as_ref().id()
+    }
+
+    fn widget_state(&self) -> WidgetState {
+        self.as_ref().widget_state()
+    }
+
+    fn node(&self) -> Node {
+        self.as_ref().node()
+    }
+}
+
+/// wrapper over [`Widget`] trait to be stored inside [`ViewStorage`]
+pub struct View {
+    node: Node,
+    widget_state: WidgetState,
+    vertices: RwSignal<Vertices>,
+}
+
+impl View {
+    fn new(widget: impl IntoView + 'static) -> Self {
+        Self {
+            node: widget.node(),
+            widget_state: widget.widget_state(),
+            vertices: RwSignal::new(Vertices::new()),
+        }
+    }
+
+    pub(crate) fn window(size: Size<u32>) -> Self {
+        let window_state = WidgetState::window(size);
+        Self {
+            node: Node::new(),
+            widget_state: window_state,
+            vertices: RwSignal::new(Vertices::new()),
+        }
+    }
+
+    pub(crate) fn widget_state(&self) -> WidgetState {
+        self.widget_state
+    }
+}
+
+impl std::fmt::Debug for View {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = self
+            .widget_state()
+            .name
+            .read_untracked(|s| *s);
+
+        f.debug_struct("View")
+            .field("name", &name)
+            .finish()
+    }
+}
+
+/// main building block to create a renderable component
+pub trait Widget {
+    fn id(&self) -> ViewId;
+    fn widget_state(&self) -> WidgetState;
+    fn node(&self) -> Node;
+}
+
+// pub struct Callbacks {
+//     on_click: Option<Box<dyn Fn()>>,
+// }
+
+// impl Callbacks {
+//     pub(crate) fn new() -> Self {
+//         Self {
+//             on_click: None,
+//         }
+//     }
+
+//     pub(crate) fn set_on_click(&mut self, f: impl Fn() + 'static) {
+//         self.on_click = Some(Box::new(f));
+//     }
+
+//     pub(crate) fn invoke_on_click(&self) {
+//         if let Some(on_click) = self.on_click.as_ref() {
+//             on_click()
+//         }
+//     }
+// }
+
+pub struct TestCircleWidget {
+    id: ViewId,
+    node: Node,
+    state: WidgetState,
+}
+
+impl TestCircleWidget {
+    pub fn new() -> Self {
+        let id = VIEW_STORAGE.with(|s| s.create_entity());
+        let node = Node::new()
+            .with_shape(Shape::Circle)
+            .with_stroke_width(5);
+        let state = WidgetState::new()
+            .with_name("Circle")
+            .with_size((100, 100));
+
+        Self {
+            id,
+            node,
+            state,
+        }
+    }
+
+    pub fn append_child(self, child: impl IntoView) -> Self {
+        VIEW_STORAGE.with(|s| s.append_child(&self.id, child));
+        self
+    }
+
+    pub fn and(self, sibling: impl IntoView) -> Self {
+        VIEW_STORAGE.with(|s| s.add_sibling(&self.id, sibling));
+        self
+    }
+
+    pub fn state(self, f: impl Fn(&WidgetState) + 'static) -> Self {
+        f(&self.state);
         self
     }
 }
 
-#[derive(Clone)]
-pub struct TestCircleWidget {
-    properties: Properties,
-}
+impl Widget for TestCircleWidget {
+    fn id(&self) -> ViewId {
+        self.id
+    }
 
-impl TestCircleWidget {
-    pub fn new(cx: &mut Context) -> View<Self> {
-        let properties = Properties::new()
-            .with_size((100, 100))
-            .with_shape(Shape::Circle)
-            .with_fill_color(Rgba::RED);
-        Self { properties }.into_view(cx, |_| {})
+    fn widget_state(&self) -> WidgetState {
+        self.state
+    }
+
+    fn node(&self) -> Node {
+        self.node.clone()
     }
 }
 
-impl IntoView for TestCircleWidget {
-    fn debug_name(&self) -> Option<&'static str> { Some("TestCircleWidget") }
-    fn properties(&self) -> Properties { self.properties }
+/// refcounted non reactive T which may needs to be updated by reactive system
+pub struct Node(RwSignal<Element>);
+
+impl Node {
+    pub fn new() -> Self {
+        Self(RwSignal::new(Element::new()))
+    }
+
+    pub(crate) fn get(&self) -> Element {
+        self.0.read_untracked(|el| *el)
+    }
+
+    pub fn with_fill_color(self, color: Rgba<u8>) -> Self {
+        self.set_fill_color(color);
+        self
+    }
+
+    pub fn with_stroke_color(self, color: Rgba<u8>) -> Self {
+        self.set_stroke_color(color);
+        self
+    }
+
+    pub fn with_stroke_width(self, val: u32) -> Self {
+        self.set_stroke_width(val);
+        self
+    }
+
+    pub fn with_shape(self, shape: Shape) -> Self {
+        self.set_shape(shape);
+        self
+    }
+
+    pub fn with_rotation(self, val: f32) -> Self {
+        self.set_rotation(val);
+        self
+    }
+
+    pub fn with_corner_radius(self, val: CornerRadius) -> Self {
+        self.set_corner_radius(val);
+        self
+    }
+
+    pub(crate) fn set_fill_color(&self, color: Rgba<u8>) {
+        self.0.update(|el| el.set_fill_color(color));
+    }
+
+    pub(crate) fn set_stroke_color(&self, color: Rgba<u8>) {
+        self.0.update(|el| el.set_stroke_color(color));
+    }
+
+    pub(crate) fn set_stroke_width(&self, val: u32) {
+        self.0.update(|el| el.set_stroke_width(val));
+    }
+
+    pub(crate) fn set_shape(&self, shape: Shape) {
+        self.0.update(|el| el.set_shape(shape));
+    }
+
+    pub(crate) fn set_rotation(&self, val: f32) {
+        self.0.update(|el| el.set_rotation(val));
+    }
+
+    pub(crate) fn set_corner_radius(&self, val: CornerRadius) {
+        self.0.update(|el| el.set_corner_radius(val));
+    }
 }
 
-// #[derive(Clone)]
-// pub struct TestTriangleWidget {
-//     properties: Properties,
-// }
+impl Clone for Node {
+    fn clone(&self) -> Self {
+        Self(self.0)
+    }
+}
 
-// impl TestTriangleWidget {
-//     pub fn new(cx: &mut Context) -> View<Self> {
-//         let properties = Properties::new()
-//             .with_size((300, 300))
-//             .with_shape(Shape::Triangle)
-//             .with_fill_color(Rgba::RED);
-//         Self { properties }.into_view(cx, |_| {})
-//     }
-// }
+/// this is just a wrapper over `FnMut(Option<T>) -> T`
+pub trait FnEl<T>: FnMut(Option<T>) -> T {}
 
-// impl IntoView for TestTriangleWidget {
-//     fn debug_name(&self) -> Option<&'static str> { Some("TestTriangleWidget") }
-//     fn properties(&self) -> Properties { self.properties }
-// }
+impl<F, T> FnEl<T> for F where F: FnMut(Option<T>) -> T {}
+
+/// trait to modify the rendered element
+pub trait Style: Widget + Sized {
+    fn set_color<F>(self, mut f: F) -> Self
+    where
+        F: FnEl<Rgba<u8>> + 'static,
+    {
+        let node = self.node();
+        Effect::new(move |prev| {
+            let color = f(prev);
+            node.set_fill_color(color);
+            color
+        });
+        self
+    }
+
+    fn set_stroke_color<F>(self, mut f: F) -> Self
+    where
+        F: FnEl<Rgba<u8>> + 'static
+    {
+        let node = self.node();
+        Effect::new(move |prev| {
+            let color = f(prev);
+            node.set_stroke_color(color);
+            color
+        });
+        self
+    }
+
+    fn set_hover_color<F>(self, mut f: F) -> Self
+    where
+        F: FnEl<Rgba<u8>> + 'static
+    {
+        let hoverable = self.widget_state().hoverable;
+        hoverable.write_untracked(|val| *val = true);
+
+        let node = self.node();
+        let init_color = node.0.read_untracked(|elem| elem.fill_color());
+        let dirty = VIEW_STORAGE.with(|s| s.dirty);
+        let is_hovered = self.widget_state().is_hovered;
+
+        Effect::new(move |prev| {
+            let color = f(prev);
+            if is_hovered.get() {
+                node.set_fill_color(color);
+            } else {
+                node.set_fill_color(init_color);
+            }
+            dirty.set(true);
+            color
+        });
+        self
+    }
+
+    fn set_click_color<F>(self, mut f: F) -> Self
+    where
+        F: FnEl<Rgba<u8>> + 'static,
+    {
+        let node = self.node();
+        let init_color = node.0.read_untracked(|elem| elem.fill_color());
+        let is_clicked = self.widget_state().is_clicked;
+        let dirty = VIEW_STORAGE.with(|s| s.dirty);
+
+        Effect::new(move |prev| {
+            let color = f(prev);
+            if is_clicked.get() {
+                node.set_fill_color(color);
+            } else {
+                node.set_fill_color(init_color);
+            }
+            dirty.set(true);
+            color
+        });
+        self
+    }
+
+    fn set_stroke_width<F>(self, mut f: F) -> Self
+    where
+        F: FnEl<u32> + 'static
+    {
+        let node = self.node();
+        Effect::new(move |prev| {
+            let val = f(prev);
+            node.set_stroke_width(val);
+            val
+        });
+        self
+    }
+
+    fn set_rotation<F>(self, mut f: F) -> Self
+    where
+        F: FnEl<f32> + 'static
+    {
+        let node = self.node();
+        Effect::new(move |prev| {
+            let val = f(prev);
+            node.set_rotation(val);
+            val
+        });
+        self
+    }
+
+    fn set_corners<F>(self, mut f: F) -> Self
+    where
+        F: FnEl<CornerRadius> + 'static
+    {
+        let node = self.node();
+        Effect::new(move |prev| {
+            let val = f(prev);
+            node.set_corner_radius(val);
+            val
+        });
+        self
+    }
+
+    fn set_shape<F>(self, mut f: F) -> Self
+    where
+        F: FnEl<Shape> + 'static
+    {
+        let node = self.node();
+        Effect::new(move |prev| {
+            let shape = f(prev);
+            node.set_shape(shape);
+            shape
+        });
+        self
+    }
+
+    fn set_size(self, size: impl Into<Size<u32>>) -> Self {
+        self.widget_state()
+            .rect
+            .write_untracked(|rect| rect.set_size(size.into()));
+        self
+    }
+
+    fn set_dragable(self, value: bool) -> Self {
+        self.widget_state()
+            .dragable
+            .write_untracked(|val| *val = value);
+        self
+    }
+}
+
+impl<T> Style for T where T: Widget + Sized {}

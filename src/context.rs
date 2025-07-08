@@ -1,253 +1,101 @@
 use std::collections::HashMap;
 
-use aplite_reactive::Effect;
-use aplite_types::{Size, Vector2};
-
-use aplite_renderer::ImageData;
-use aplite_renderer::Render;
+use aplite_reactive::*;
 use aplite_renderer::Renderer;
+use aplite_types::{Size, Vector2};
+use winit::window::WindowId;
+
+use crate::view::ViewId;
+use crate::view::VIEW_STORAGE;
 
 pub mod layout;
-pub(crate) mod properties;
+pub(crate) mod widget_state;
 pub(crate) mod cursor;
-pub(crate) mod tree;
 
-use properties::{AspectRatio, Properties};
-use tree::{Entity, NodeId, Tree};
+use widget_state::AspectRatio;
 use cursor::{Cursor, MouseAction, MouseButton};
 use layout::{
     LayoutContext,
     Orientation,
 };
 
-pub(crate) enum UpdateMode {
-    HoverColor(NodeId),
-    ClickColor(NodeId),
-    RevertColor(NodeId),
-    Transform(NodeId),
-    Size(NodeId),
-}
-
-type ImageFn = Box<dyn Fn() -> ImageData>;
-type StyleFn = Box<dyn Fn(&mut Properties)>;
-type ActionFn = Box<dyn Fn()>;
-
+// i think this one could be a reactive system too
 pub struct Context {
-    current: Option<NodeId>,
-    pub(crate) tree: Tree<NodeId>,
-    pub(crate) properties: Vec<Properties>,
-    image_fn: HashMap<NodeId, ImageFn>,
-    style_fn: HashMap<NodeId, StyleFn>,
-    callbacks: HashMap<NodeId, ActionFn>,
-    pub(crate) cursor: Cursor,
-    pending_update: Vec<UpdateMode>,
+    pub(crate) root_window: HashMap<ViewId, WindowId>,
+    cursor: Cursor,
 }
 
 impl Default for Context {
     fn default() -> Self {
         Self {
-            current: None,
-            tree: Default::default(),
-            properties: Vec::with_capacity(1024),
-            image_fn: HashMap::new(),
-            style_fn: HashMap::new(),
-            callbacks: HashMap::new(),
+            root_window: HashMap::new(),
             cursor: Cursor::new(),
-            pending_update: Vec::with_capacity(10),
         }
     }
 }
 
 impl Context {
-    pub(crate) fn new(size: Size<u32>) -> Self {
-        let mut cx = Self::default();
-        cx.tree.insert(NodeId::root(), None);
-        cx.properties.push(Properties::window_properties(size));
-        cx
-    }
-
-    // pub(crate) fn add_view<F, IV>(&mut self, view_fn: F)
-    // where
-    //     F: Fn() -> IV + 'static,
-    //     IV: crate::view::IntoView + 'static,
-    // {
-    //     Effect::new(move |_| {
-    //         view_fn().into_view(self, |_| {});
-    //     });
-    // }
-}
-
-// ........................................................ //
-// ........................................................ //
-//                                                          //
-//                         Debug                            //
-//                                                          //
-// ........................................................ //
-// ........................................................ //
-
-#[cfg(feature = "debug_tree")]
-impl Context {
-    pub(crate) fn debug_tree(&self) {
-        self.print_children_from(NodeId::root());
-    }
-
-    pub(crate) fn print_children_from(&self, start: NodeId) {
-        eprintln!(" > {start:?}: {:?}", self.get_window_properties().name().unwrap_or_default());
-        if start == NodeId::root() {
-            self.recursive_print(None, 0);
-        } else {
-            self.recursive_print(Some(start), 0);
-        }
-    }
-
-    fn recursive_print(&self, start: Option<NodeId>, indent: usize) {
-        let acc = 3;
-        if let Some(current) = start {
-            if let Some(children) = self.tree.get_all_children(&current) {
-                children.iter().for_each(|child| {
-                    let prop = self.get_node_data(child);
-                    let data = prop.size();
-                    let name = prop.name().unwrap_or_default();
-                    if self.tree.get_parent(child).is_some_and(|p| self.tree.get_parent(p).is_some()) {
-                        for i in 0..(indent - acc)/acc {
-                            let c = acc - i;
-                            eprint!("{:c$}|", "");
-                        }
-                        let j = acc - 1;
-                        eprintln!("{:j$}╰─ {child:?}: {name:?} | {data:?}", "");
-                    } else {
-                        eprintln!("{:indent$}╰─ {child:?}: {name:?} | {data:?}", "");
-                    }
-                    if self.tree.get_first_child(child).is_some() {
-                        self.recursive_print(Some(*child), indent + acc);
-                    }
-                });
-            }
-        } else {
-            self.tree.get_all_ancestor()
-                .iter()
-                .for_each(|node| {
-                    let prop = self.get_node_data(*node);
-                    let data = prop.size();
-                    let name = prop.name().unwrap_or_default();
-                    eprintln!(" > {node:?}: {name:?} | {data:?}");
-                    if self.tree.get_first_child(node).is_some() {
-                        self.recursive_print(Some(**node), indent + acc);
-                    }
-                });
-        }
+    pub(crate) fn new() -> Self {
+        Self::default()
     }
 }
 
-// window
+// ########################################################
+// #                                                      #
+// #                        Data                          #
+// #                                                      #
+// ########################################################
+
 impl Context {
-    pub(crate) fn get_window_properties(&self) -> &Properties {
-        &self.properties[0]
+    pub(crate) fn dirty(&self) -> RwSignal<bool> {
+        VIEW_STORAGE.with(|s| s.dirty)
     }
 
-    pub(crate) fn update_window_properties<F: Fn(&mut Properties)>(&mut self, f: F) {
-        if let Some(prop) = self.properties.get_mut(0) {
-            f(prop);
-        }
+    pub(crate) fn toggle_dirty(&self) {
+        VIEW_STORAGE.with(|s| s.dirty.set(true))
+    }
+
+    pub(crate) fn toggle_clean(&self) {
+        VIEW_STORAGE.with(|s| s.dirty.set(false))
     }
 }
 
-// ........................................................ //
-// ........................................................ //
-//                                                          //
-//                          Data                            //
-//                                                          //
-// ........................................................ //
-// ........................................................ //
+// #########################################################
+// #                                                       #
+// #                        Layout                         #
+// #                                                       #
+// #########################################################
 
 impl Context {
-    pub(crate) fn create_entity(&self) -> NodeId {
-        self.tree.create_entity()
+    pub(crate) fn layout_the_whole_window(&self, root_id: &ViewId) {
+        self.calculate_size_recursive(root_id);
+        self.recursive_layout_from_id(root_id);
     }
 
-    pub(crate) fn current_entity(&self) -> Option<NodeId> {
-        self.current
-    }
-
-    pub(crate) fn set_current_entity(&mut self, entity: Option<NodeId>) {
-        self.current = entity;
-    }
-
-    pub(crate) fn insert(
-        &mut self,
-        node_id: NodeId,
-        parent: Option<NodeId>,
-        properties: Properties,
-    ) {
-        self.tree.insert(node_id, parent);
-        self.properties.push(properties);
-    }
-
-    pub(crate) fn add_image<F: Fn() -> ImageData + 'static>(&mut self, node_id: NodeId, f: F) {
-        self.image_fn.insert(node_id, Box::new(f));
-    }
-
-    pub(crate) fn add_style_fn<F: Fn(&mut Properties) + 'static>(&mut self, node_id: NodeId, style_fn: F) {
-        self.style_fn.insert(node_id, Box::new(style_fn));
-    }
-
-    pub(crate) fn add_callbacks<F: Fn() + 'static>(&mut self, node_id: NodeId, callback: F) {
-        self.callbacks.insert(node_id, Box::new(callback));
-    }
-
-    pub(crate) fn get_node_data(&self, node_id: &NodeId) -> &Properties {
-        &self.properties[node_id.index()]
-    }
-
-    pub(crate) fn get_node_data_mut(&mut self, node_id: &NodeId) -> &mut Properties {
-        &mut self.properties[node_id.index()]
-    }
-}
-
-// ........................................................ //
-// ........................................................ //
-//                                                          //
-//                          Layout                          //
-//                                                          //
-// ........................................................ //
-// ........................................................ //
-
-impl Context {
-    pub(crate) fn layout(&mut self) {
-        let ancestors = self.tree
-            .get_all_ancestor()
-            .iter()
-            .map(|node_id| **node_id)
-            .collect::<Vec<_>>();
-
-        ancestors
-            .iter()
-            .for_each(|node_id| {
-                self.calculate_size_recursive(node_id);
-            });
-
-        self.recursive_layout(&NodeId::root());
-    }
-
-    pub(crate) fn recursive_layout(&mut self, node_id: &NodeId) {
-        let children = LayoutContext::new(node_id, self).calculate();
-        if node_id !=&NodeId::root() { self.pending_update.push(UpdateMode::Transform(*node_id)) }
+    pub(crate) fn recursive_layout_from_id(&self, id: &ViewId) {
+        let children = LayoutContext::new(id).calculate();
         if let Some(children) = children {
-            children.iter().for_each(|child| self.recursive_layout(child));
+            children.iter().for_each(|child| self.recursive_layout_from_id(child));
         }
+        self.toggle_dirty();
     }
 
-    fn calculate_size_recursive(&mut self, node_id: &NodeId) -> Size<u32> {
-        let prop = *self.get_node_data(node_id);
-        let padding = prop.padding();
-        let mut size = prop.size();
+    fn calculate_size_recursive(&self, id: &ViewId) -> Size<u32> {
+        let widget_state = VIEW_STORAGE.with(|s| s.get_widget_state(id));
+        let padding = widget_state.padding();
+        let mut size = widget_state.rect.read_untracked(|rect| rect.size());
 
         let mut resized = false;
 
-        if let Some(children) = self.tree.get_all_children(node_id) {
+        let maybe_children = VIEW_STORAGE.with(|s| {
+            s.tree.borrow()
+                .get_all_children(id)
+                .map(|v| v.iter().map(|c| **c).collect::<Vec<_>>())
+        });
+        if let Some(children) = maybe_children {
             children.iter().for_each(|child_id| {
                 let child_size = self.calculate_size_recursive(child_id);
-                match prop.orientation() {
+                match widget_state.orientation() {
                     Orientation::Vertical => {
                         size.add_height(child_size.height());
                         size.set_width(size.width().max(child_size.width() + padding.horizontal()));
@@ -259,8 +107,8 @@ impl Context {
                 }
             });
             let child_len = children.len() as u32;
-            let stretch = prop.spacing() * (child_len - 1);
-            match prop.orientation() {
+            let stretch = widget_state.spacing() * (child_len - 1);
+            match widget_state.orientation() {
                 Orientation::Vertical => {
                     size.add_height(padding.vertical() + stretch);
                 },
@@ -270,216 +118,153 @@ impl Context {
             }
         }
 
-        if let AspectRatio::Defined(tuple) = prop.image_aspect_ratio() {
-            if let Some(parent) = self.tree.get_parent(node_id) {
-                match self.get_node_data(parent).orientation() {
-                    Orientation::Vertical => size.adjust_height(tuple.into()),
-                    Orientation::Horizontal => size.adjust_width(tuple.into()),
+        if let AspectRatio::Defined(tuple) = widget_state.image_aspect_ratio() {
+            VIEW_STORAGE.with(|s| {
+                if let Some(parent) = s.tree.borrow().get_parent(id) {
+                    match s.get_widget_state(parent).orientation() {
+                        Orientation::Vertical => size.adjust_height(tuple.into()),
+                        Orientation::Horizontal => size.adjust_width(tuple.into()),
+                    }
+                } else {
+                    size.adjust_width(tuple.into());
                 }
-            } else {
-                size.adjust_width(tuple.into());
-            }
-            self.get_node_data_mut(node_id).set_size(size);
-            self.pending_update.push(UpdateMode::Size(*node_id));
+            });
+            widget_state.rect.write_untracked(|rect| rect.set_size(size));
         }
 
         let final_size = size
-            .max(prop.min_width(), prop.min_height())
-            .min(prop.max_width(), prop.max_height());
+            .max(widget_state.min_width(), widget_state.min_height())
+            .min(widget_state.max_width(), widget_state.max_height());
 
-        resized |= final_size != prop.size();
+        resized |= final_size != widget_state.rect.read_untracked(|rect| rect.size());
 
         if resized {
-            self.get_node_data_mut(node_id).set_size(final_size);
-            self.pending_update.push(UpdateMode::Size(*node_id));
+            widget_state.rect.write_untracked(|state| state.set_size(final_size));
         }
+
         final_size
     }
 }
 
-// ........................................................ //
-// ........................................................ //
-//                                                          //
-//                          Cursor                          //
-//                                                          //
-// ........................................................ //
-// ........................................................ //
+// #########################################################
+// #                                                       #
+// #                     Cursor Event                      #
+// #                                                       #
+// #########################################################
 
 impl Context {
-    pub(crate) fn handle_mouse_move(&mut self, pos: impl Into<Vector2<f32>>) {
-        if self.properties.len() <= 1 { return }
+    pub(crate) fn handle_mouse_move(&mut self, root_id: &ViewId, pos: impl Into<Vector2<f32>>) {
+        VIEW_STORAGE.with(|s| {
+            if s.get_all_members_of(root_id).is_empty() { return }
+        });
         self.cursor.hover.pos = pos.into();
 
         #[cfg(feature = "cursor_stats")] let start = std::time::Instant::now();
-        self.detect_scope();
-
-        if let Some(scope) = self.cursor.scope {
-            self.detect_hovered_child(scope);
-        } else {
-            self.cursor.hover.prev = self.cursor.hover.curr.take();
-        }
+        self.detect_hover();
         #[cfg(feature = "cursor_stats")] eprintln!("{:?}", start.elapsed());
 
         self.handle_hover();
     }
 
-    fn detect_scope(&mut self) {
-        if let Some(current) = self.cursor.hover.curr.as_ref() {
-            if let Some(scope) = self.cursor.scope.as_ref() {
-                if self.tree.is_member_of(current, scope) { return }
-            }
-        }
-        self.cursor.scope = self
-            .tree
-            .iter()
-            .skip(1)
-            .filter_map(|node| {
-                if self.get_node_data(node.id()).is_hovered(self.cursor.hover.pos) {
-                    Some(*node.id())
-                } else {
-                    None
-                }
-            }).max();
-    }
-
-    fn detect_hovered_child(&mut self, scope: NodeId) {
-        let mut curr = scope;
-        while let Some(children) = self.tree.get_all_children(&curr) {
-            if let Some(hovered) = children.iter().find(|child| {
-                self.get_node_data(child).is_hovered(self.cursor.hover.pos)
-            }) {
-                curr = *hovered;
-            } else {
-                break
-            }
-        }
-
+    fn detect_hover(&mut self) {
         if self.cursor.click.obj.is_none() {
-            self.cursor.hover.prev = self.cursor.hover.curr;
-            self.cursor.hover.curr = Some(curr);
+            VIEW_STORAGE.with(|s| {
+                s.hoverable
+                    .borrow()
+                    .iter()
+                    .for_each(|id| {
+                        let state = s.get_widget_state(id);
+                        state.detect_hover(&mut self.cursor, id);
+                    });
+            })
         }
     }
-}
 
-// ........................................................ //
-// ........................................................ //
-//                                                          //
-//                     Event Handling                       //
-//                                                          //
-// ........................................................ //
-// ........................................................ //
-
-impl Context {
     pub(crate) fn handle_hover(&mut self) {
         if self.cursor.is_idling() || self.cursor.is_unscoped() { return }
 
-        if let Some(prev_id) = self.cursor.hover.prev.take() {
-            self.pending_update.push(UpdateMode::RevertColor(prev_id));
-        }
         if let Some(hover_id) = self.cursor.hover.curr {
-            self.pending_update.push(UpdateMode::HoverColor(hover_id));
-            let dragable = self.get_node_data(&hover_id).is_dragable();
+            let dragable = VIEW_STORAGE.with(|s| {
+                s.get_widget_state(&hover_id)
+                    .dragable
+                    .read_untracked(|val| *val)
+            });
             if self.cursor.is_dragging(&hover_id) && dragable {
                 self.handle_drag(&hover_id);
             }
         }
     }
 
-    fn handle_drag(&mut self, hover_id: &NodeId) {
+    fn handle_drag(&mut self, hover_id: &ViewId) {
         let pos = self.cursor.hover.pos - self.cursor.click.offset;
-        self.get_node_data_mut(hover_id).set_position(pos.into());
-        self.recursive_layout(hover_id);
+        VIEW_STORAGE.with(|s| s.get_widget_state(hover_id).rect)
+            .write_untracked(|rect| rect.set_pos(pos.into()));
+        self.recursive_layout_from_id(hover_id);
     }
 
     pub(crate) fn handle_click(&mut self, action: impl Into<MouseAction>, button: impl Into<MouseButton>) {
         self.cursor.set_click_state(action.into(), button.into());
-        if let Some(click_id) = self.cursor.click.obj {
-            if let Some(callback) = self.callbacks.get(&click_id) {
-                callback();
-            }
-            let props = self.get_node_data(&click_id);
-            self.cursor.click.offset = self.cursor.click.pos - Vector2::<f32>::from(props.pos());
-            self.pending_update.push(UpdateMode::ClickColor(click_id));
+        if let Some(click_id) = self.cursor.click.obj.as_ref() {
+            VIEW_STORAGE.with(|s| {
+                s.invoke_callback(click_id);
+
+                let state = s.get_widget_state(click_id);
+                let rect = state.rect;
+                let pos = rect.read_untracked(|rect| rect.pos().f32());
+                self.cursor.click.offset = self.cursor.click.pos - pos;
+                state.is_clicked.write_untracked(|val| *val = true);
+            });
         }
         if self.cursor.state.action == MouseAction::Released {
-            if let Some(hover_id) = self.cursor.hover.curr {
-                self.pending_update.push(UpdateMode::HoverColor(hover_id));
+            if let Some(hover_id) = self.cursor.hover.curr.as_ref() {
+                VIEW_STORAGE.with(|s| {
+                    s.get_widget_state(hover_id)
+                        .is_clicked
+                        .write_untracked(|val| *val = false);
+                })
             }
         }
     }
 }
 
-// ........................................................ //
-// ........................................................ //
-//                                                          //
-//                        Render                            //
-//                                                          //
-// ........................................................ //
-// ........................................................ //
+// #########################################################
+// #                                                       #
+// #                         Render                        #
+// #                                                       #
+// #########################################################
 
 impl Context {
-    pub(crate) fn has_changed(&self) -> bool {
-        !self.pending_update.is_empty()
-    }
+    pub(crate) fn render(&self, root_id: ViewId, renderer: &mut Renderer) {
+        VIEW_STORAGE.with(|s| {
+            renderer.begin();
 
-    pub(crate) fn submit_update(&mut self, renderer: &mut Renderer) {
-        self.pending_update.iter().for_each(|mode| {
-            match mode {
-                UpdateMode::HoverColor(node_id) => {
-                    if let Some(color) = self.get_node_data(node_id).hover_color() {
-                        renderer.update_element_color(node_id.index() - 1, color);
+            let screen = renderer.screen_size();
+            let components = s.get_render_components(&root_id, screen);
+
+            let mut elements = Vec::with_capacity(components.len());
+            let mut transforms = Vec::with_capacity(components.len());
+            let mut mesh = Vec::with_capacity(components.len() * 4);
+
+            components.iter().enumerate().for_each(|(idx, (elem, vert, mat, img))| {
+                let info = img.as_ref().map(|image_fn| renderer.push_atlas(image_fn)).flatten();
+                if let Some(info) = info {
+                    if let Some(uv) = info.get_uv() {
+                        vert.write_untracked(|vertices| vertices.set_uv(uv));
                     }
-                },
-                UpdateMode::ClickColor(node_id) => {
-                    if let Some(color) = self.get_node_data(node_id).click_color() {
-                        renderer.update_element_color(node_id.index() - 1, color);
-                    }
-                }
-                UpdateMode::RevertColor(node_id) => {
-                    let color = self.get_node_data(node_id).fill_color();
-                    renderer.update_element_color(node_id.index() - 1, color);
-                }
-                UpdateMode::Transform(node_id) => {
-                    let rect = self.get_node_data(node_id).rect();
-                    renderer.update_element_transform(node_id.index() - 1, rect);
-                }
-                UpdateMode::Size(node_id) => {
-                    let rect = self.get_node_data(node_id).rect();
-                    renderer.update_element_size(node_id.index() - 1, rect.size());
-                }
-            }
-        });
-        self.pending_update.clear();
-        renderer.write_data();
-    }
-}
+                    let atlas_id = info.get_atlas_id().unwrap_or(-1);
+                    let image_id = info.get_image_id().unwrap_or(-1);
+                    elem.update(|elem| {
+                        elem.set_atlas_id(atlas_id);
+                        elem.set_image_id(image_id);
+                    });
+                };
+                vert.write_untracked(|v| v.set_id(idx as _));
+                transforms.push(*mat);
+                elements.push(elem.read_untracked(|el| *el));
+                mesh.extend_from_slice(&vert.read_untracked(|v| *v));
+            });
 
-impl Render for Context {
-    fn render(&self, renderer: &mut Renderer) {
-        self.tree.iter().skip(1).for_each(|node| {
-            if let Some(image_fn) = self.image_fn.get(node.id()) {
-                // if node.id().index() == 3 {
-                //     let info = renderer.push_image(image_fn);
-                //     let prop = self.get_node_data(node.id());
-                //     renderer.add_component(prop, Some(info));
-                // } else {
-                //     let info = renderer.push_atlas(image_fn);
-                //     let prop = self.get_node_data(node.id());
-                //     renderer.add_component(prop, info);
-                // }
-
-                if let Some(info) = renderer.push_atlas(image_fn) {
-                    let prop = self.get_node_data(node.id());
-                    renderer.add_component(prop, Some(info));
-                } else {
-                    let info = renderer.push_image(image_fn);
-                    let prop = self.get_node_data(node.id());
-                    renderer.add_component(prop, Some(info));
-                }
-            } else {
-                let prop = self.get_node_data(node.id());
-                renderer.add_component(prop, None);
-            }
+            renderer.submit_data_batched(&elements, &transforms, &mesh);
         });
     }
 }

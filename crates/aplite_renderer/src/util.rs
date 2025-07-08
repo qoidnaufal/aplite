@@ -1,21 +1,5 @@
-use aplite_types::{Rect, Rgba};
-
 use super::shader::{create_shader, VERTEX, SDF, FRAGMENT};
 use super::gpu::Gpu;
-use super::element::{CornerRadius, Shape};
-use super::Renderer;
-
-pub trait RenderElementSource: Sized {
-    fn fill_color(&self) -> Rgba<f32>;
-    fn stroke_color(&self) -> Rgba<f32>;
-    fn rect(&self) -> Rect<f32>;
-    fn corners(&self) -> CornerRadius;
-    fn shape(&self) -> Shape;
-    fn rotation(&self) -> f32;
-    fn stroke_width(&self) -> f32;
-}
-
-pub trait Render { fn render(&self, renderer: &mut Renderer); }
 
 pub(crate) struct Sampler {
     pub(crate) bind_group: wgpu::BindGroup,

@@ -17,10 +17,10 @@ struct Radius {
 
 fn scale_radius(r: Radius, ew: f32) -> Radius {
     var ret: Radius;
-    ret.top_left = (r.top_left * ew / (100.0 * 2.0)) / screen_s.x;
-    ret.bot_left = (r.bot_left * ew / (100.0 * 2.0)) / screen_s.x;
-    ret.bot_right = (r.bot_right * ew / (100.0 * 2.0)) / screen_s.x;
-    ret.top_right = (r.top_right * ew / (100.0 * 2.0)) / screen_s.x;
+    ret.top_left = (r.top_left * ew / (100.0 * 2.0));
+    ret.bot_left = (r.bot_left * ew / (100.0 * 2.0));
+    ret.bot_right = (r.bot_right * ew / (100.0 * 2.0));
+    ret.top_right = (r.top_right * ew / (100.0 * 2.0));
     return ret;
 }
 
@@ -28,7 +28,6 @@ struct Element {
     color: vec4<f32>,
     stroke_color: vec4<f32>,
     radius: Radius,
-    size: vec2<f32>,
     shape: u32,
     rotate: f32,
     stroke_width: f32,
@@ -109,7 +108,8 @@ fn sdSegment(p: vec2f, a: vec2f, b: vec2f) -> f32 {
 }
 
 fn sdf(uv: vec2<f32>, element: Element, stroke_width: f32) -> f32 {
-    let size = element.size / screen_s;
+    let transform = transforms[element.transform_id];
+    let size = vec2f(transform[0].x, transform[1].y);
 
     switch element.shape {
         case 0u: {
@@ -125,7 +125,7 @@ fn sdf(uv: vec2<f32>, element: Element, stroke_width: f32) -> f32 {
         case 2u: {
             let p = uv * size;
             let b = size - stroke_width;
-            let r = scale_radius(element.radius, element.size.x);
+            let r = scale_radius(element.radius, size.x);
             return sdRoundedRect(p, b, r);
         }
         default: { return -1.0; }

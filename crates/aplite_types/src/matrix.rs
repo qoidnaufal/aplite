@@ -33,7 +33,7 @@ impl<const M: usize, const N: usize, T: GpuPrimitive + NumDebugger> std::fmt::De
             }
             s.push_str(suffix);
         }
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 

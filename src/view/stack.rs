@@ -1,63 +1,121 @@
 use aplite_types::Rgba;
 use aplite_renderer::Shape;
 
-use crate::prelude::Orientation;
-use crate::context::Context;
-use crate::context::properties::Properties;
+use crate::{context::widget_state::WidgetState, prelude::Orientation};
 
-use super::{IntoView, View};
+use super::{IntoView, Node, ViewId, Widget, VIEW_STORAGE};
 
-pub fn v_stack<F>(cx: &mut Context, child_view: F) -> View<VStack>
-where F: FnOnce(&mut Context),
-{
-    VStack::new(cx, child_view)
+pub fn v_stack<F>() -> VStack {
+    VStack::new()
 }
 
 pub struct VStack {
-    properties: Properties,
+    id: ViewId,
+    node: Node,
+    state: WidgetState,
 }
 
 impl VStack {
-    pub fn new<F>(cx: &mut Context, child_view: F) -> View<Self>
-    where
-        F: FnOnce(&mut Context)
-    {
-        let properties = Properties::new()
-            .with_shape(Shape::Rect)
-            .with_fill_color(Rgba::DARK_GRAY);
-        Self { properties }.into_view(cx, child_view)
+    pub fn new() -> Self {
+        let id = VIEW_STORAGE.with(|s| s.create_entity());
+        let node = Node::new()
+            .with_fill_color(Rgba::DARK_GRAY)
+            .with_shape(Shape::Rect);
+        let state = WidgetState::new()
+            .with_name("VStack")
+            .with_size((1, 1));
+
+        Self {
+            id,
+            node,
+            state,
+        }
+    }
+
+    pub fn append_child(self, child: impl IntoView) -> Self {
+        VIEW_STORAGE.with(|s| s.append_child(&self.id, child));
+        self
+    }
+
+    pub fn and(self, sibling: impl IntoView) -> Self {
+        VIEW_STORAGE.with(|s| s.add_sibling(&self.id, sibling));
+        self
+    }
+
+    pub fn state(mut self, mut f: impl FnMut(&mut WidgetState) + 'static) -> Self {
+        f(&mut self.state);
+        self
     }
 }
 
-impl IntoView for VStack {
-    fn debug_name(&self) -> Option<&'static str> { Some("VStack") }
-    fn properties(&self) -> Properties { self.properties }
+impl Widget for VStack {
+    fn id(&self) -> ViewId {
+        self.id
+    }
+
+    fn widget_state(&self) -> WidgetState {
+        self.state
+    }
+
+    fn node(&self) -> Node {
+        self.node.clone()
+    }
 }
 
-pub fn h_stack<F>(cx: &mut Context, child_view: F) -> View<HStack>
-where F: FnOnce(&mut Context),
-{
-    HStack::new(cx, child_view)
+pub fn h_stack<F>() -> HStack {
+    HStack::new()
 }
 
 pub struct HStack {
-    properties: Properties,
+    id: ViewId,
+    node: Node,
+    state: WidgetState,
 }
 
 impl HStack {
-    pub fn new<F>(cx: &mut Context, child_view: F) -> View<Self>
-    where
-        F: FnOnce(&mut Context)
-    {
-        let properties = Properties::new()
-            .with_shape(Shape::Rect)
+    pub fn new() -> Self {
+        let id = VIEW_STORAGE.with(|s| s.create_entity());
+        let node = Node::new()
+            .with_fill_color(Rgba::DARK_GRAY)
+            .with_shape(Shape::Rect);
+        let state = WidgetState::new()
             .with_orientation(Orientation::Horizontal)
-            .with_fill_color(Rgba::DARK_GRAY);
-        Self { properties }.into_view(cx, child_view)
+            .with_name("HStack")
+            .with_size((1, 1));
+
+        Self {
+            id,
+            node,
+            state,
+        }
+    }
+
+    pub fn append_child(self, child: impl IntoView) -> Self {
+        VIEW_STORAGE.with(|s| s.append_child(&self.id, child));
+        self
+    }
+
+    pub fn and(self, sibling: impl IntoView) -> Self {
+        VIEW_STORAGE.with(|s| s.add_sibling(&self.id, sibling));
+        self
+    }
+
+    pub fn state(mut self, mut f: impl FnMut(&mut WidgetState) + 'static) -> Self {
+        f(&mut self.state);
+        self
     }
 }
 
-impl IntoView for HStack {
-    fn debug_name(&self) -> Option<&'static str> { Some("HStack") }
-    fn properties(&self) -> Properties { self.properties }
+impl Widget for HStack {
+    fn id(&self) -> ViewId {
+        self.id
+    }
+
+    fn widget_state(&self) -> WidgetState {
+        self.state
+    }
+
+    fn node(&self) -> Node {
+        self.node.clone()
+    }
 }

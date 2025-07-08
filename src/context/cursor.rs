@@ -1,6 +1,7 @@
+use aplite_reactive::RwSignal;
 use aplite_types::Vector2;
 
-use super::tree::NodeId;
+use crate::view::ViewId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseAction {
@@ -50,19 +51,20 @@ pub struct MouseState {
 pub struct MouseClick {
     pub pos: Vector2<f32>,
     pub offset: Vector2<f32>,
-    pub obj: Option<NodeId>,
+    pub obj: Option<ViewId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MouseHover {
     pub pos: Vector2<f32>,
-    pub curr: Option<NodeId>,
-    pub prev: Option<NodeId>,
+    pub curr: Option<ViewId>,
+    pub prev: Option<ViewId>,
+    pub z_index: RwSignal<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Cursor {
-    pub scope: Option<NodeId>,
+    pub scope: Option<ViewId>,
     pub hover: MouseHover,
     pub state: MouseState,
     pub click: MouseClick,
@@ -76,6 +78,7 @@ impl Default for Cursor {
                 pos: Vector2::default(),
                 curr: None,
                 prev: None,
+                z_index: RwSignal::new(0),
             },
             state: MouseState {
                 action: MouseAction::Released,
@@ -112,7 +115,7 @@ impl Cursor {
         }
     }
 
-    pub(crate) fn is_dragging(&self, hover_id: &NodeId) -> bool {
+    pub(crate) fn is_dragging(&self, hover_id: &ViewId) -> bool {
         self.click.obj.is_some_and(|click_id| &click_id == hover_id)
             && self.hover.pos != self.click.pos
     }

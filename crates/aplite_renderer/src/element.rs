@@ -1,7 +1,4 @@
-use aplite_types::{Rgba, Size};
-
-use super::util::RenderElementSource;
-// use super::{Indices, RenderComponentSource};
+use aplite_types::Rgba;
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,7 +36,16 @@ impl From<u32> for CornerRadius {
 }
 
 impl CornerRadius {
-    pub const fn new_homogen(r: u32) -> Self {
+    pub const fn new(tl: u32, bl: u32, br: u32, tr: u32) -> Self {
+        Self {
+            tl: tl as _,
+            bl: bl as _,
+            br: br as _,
+            tr: tr as _,
+        }
+    }
+
+    pub const fn homogen(r: u32) -> Self {
         Self {
             tl: r as _,
             bl: r as _,
@@ -80,12 +86,11 @@ impl CornerRadius {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone)]
-pub(crate) struct Element {
+#[derive(Debug, Clone, Copy)]
+pub struct Element {
     pub(crate) fill_color: Rgba<f32>,
     pub(crate) stroke_color: Rgba<f32>,
     pub(crate) corners: CornerRadius,
-    pub(crate) size: Size<f32>,
     pub(crate) shape: Shape,
     pub(crate) rotation: f32,
     pub(crate) stroke_width: f32,
@@ -95,19 +100,85 @@ pub(crate) struct Element {
 }
 
 impl Element {
-    pub(crate) fn new(rcs: &impl RenderElementSource) -> Self {
+    pub const fn new() -> Self {
         Self {
-            fill_color: rcs.fill_color(),
-            stroke_color: rcs.stroke_color(),
-            corners: rcs.corners(),
-            size: rcs.rect().size(),
-            shape: rcs.shape(),
-            rotation: rcs.rotation(),
-            stroke_width: rcs.stroke_width(),
+            fill_color: Rgba::new(1., 0., 0., 1.),
+            stroke_color: Rgba::new(1., 1., 1., 1.),
+            corners: CornerRadius::homogen(25),
+            shape: Shape::RoundedRect,
+            rotation: 0.0,
+            stroke_width: 0.0,
             image_id: -1,
             atlas_id: -1,
             transform_id: 0,
         }
+    }
+
+    pub fn circle() -> Self {
+        Self {
+            fill_color: Rgba::RED.into(),
+            stroke_color: Rgba::WHITE.into(),
+            corners: CornerRadius::homogen(25),
+            shape: Shape::Circle,
+            rotation: 0.0,
+            stroke_width: 0.0,
+            image_id: -1,
+            atlas_id: -1,
+            transform_id: 0,
+        }
+    }
+
+    pub fn rounded_rect() -> Self {
+        Self {
+            fill_color: Rgba::RED.into(),
+            stroke_color: Rgba::WHITE.into(),
+            corners: CornerRadius::homogen(25),
+            shape: Shape::RoundedRect,
+            rotation: 0.0,
+            stroke_width: 0.0,
+            image_id: -1,
+            atlas_id: -1,
+            transform_id: 0,
+        }
+    }
+
+    pub fn rect() -> Self {
+        Self {
+            fill_color: Rgba::RED.into(),
+            stroke_color: Rgba::WHITE.into(),
+            corners: CornerRadius::homogen(0),
+            shape: Shape::Rect,
+            rotation: 0.0,
+            stroke_width: 0.0,
+            image_id: -1,
+            atlas_id: -1,
+            transform_id: 0,
+        }
+    }
+
+    pub fn with_fill_color(mut self, color: Rgba<u8>) -> Self {
+        self.fill_color = color.into();
+        self
+    }
+
+    pub fn with_stroke_color(mut self, color: Rgba<u8>) -> Self {
+        self.stroke_color = color.into();
+        self
+    }
+
+    pub fn with_corner_radius(mut self, corner_radius: CornerRadius) -> Self {
+        self.corners = corner_radius;
+        self
+    }
+
+    pub fn with_rotation(mut self, rotation: f32) -> Self {
+        self.rotation = rotation;
+        self
+    }
+
+    pub fn with_stroke_width(mut self, width: f32) -> Self {
+        self.stroke_width = width;
+        self
     }
 
     pub(crate) fn with_transform_id(mut self, id: u32) -> Self {
@@ -125,11 +196,43 @@ impl Element {
         self
     }
 
-    pub(crate) fn set_color(&mut self, color: Rgba<u8>) {
+    pub fn set_fill_color(&mut self, color: Rgba<u8>) {
         self.fill_color = color.into();
     }
 
-    pub(crate) fn set_size(&mut self, size: Size<u32>) {
-        self.size = size.into();
+    pub fn set_stroke_color(&mut self, color: Rgba<u8>) {
+        self.stroke_color = color.into();
+    }
+
+    pub fn set_stroke_width(&mut self, val: u32) {
+        self.stroke_width = val as _;
+    }
+
+    pub fn set_rotation(&mut self, val: f32) {
+        self.rotation = val;
+    }
+
+    pub fn set_corner_radius(&mut self, val: CornerRadius) {
+        self.corners = val;
+    }
+
+    pub fn set_shape(&mut self, shape: Shape) {
+        self.shape = shape;
+    }
+
+    pub fn set_transform_id(&mut self, val: u32) {
+        self.transform_id = val;
+    }
+
+    pub fn set_image_id(&mut self, val: i32) {
+        self.image_id = val;
+    }
+
+    pub fn set_atlas_id(&mut self, val: i32) {
+        self.atlas_id = val;
+    }
+
+    pub fn fill_color(&self) -> Rgba<u8> {
+        self.fill_color.u8()
     }
 }

@@ -102,20 +102,20 @@ impl<K: Sized> Key<K> {
 }
 
 #[derive(Clone)]
-pub struct VecMap<K: Sized, V: Sized> {
+pub struct KVMap<K: Sized, V: Sized> {
     inner: Vec<Slot<V>>,
     free_slot: u32,
     count: u32,
     phantom: PhantomData<K>,
 }
 
-impl<K: Sized, V: Sized> Default for VecMap<K, V> {
+impl<K: Sized, V: Sized> Default for KVMap<K, V> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<K: Sized, V: Sized> std::ops::Index<Key<K>> for VecMap<K, V> {
+impl<K: Sized, V: Sized> std::ops::Index<Key<K>> for KVMap<K, V> {
     type Output = V;
     fn index(&self, key: Key<K>) -> &Self::Output {
         let slot = &self.inner[key.idx as usize];
@@ -127,7 +127,7 @@ impl<K: Sized, V: Sized> std::ops::Index<Key<K>> for VecMap<K, V> {
     }
 }
 
-impl<K: Sized, V: Sized> std::ops::IndexMut<Key<K>> for VecMap<K, V> {
+impl<K: Sized, V: Sized> std::ops::IndexMut<Key<K>> for KVMap<K, V> {
     fn index_mut(&mut self, key: Key<K>) -> &mut Self::Output {
         let slot = &mut self.inner[key.idx as usize];
         if key.version == slot.version {
@@ -138,7 +138,7 @@ impl<K: Sized, V: Sized> std::ops::IndexMut<Key<K>> for VecMap<K, V> {
     }
 }
 
-impl<K: Sized, V: Sized> VecMap<K, V> {
+impl<K: Sized, V: Sized> KVMap<K, V> {
     pub fn new() -> Self {
         Self::new_with_capacity(0)
     }
@@ -256,16 +256,16 @@ impl<K: Sized, V: Sized> VecMap<K, V> {
         self.free_slot = 0;
     }
 
-    pub fn iter(&self) -> VecMapIter<'_, K, V> {
+    pub fn iter(&self) -> KVMapIter<'_, K, V> {
         self.into_iter()
     }
 
-    pub fn iter_mut(&mut self) -> VecMapIterMut<'_, K, V> {
+    pub fn iter_mut(&mut self) -> KVMapIterMut<'_, K, V> {
         self.into_iter()
     }
 }
 
-impl<K: Sized, V: std::fmt::Debug> std::fmt::Debug for VecMap<K, V> {
+impl<K: Sized, V: std::fmt::Debug> std::fmt::Debug for KVMap<K, V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.count == 0 {
             write!(f, "[]")
@@ -285,13 +285,13 @@ impl<K: Sized, V: std::fmt::Debug> std::fmt::Debug for VecMap<K, V> {
     }
 }
 
-pub struct VecMapIter<'a, K, V> {
+pub struct KVMapIter<'a, K, V> {
     pub(crate) inner: Enumerate<Iter<'a, Slot<V>>>,
     pub(crate) counter: usize,
     pub(crate) phantom: PhantomData<K>,
 }
 
-impl<'a, K, V> Iterator for VecMapIter<'a, K, V> {
+impl<'a, K, V> Iterator for KVMapIter<'a, K, V> {
     type Item = (Key<K>, &'a V);
     fn next(&mut self) -> Option<Self::Item> {
         self.inner
@@ -310,12 +310,12 @@ impl<'a, K, V> Iterator for VecMapIter<'a, K, V> {
     }
 }
 
-impl<'a, K, V> IntoIterator for &'a VecMap<K, V> {
+impl<'a, K, V> IntoIterator for &'a KVMap<K, V> {
     type Item = (Key<K>, &'a V);
-    type IntoIter = VecMapIter<'a, K, V>;
+    type IntoIter = KVMapIter<'a, K, V>;
 
     fn into_iter(self) -> Self::IntoIter {
-        VecMapIter {
+        KVMapIter {
             inner: self.inner.iter().enumerate(),
             counter: self.len(),
             phantom: PhantomData
@@ -323,13 +323,13 @@ impl<'a, K, V> IntoIterator for &'a VecMap<K, V> {
     }
 }
 
-pub struct VecMapIterMut<'a, K, V> {
+pub struct KVMapIterMut<'a, K, V> {
     pub(crate) inner: Enumerate<IterMut<'a, Slot<V>>>,
     pub(crate) counter: usize,
     pub(crate) phantom: PhantomData<K>,
 }
 
-impl<'a, K, V> Iterator for VecMapIterMut<'a, K, V> {
+impl<'a, K, V> Iterator for KVMapIterMut<'a, K, V> {
     type Item = (Key<K>, &'a mut V);
     fn next(&mut self) -> Option<Self::Item> {
         self.inner
@@ -345,12 +345,12 @@ impl<'a, K, V> Iterator for VecMapIterMut<'a, K, V> {
     }
 }
 
-impl<'a, K, V> IntoIterator for &'a mut VecMap<K, V> {
+impl<'a, K, V> IntoIterator for &'a mut KVMap<K, V> {
     type Item = (Key<K>, &'a mut V);
-    type IntoIter = VecMapIterMut<'a, K, V>;
+    type IntoIter = KVMapIterMut<'a, K, V>;
 
     fn into_iter(self) -> Self::IntoIter {
-        VecMapIterMut {
+        KVMapIterMut {
             counter: self.len(),
             inner: self.inner.iter_mut().enumerate(),
             phantom: PhantomData,
@@ -367,14 +367,14 @@ mod vecmap {
 
     #[test]
     fn insert() {
-        let mut storage: VecMap<MyKey, u8> = VecMap::new();
+        let mut storage: KVMap<MyKey, u8> = KVMap::new();
         let key = storage.insert(69);
         assert_eq!(key.idx, 0)
     }
 
     #[test]
     fn get() {
-        let mut storage: VecMap<MyKey, u8> = VecMap::new();
+        let mut storage: KVMap<MyKey, u8> = KVMap::new();
         let key = storage.insert(69);
         let res = storage.get(&key).unwrap();
         assert_eq!(*res, 69)
@@ -382,7 +382,7 @@ mod vecmap {
 
     #[test]
     fn remove() {
-        let mut storage: VecMap<MyKey, u8> = VecMap::new();
+        let mut storage: KVMap<MyKey, u8> = KVMap::new();
         let mut keys = vec![];
         for i in 0..10u8 {
             let key = storage.insert(i);
@@ -409,7 +409,7 @@ mod vecmap {
 
     #[test]
     fn double_remove() {
-        let mut storage: VecMap<MyKey, u8> = VecMap::new();
+        let mut storage: KVMap<MyKey, u8> = KVMap::new();
         let mut keys = vec![];
         for i in 0..10u8 {
             let key = storage.insert(i);

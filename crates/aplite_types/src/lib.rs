@@ -2,11 +2,11 @@ mod color;
 mod fraction;
 mod matrix;
 mod size;
-mod traits;
+mod num_traits;
 mod vector;
 mod rect;
 
-pub use traits::*;
+pub use num_traits::*;
 pub use size::Size;
 pub use matrix::{Matrix4x4, Matrix3x2};
 pub use fraction::Fraction;

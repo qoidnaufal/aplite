@@ -1,32 +1,67 @@
+use aplite_reactive::*;
+use aplite_renderer::Shape;
 use aplite_types::Rgba;
-use crate::context::Context;
-use crate::context::properties::Properties;
+use crate::context::widget_state::WidgetState;
 
-use super::{IntoView, View};
+use super::{Node, IntoView, ViewId, Widget, VIEW_STORAGE};
 
-pub fn button(cx: &mut Context) -> View<Button> { Button::new(cx) }
+pub fn button() -> Button { Button::new() }
 
 pub struct Button {
-    properties: Properties,
+    id: ViewId,
+    node: Node,
+    state: WidgetState,
 }
 
 impl Button {
-    pub fn new(cx: &mut Context) -> View<Self> {
-        let properties = Properties::new()
-            .with_size((80, 30))
-            .with_fill_color(Rgba::RED);
-        Self { properties }.into_view(cx, |_| {})
-    }
-}
+    pub fn new() -> Self {
+        let id = VIEW_STORAGE.with(|s| s.create_entity());
+        let node = Node::new()
+            .with_fill_color(Rgba::RED)
+            .with_shape(Shape::RoundedRect);
+        let state = WidgetState::new()
+            .with_name("Button")
+            .with_size((80, 30));
+        state.hoverable.write_untracked(|val| *val = true);
 
-impl View<'_, Button> {
+        Self {
+            id,
+            node,
+            state,
+        }
+    }
+
+    pub fn append_child(self, child: impl IntoView) -> Self {
+        VIEW_STORAGE.with(|s| s.append_child(&self.id, child));
+        self
+    }
+
+    pub fn and(self, sibling: impl IntoView) -> Self {
+        VIEW_STORAGE.with(|s| s.add_sibling(&self.id, sibling));
+        self
+    }
+    
     pub fn on_click<F: Fn() + 'static>(self, f: F) -> Self {
-        self.cx.add_callbacks(self.id(), f);
+        VIEW_STORAGE.with(|s| s.add_on_click(self.id, f));
+        self
+    }
+
+    pub fn state(mut self, mut f: impl FnMut(&mut WidgetState) + 'static) -> Self {
+        f(&mut self.state);
         self
     }
 }
 
-impl IntoView for Button {
-    fn debug_name(&self) -> Option<&'static str> { Some("Button") }
-    fn properties(&self) -> Properties { self.properties }
+impl Widget for Button {
+    fn id(&self) -> ViewId {
+        self.id
+    }
+
+    fn widget_state(&self) -> WidgetState {
+        self.state
+    }
+
+    fn node(&self) -> Node {
+        self.node.clone()
+    }
 }

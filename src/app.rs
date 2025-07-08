@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use aplite_reactive::{Effect, Get};
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
@@ -8,11 +9,12 @@ use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::application::ApplicationHandler;
 
 use aplite_types::{Size, Rgba};
-use aplite_renderer::{Render, Renderer, RendererError};
+use aplite_renderer::{Renderer, RendererError};
 
 use crate::prelude::ApliteResult;
 use crate::context::Context;
 use crate::error::ApliteError;
+use crate::view::{IntoView, View, ViewId, VIEW_STORAGE};
 
 #[derive(Debug)]
 enum WinitSize {
@@ -23,7 +25,7 @@ enum WinitSize {
 pub(crate) const DEFAULT_SCREEN_SIZE: Size<u32> = Size::new(800, 600);
 
 pub struct WindowAttributes {
-    title: String,
+    title: &'static str,
     inner_size: Size<u32>,
     decorations: bool,
     transparent: bool,
@@ -34,7 +36,7 @@ pub struct WindowAttributes {
 impl Default for WindowAttributes {
     fn default() -> Self {
         Self {
-            title: "GUI App".into(),
+            title: "GUI App",
             inner_size: DEFAULT_SCREEN_SIZE,
             decorations: true,
             transparent: false,
@@ -45,8 +47,8 @@ impl Default for WindowAttributes {
 }
 
 impl WindowAttributes {
-    pub fn set_title(&mut self, title: impl Into<String>) {
-        self.title = title.into();
+    pub fn set_title(&mut self, title: &'static str) {
+        self.title = title;
     }
 
     pub fn set_inner_size(&mut self, size: impl Into<Size<u32>>) {
@@ -74,7 +76,7 @@ impl From<&WindowAttributes> for winit::window::WindowAttributes {
     fn from(w: &WindowAttributes) -> Self {
         Self::default()
             .with_inner_size::<winit::dpi::LogicalSize<u32>>(w.inner_size.into())
-            .with_title(&w.title)
+            .with_title(w.title)
             .with_decorations(w.decorations)
             .with_transparent(w.transparent)
             .with_maximized(w.maximized)
@@ -85,8 +87,9 @@ impl From<&WindowAttributes> for winit::window::WindowAttributes {
 pub struct Aplite {
     renderer: Option<Renderer>,
     cx: Context,
-    window: HashMap<WindowId, Arc<Window>>,
+    window: HashMap<WindowId, (ViewId, Arc<Window>)>,
     window_attributes: WindowAttributes,
+    views: Vec<Box<dyn FnOnce(WindowId) -> Box<dyn IntoView>>>,
 
     #[cfg(feature = "render_stats")]
     stats: aplite_stats::Stats,
@@ -94,19 +97,19 @@ pub struct Aplite {
 
 // user API
 impl Aplite {
-    pub fn new<F: FnOnce(&mut Context)>(view_fn: F) -> Self {
+    pub fn new<IV: IntoView + 'static>(view_fn: impl FnOnce() -> IV + 'static) -> Self {
         let mut app = Self::new_empty();
-        view_fn(&mut app.cx);
-        app.cx.layout();
+        app.views.push(Box::new(|_| Box::new(view_fn())));
         app
     }
 
     pub fn new_empty() -> Self {
         Self {
             renderer: None,
-            cx: Context::new(DEFAULT_SCREEN_SIZE),
+            cx: Context::new(),
             window: HashMap::with_capacity(4),
             window_attributes: WindowAttributes::default(),
+            views: Vec::with_capacity(4),
 
             #[cfg(feature = "render_stats")]
             stats: aplite_stats::Stats::new(),
@@ -125,42 +128,63 @@ impl Aplite {
         self
     }
 
-    pub fn set_background_color(mut self, color: Rgba<u8>) -> Self {
-        self.cx.update_window_properties(|prop| prop.set_fill_color(color));
-        self
-    }
+    // pub fn set_background_color(mut self, color: Rgba<u8>) -> Self {
+    //     self.cx.update_window_properties(|prop| prop.set_fill_color(color));
+    //     self
+    // }
 }
 
 // initialization
 impl Aplite {
-    fn initialize_window(&mut self, event_loop: &ActiveEventLoop) -> Result<Arc<Window>, ApliteError> {
+    fn initialize_window(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+    ) -> Result<(ViewId, Arc<Window>), ApliteError> {
         let attributes = &self.window_attributes;
         let window = event_loop.create_window(attributes.into())?;
-        let size: Size<u32> = window
-            .inner_size()
-            .to_logical(window.scale_factor())
-            .into();
+        let window_id = window.id();
 
-        self.cx.update_window_properties(|prop| {
-            prop.set_size(size);
-            prop.set_position((size / 2).into());
+        let view_id = VIEW_STORAGE.with(|s| {
+            let root = s.create_entity();
+
+            let size = window
+                .inner_size()
+                .to_logical(window.scale_factor());
+            let root_view = View::window(size.into());
+            s.storage.borrow_mut().insert(root, root_view);
+
+            self.cx.root_window.insert(root, window_id);
+
+            if let Some(view_fn) = self.views.pop() {
+                let view = view_fn(window_id);
+                s.append_child(&root, view);
+
+                self.cx.layout_the_whole_window(&root);
+
+                #[cfg(feature = "debug_tree")] eprintln!("{:?}", s.tree.borrow());
+            }
+
+            root
         });
 
-        Ok(Arc::new(window))
+        Ok((view_id, Arc::new(window)))
     }
 
     fn initialize_renderer(&mut self, window: Arc<Window>) -> Result<(), ApliteError> {
-        let mut renderer = Renderer::new(Arc::clone(&window))?;
-        self.cx.render(&mut renderer);
-
-        #[cfg(feature = "debug_tree")] self.cx.debug_tree();
-
+        let renderer = Renderer::new(Arc::clone(&window))?;
         self.renderer = Some(renderer);
         Ok(())
     }
 
-    fn add_window(&mut self, window: Arc<Window>) {
-        self.window.insert(window.id(), window);
+    fn add_window(&mut self, view_id: ViewId, window: Arc<Window>) {
+        let window_id = window.id();
+        self.window.insert(window_id, (view_id, Arc::clone(&window)));
+
+        let dirty = self.cx.dirty();
+        Effect::new(move |_| {
+            // FIXME: this should coresponds to which window_id
+            if dirty.get() { window.request_redraw() }
+        });
     }
 }
 
@@ -175,10 +199,6 @@ impl Aplite {
                     (logical.width, logical.height).into()
                 },
             };
-            self.cx.update_window_properties(|wp| {
-                wp.set_size(size);
-                wp.set_position((size / 2).into());
-            });
             renderer.resize(size);
         }
     }
@@ -189,42 +209,47 @@ impl Aplite {
         }
     }
 
-    fn request_redraw(&self, window_id: &WindowId) {
-        if let Some(window) = self.window.get(window_id) {
-            window.request_redraw();
-        }
-    }
+    // fn request_redraw(&self, window_id: &WindowId) {
+    //     if let Some((_, window)) = self.window.get(window_id) {
+    //         window.request_redraw();
+    //     }
+    // }
 
-    fn detect_update(&mut self, window_id: &WindowId) {
-        if self.cx.has_changed() {
-            self.request_redraw(window_id);
-        }
-    }
+    // fn detect_update(&mut self, window_id: &WindowId) {
+    //     if self.cx.has_changed() {
+    //         self.request_redraw(window_id);
+    //     }
+    // }
 
     fn handle_redraw_request(&mut self, window_id: &WindowId, event_loop: &ActiveEventLoop) {
-        if let Some(window) = self.window.get(window_id).cloned() {
-            self.submit_update();
+        if let Some((_, window)) = self.window.get(window_id).cloned() {
+            // FIXME: this method looks like a rebuilding to me
+            self.submit_update(&window_id);
+            window.pre_present_notify();
 
             #[cfg(feature = "render_stats")] let start = std::time::Instant::now();
 
-            self.render(event_loop, || window.pre_present_notify());
+            self.render(event_loop);
 
             #[cfg(feature = "render_stats")] self.stats.inc(start.elapsed())
         }
     }
 
-    fn submit_update(&mut self) {
+    fn submit_update(&mut self, window_id: &WindowId) {
         if let Some(renderer) = self.renderer.as_mut() {
-            self.cx.submit_update(renderer);
+            let (root_id, _) = self.window.get(window_id).unwrap();
+            self.cx.render(*root_id, renderer);
+            self.cx.toggle_clean();
         }
     }
 
-    fn render<P: FnOnce()>(&mut self, event_loop: &ActiveEventLoop, pre_present_notify: P) {
+    fn render(&mut self, event_loop: &ActiveEventLoop) {
         if self.renderer.is_none() { event_loop.exit() }
         let renderer = self.renderer.as_mut().unwrap();
-        let size = renderer.surface_size();
-        let color = self.cx.get_window_properties().fill_color();
-        if let Err(err) = renderer.render(color, pre_present_notify) {
+        let size = renderer.screen_size().u32();
+        let color = Rgba::TRANSPARENT;
+
+        if let Err(err) = renderer.render(color) {
             match err {
                 RendererError::ShouldResize => self.handle_resize(WinitSize::Logical(size)),
                 RendererError::ShouldExit => event_loop.exit(),
@@ -244,23 +269,21 @@ impl Aplite {
         self.cx.handle_click(state, button);
     }
 
-    fn handle_mouse_move(&mut self, pos: PhysicalPosition<f64>) {
-        if self.renderer.is_none() { return }
-        let renderer = self.renderer.as_mut().unwrap();
-        let logical_pos = pos.to_logical::<f32>(renderer.scale_factor());
-        self.cx.handle_mouse_move((logical_pos.x, logical_pos.y));
+    fn handle_mouse_move(&mut self, window_id: &WindowId, pos: PhysicalPosition<f64>) {
+        if let Some(renderer) = self.renderer.as_mut()
+            && let Some((root, _)) = self.window.get(window_id) {
+            let logical_pos = pos.to_logical::<f32>(renderer.scale_factor());
+            self.cx.handle_mouse_move(root, (logical_pos.x, logical_pos.y));
+        }
     }
 }
 
 impl ApplicationHandler for Aplite {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if let Ok(window) = self.initialize_window(event_loop) {
-            match self.initialize_renderer(Arc::clone(&window)) {
-                Ok(_) => self.add_window(window),
-                Err(_) => event_loop.exit(),
-            }
-        } else {
-            event_loop.exit();
+        match self.initialize_window(event_loop) {
+            Ok((view_id, window)) if self.initialize_renderer(Arc::clone(&window))
+                .is_ok() => self.add_window(view_id, window),
+            _ => event_loop.exit(),
         }
     }
 
@@ -275,11 +298,11 @@ impl ApplicationHandler for Aplite {
             WindowEvent::RedrawRequested => self.handle_redraw_request(&window_id, event_loop),
             WindowEvent::Resized(s) => self.handle_resize(WinitSize::Physical(s)),
             WindowEvent::MouseInput { state, button, .. } => self.handle_click(state, button),
-            WindowEvent::CursorMoved { position, .. } => self.handle_mouse_move(position),
+            WindowEvent::CursorMoved { position, .. } => self.handle_mouse_move(&window_id, position),
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => self.set_scale_factor(scale_factor),
             _ => {}
         }
-        self.detect_update(&window_id);
+        // self.detect_update(&window_id);
     }
 }
 

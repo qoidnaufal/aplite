@@ -112,6 +112,16 @@ impl Size<u32> {
     pub fn adjust_height(&mut self, aspect_ratio: Fraction<u32>) {
         self.set_height(self.width() / aspect_ratio)
     }
+
+    pub fn f32(self) -> Size<f32> {
+        Size { inner: self.inner.f32() }
+    }
+}
+
+impl Size<f32> {
+    pub fn u32(self) -> Size<u32> {
+        Size { inner: self.inner.u32() }
+    }
 }
 
 // arithmetic operation
@@ -169,13 +179,13 @@ impl From<LogicalSize<u32>> for Size<u32> {
 
 impl From<Size<u32>> for Size<f32> {
     fn from(value: Size<u32>) -> Self {
-        Self { inner: value.inner.into() }
+        value.f32()
     }
 }
 
 impl From<Size<f32>> for Size<u32> {
     fn from(value: Size<f32>) -> Self {
-        Self { inner: value.inner.into() }
+        value.u32()
     }
 }
 

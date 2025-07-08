@@ -207,6 +207,18 @@ impl<const N: usize, T: GpuPrimitive> Eq for Vector<N, T> {}
 
 // type conversion
 
+impl<const N: usize> Vector<N, f32> {
+    pub fn u32(self) -> Vector<N, u32> {
+        self.into()
+    }
+}
+
+impl<const N: usize> Vector<N, u32> {
+    pub fn f32(self) -> Vector<N, f32> {
+        self.into()
+    }
+}
+
 impl<const N: usize> From<Vector<N, f32>> for Vector<N, u32> {
     fn from(value: Vector<N, f32>) -> Self {
         let mut ret = Self::default();

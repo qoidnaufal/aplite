@@ -8,7 +8,7 @@ pub(crate) use atlas::Atlas;
 pub(crate) use texture_data::TextureData;
 pub use image_data::{ImageData, image_reader};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum TextureInfo {
     ImageId(i32),
     AtlasId {
@@ -18,21 +18,21 @@ pub enum TextureInfo {
 }
 
 impl TextureInfo {
-    pub(crate) fn get_uv(&self) -> Option<Rect<f32>> {
+    pub fn get_uv(&self) -> Option<Rect<f32>> {
         match self {
             TextureInfo::ImageId(_) => None,
             TextureInfo::AtlasId { uv, .. } => Some(*uv),
         }
     }
 
-    pub(crate) fn get_image_id(&self) -> Option<i32> {
+    pub fn get_image_id(&self) -> Option<i32> {
         match self {
             TextureInfo::ImageId(id) => Some(*id),
             TextureInfo::AtlasId { .. } => None,
         }
     }
 
-    pub(crate) fn get_atlas_id(&self) -> Option<i32> {
+    pub fn get_atlas_id(&self) -> Option<i32> {
         match self {
             TextureInfo::ImageId(_) => None,
             TextureInfo::AtlasId { id, .. } => Some(*id),

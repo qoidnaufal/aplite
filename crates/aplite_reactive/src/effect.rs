@@ -1,44 +1,58 @@
-use crate::runtime::RUNTIME;
-use crate::traits::Subscriber;
+use std::cell::RefCell;
 
-pub struct Effect<R> {
-    pub(crate) f: Box<dyn FnMut(Option<R>) -> R>,
+use crate::graph::{EffectId, GRAPH};
+use crate::subscriber::Subscriber;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Effect {
+    id: EffectId,
 }
 
-impl<R> Effect<R> {
-    pub fn new<F>(f: F)
+impl Effect {
+    pub fn new<F, R>(f: F) -> Self
     where
         F: FnMut(Option<R>) -> R + 'static,
         R: 'static,
     {
-        RUNTIME.with(|rt| rt.create_effect(f))
+        GRAPH.with(|rt| rt.create_effect(f))
     }
 
-    pub(crate) fn run(&mut self) -> R {
-        (self.f)(None)
+    pub(crate) fn with_id(id: EffectId) -> Self {
+        Self { id }
     }
-}
 
-impl<R> Subscriber for Effect<R> {
-    fn run(&mut self) {
-        self.run();
+    pub(crate) fn id(&self) -> &EffectId {
+        &self.id
     }
 }
 
-pub struct AnySubscriber(Box<dyn Subscriber>);
+pub(crate) struct EffectInner<R> {
+    pub(crate) value: Option<R>,
+    pub(crate) f: Box<dyn FnMut(Option<R>) -> R>,
+}
 
-impl AnySubscriber {
+impl<R> EffectInner<R> {
+    pub(crate) fn new<F>(f: F) -> Self
+    where
+        F: FnMut(Option<R>) -> R + 'static,
+        R: 'static,
+    {
+        Self {
+            value: None,
+            f: Box::new(f),
+        }
+    }
+
     pub(crate) fn run(&mut self) {
-        self.0.run();
+        let old_val = self.value.take();
+        let new_val = (self.f)(old_val);
+        self.value = Some(new_val);
     }
 }
 
-pub(crate) trait ToAnySubscriber {
-    fn to_any_subscriber(self) -> AnySubscriber;
-}
-
-impl<T: Subscriber + 'static> ToAnySubscriber for T {
-    fn to_any_subscriber(self) -> AnySubscriber {
-        AnySubscriber(Box::new(self))
+impl<R> Subscriber for RefCell<EffectInner<R>> {
+    fn run(&self) {
+        let mut inner = self.borrow_mut();
+        inner.run();
     }
 }

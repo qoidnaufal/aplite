@@ -104,6 +104,16 @@ impl Rect<u32> {
     pub fn adjust_height(&mut self, aspect_ratio: Fraction<u32>) {
         self.set_height(self.width() / aspect_ratio)
     }
+
+    pub fn f32(self) -> Rect<f32> {
+        self.into()
+    }
+}
+
+impl Rect<f32> {
+    pub fn u32(self) -> Rect<u32> {
+        self.into()
+    }
 }
 
 impl From<Rect<f32>> for Rect<u32> {

@@ -6,17 +6,20 @@ pub(crate) struct Screen {
     pub(crate) transform: Buffer<Matrix3x2>,
     pub(crate) size: Buffer<Size<f32>>,
     pub(crate) bind_group: wgpu::BindGroup,
-    pub(crate) screen_transform: Matrix3x2,
-    pub(crate) screen_size: Size<f32>,
+
+    screen_transform: Matrix3x2,
+    screen_size: Size<f32>,
     pub(crate) scale_factor: f64,
+
     res_changed: bool,
     is_resized: bool,
 }
 
 impl Screen {
     pub(crate) fn new(device: &wgpu::Device, screen_size: Size<f32>, scale_factor: f64) -> Self {
-        let transform = Buffer::<Matrix3x2>::new(device, 1, wgpu::BufferUsages::UNIFORM, "screen transform");
-        let size = Buffer::<Size<f32>>::new(device, 1, wgpu::BufferUsages::UNIFORM, "screen scaler");
+        let uniform = wgpu::BufferUsages::UNIFORM;
+        let transform = Buffer::<Matrix3x2>::new(device, 1, uniform, "screen transform");
+        let size = Buffer::<Size<f32>>::new(device, 1, uniform, "screen scaler");
         let bind_group = Self::bind_group(device, &[
             transform.bind_group_entry(0),
             size.bind_group_entry(1)

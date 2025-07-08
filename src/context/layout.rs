@@ -1,9 +1,9 @@
+use aplite_reactive::*;
 use aplite_types::{Rect, Vector2};
 
-use crate::context::Context;
-use crate::context::properties::Properties;
+use crate::context::widget_state::WidgetState;
 
-use super::tree::NodeId;
+use crate::view::{ViewId, VIEW_STORAGE};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HAlign {
@@ -60,8 +60,22 @@ pub struct Padding {
 }
 
 impl Padding {
-    pub(crate) const fn new(top: u32, bottom: u32, left: u32, right: u32) -> Self {
-        Self { top, bottom, left, right }
+    pub const fn new(top: u32, bottom: u32, left: u32, right: u32) -> Self {
+        Self {
+            top,
+            bottom,
+            left,
+            right,
+        }
+    }
+
+    pub const fn all(value: u32) -> Self {
+        Self {
+            top: value,
+            bottom: value,
+            left: value,
+            right: value,
+        }
     }
 
     pub(crate) fn vertical(&self) -> u32 { self.top() + self.bottom() }
@@ -102,23 +116,18 @@ pub(crate) struct Rules {
 }
 
 impl Rules {
-    pub(crate) fn new(prop: &Properties) -> Self {
+    pub(crate) fn new(state: &WidgetState) -> Self {
         Self {
-            rect: prop.rect(),
-            orientation: prop.orientation(),
-            alignment: prop.alignment(),
-            padding: prop.padding(),
-            spacing: prop.spacing(),
+            rect: state.rect.read_untracked(|rect| *rect),
+            orientation: state.orientation(),
+            alignment: state.alignment(),
+            padding: state.padding(),
+            spacing: state.spacing(),
         }
     }
 }
 
 impl Rules {
-    // fn inner_space(&self) -> Size<u32> {
-    //     (self.size.width() - self.padding.horizontal(),
-    //     self.size.height() - self.padding.vertical()).into()
-    // }
-
     fn offset_x(&self) -> u32 {
         let pl = self.padding.left();
         let pr = self.padding.right();
@@ -189,38 +198,41 @@ impl Rules {
 }
 
 pub(crate) struct LayoutContext<'a> {
-    entity: &'a NodeId,
-    cx: &'a mut Context,
+    entity: &'a ViewId,
     next_pos: Vector2<u32>,
-    // avalilable_space: Rect<u32>,
     rules: Rules,
 }
 
 impl<'a> LayoutContext<'a> {
-    pub(crate) fn new(entity: &'a NodeId, cx: &'a mut Context) -> Self {
-        let rules = Rules::new(cx.get_node_data(entity));
+    pub(crate) fn new(entity: &'a ViewId) -> Self {
+        let rules = VIEW_STORAGE.with(|s| {
+            let widget_state = s.get_widget_state(entity);
+            Rules::new(&widget_state)
+        });
         Self {
             entity,
-            cx,
-            // avalilable_space: rules.inner_space(),
             next_pos: Vector2::new(0, 0),
             rules,
         }
     }
 
-    fn query_children(&mut self, children: Option<&Vec<NodeId>>) -> (u32, u32) {
+    fn query_children(&mut self, children: Option<&Vec<ViewId>>) -> (u32, u32) {
         if let Some(children) = children {
             (children.iter().map(|child| {
-                let size = self.cx.get_node_data(child).size();
-                match self.rules.orientation {
-                    Orientation::Vertical => size.height(),
-                    Orientation::Horizontal => size.width(),
-                }
+                let rect = VIEW_STORAGE.with(|s| {
+                    s.get_widget_state(child).rect
+                });
+                rect.read_untracked(|rect| {
+                    match self.rules.orientation {
+                        Orientation::Vertical => rect.size().height(),
+                        Orientation::Horizontal => rect.size().width(),
+                    }
+                })
             }).sum(), children.len() as u32)
         } else { (0, 0) }
     }
 
-    fn initialize_next_pos(&mut self, children: Option<&Vec<NodeId>>) {
+    fn initialize_next_pos(&mut self, children: Option<&Vec<ViewId>>) {
         let (child_size, child_len) = self.query_children(children);
 
         match self.rules.orientation {
@@ -235,20 +247,23 @@ impl<'a> LayoutContext<'a> {
         }
     }
 
-    fn get_children(&self) -> Option<Vec<NodeId>> {
-        if self.entity == &NodeId::root() {
-            self.cx.tree.get_all_ancestor()
-                .iter()
-                .map(|a| Some(**a))
-                .collect::<Option<Vec<_>>>()
-        } else {
-            self.cx.tree.get_all_children(self.entity)
-        }
-    }
+    // fn get_children(&self) -> Option<Vec<ViewId>> {
+    //     VIEW_STORAGE.with(|s| {
+    //         let tree = s.tree.borrow();
+    //         tree.get_all_children(self.entity)
+    //             .map(|children| {
+    //                 children.iter()
+    //                     .map(|id| **id)
+    //                     .collect::<Vec<_>>()
+    //             })
+    //     })
+    // }
 
-    fn assign_position(&mut self, child: &NodeId) {
-        let prop = self.cx.get_node_data_mut(child);
-        let size = prop.size();
+    fn assign_position(&mut self, child: &ViewId) {
+        let rect = VIEW_STORAGE.with(|s| {
+            s.get_widget_state(child).rect
+        });
+        let size = rect.read_untracked(|rect| rect.size());
 
         match self.rules.orientation {
             Orientation::Vertical => {
@@ -273,7 +288,7 @@ impl<'a> LayoutContext<'a> {
             },
         }
 
-        prop.set_position(self.next_pos);
+        rect.write_untracked(|rect| rect.set_pos(self.next_pos));
 
         match self.rules.orientation {
             Orientation::Vertical => self.next_pos.add_y(self.rules.spacing + size.height() / 2),
@@ -281,8 +296,17 @@ impl<'a> LayoutContext<'a> {
         }
     }
 
-    pub(crate) fn calculate(&mut self) -> Option<Vec<NodeId>> {
-        let children = self.get_children();
+    pub(crate) fn calculate(&mut self) -> Option<Vec<ViewId>> {
+        let children = VIEW_STORAGE.with(|s| {
+            s.tree
+                .borrow()
+                .get_all_children(self.entity)
+                .map(|vec| {
+                    vec.iter()
+                        .map(|id| **id)
+                        .collect::<Vec<_>>()
+                })
+        });
         self.initialize_next_pos(children.as_ref());
 
         if let Some(children) = children.as_ref() {

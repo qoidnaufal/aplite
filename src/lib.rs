@@ -8,22 +8,29 @@ pub mod prelude {
 
     pub use aplite_reactive::*;
     pub use aplite_renderer::image_reader;
-    pub use aplite_renderer::Shape;
+    pub use aplite_renderer::{
+        Shape,
+        CornerRadius,
+    };
     pub use aplite_types::Rgba;
 
     pub use crate::app::Aplite;
     pub use crate::context::Context;
-    pub use crate::context::properties::AspectRatio;
+    pub use crate::context::widget_state::AspectRatio;
     pub use crate::context::layout::{
-        Orientation,
         Alignment,
+        Orientation,
+        Padding,
         VAlign,
         HAlign
     };
     pub use crate::view::{
+        Widget,
+        IntoView,
         View,
+        Style,
+        Node,
         TestCircleWidget,
-        // TestTriangleWidget,
         HStack,
         VStack,
         Button,

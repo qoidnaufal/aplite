@@ -1,43 +1,76 @@
-use aplite_types::Rgba;
-use aplite_renderer::ImageData;
 use aplite_renderer::Shape;
+use aplite_renderer::ImageData;
 
-use crate::context::Context;
-use crate::context::properties::{AspectRatio, Properties};
+use crate::context::widget_state::WidgetState;
+use crate::prelude::AspectRatio;
 
-use super::{IntoView, View};
+use super::IntoView;
+use super::Node;
+use super::ViewId;
+use super::Widget;
+use super::VIEW_STORAGE;
 
-pub fn image<F: Fn() -> ImageData + 'static>(cx: &mut Context, f: F) -> View<Image> {
-    Image::new(cx, f)
+pub fn image<F: Fn() -> ImageData + 'static>(image_fn: F) -> Image {
+    Image::new(image_fn)
 }
 
 pub struct Image {
-    properties: Properties,
+    id: ViewId,
+    node: Node,
+    state: WidgetState,
 }
 
 impl Image {
-    pub fn new<F: Fn() -> ImageData + 'static>(cx: &mut Context, image_fn: F) -> View<Self> {
-        let properties = Properties::new()
-            .with_size((100, 100))
-            .with_shape(Shape::Rect)
-            .with_fill_color(Rgba::WHITE);
-        Self { properties }.into_view(cx, |_| {}).add_data(image_fn)
-    }
-}
+    pub fn new<F: Fn() -> ImageData + 'static>(f: F) -> Self {
+        let id = VIEW_STORAGE.with(|s| {
+            let id = s.create_entity();
+            s.image_fn.borrow_mut().insert(id, Box::new(f));
+            id
+        });
+        let node = Node::new()
+            .with_shape(Shape::Rect);
+        let state = WidgetState::new()
+            .with_name("Image")
+            .with_size((100, 100));
 
-impl View<'_, Image> {
-    fn add_data<F: Fn() -> ImageData + 'static>(self, image_fn: F) -> Self {
-        self.cx.add_image(self.id(), image_fn);
+        Self {
+            id,
+            state,
+            node,
+        }
+    }
+
+    pub fn append_child(self, child: impl IntoView) -> Self {
+        VIEW_STORAGE.with(|s| s.append_child(&self.id, child));
         self
     }
 
-    pub fn with_aspect_ratio(self, aspect_ratio: AspectRatio) -> Self {
-        self.cx.get_node_data_mut(&self.id()).set_image_aspect_ratio(aspect_ratio);
+    pub fn and(self, sibling: impl IntoView) -> Self {
+        VIEW_STORAGE.with(|s| s.add_sibling(&self.id, sibling));
+        self
+    }
+
+    pub fn with_aspect_ratio(mut self, aspect_ratio: AspectRatio) -> Self {
+        self.state.set_image_aspect_ratio(aspect_ratio);
+        self
+    }
+
+    pub fn state(mut self, mut f: impl FnMut(&mut WidgetState) + 'static) -> Self {
+        f(&mut self.state);
         self
     }
 }
 
-impl IntoView for Image {
-    fn debug_name(&self) -> Option<&'static str> { Some("Image") }
-    fn properties(&self) -> Properties { self.properties }
+impl Widget for Image {
+    fn id(&self) -> ViewId {
+        self.id
+    }
+
+    fn widget_state(&self) -> WidgetState {
+        self.state
+    }
+
+    fn node(&self) -> Node {
+        self.node.clone()
+    }
 }

@@ -1,11 +1,12 @@
 mod vecmap;
 mod derived;
+mod tree;
 
 pub use vecmap::{
     Key,
-    VecMap,
-    VecMapIter,
-    VecMapIterMut,
+    KVMap,
+    KVMapIter,
+    KVMapIterMut,
     MaxCapacityReached,
 };
 pub use derived::{
@@ -14,3 +15,4 @@ pub use derived::{
     DerivedIter,
     DerivedIterMut,
 };
+pub use tree::*;

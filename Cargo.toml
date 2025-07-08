@@ -29,6 +29,7 @@ aplite_types.workspace = true
 aplite_stats = { path = "crates/aplite_stats", default-features = false, optional = true }
 aplite_reactive = { path = "crates/aplite_reactive" }
 aplite_renderer = { path = "crates/aplite_renderer" }
+aplite_storage = { path = "crates/aplite_storage" }
 
 [workspace.dependencies]
 aplite_types = { path = "crates/aplite_types" }

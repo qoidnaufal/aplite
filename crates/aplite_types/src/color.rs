@@ -43,6 +43,7 @@ impl<T: GpuPrimitive> Rgba<T> {
 }
 
 impl Rgba<u8> {
+    pub const TRANSPARENT: Self = Self::new(0, 0, 0, 0);
     pub const BLACK: Self = Self::new(0, 0, 0, 255);
     pub const RED: Self = Self::new(255, 0, 0, 255);
     pub const GREEN: Self = Self::new(0, 255, 0, 255);
@@ -88,6 +89,26 @@ impl From<u32> for Rgba<u8> {
 }
 
 // type conversion
+
+impl Rgba<f32> {
+    pub fn u8(self) -> Rgba<u8> {
+        self.into()
+    }
+
+    pub fn to_vec_f32(self) -> Vector4<f32> {
+        self.into()
+    }
+}
+
+impl Rgba<u8> {
+    pub fn f32(self) -> Rgba<f32> {
+        self.into()
+    }
+
+    pub fn to_vec_f32(self) -> Vector4<f32> {
+        self.f32().into()
+    }
+}
 
 impl From<Rgba<u8>> for Rgba<f32> {
     fn from(val: Rgba<u8>) -> Self {
