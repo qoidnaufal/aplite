@@ -36,6 +36,8 @@ impl From<u32> for CornerRadius {
 }
 
 impl CornerRadius {
+    /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
+    /// Doesn't necessarily mean that you can't put a value more than 100
     pub const fn new(tl: u32, bl: u32, br: u32, tr: u32) -> Self {
         Self {
             tl: tl as _,
@@ -45,6 +47,8 @@ impl CornerRadius {
         }
     }
 
+    /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
+    /// Doesn't necessarily mean that you can't put a value more than 100
     pub const fn homogen(r: u32) -> Self {
         Self {
             tl: r as _,
@@ -54,6 +58,8 @@ impl CornerRadius {
         }
     }
 
+    /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
+    /// Doesn't necessarily mean that you can't put a value more than 100
     pub fn set_each(&mut self, tl: u32, bl: u32, br: u32, tr: u32) {
         self.tl = tl as _;
         self.bl = bl as _;
@@ -61,6 +67,8 @@ impl CornerRadius {
         self.tr = tr as _;
     }
 
+    /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
+    /// Doesn't necessarily mean that you can't put a value more than 100
     pub fn set_all(&mut self, r: u32) {
         self.tl = r as _;
         self.bl = r as _;
@@ -68,18 +76,26 @@ impl CornerRadius {
         self.tr = r as _;
     }
 
+    /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
+    /// Doesn't necessarily mean that you can't put a value more than 100
     pub fn set_top_left(&mut self, r: u32) {
         self.tl = r as _;
     }
 
+    /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
+    /// Doesn't necessarily mean that you can't put a value more than 100
     pub fn set_bot_left(&mut self, r: u32) {
         self.bl = r as _;
     }
 
+    /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
+    /// Doesn't necessarily mean that you can't put a value more than 100
     pub fn set_bot_right(&mut self, r: u32) {
         self.br = r as _;
     }
 
+    /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
+    /// Doesn't necessarily mean that you can't put a value more than 100
     pub fn set_top_right(&mut self, r: u32) {
         self.tr = r as _;
     }
@@ -181,20 +197,20 @@ impl Element {
         self
     }
 
-    pub(crate) fn with_transform_id(mut self, id: u32) -> Self {
-        self.transform_id = id;
-        self
-    }
+    // pub(crate) fn with_transform_id(mut self, id: u32) -> Self {
+    //     self.transform_id = id;
+    //     self
+    // }
 
-    pub(crate) fn with_atlas_id(mut self, id: i32) -> Self {
-        self.atlas_id = id;
-        self
-    }
+    // pub(crate) fn with_atlas_id(mut self, id: i32) -> Self {
+    //     self.atlas_id = id;
+    //     self
+    // }
 
-    pub(crate) fn with_image_id(mut self, id: i32) -> Self {
-        self.image_id = id;
-        self
-    }
+    // pub(crate) fn with_image_id(mut self, id: i32) -> Self {
+    //     self.image_id = id;
+    //     self
+    // }
 
     pub fn set_fill_color(&mut self, color: Rgba<u8>) {
         self.fill_color = color.into();

@@ -44,26 +44,42 @@ fn root() -> impl IntoView {
                 .set_hover_color(|_| Rgba::BLUE)
                 .set_stroke_width(|_| 5)
                 .set_corners(|_| CornerRadius::new(80, 80, 0, 0))
-                .set_click_color(|_| Rgba::GREEN)
+                .set_click_color(|_| Rgba::DARK_GRAY)
                 .on_click(inc)
         ).append_child(
             Button::new()
                 .set_color(|_| Rgba::GREEN)
                 .set_hover_color(|_| Rgba::WHITE)
-                .set_click_color(|_| Rgba::GREEN)
+                .set_click_color(|_| Rgba::DARK_GREEN)
                 .set_stroke_width(|_| 5)
                 .set_corners(|_| CornerRadius::homogen(50))
                 .on_click(dec)
         ).append_child(
             Button::new()
                 .set_color(|_| Rgba::BLUE)
-                .set_hover_color(|_| Rgba::YELLOW)
+                .set_hover_color(move |_| {
+                    let r = (counter.get() as u8) % 255;
+                    let g = (counter.get() as u8 + 25) % 255;
+                    let b = (counter.get() as u8 + 50) % 255;
+                    let a = 255;
+                    Rgba::new(r, g, b, a)
+                })
                 .set_stroke_width(|_| 5)
                 .set_corners(|_| CornerRadius::new(0, 69, 0, 69))
         ).append_child(
             Button::new()
                 .set_corners(|_| CornerRadius::homogen(70))
-                .set_color(|_| Rgba::YELLOW)
+                .set_color(move |_| {
+                    counter.with(|val| {
+                        if val % 3 == 0 {
+                            Rgba::RED
+                        } else if val % 2 == 0 {
+                            Rgba::GREEN
+                        } else {
+                            Rgba::BLUE
+                        }
+                    })
+                })
         )
         .set_color(|_| Rgba::TRANSPARENT)
         .set_dragable(true)
@@ -104,7 +120,6 @@ fn root() -> impl IntoView {
 
 fn dummy() -> impl IntoView {
     let (counter, set_counter) = Signal::new(0i32);
-    // let evaluator = RwSignal::new(0i32);
 
     Effect::new(move |_| {
         counter.with(|val| {
@@ -115,8 +130,7 @@ fn dummy() -> impl IntoView {
             } else {
                 "Rgba::BLUE"
             };
-            eprintln!("{val}: {color}");
-            // evaluator.set(*val);
+            eprint!("{val}: {color}     \r");
         });
     });
 

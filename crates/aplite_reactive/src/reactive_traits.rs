@@ -10,16 +10,19 @@ use crate::graph::{ReactiveId, GRAPH};
 #########################################################
 */
 
+#[doc(hidden)]
 pub trait Reactive {
     fn id(&self) -> &ReactiveId;
 }
 
+#[doc(hidden)]
 pub trait Track: Reactive {
     fn track(&self) {
         GRAPH.with(|graph| graph.track(self.id()))
     }
 }
 
+#[doc(hidden)]
 pub trait Notify: Reactive {
     fn notify(&self) {
         GRAPH.with(|graph| graph.notify_subscribers(self.id()))
@@ -113,8 +116,12 @@ impl<T> With for T where T: Track + Read {}
 pub trait Set: Notify + Write {
     /// update the value directly and notify the subscribers
     fn set(&self, value: <Self as Write>::Value) {
-        self.write_untracked(|val| *val = value);
+        self.set_untracked(value);
         self.notify();
+    }
+
+    fn set_untracked(&self, value: <Self as Write>::Value) {
+        self.write_untracked(|val| *val = value);
     }
 }
 
@@ -125,6 +132,10 @@ pub trait Update: Notify + Write {
     fn update(&self, f: impl FnOnce(&mut <Self as Write>::Value)) {
         self.write_untracked(f);
         self.notify();
+    }
+
+    fn update_untracked(&self, f: impl FnOnce(&mut <Self as Write>::Value)) {
+        self.write_untracked(f);
     }
 }
 

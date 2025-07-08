@@ -1,7 +1,7 @@
 use aplite_reactive::*;
 use aplite_types::{Matrix3x2, Rect, Size, Vector2};
 
-use crate::{context::layout::{Alignment, Orientation, Padding}, view::ViewId};
+use crate::context::layout::{Alignment, Orientation, Padding};
 
 use super::cursor::Cursor;
 
@@ -74,11 +74,8 @@ impl WidgetState {
     //     self.rect.adjust_height(aspect_ratio);
     // }
 
-    pub(crate) fn detect_hover(&self, cursor: &mut Cursor, id: &ViewId) {
-        // FIXME: consider rotation & maybe some precision
-        // let rotate = Matrix2x2::rotate(self.rotate);
-        // let pos: Vector2<f32> = attr.pos.into();
-        // let p = rotate * pos;
+    // FIXME: consider rotation & maybe some precision
+    pub(crate) fn detect_hover(&self, cursor: &Cursor) -> bool {
         let pos = cursor.hover.pos;
         let rect = self.rect.get_untracked();
         let x = rect.x() as f32;
@@ -98,12 +95,13 @@ impl WidgetState {
 
         self.is_hovered.set((y - height..y + height).contains(&y_cursor)
             && (x - width..x + width).contains(&x_cursor)
-            && cursor.hover.z_index.get_untracked() <= self.z_index.get_untracked());
+            && cursor.hover.z_index <= self.z_index.get_untracked());
 
-        if self.is_hovered.get_untracked() {
-            cursor.hover.prev = cursor.hover.curr.replace(*id);
-            cursor.hover.z_index.set(self.z_index.get_untracked());
-        }
+        // if self.is_hovered.get_untracked() {
+        //     cursor.hover.z_index.set(self.z_index.get_untracked());
+        // }
+
+        self.is_hovered.get_untracked()
     }
 
     // pub(crate) fn toggle_click(&mut self) {

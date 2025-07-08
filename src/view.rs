@@ -387,17 +387,20 @@ pub trait Style: Widget + Sized {
         F: FnEl<Rgba<u8>> + 'static
     {
         let hoverable = self.widget_state().hoverable;
-        hoverable.write_untracked(|val| *val = true);
+        hoverable.update_untracked(|val| *val = true);
 
         let node = self.node();
         let init_color = node.0.read_untracked(|elem| elem.fill_color());
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
         let is_hovered = self.widget_state().is_hovered;
+        let is_clicked = self.widget_state().is_clicked;
 
         Effect::new(move |prev| {
             let color = f(prev);
             if is_hovered.get() {
-                node.set_fill_color(color);
+                if !is_clicked.get() {
+                    node.set_fill_color(color);
+                }
             } else {
                 node.set_fill_color(init_color);
             }
@@ -412,7 +415,6 @@ pub trait Style: Widget + Sized {
         F: FnEl<Rgba<u8>> + 'static,
     {
         let node = self.node();
-        let init_color = node.0.read_untracked(|elem| elem.fill_color());
         let is_clicked = self.widget_state().is_clicked;
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
 
@@ -420,8 +422,6 @@ pub trait Style: Widget + Sized {
             let color = f(prev);
             if is_clicked.get() {
                 node.set_fill_color(color);
-            } else {
-                node.set_fill_color(init_color);
             }
             dirty.set(true);
             color
@@ -484,14 +484,14 @@ pub trait Style: Widget + Sized {
     fn set_size(self, size: impl Into<Size<u32>>) -> Self {
         self.widget_state()
             .rect
-            .write_untracked(|rect| rect.set_size(size.into()));
+            .update_untracked(|rect| rect.set_size(size.into()));
         self
     }
 
     fn set_dragable(self, value: bool) -> Self {
         self.widget_state()
             .dragable
-            .write_untracked(|val| *val = value);
+            .update_untracked(|val| *val = value);
         self
     }
 }

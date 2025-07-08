@@ -129,7 +129,7 @@ impl Context {
                     size.adjust_width(tuple.into());
                 }
             });
-            widget_state.rect.write_untracked(|rect| rect.set_size(size));
+            widget_state.rect.update_untracked(|rect| rect.set_size(size));
         }
 
         let final_size = size
@@ -139,7 +139,7 @@ impl Context {
         resized |= final_size != widget_state.rect.read_untracked(|rect| rect.size());
 
         if resized {
-            widget_state.rect.write_untracked(|state| state.set_size(final_size));
+            widget_state.rect.update_untracked(|state| state.set_size(final_size));
         }
 
         final_size
@@ -161,22 +161,34 @@ impl Context {
 
         #[cfg(feature = "cursor_stats")] let start = std::time::Instant::now();
         self.detect_hover();
-        #[cfg(feature = "cursor_stats")] eprintln!("{:?}", start.elapsed());
+        #[cfg(feature = "cursor_stats")] eprint!("{:?}     \r", start.elapsed());
 
         self.handle_hover();
     }
 
     fn detect_hover(&mut self) {
-        if self.cursor.click.obj.is_none() {
-            VIEW_STORAGE.with(|s| {
+        if !self.cursor.is_dragging {
+            let hovered = VIEW_STORAGE.with(|s| {
                 s.hoverable
                     .borrow()
                     .iter()
-                    .for_each(|id| {
+                    .filter_map(|id| {
                         let state = s.get_widget_state(id);
-                        state.detect_hover(&mut self.cursor, id);
-                    });
-            })
+                        state.detect_hover(&self.cursor)
+                            .then_some((*id, state.z_index.get_untracked()))
+                    }).max()
+            });
+
+            match hovered {
+                Some((id, z_index)) => {
+                    self.cursor.hover.prev = self.cursor.hover.curr.replace(id);
+                    self.cursor.hover.z_index = z_index;
+                },
+                None => {
+                    self.cursor.hover.prev = self.cursor.hover.curr.take();
+                    self.cursor.hover.z_index = 0;
+                },
+            }
         }
     }
 
@@ -189,8 +201,11 @@ impl Context {
                     .dragable
                     .get_untracked()
             });
-            if self.cursor.is_dragging(&hover_id) && dragable {
-                self.handle_drag(&hover_id);
+            if self.cursor.is_dragging(&hover_id) {
+                self.cursor.is_dragging = true;
+                if dragable {
+                    self.handle_drag(&hover_id);
+                }
             }
         }
     }
@@ -198,29 +213,28 @@ impl Context {
     fn handle_drag(&mut self, hover_id: &ViewId) {
         let pos = self.cursor.hover.pos - self.cursor.click.offset;
         VIEW_STORAGE.with(|s| s.get_widget_state(hover_id).rect)
-            .write_untracked(|rect| rect.set_pos(pos.into()));
+            .update_untracked(|rect| rect.set_pos(pos.into()));
         self.recursive_layout_from_id(hover_id);
     }
 
     pub(crate) fn handle_click(&mut self, action: impl Into<MouseAction>, button: impl Into<MouseButton>) {
         self.cursor.set_click_state(action.into(), button.into());
-        if let Some(click_id) = self.cursor.click.obj.as_ref() {
+        if let Some(hover_id) = self.cursor.hover.curr.as_ref() {
             VIEW_STORAGE.with(|s| {
-                s.invoke_callback(click_id);
-
-                let state = s.get_widget_state(click_id);
+                let state = s.get_widget_state(hover_id);
                 let rect = state.rect;
                 let pos = rect.read_untracked(|rect| rect.pos().f32());
                 self.cursor.click.offset = self.cursor.click.pos - pos;
-                state.is_clicked.write_untracked(|val| *val = true);
+                state.is_clicked.set(true);
             });
         }
         if self.cursor.state.action == MouseAction::Released {
             if let Some(hover_id) = self.cursor.hover.curr.as_ref() {
                 VIEW_STORAGE.with(|s| {
+                    s.invoke_callback(hover_id);
                     s.get_widget_state(hover_id)
                         .is_clicked
-                        .write_untracked(|val| *val = false);
+                        .set(false)
                 })
             }
         }
@@ -249,7 +263,7 @@ impl Context {
                 let info = img.as_ref().map(|image_fn| renderer.push_atlas(image_fn)).flatten();
                 if let Some(info) = info {
                     if let Some(uv) = info.get_uv() {
-                        vert.write_untracked(|vertices| vertices.set_uv(uv));
+                        vert.update_untracked(|vertices| vertices.set_uv(uv));
                     }
                     let atlas_id = info.get_atlas_id().unwrap_or(-1);
                     let image_id = info.get_image_id().unwrap_or(-1);
@@ -258,7 +272,7 @@ impl Context {
                         elem.set_image_id(image_id);
                     });
                 };
-                vert.write_untracked(|v| v.set_id(idx as _));
+                vert.update_untracked(|v| v.set_id(idx as _));
                 transforms.push(*mat);
                 elements.push(elem.get_untracked());
                 mesh.extend_from_slice(&vert.get_untracked());

@@ -118,7 +118,7 @@ pub(crate) struct Rules {
 impl Rules {
     pub(crate) fn new(state: &WidgetState) -> Self {
         Self {
-            rect: state.rect.read_untracked(|rect| *rect),
+            rect: state.rect.get_untracked(),
             orientation: state.orientation(),
             alignment: state.alignment(),
             padding: state.padding(),
@@ -288,7 +288,7 @@ impl<'a> LayoutContext<'a> {
             },
         }
 
-        rect.write_untracked(|rect| rect.set_pos(self.next_pos));
+        rect.update_untracked(|rect| rect.set_pos(self.next_pos));
 
         match self.rules.orientation {
             Orientation::Vertical => self.next_pos.add_y(self.rules.spacing + size.height() / 2),

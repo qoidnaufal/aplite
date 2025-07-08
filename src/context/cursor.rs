@@ -1,4 +1,3 @@
-use aplite_reactive::RwSignal;
 use aplite_types::Vector2;
 
 use crate::view::ViewId;
@@ -59,26 +58,26 @@ pub struct MouseHover {
     pub pos: Vector2<f32>,
     pub curr: Option<ViewId>,
     pub prev: Option<ViewId>,
-    pub z_index: RwSignal<u32>,
+    pub z_index: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Cursor {
-    pub scope: Option<ViewId>,
     pub hover: MouseHover,
     pub state: MouseState,
     pub click: MouseClick,
+    pub timer: std::time::Duration,
+    pub is_dragging: bool,
 }
 
 impl Default for Cursor {
     fn default() -> Self {
         Self {
-            scope: None,
             hover: MouseHover {
                 pos: Vector2::default(),
                 curr: None,
                 prev: None,
-                z_index: RwSignal::new(0),
+                z_index: 0,
             },
             state: MouseState {
                 action: MouseAction::Released,
@@ -89,6 +88,8 @@ impl Default for Cursor {
                 offset: Vector2::default(),
                 obj: None,
             },
+            timer: std::time::Duration::from_millis(0),
+            is_dragging: false,
         }
     }
 }
@@ -105,18 +106,25 @@ impl Cursor {
     pub(crate) fn set_click_state(&mut self, action: MouseAction, button: MouseButton) {
         self.set_state(action, button);
 
+        let start = std::time::Instant::now();
         match (self.state.action, self.state.button) {
             (MouseAction::Pressed, MouseButton::Left) => {
-                self.click.obj = self.hover.curr;
+                // self.click.obj = self.hover.curr;
                 self.click.pos = self.hover.pos;
             },
-            (MouseAction::Released, MouseButton::Left) => self.click.obj = None,
+            (MouseAction::Released, MouseButton::Left) => {
+                self.timer = start.elapsed();
+                self.is_dragging = false;
+                // self.click.obj = None;
+            },
             _ => {}
         }
     }
 
     pub(crate) fn is_dragging(&self, hover_id: &ViewId) -> bool {
-        self.click.obj.is_some_and(|click_id| &click_id == hover_id)
+        self.is_clicking()
+            && self.hover.curr.is_some_and(|id| &id == hover_id)
+        // self.click.obj.is_some_and(|click_id| &click_id == hover_id)
             && self.hover.pos != self.click.pos
     }
 
@@ -125,10 +133,14 @@ impl Cursor {
     }
 
     pub(crate) fn is_idling(&self) -> bool {
-        self.is_hovering_same_obj() && self.click.obj.is_none()
+        self.is_hovering_same_obj() && !self.is_clicking()
     }
 
     pub(crate) fn is_unscoped(&self) -> bool {
         self.hover.curr.is_none() && self.hover.prev.is_none()
+    }
+
+    pub(crate) fn is_clicking(&self) -> bool {
+        matches!(self.state.action, MouseAction::Pressed)
     }
 }

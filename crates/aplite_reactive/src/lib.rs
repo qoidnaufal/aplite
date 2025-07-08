@@ -13,4 +13,11 @@ pub use effect::*;
 pub use rw_signal::*;
 pub use read_signal::*;
 pub use write_signal::*;
-pub use reactive_traits::*;
+pub use reactive_traits::{
+    Dispose,
+    Read,
+    Get,
+    Set,
+    With,
+    Update,
+};
