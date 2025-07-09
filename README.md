@@ -25,30 +25,36 @@ This is an example from the current (incomplete) works I've accomplished so far:
 ```rust
 use aplite::prelude::*;
 
-fn root(cx: &mut Context) {
-    let (counter, set_counter) = Signal::new(0i32);
+fn dummy() -> impl IntoView {
+    let (counter, set_counter) = Signal::create(0i32);
+
+    Effect::new(move |_| {
+        counter.with(|val| eprintln!("{val}"));
+    });
 
     let click = move || {
         set_counter.update(|num| *num += 1);
     };
 
-    Effect::new(move || eprintln!("{}", counter.get()));
-
-    Button::new(cx)
-        .style(|style| {
-            style.set_size((200, 69));
-            style.set_stroke_color(Rgba::WHITE);
-            style.set_stroke_width(6);
-            style.set_corners(|r| r.set_all(47));
-            style.set_dragable(true);
+    let color = move |_| {
+        counter.with(|val| {
+            if val % 3 == 0 {
+                Rgba::RED
+            } else if val % 2 == 0 {
+                Rgba::GREEN
+            } else {
+                Rgba::BLUE
+            }
         })
+    };
+
+    let button = Button::new()
         .on_click(click);
-    TestCircleWidget::new(cx)
-        .style(|style| {
-            style.set_stroke_width(6);
-            style.set_size((150, 150));
-            style.set_dragable(true);
-        });
+
+    let circle = TestCircleWidget::new()
+        .set_color(color);
+
+    button.and(circle)
 }
 
 fn main() -> AppResult {

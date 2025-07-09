@@ -15,7 +15,7 @@ repository = "https://github.com/qoidnaufal/aplite"
 [workspace]
 members = [
   "crates/aplite_types",
-  "crates/aplite_pollster",
+  "crates/aplite_future",
   "crates/aplite_renderer",
   "crates/aplite_stats",
   "crates/aplite_reactive",

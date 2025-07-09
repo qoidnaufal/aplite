@@ -87,7 +87,7 @@ impl Renderer {
         });
     }
 
-    pub fn render(&mut self, color: Rgba<u8>) -> Result<(), RendererError> {
+    pub fn render(&mut self, color: Rgba<u8>, window: Arc<Window>) -> Result<(), RendererError> {
         let frame = self.gpu.get_current_texture()?;
         let view = &frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
@@ -106,6 +106,8 @@ impl Renderer {
 
         self.atlas.update(&self.gpu.device, &mut encoder);
         self.encode(&mut encoder, desc);
+
+        window.pre_present_notify();
 
         self.gpu.queue.submit([encoder.finish()]);
         frame.present();
@@ -148,7 +150,7 @@ impl Renderer {
         vertices: &[Vertex],
         offset: u64,
     ) {
-        let indices = Indices::new().with_offset(offset as _, true);
+        let indices = Indices::new().with_offset(offset as _, true).as_slice();
         self.mesh[self.current].indices.write(&self.gpu.device, &self.gpu.queue, offset * 6, &indices);
         self.mesh[self.current].vertices.write(&self.gpu.device, &self.gpu.queue, offset * 4, vertices);
         self.mesh[self.current].offset = offset;
@@ -173,7 +175,6 @@ impl Renderer {
 
         self.mesh[self.current].write_data(&self.gpu.device, &self.gpu.queue, &indices, vertices);
         self.storage[self.current].write_data(&self.gpu.device, &self.gpu.queue, elements, transforms);
-        self.screen.write(&self.gpu.device, &self.gpu.queue);
     }
 
     pub fn push_image(&mut self, f: &dyn Fn() -> ImageData) -> TextureInfo {

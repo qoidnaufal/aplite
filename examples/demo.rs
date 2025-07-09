@@ -2,7 +2,7 @@ use aplite::prelude::*;
 use AspectRatio::Defined;
 
 fn root() -> impl IntoView {
-    let (counter, set_counter) = Signal::new(0i32);
+    let (counter, set_counter) = Signal::create(0i32);
 
     let inc = move || {
         set_counter.update(|num| *num += 1);
@@ -49,7 +49,7 @@ fn root() -> impl IntoView {
         ).append_child(
             Button::new()
                 .set_color(|_| Rgba::GREEN)
-                .set_hover_color(|_| Rgba::WHITE)
+                .set_hover_color(|_| Rgba::LIGHT_GRAY)
                 .set_click_color(|_| Rgba::DARK_GREEN)
                 .set_stroke_width(|_| 5)
                 .set_corners(|_| CornerRadius::homogen(50))
@@ -57,18 +57,15 @@ fn root() -> impl IntoView {
         ).append_child(
             Button::new()
                 .set_color(|_| Rgba::BLUE)
-                .set_hover_color(move |_| {
-                    let r = (counter.get() as u8) % 255;
-                    let g = (counter.get() as u8 + 25) % 255;
-                    let b = (counter.get() as u8 + 50) % 255;
-                    let a = 255;
-                    Rgba::new(r, g, b, a)
-                })
+                .set_hover_color(move |_| Rgba::PURPLE)
                 .set_stroke_width(|_| 5)
                 .set_corners(|_| CornerRadius::new(0, 69, 0, 69))
         ).append_child(
             Button::new()
                 .set_corners(|_| CornerRadius::homogen(70))
+                .set_rotation(move |_| {
+                    counter.with(|val| *val as f32 * 57.29 / 360.)
+                })
                 .set_color(move |_| {
                     counter.with(|val| {
                         if val % 3 == 0 {
@@ -119,7 +116,7 @@ fn root() -> impl IntoView {
 }
 
 fn dummy() -> impl IntoView {
-    let (counter, set_counter) = Signal::new(0i32);
+    let (counter, set_counter) = Signal::create(0i32);
 
     Effect::new(move |_| {
         counter.with(|val| {
@@ -156,6 +153,7 @@ fn dummy() -> impl IntoView {
         .set_corners(|_| CornerRadius::homogen(47))
         .set_dragable(true)
         .set_size((200, 69))
+        .set_rotation(|_| 10.)
         .on_click(click);
 
     let circle = TestCircleWidget::new()

@@ -143,6 +143,9 @@ struct Stroke {
 };
 
 fn get_stroke(element: Element) -> Stroke {
+    // let elem_t = transform[element.transform_id];
+    // let scale = elem_t[0].x;
+
     var stroke: Stroke;
     stroke.color = element.stroke_color;
     stroke.width = element.stroke_width / screen_s.x;

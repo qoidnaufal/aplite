@@ -154,9 +154,9 @@ impl Context {
 
 impl Context {
     pub(crate) fn handle_mouse_move(&mut self, root_id: &ViewId, pos: impl Into<Vector2<f32>>) {
-        VIEW_STORAGE.with(|s| {
-            if s.get_all_members_of(root_id).is_empty() { return }
-        });
+        if VIEW_STORAGE.with(|s| {
+            s.get_all_members_of(root_id).is_empty()
+        }) { return }
         self.cursor.hover.pos = pos.into();
 
         #[cfg(feature = "cursor_stats")] let start = std::time::Instant::now();
@@ -259,8 +259,10 @@ impl Context {
             let mut transforms = Vec::with_capacity(components.len());
             let mut mesh = Vec::with_capacity(components.len() * 4);
 
+            // FIXME: this is shit, triggering allocation is shit
+            // there should be a way to write each component individually
             components.iter().enumerate().for_each(|(idx, (elem, vert, mat, img))| {
-                let info = img.as_ref().map(|image_fn| renderer.push_atlas(image_fn)).flatten();
+                let info = img.as_ref().and_then(|image_fn| renderer.push_atlas(image_fn));
                 if let Some(info) = info {
                     if let Some(uv) = info.get_uv() {
                         vert.update_untracked(|vertices| vertices.set_uv(uv));
@@ -279,6 +281,7 @@ impl Context {
             });
 
             renderer.submit_data_batched(&elements, &transforms, &mesh);
+            renderer.finish();
         });
     }
 }

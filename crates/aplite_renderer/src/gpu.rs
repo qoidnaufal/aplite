@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use aplite_types::Size;
-use aplite_pollster::block_on;
+use aplite_future::block_on;
 use winit::window::Window;
 
 use super::RendererError;

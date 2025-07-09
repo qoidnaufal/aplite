@@ -6,7 +6,7 @@ pub struct Vector<const N: usize, T: GpuPrimitive> {
     inner: [T; N]
 }
 
-impl<const N: usize, T: GpuPrimitive + NumDebugger> std::fmt::Debug for Vector<N, T> {
+impl<const N: usize, T: NumDebugger> std::fmt::Debug for Vector<N, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = format!("Vector{N}");
         let s = self.debug_formatter(name.as_str());
@@ -33,7 +33,7 @@ impl<const N: usize, T: GpuPrimitive> std::ops::IndexMut<usize> for Vector<N, T>
     }
 }
 
-impl<const N: usize, T: GpuPrimitive + NumDebugger> Vector<N, T> {
+impl<const N: usize, T: NumDebugger> Vector<N, T> {
     pub(crate) fn debug_formatter(&self, name: &str) -> String {
         let mut s = String::new();
         s.push_str(format!("{name} {{").as_str());
@@ -46,7 +46,7 @@ impl<const N: usize, T: GpuPrimitive + NumDebugger> Vector<N, T> {
             } else {
                 format!(" {num}")
             };
-            if n == N-1 {
+            if n == N - 1 {
                 if num.is_float() {
                     s.push_str(format!("{num_str}  }}").as_str());
                 } else {

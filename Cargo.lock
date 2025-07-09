@@ -102,7 +102,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "aplite_pollster"
+name = "aplite_future"
 version = "0.1.0"
 
 [[package]]
@@ -116,7 +116,7 @@ dependencies = [
 name = "aplite_renderer"
 version = "0.1.0"
 dependencies = [
- "aplite_pollster",
+ "aplite_future",
  "aplite_types",
  "image",
  "wgpu",

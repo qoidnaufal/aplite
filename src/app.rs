@@ -225,11 +225,10 @@ impl Aplite {
         if let Some((_, window)) = self.window.get(window_id).cloned() {
             // FIXME: this method looks like a rebuilding to me
             self.submit_update(&window_id);
-            window.pre_present_notify();
 
             #[cfg(feature = "render_stats")] let start = std::time::Instant::now();
 
-            self.render(event_loop);
+            self.render(event_loop, window);
 
             #[cfg(feature = "render_stats")] self.stats.inc(start.elapsed())
         }
@@ -243,13 +242,13 @@ impl Aplite {
         }
     }
 
-    fn render(&mut self, event_loop: &ActiveEventLoop) {
+    fn render(&mut self, event_loop: &ActiveEventLoop, window: Arc<Window>) {
         if self.renderer.is_none() { event_loop.exit() }
         let renderer = self.renderer.as_mut().unwrap();
         let size = renderer.screen_size().u32();
         let color = Rgba::TRANSPARENT;
 
-        if let Err(err) = renderer.render(color) {
+        if let Err(err) = renderer.render(color, window) {
             match err {
                 RendererError::ShouldResize => self.handle_resize(WinitSize::Logical(size)),
                 RendererError::ShouldExit => event_loop.exit(),

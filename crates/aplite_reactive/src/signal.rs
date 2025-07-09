@@ -15,7 +15,7 @@ pub struct Signal {
 }
 
 impl Signal {
-    pub fn new<T: 'static>(value: T) -> (ReadSignal<T>, WriteSignal<T>) {
+    pub fn create<T: 'static>(value: T) -> (ReadSignal<T>, WriteSignal<T>) {
         GRAPH.with(|graph| graph.create_rw_signal(value)).split()
     }
 
@@ -27,7 +27,7 @@ impl Signal {
         GRAPH.with(|graph| graph.create_rw_signal(value)).write_only()
     }
 
-    pub(crate) fn store_value<T: Any + 'static>(value: T) -> Self {
+    pub(crate) fn new<T: Any + 'static>(value: T) -> Self {
         Self {
             value: Rc::new(RefCell::new(value)),
             subscribers: Default::default(),

@@ -172,6 +172,10 @@ impl Element {
         }
     }
 
+    pub fn rotation(&self) -> f32 {
+        self.rotation
+    }
+
     pub fn with_fill_color(mut self, color: Rgba<u8>) -> Self {
         self.fill_color = color.into();
         self

@@ -69,7 +69,7 @@ impl ReactiveGraph {
 
     pub(crate) fn create_rw_signal<T: Any + 'static>(&self, value: T) -> RwSignal<T> {
         let id = ReactiveId::new();
-        self.signals.borrow_mut().insert(id, Signal::store_value(value));
+        self.signals.borrow_mut().insert(id, Signal::new(value));
         RwSignal { id, phantom: PhantomData }
     }
 
@@ -147,7 +147,7 @@ mod reactive_test {
 
     #[test]
     fn signal() {
-        let (counter, set_counter) = Signal::new(0i32);
+        let (counter, set_counter) = Signal::create(0i32);
 
         set_counter.update(|num| *num += 1);
         assert_eq!(counter.get(), 1);
@@ -161,9 +161,9 @@ mod reactive_test {
 
     #[test]
     fn effect() {
-        let (use_last, set_use_last) = Signal::new(false);
-        let (first, set_first) = Signal::new("Dario");
-        let (last, set_last) = Signal::new("");
+        let (use_last, set_use_last) = Signal::create(false);
+        let (first, set_first) = Signal::create("Dario");
+        let (last, set_last) = Signal::create("");
 
         let name = Rc::new(RefCell::new(String::new()));
         let set_name = Rc::clone(&name);
@@ -202,7 +202,7 @@ mod reactive_test {
     #[test]
     fn derive() {
         let rw = RwSignal::new(0i32);
-        let (counter, set_counter) = Signal::new(0i32);
+        let (counter, set_counter) = Signal::create(0i32);
 
         set_counter.set(69);
         rw.update(|num| *num = counter.get());
@@ -211,14 +211,14 @@ mod reactive_test {
 
     #[test]
     fn child_effect() {
-        let (check, set_check) = Signal::new(false);
-        let (outer_name, set_outer_name) = Signal::new("Steve");
+        let (check, set_check) = Signal::create(false);
+        let (outer_name, set_outer_name) = Signal::create("Steve");
 
         let someone = Rc::new(RefCell::new(String::new()));
         let outer_one = Rc::clone(&someone);
 
         Effect::new(move |_| {
-            let (inner_name, set_inner_name) = Signal::new("");
+            let (inner_name, set_inner_name) = Signal::create("");
             let inner_one = Rc::clone(&outer_one);
 
             Effect::new(move |_| {
@@ -251,7 +251,7 @@ mod reactive_test {
     #[test]
     #[should_panic]
     fn dispose() {
-        let (num, set_num) = Signal::new(0i32);
+        let (num, set_num) = Signal::create(0i32);
         let double = || num.get() * 2;
 
         set_num.set(1);

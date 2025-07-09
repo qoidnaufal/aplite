@@ -5,7 +5,7 @@ pub struct Rect<T: GpuPrimitive> {
     inner: Vector4<T>,
 }
 
-impl<T: GpuPrimitive + NumDebugger> std::fmt::Debug for Rect<T> {
+impl<T: NumDebugger> std::fmt::Debug for Rect<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = self.inner.debug_formatter("Rect");
         write!(f, "{s}")
@@ -106,24 +106,24 @@ impl Rect<u32> {
     }
 
     pub fn f32(self) -> Rect<f32> {
-        self.into()
+        Rect { inner: self.inner.f32() }
     }
 }
 
 impl Rect<f32> {
     pub fn u32(self) -> Rect<u32> {
-        self.into()
+        Rect { inner: self.inner.u32() }
     }
 }
 
 impl From<Rect<f32>> for Rect<u32> {
     fn from(value: Rect<f32>) -> Self {
-        Self { inner: value.inner.into() }
+        Self { inner: value.inner.u32() }
     }
 }
 
 impl From<Rect<u32>> for Rect<f32> {
     fn from(value: Rect<u32>) -> Self {
-        Self { inner: value.inner.into() }
+        Self { inner: value.inner.f32() }
     }
 }
