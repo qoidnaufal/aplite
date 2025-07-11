@@ -1,5 +1,20 @@
 use aplite_types::Rgba;
 
+use crate::texture::AtlasId;
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct Element {
+    pub(crate) fill_color: Rgba<f32>,
+    pub(crate) stroke_color: Rgba<f32>,
+    pub(crate) corners: CornerRadius,
+    pub(crate) shape: Shape,
+    pub(crate) rotation: f32,
+    pub(crate) stroke_width: f32,
+    pub(crate) atlas_id: AtlasId,
+    pub(crate) transform_id: u32,
+}
+
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shape {
@@ -69,49 +84,36 @@ impl CornerRadius {
 
     /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
     /// Doesn't necessarily mean that you can't put a value more than 100
-    pub fn set_all(&mut self, r: u32) {
-        self.tl = r as _;
-        self.bl = r as _;
-        self.br = r as _;
-        self.tr = r as _;
+    pub fn set_all(&mut self, val: u32) {
+        self.tl = val as _;
+        self.bl = val as _;
+        self.br = val as _;
+        self.tr = val as _;
     }
 
     /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
     /// Doesn't necessarily mean that you can't put a value more than 100
-    pub fn set_top_left(&mut self, r: u32) {
-        self.tl = r as _;
+    pub fn set_top_left(&mut self, val: u32) {
+        self.tl = val as _;
     }
 
     /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
     /// Doesn't necessarily mean that you can't put a value more than 100
-    pub fn set_bot_left(&mut self, r: u32) {
-        self.bl = r as _;
+    pub fn set_bot_left(&mut self, val: u32) {
+        self.bl = val as _;
     }
 
     /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
     /// Doesn't necessarily mean that you can't put a value more than 100
-    pub fn set_bot_right(&mut self, r: u32) {
-        self.br = r as _;
+    pub fn set_bot_right(&mut self, val: u32) {
+        self.br = val as _;
     }
 
     /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
     /// Doesn't necessarily mean that you can't put a value more than 100
-    pub fn set_top_right(&mut self, r: u32) {
-        self.tr = r as _;
+    pub fn set_top_right(&mut self, val: u32) {
+        self.tr = val as _;
     }
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct Element {
-    pub(crate) fill_color: Rgba<f32>,
-    pub(crate) stroke_color: Rgba<f32>,
-    pub(crate) corners: CornerRadius,
-    pub(crate) shape: Shape,
-    pub(crate) rotation: f32,
-    pub(crate) stroke_width: f32,
-    pub(crate) atlas_id: i32,
-    pub(crate) transform_id: u32,
 }
 
 impl Element {
@@ -123,51 +125,12 @@ impl Element {
             shape: Shape::RoundedRect,
             rotation: 0.0,
             stroke_width: 0.0,
-            atlas_id: -1,
+            atlas_id: AtlasId::new(-1),
             transform_id: 0,
         }
     }
 
-    pub fn circle() -> Self {
-        Self {
-            fill_color: Rgba::RED.into(),
-            stroke_color: Rgba::WHITE.into(),
-            corners: CornerRadius::homogen(25),
-            shape: Shape::Circle,
-            rotation: 0.0,
-            stroke_width: 0.0,
-            atlas_id: -1,
-            transform_id: 0,
-        }
-    }
-
-    pub fn rounded_rect() -> Self {
-        Self {
-            fill_color: Rgba::RED.into(),
-            stroke_color: Rgba::WHITE.into(),
-            corners: CornerRadius::homogen(25),
-            shape: Shape::RoundedRect,
-            rotation: 0.0,
-            stroke_width: 0.0,
-            atlas_id: -1,
-            transform_id: 0,
-        }
-    }
-
-    pub fn rect() -> Self {
-        Self {
-            fill_color: Rgba::RED.into(),
-            stroke_color: Rgba::WHITE.into(),
-            corners: CornerRadius::homogen(0),
-            shape: Shape::Rect,
-            rotation: 0.0,
-            stroke_width: 0.0,
-            atlas_id: -1,
-            transform_id: 0,
-        }
-    }
-
-    pub fn atlas_id(&self) -> i32 {
+    pub(crate) fn atlas_id(&self) -> AtlasId {
         self.atlas_id
     }
 
@@ -243,8 +206,8 @@ impl Element {
         self.transform_id = val;
     }
 
-    pub fn set_atlas_id(&mut self, val: i32) {
-        self.atlas_id = val;
+    pub fn set_atlas_id(&mut self, id: AtlasId) {
+        self.atlas_id = id;
     }
 
     pub fn fill_color(&self) -> Rgba<u8> {

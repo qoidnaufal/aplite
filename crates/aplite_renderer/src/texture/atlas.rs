@@ -9,12 +9,8 @@ use super::ImageData;
 pub struct AtlasId(i32);
 
 impl AtlasId {
-    pub(crate) fn new(id: i32) -> Self {
+    pub(crate) const fn new(id: i32) -> Self {
         Self(id)
-    }
-
-    pub fn get_id(&self) -> i32 {
-        self.0
     }
 }
 
@@ -24,7 +20,7 @@ pub(crate) struct Atlas {
     texture: wgpu::Texture,
     pub(crate) bind_group: wgpu::BindGroup,
 
-    pending_image: HashMap<AtlasId, ImageData>,
+    pending_data: HashMap<AtlasId, ImageData>,
     position: HashMap<AtlasId, Rect<u32>>,
     uvs: HashMap<AtlasId, Rect<f32>>,
     count: i32,
@@ -80,7 +76,7 @@ impl Atlas {
             used,
             texture,
             bind_group,
-            pending_image: HashMap::new(),
+            pending_data: HashMap::new(),
             position: HashMap::new(),
             uvs: HashMap::new(),
             count: 0,
@@ -122,7 +118,7 @@ impl Atlas {
 
         self.position.insert(resource_id, self.used);
         self.uvs.insert(resource_id, uv);
-        self.pending_image.insert(resource_id, data);
+        self.pending_data.insert(resource_id, data);
         self.occupy(width);
         self.count += 1;
 
@@ -135,9 +131,9 @@ impl Atlas {
     }
 
     pub(crate) fn update(&mut self, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder) {
-        if self.pending_image.is_empty() { return }
+        if self.pending_data.is_empty() { return }
 
-        for (id, data) in &self.pending_image {
+        for (id, data) in &self.pending_data {
             let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
             let width = data.width() * 4;
             let padding = (alignment - width % alignment) % alignment;
@@ -189,7 +185,7 @@ impl Atlas {
             );
         }
 
-        self.pending_image.clear();
+        self.pending_data.clear();
     }
 
     pub(crate) fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {

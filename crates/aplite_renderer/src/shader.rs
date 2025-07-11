@@ -38,12 +38,17 @@ struct Element {
 @group(1) @binding(0) var<storage> elements: array<Element>;
 @group(1) @binding(1) var<storage> transforms: array<mat3x2<f32>>;
 
-fn rotate(r: f32, pos: vec2<f32>) -> vec2<f32> {
-    let rotation = mat2x2<f32>(
-        cos(r), -sin(r),
-        sin(r),  cos(r),
+fn get_pos(element: Element, pos: vec2<f32>) -> vec2f {
+    let t = transforms[element.transform_id];
+    let r = element.rotate;
+
+    let mat = mat2x2<f32>(
+        cos(r) * t[0].x, -sin(r) * t[1].y,
+        sin(r) * t[0].x,  cos(r) * t[1].y,
     );
-    return rotation * pos;
+
+    let translate = vec2f(t[2].x, t[2].y);
+    return mat * pos + translate;
 }
 
 struct VertexInput {
@@ -61,15 +66,9 @@ struct FragmentPayload {
 @vertex
 fn vs_main(vertex: VertexInput) -> FragmentPayload {
     let element = elements[vertex.id];
-    let element_t = transforms[element.transform_id];
 
-    var pos = vertex.pos;
-    if element.rotate != 0.0 {
-        pos = rotate(element.rotate, vertex.pos);
-    }
-
-    let t_pos = element_t * vec3f(pos, 1.0);
-    let s_pos = screen_t * vec3f(t_pos, 1.0);
+    let pos = get_pos(element, vertex.pos);
+    let s_pos = screen_t * vec3f(pos, 1.0);
 
     var out: FragmentPayload;
     out.uv = select(vertex.uv * 2 - 1, vertex.uv, element.atlas_id > -1);

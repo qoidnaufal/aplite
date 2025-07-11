@@ -259,8 +259,7 @@ impl Context {
             components.iter().for_each(|(elem, mat, img)| {
                 let info = img.as_ref().and_then(|image_fn| renderer.render_image(image_fn));
                 if let Some(id) = info {
-                    let atlas_id = id.get_id();
-                    elem.update_untracked(|elem| elem.set_atlas_id(atlas_id));
+                    elem.update_untracked(|elem| elem.set_atlas_id(id));
                 };
                 transforms.push(*mat);
                 elements.push(elem.get_untracked());

@@ -35,7 +35,25 @@ pub struct WidgetState {
 
 impl Default for WidgetState {
     fn default() -> Self {
-        Self::new()
+        Self {
+            name: "",
+            rect: RwSignal::new(Rect::new((0, 0), (0, 0))),
+            min_width: Some(1),
+            min_height: Some(1),
+            max_width: None,
+            max_height: None,
+            alignment: Alignment::new(),
+            orientation: Orientation::Vertical,
+            spacing: 0,
+            z_index: RwSignal::new(0),
+            padding: Padding::default(),
+            image_aspect_ratio: AspectRatio::Undefined,
+            dragable: RwSignal::new(false),
+            hoverable: RwSignal::new(false),
+            is_hovered: RwSignal::new(false),
+            is_clicked: RwSignal::new(false),
+            trigger_callback: RwSignal::new(false),
+        }
     }
 }
 
@@ -47,25 +65,10 @@ impl WidgetState {
         let w = size.width();
         let h = size.height();
 
-        Self {
-            name: "Root",
-            rect: RwSignal::new(Rect::new((x, y), (w, h))),
-            min_width: None,
-            min_height: None,
-            max_width: None,
-            max_height: None,
-            alignment: Default::default(),
-            orientation: Default::default(),
-            spacing: 10,
-            z_index: RwSignal::new(0),
-            padding: Default::default(),
-            image_aspect_ratio: AspectRatio::Undefined,
-            dragable: RwSignal::new(false),
-            hoverable: RwSignal::new(false),
-            is_hovered: RwSignal::new(false),
-            is_clicked: RwSignal::new(false),
-            trigger_callback: RwSignal::new(false),
-        }
+        Self::new()
+            .with_name("Root")
+            .with_size((w, h))
+            .with_position((x, y))
     }
 
     // pub(crate) fn adjust_width(&mut self, aspect_ratio: Fraction<u32>) {
@@ -99,44 +102,23 @@ impl WidgetState {
             && (x - width..x + width).contains(&x_cursor)
             && cursor.hover.z_index <= self.z_index.get_untracked());
 
-        // if self.is_hovered.get_untracked() {
-        //     cursor.hover.z_index.set(self.z_index.get_untracked());
-        // }
-
         self.is_hovered.get_untracked()
     }
-
-    // pub(crate) fn toggle_click(&mut self) {
-    //     self.is_clicked.update(|click| *click = !*click);
-    // }
 }
 
 // creation
 impl WidgetState {
     pub fn new() -> Self {
-        Self {
-            name: "",
-            rect: RwSignal::new(Rect::new((0, 0), (0, 0))),
-            min_width: Some(1),
-            min_height: Some(1),
-            max_width: None,
-            max_height: None,
-            alignment: Alignment::new(),
-            orientation: Orientation::Vertical,
-            spacing: 0,
-            z_index: RwSignal::new(0),
-            padding: Padding::new(5, 5, 5, 5),
-            image_aspect_ratio: AspectRatio::Undefined,
-            dragable: RwSignal::new(false),
-            hoverable: RwSignal::new(false),
-            is_hovered: RwSignal::new(false),
-            is_clicked: RwSignal::new(false),
-            trigger_callback: RwSignal::new(false),
-        }
+        Self::default()
     }
 
     pub fn with_name(mut self, name: &'static str) -> Self {
         self.set_name(name);
+        self
+    }
+
+    pub(crate) fn with_position(self, pos: impl Into<Vector2<u32>>) -> Self {
+        self.rect.update_untracked(|rect| rect.set_pos(pos.into()));
         self
     }
 
@@ -238,7 +220,7 @@ impl WidgetState {
         self.spacing = value
     }
 
-    pub(crate) fn set_image_aspect_ratio(&mut self, aspect_ratio: AspectRatio) {
+    pub fn set_image_aspect_ratio(&mut self, aspect_ratio: AspectRatio) {
         self.image_aspect_ratio = aspect_ratio;
     }
 }

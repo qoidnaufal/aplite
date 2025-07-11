@@ -31,7 +31,7 @@ pub mod prelude {
         Style,
         Layout,
         ViewNode,
-        TestCircleWidget,
+        CircleWidget,
         HStack,
         VStack,
         Button,

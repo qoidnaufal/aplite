@@ -30,7 +30,7 @@ pub struct WindowAttributes {
     decorations: bool,
     transparent: bool,
     maximized: bool,
-    fullscreen: Option<winit::window::Fullscreen>,
+    resizable: bool,
 }
 
 impl Default for WindowAttributes {
@@ -41,34 +41,8 @@ impl Default for WindowAttributes {
             decorations: true,
             transparent: false,
             maximized: false,
-            fullscreen: None,
+            resizable: true,
         }
-    }
-}
-
-impl WindowAttributes {
-    pub fn set_title(&mut self, title: &'static str) {
-        self.title = title;
-    }
-
-    pub fn set_inner_size(&mut self, size: impl Into<Size<u32>>) {
-        self.inner_size = size.into();
-    }
-
-    pub fn set_decorations_enabled(&mut self, val: bool) {
-        self.decorations = val;
-    }
-
-    pub fn set_transparent(&mut self, val: bool) {
-        self.transparent = val;
-    }
-
-    pub fn set_maximized(&mut self, val: bool) {
-        self.maximized = val;
-    }
-
-    pub fn set_fullscreen_mode(&mut self, val: Option<winit::window::Fullscreen>) {
-        self.fullscreen = val;
     }
 }
 
@@ -80,7 +54,7 @@ impl From<&WindowAttributes> for winit::window::WindowAttributes {
             .with_decorations(w.decorations)
             .with_transparent(w.transparent)
             .with_maximized(w.maximized)
-            .with_fullscreen(w.fullscreen.clone())
+            .with_resizable(w.resizable)
     }
 }
 
@@ -123,15 +97,40 @@ impl Aplite {
         Ok(())
     }
 
-    pub fn set_window_attributes(mut self, f: fn(&mut WindowAttributes)) -> Self {
-        f(&mut self.window_attributes);
+    pub fn with_title(mut self, title: &'static str) -> Self {
+        self.window_attributes.title = title;
         self
     }
 
-    // pub fn set_background_color(mut self, color: Rgba<u8>) -> Self {
-    //     self.cx.update_window_properties(|prop| prop.set_fill_color(color));
-    //     self
-    // }
+    pub fn with_inner_size(mut self, width: u32, height: u32) -> Self {
+        self.window_attributes.inner_size = (width, height).into();
+        self
+    }
+
+    pub fn with_decorations_enabled(mut self, val: bool) -> Self {
+        self.window_attributes.decorations = val;
+        self
+    }
+
+    pub fn with_transparent(mut self, val: bool) -> Self {
+        self.window_attributes.transparent = val;
+        self
+    }
+
+    pub fn with_maximized(mut self, val: bool) -> Self {
+        self.window_attributes.maximized = val;
+        self
+    }
+
+    pub fn with_resizable(mut self, val: bool) -> Self {
+        self.window_attributes.resizable = val;
+        self
+    }
+
+    pub fn with_background_color(self, color: Rgba<u8>) -> Self {
+        let _ = color;
+        self
+    }
 }
 
 // initialization
@@ -182,7 +181,7 @@ impl Aplite {
 
         let dirty = self.cx.dirty();
         Effect::new(move |_| {
-            // FIXME: this should coresponds to which window_id
+            // FIXME: this should coresponds to root_id & window_id
             if dirty.get() { window.request_redraw() }
         });
     }

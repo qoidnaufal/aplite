@@ -65,6 +65,10 @@ impl<const M: usize, const N: usize> Matrix<M, N> {
         &self.inner
     }
 
+    const fn get_scale(&self) -> (f32, f32) {
+        (self.inner[0].x(), self.inner[1].y())
+    }
+
     #[inline(always)]
     pub fn with_translate(mut self, x: f32, y: f32) -> Self {
         self.set_translate(x, y);
@@ -85,8 +89,24 @@ impl<const M: usize, const N: usize> Matrix<M, N> {
 
     #[inline(always)]
     pub fn set_scale(&mut self, sx: f32, sy: f32) {
-        self[0].set_x(sx);
-        self[1].set_y(sy);
+        self[0].mul_x(sx);
+        self[1].mul_y(sy);
+    }
+
+    #[inline(always)]
+    /// rotation need to be in radians
+    pub fn with_scale_and_rotation_rad(mut self, sx: f32, sy: f32, rad: f32) -> Self {
+        self.set_scale_and_rotation_rad(sx, sy, rad);
+        self
+    }
+
+    #[inline(always)]
+    /// rotation need to be in radians
+    pub fn set_scale_and_rotation_rad(&mut self, sx: f32, sy: f32, rad: f32) {
+        self[0].set_x( rad.cos() * sx);
+        self[0].set_y(-rad.sin() * sy);
+        self[1].set_x( rad.sin() * sx);
+        self[1].set_y( rad.cos() * sy);
     }
 
     #[inline(always)]
@@ -100,84 +120,36 @@ impl<const M: usize, const N: usize> Matrix<M, N> {
     /// rotation need to be in degree, will be converted into radians internally
     pub fn set_scale_and_rotation_deg(&mut self, sx: f32, sy: f32, rotation: f32) {
         let rad = rotation.to_radians();
-        self[0].set_x(sx * rad.cos());
-        self[0].set_y(-rad.sin());
-        self[1].set_x( rad.sin());
-        self[1].set_y(sy * rad.cos());
-    }
-
-    #[inline(always)]
-    /// rotation need to be in radians
-    pub fn with_scale_and_rotation_rad(mut self, sx: f32, sy: f32, rad: f32) -> Self {
         self.set_scale_and_rotation_rad(sx, sy, rad);
-        self
-    }
-
-    #[inline(always)]
-    /// rotation need to be in radians
-    pub fn set_scale_and_rotation_rad(&mut self, sx: f32, sy: f32, rad: f32) {
-        self[0].set_x(sx * rad.cos());
-        self[0].set_y(-rad.sin());
-        self[1].set_x( rad.sin());
-        self[1].set_y(sy * rad.cos());
     }
 
     #[inline(always)]
     /// value must be a degree, will be converted into radians internally
-    pub fn with_rotation_cw_deg(mut self, deg: f32) -> Self {
-        self.set_rotation_cw_deg(deg);
+    pub fn with_rotation_deg(mut self, deg: f32) -> Self {
+        self.set_rotation_deg(deg);
         self
     }
 
     #[inline(always)]
     /// value must be a degree, will be converted into radians internally
-    pub fn set_rotation_cw_deg(&mut self, deg: f32) {
+    pub fn set_rotation_deg(&mut self, deg: f32) {
         let rad = deg.to_radians();
-        self[0].mul_x( rad.cos());  self[1].set_x(rad.sin());
-        self[0].set_y(-rad.sin());  self[1].mul_y(rad.cos());
-    }
-
-    #[inline(always)]
-    /// value must be a degree, will be converted into radians internally
-    pub fn with_rotation_ccw_deg(mut self, deg: f32) -> Self {
-        self.set_rotation_ccw_deg(deg);
-        self
-    }
-
-    #[inline(always)]
-    /// value must be a degree, will be converted into radians internally
-    pub fn set_rotation_ccw_deg(&mut self, deg: f32) {
-        let rad = deg.to_radians();
-        self[0].mul_x(rad.cos());  self[1].set_x(-rad.sin());
-        self[0].set_y(rad.sin());  self[1].mul_y( rad.cos());
+        let (sx, sy) = self.get_scale();
+        self.set_scale_and_rotation_rad(sx, sy, rad);
     }
 
     #[inline(always)]
     /// value must be in radian
-    pub fn with_rotation_cw_rad(mut self, rad: f32) -> Self {
-        self.set_rotation_cw_rad(rad);
+    pub fn with_rotation_rad(mut self, rad: f32) -> Self {
+        self.set_rotation_rad(rad);
         self
     }
 
     #[inline(always)]
     /// value must be in radian
-    pub fn set_rotation_cw_rad(&mut self, rad: f32) {
-        self[0].mul_x( rad.cos());  self[1].set_x(rad.sin());
-        self[0].set_y(-rad.sin());  self[1].mul_y(rad.cos());
-    }
-
-    #[inline(always)]
-    /// value must be in radian
-    pub fn with_rotation_ccw_rad(mut self, rad: f32) -> Self {
-        self.set_rotation_ccw_rad(rad);
-        self
-    }
-
-    #[inline(always)]
-    /// value must be in radian
-    pub fn set_rotation_ccw_rad(&mut self, rad: f32) {
-        self[0].mul_x(rad.cos());  self[1].set_x(-rad.sin());
-        self[0].set_y(rad.sin());  self[1].mul_y( rad.cos());
+    pub fn set_rotation_rad(&mut self, rad: f32) {
+        let (sx, sy) = self.get_scale();
+        self.set_scale_and_rotation_rad(sx, sy, rad);
     }
 
     fn transpose(self) -> Matrix<N, M> {
@@ -243,47 +215,12 @@ impl Matrix3x2 {
 pub type Matrix2x2 = Matrix<2, 2>;
 
 impl Matrix2x2 {
-    /// Counter-clockwise rotation, the value will be converted into radians internally
-    pub fn ccw_deg(deg: f32) -> Self {
-        let rad = deg.to_radians();
-        Self {
-            inner: [
-                Vector2::new( rad.cos(), rad.sin()),
-                Vector2::new(-rad.sin(), rad.cos())
-            ]
-        }
-    }
-
-    /// Clockwise rotation, the value will be converted into radians internally
-    pub fn cw_deg(deg: f32) -> Self {
-        let rad = deg.to_radians();
-        Self {
-            inner: [
-                Vector2::new(rad.cos(), -rad.sin()),
-                Vector2::new(rad.sin(),  rad.cos())
-            ]
-        }
-    }
-
-    /// Counter-clockwise rotation, value must be in radians
-    pub fn ccw_rad(rad: f32) -> Self {
-        Self {
-            inner: [
-                Vector2::new( rad.cos(), rad.sin()),
-                Vector2::new(-rad.sin(), rad.cos())
-            ]
-        }
-    }
-
-    /// Clockwise rotation, value must be in radians
-    pub fn cw_rad(rad: f32) -> Self {
-        Self {
-            inner: [
-                Vector2::new(rad.cos(), -rad.sin()),
-                Vector2::new(rad.sin(),  rad.cos())
-            ]
-        }
-    }
+    pub const IDENTITY: Self = Self {
+        inner: [
+            Vector2::new(1.0, 0.0),
+            Vector2::new(0.0, 1.0)
+        ]
+    };
 }
 
 #[cfg(test)]
@@ -297,20 +234,32 @@ mod matrix_test {
         let point3 = Vector3::new(1.0, 1.0, 1.0);
         let point2 = Vector2::new(1.0, 1.0);
 
-        let dot = mat3x2.dot_vec(point3);
-        let trx = mat3x2.transform_point(point2);
+        let res = mat3x2.dot_vec(point3);
+        let cpr = mat3x2.transform_point(point2);
 
         eprintln!("{mat3x2:?}");
-        assert_eq!(dot, trx);
+        assert_eq!(res, cpr);
     }
 
     #[test]
     fn mat_mul() {
-        let mat2x2 = Matrix2x2::cw_rad(0.0);
+        let mat2x2 = Matrix2x2::IDENTITY.with_rotation_rad(0.0);
         let mat3x2 = Matrix3x2::IDENTITY.with_translate(1.0, 1.0);
 
         let res = mat2x2.dot_mat(mat3x2);
         let cpr = Matrix3x2::IDENTITY;
+
+        assert_eq!(res, cpr);
+    }
+
+    #[test]
+    fn rotation() {
+        let point = Vector2::new(1.0, 1.2);
+        let mat2x2 = Matrix2x2::IDENTITY.with_scale(1.3, 1.4).with_rotation_rad(30.);
+        let res = mat2x2.dot_vec(point);
+
+        let mat3x2 = Matrix3x2::IDENTITY.with_scale_and_rotation_rad(1.3, 1.4, 30.);
+        let cpr = mat3x2.transform_point(point);
 
         assert_eq!(res, cpr);
     }

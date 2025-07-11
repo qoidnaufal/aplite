@@ -180,7 +180,7 @@ impl Renderer {
         (0..elements.len())
             .for_each(|i| {
                 indices.extend_from_slice(Indices::new().with_offset(i as _, true).as_slice());
-                let id = AtlasId::new(elements[i].atlas_id());
+                let id = elements[i].atlas_id();
                 let vert = if let Some(uv) = self.atlas.get_uv(&id) {
                     Vertices::new().with_uv(*uv).with_id(i as _)
                 } else {

@@ -17,14 +17,14 @@ fn root() -> impl IntoView {
     let first_row = HStack::new()
         .append_child(
             Image::new(|| image_reader("examples/assets/image1.jpg"))
-                .with_aspect_ratio(Defined((8, 5)))
+                .state(|state| state.set_image_aspect_ratio(Defined((8, 5))))
         )
         .append_child(
             Image::new(|| image_reader("examples/assets/image2.jpg"))
                 .set_dragable(true)
         )
         .append_child(
-            TestCircleWidget::new()
+            CircleWidget::new()
                 .set_color(|_| Rgba::PURPLE)
                 .set_hover_color(|_| Rgba::RED)
         )
@@ -64,7 +64,7 @@ fn root() -> impl IntoView {
             Button::new()
                 .set_corners(|_| CornerRadius::homogen(70))
                 .set_rotation(move |_| {
-                    counter.with(|val| *val as f32 * 57.29 / 360.)
+                    counter.with(|val| *val as f32)
                 })
                 .set_color(move |_| {
                     counter.with(|val| {
@@ -90,7 +90,7 @@ fn root() -> impl IntoView {
             s.set_spacing(5);
         })
     ).append_child(
-        TestCircleWidget::new()
+        CircleWidget::new()
             .set_color(|_| Rgba::BLACK)
             .set_hover_color(|_| Rgba::GREEN)
             .set_stroke_color(|_| Rgba::RED)
@@ -103,7 +103,7 @@ fn root() -> impl IntoView {
         s.set_spacing(5);
     });
 
-    let circle = TestCircleWidget::new()
+    let circle = CircleWidget::new()
         .set_color(|_| Rgba::new(169, 72, 43, 255))
         .set_hover_color(|_| Rgba::BLACK)
         .set_stroke_color(|_| Rgba::WHITE)
@@ -138,7 +138,7 @@ fn dummy() -> impl IntoView {
         .set_size((200, 69))
         .on_click(click);
 
-    let circle = TestCircleWidget::new()
+    let circle = CircleWidget::new()
         .set_color(color)
         .set_shape(move |_| {
             counter.with(|val| {
@@ -161,19 +161,14 @@ fn main() -> ApliteResult {
     match args.nth(1) {
         Some(arg) if arg == "dummy" => {
             Aplite::new(dummy)
-                .set_window_attributes(|window| {
-                    window.set_title("Dummy");
-                    // window.set_inner_size((500, 500));
-                })
-                // .set_background_color(Rgba::DARK_GRAY)
+                .with_title("Dummy")
+                .with_background_color(Rgba::DARK_GRAY)
                 .launch()
         },
         Some(arg) if arg == "empty" => {
             Aplite::new_empty()
-                .set_window_attributes(|window| {
-                    window.set_title("Empty");
-                })
-                // .set_background_color(Rgba::DARK_GREEN)
+                .with_title("Empty")
+                .with_background_color(Rgba::DARK_GREEN)
                 .launch()
         }
         _ => {

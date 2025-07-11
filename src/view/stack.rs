@@ -18,9 +18,11 @@ pub struct VStack {
 impl VStack {
     pub fn new() -> Self {
         let id = VIEW_STORAGE.with(|s| s.create_entity());
+
         let node = ViewNode::new()
             .with_fill_color(Rgba::DARK_GRAY)
             .with_shape(Shape::Rect);
+
         let state = WidgetState::new()
             .with_name("VStack")
             .with_size((1, 1));
@@ -32,17 +34,7 @@ impl VStack {
         }
     }
 
-    // pub fn append_child(self, child: impl IntoView) -> Self {
-    //     VIEW_STORAGE.with(|s| s.append_child(&self.id, child));
-    //     self
-    // }
-
-    // pub fn and(self, sibling: impl IntoView) -> Self {
-    //     VIEW_STORAGE.with(|s| s.add_sibling(&self.id, sibling));
-    //     self
-    // }
-
-    pub fn state(mut self, mut f: impl FnMut(&mut WidgetState) + 'static) -> Self {
+    pub fn state(mut self, f: impl Fn(&mut WidgetState)) -> Self {
         f(&mut self.state);
         self
     }
@@ -53,8 +45,8 @@ impl Widget for VStack {
         self.id
     }
 
-    fn widget_state(&self) -> WidgetState {
-        self.state
+    fn widget_state(&self) -> &WidgetState {
+        &self.state
     }
 
     fn node(&self) -> ViewNode {
@@ -75,9 +67,11 @@ pub struct HStack {
 impl HStack {
     pub fn new() -> Self {
         let id = VIEW_STORAGE.with(|s| s.create_entity());
+
         let node = ViewNode::new()
             .with_fill_color(Rgba::DARK_GRAY)
             .with_shape(Shape::Rect);
+
         let state = WidgetState::new()
             .with_orientation(Orientation::Horizontal)
             .with_name("HStack")
@@ -90,17 +84,7 @@ impl HStack {
         }
     }
 
-    // pub fn append_child(self, child: impl IntoView) -> Self {
-    //     VIEW_STORAGE.with(|s| s.append_child(&self.id, child));
-    //     self
-    // }
-
-    // pub fn and(self, sibling: impl IntoView) -> Self {
-    //     VIEW_STORAGE.with(|s| s.add_sibling(&self.id, sibling));
-    //     self
-    // }
-
-    pub fn state(mut self, mut f: impl FnMut(&mut WidgetState) + 'static) -> Self {
+    pub fn state(mut self, f: impl Fn(&mut WidgetState)) -> Self {
         f(&mut self.state);
         self
     }
@@ -111,8 +95,8 @@ impl Widget for HStack {
         self.id
     }
 
-    fn widget_state(&self) -> WidgetState {
-        self.state
+    fn widget_state(&self) -> &WidgetState {
+        &self.state
     }
 
     fn node(&self) -> ViewNode {

@@ -53,7 +53,7 @@ impl ViewStorage {
     pub(crate) fn append_child(&self, id: &ViewId, child: impl IntoView) {
         let child_id = child.id();
         let state = child.widget_state();
-        if state.hoverable.get() || state.dragable.get() {
+        if state.hoverable.get_untracked() || state.dragable.get_untracked() {
             let mut hoverable = self.hoverable.borrow_mut();
             if !hoverable.contains(&child_id) {
                 hoverable.push(child_id);
@@ -66,7 +66,7 @@ impl ViewStorage {
     pub(crate) fn add_sibling(&self, id: &ViewId, sibling: impl IntoView) {
         let sibling_id = sibling.id();
         let state = sibling.widget_state();
-        if state.hoverable.get() || state.dragable.get() {
+        if state.hoverable.get_untracked() || state.dragable.get_untracked() {
             let mut hoverable = self.hoverable.borrow_mut();
             if !hoverable.contains(&sibling_id) {
                 hoverable.push(sibling_id);
@@ -124,7 +124,7 @@ impl Widget for Box<dyn IntoView> {
         self.as_ref().id()
     }
 
-    fn widget_state(&self) -> WidgetState {
+    fn widget_state(&self) -> &WidgetState {
         self.as_ref().widget_state()
     }
 
@@ -143,7 +143,7 @@ impl View {
     fn new(widget: impl IntoView + 'static) -> Self {
         Self {
             node: widget.node(),
-            widget_state: widget.widget_state(),
+            widget_state: *widget.widget_state(),
         }
     }
 
@@ -174,39 +174,17 @@ impl std::fmt::Debug for View {
 /// main building block to create a renderable component
 pub trait Widget {
     fn id(&self) -> ViewId;
-    fn widget_state(&self) -> WidgetState;
+    fn widget_state(&self) -> &WidgetState;
     fn node(&self) -> ViewNode;
 }
 
-// pub struct Callbacks {
-//     on_click: Option<Box<dyn Fn()>>,
-// }
-
-// impl Callbacks {
-//     pub(crate) fn new() -> Self {
-//         Self {
-//             on_click: None,
-//         }
-//     }
-
-//     pub(crate) fn set_on_click(&mut self, f: impl Fn() + 'static) {
-//         self.on_click = Some(Box::new(f));
-//     }
-
-//     pub(crate) fn invoke_on_click(&self) {
-//         if let Some(on_click) = self.on_click.as_ref() {
-//             on_click()
-//         }
-//     }
-// }
-
-pub struct TestCircleWidget {
+pub struct CircleWidget {
     id: ViewId,
     node: ViewNode,
     state: WidgetState,
 }
 
-impl TestCircleWidget {
+impl CircleWidget {
     pub fn new() -> Self {
         let id = VIEW_STORAGE.with(|s| s.create_entity());
         let node = ViewNode::new()
@@ -223,37 +201,28 @@ impl TestCircleWidget {
         }
     }
 
-    // pub fn append_child(self, child: impl IntoView) -> Self {
-    //     VIEW_STORAGE.with(|s| s.append_child(&self.id, child));
-    //     self
-    // }
-
-    // pub fn and(self, sibling: impl IntoView) -> Self {
-    //     VIEW_STORAGE.with(|s| s.add_sibling(&self.id, sibling));
-    //     self
-    // }
-
-    pub fn state(self, f: impl Fn(&WidgetState) + 'static) -> Self {
-        f(&self.state);
+    pub fn state(mut self, f: impl Fn(&mut WidgetState)) -> Self {
+        f(&mut self.state);
         self
     }
 }
 
-impl Widget for TestCircleWidget {
+impl Widget for CircleWidget {
     fn id(&self) -> ViewId {
         self.id
     }
 
-    fn widget_state(&self) -> WidgetState {
-        self.state
+    fn widget_state(&self) -> &WidgetState {
+        &self.state
     }
 
     fn node(&self) -> ViewNode {
-        self.node.clone()
+        self.node
     }
 }
 
 /// A wrapper over [`Element`]
+#[derive(Clone, Copy)]
 pub struct ViewNode(RwSignal<Element>);
 
 impl ViewNode {
@@ -307,18 +276,13 @@ impl ViewNode {
         self.0.update_untracked(|el| el.set_shape(shape));
     }
 
+    /// value must be in degree
     pub(crate) fn set_rotation(&self, val: f32) {
-        self.0.update_untracked(|el| el.set_rotation(val));
+        self.0.update_untracked(|el| el.set_rotation(val.to_radians()));
     }
 
     pub(crate) fn set_corner_radius(&self, val: CornerRadius) {
         self.0.update_untracked(|el| el.set_corner_radius(val));
-    }
-}
-
-impl Clone for ViewNode {
-    fn clone(&self) -> Self {
-        Self(self.0)
     }
 }
 
@@ -365,8 +329,7 @@ pub trait Style: Widget + Sized {
     where
         F: FnEl<Rgba<u8>> + 'static
     {
-        let hoverable = self.widget_state().hoverable;
-        hoverable.update_untracked(|val| *val = true);
+        self.widget_state().hoverable.set_untracked(true);
 
         let node = self.node();
         let init_color = node.0.read_untracked(|elem| elem.fill_color());
@@ -393,6 +356,7 @@ pub trait Style: Widget + Sized {
     where
         F: FnEl<Rgba<u8>> + 'static,
     {
+        self.widget_state().hoverable.set_untracked(true);
         let node = self.node();
         let is_clicked = self.widget_state().is_clicked;
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
