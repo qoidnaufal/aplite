@@ -20,12 +20,12 @@ pub fn image_reader<P: AsRef<Path>>(path: P) -> ImageData {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImageData {
     pub(crate) size: Size<u32>,
-    pub(crate) data: Vec<u8>,
+    pub(crate) bytes: Vec<u8>,
 }
 
 impl ImageData {
     pub fn new(size: impl Into<Size<u32>>, data: &[u8]) -> Self {
-        Self { size: size.into(), data: data.to_vec() }
+        Self { size: size.into(), bytes: data.to_vec() }
     }
 
     pub const fn size(&self) -> Size<u32> { self.size }
@@ -40,7 +40,7 @@ impl ImageData {
 impl std::ops::Deref for ImageData {
     type Target = [u8];
     fn deref(&self) -> &Self::Target {
-        self.data.as_slice()
+        self.bytes.as_slice()
     }
 }
 

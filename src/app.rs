@@ -209,21 +209,9 @@ impl Aplite {
         }
     }
 
-    // fn request_redraw(&self, window_id: &WindowId) {
-    //     if let Some((_, window)) = self.window.get(window_id) {
-    //         window.request_redraw();
-    //     }
-    // }
-
-    // fn detect_update(&mut self, window_id: &WindowId) {
-    //     if self.cx.has_changed() {
-    //         self.request_redraw(window_id);
-    //     }
-    // }
-
     fn handle_redraw_request(&mut self, window_id: &WindowId, event_loop: &ActiveEventLoop) {
         if let Some((_, window)) = self.window.get(window_id).cloned() {
-            // FIXME: this method looks like a rebuilding to me
+            // FIXME: not sure if retained mode works like this
             self.submit_update(&window_id);
 
             #[cfg(feature = "render_stats")] let start = std::time::Instant::now();
@@ -237,22 +225,24 @@ impl Aplite {
     fn submit_update(&mut self, window_id: &WindowId) {
         if let Some(renderer) = self.renderer.as_mut() {
             let (root_id, _) = self.window.get(window_id).unwrap();
-            self.cx.render(*root_id, renderer);
+            if self.cx.dirty().get_untracked() {
+                renderer.begin();
+                self.cx.prepare_data(*root_id, renderer);
+            }
+            renderer.finish();
             self.cx.toggle_clean();
         }
     }
 
     fn render(&mut self, event_loop: &ActiveEventLoop, window: Arc<Window>) {
-        if self.renderer.is_none() { event_loop.exit() }
-        let renderer = self.renderer.as_mut().unwrap();
-        let size = renderer.screen_size().u32();
-        let color = Rgba::TRANSPARENT;
-
-        if let Err(err) = renderer.render(color, window) {
-            match err {
-                RendererError::ShouldResize => self.handle_resize(WinitSize::Logical(size)),
-                RendererError::ShouldExit => event_loop.exit(),
-                _ => {}
+        if let Some(renderer) = self.renderer.as_mut() {
+            if let Err(err) = renderer.render(Rgba::TRANSPARENT, window) {
+                let size = renderer.screen_size().u32();
+                match err {
+                    RendererError::ShouldResize => self.handle_resize(WinitSize::Logical(size)),
+                    RendererError::ShouldExit => event_loop.exit(),
+                    _ => {}
+                }
             }
         }
     }
@@ -301,7 +291,6 @@ impl ApplicationHandler for Aplite {
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => self.set_scale_factor(scale_factor),
             _ => {}
         }
-        // self.detect_update(&window_id);
     }
 }
 

@@ -2,20 +2,24 @@ use aplite_types::{Rect, Vector2};
 
 use crate::buffer::Buffer;
 
+pub(crate) struct MeshBuffer {
+    pub(crate) indices: Buffer<u32>,
+    pub(crate) vertices: Buffer<Vertex>,
+    pub(crate) offset: u64,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct Indices([u32; 6]);
 
-impl std::ops::Deref for Indices {
-    type Target = [u32];
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
+#[derive(Clone, Copy)]
+pub struct Vertices([Vertex; 4]);
 
-impl std::ops::DerefMut for Indices {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct Vertex {
+    _pos: Vector2<f32>,
+    uv: Vector2<f32>,
+    id: u32,
 }
 
 impl Indices {
@@ -32,32 +36,21 @@ impl Indices {
         self
     }
 
-    pub(crate) fn as_slice(&self) -> [u32; 6] {
-        self.0
+    pub(crate) fn as_slice(&self) -> &[u32] {
+        &self.0
     }
 }
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct Vertex {
-    _pos: Vector2<f32>,
-    uv: Vector2<f32>,
-    id: u32,
-}
-
-#[derive(Clone, Copy)]
-pub struct Vertices([Vertex; 4]);
-
-impl std::ops::Deref for Vertices {
-    type Target = [Vertex];
+impl std::ops::Deref for Indices {
+    type Target = [u32];
     fn deref(&self) -> &Self::Target {
-        self.as_slice()
+        &self.0
     }
 }
 
-impl std::ops::DerefMut for Vertices {
+impl std::ops::DerefMut for Indices {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.0.as_mut_slice()
+        &mut self.0
     }
 }
 
@@ -121,10 +114,17 @@ impl std::fmt::Debug for Vertices {
     }
 }
 
-pub(crate) struct MeshBuffer {
-    pub(crate) indices: Buffer<u32>,
-    pub(crate) vertices: Buffer<Vertex>,
-    pub(crate) offset: u64,
+impl std::ops::Deref for Vertices {
+    type Target = [Vertex];
+    fn deref(&self) -> &Self::Target {
+        self.as_slice()
+    }
+}
+
+impl std::ops::DerefMut for Vertices {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0.as_mut_slice()
+    }
 }
 
 impl MeshBuffer {
@@ -156,7 +156,7 @@ impl MeshBuffer {
         self.vertices.slice(0..self.offset * 6)
     }
 
-    pub(crate) fn vertice_desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+    pub(crate) fn vertice_layout<'a>() -> wgpu::VertexBufferLayout<'a> {
         wgpu::VertexBufferLayout {
             array_stride: size_of::<Vertex>() as u64,
             step_mode: wgpu::VertexStepMode::Vertex,

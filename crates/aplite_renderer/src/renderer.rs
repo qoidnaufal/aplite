@@ -10,7 +10,8 @@ use crate::storage::Storage;
 use crate::gpu::Gpu;
 use crate::mesh::{Indices, MeshBuffer, Vertex};
 use crate::util::{create_pipeline, Sampler};
-use crate::texture::{Atlas, ImageData, TextureData, TextureInfo};
+use crate::texture::{Atlas, AtlasId, ImageData};
+use crate::Vertices;
 
 pub struct Renderer {
     gpu: Gpu,
@@ -18,7 +19,6 @@ pub struct Renderer {
     storage: [Storage; 3],
     atlas: Atlas,
     sampler: Sampler,
-    images: Vec<TextureData>,
     pipeline: wgpu::RenderPipeline,
     mesh: [MeshBuffer; 3],
     current: usize,
@@ -28,28 +28,35 @@ impl Renderer {
     pub fn new(window: Arc<Window>) -> Result<Self, RendererError> {
         let gpu = Gpu::new(Arc::clone(&window))?;
 
-        let buffers = &[MeshBuffer::vertice_desc()];
+        let screen = Screen::new(&gpu.device, gpu.size().into(), window.scale_factor());
+        let atlas = Atlas::new(&gpu.device, &gpu.queue);
+        let sampler = Sampler::new(&gpu.device);
+        let vertice_layout = &[MeshBuffer::vertice_layout()];
+
+        let storage = [
+            Storage::new(&gpu.device),
+            Storage::new(&gpu.device),
+            Storage::new(&gpu.device),
+        ];
+        let mesh = [
+            MeshBuffer::new(&gpu.device),
+            MeshBuffer::new(&gpu.device),
+            MeshBuffer::new(&gpu.device),
+        ];
         let layouts = &[
             &Screen::bind_group_layout(&gpu.device),
             &Storage::bind_group_layout(&gpu.device),
             &Atlas::bind_group_layout(&gpu.device),
             &Sampler::bind_group_layout(&gpu.device),
         ];
-        let pipeline = create_pipeline(&gpu, buffers, layouts);
 
-        let screen = Screen::new(&gpu.device, gpu.size().into(), window.scale_factor());
-        let storage = [Storage::new(&gpu.device), Storage::new(&gpu.device), Storage::new(&gpu.device)];
-        let atlas = Atlas::new(&gpu.device);
-        let sampler = Sampler::new(&gpu.device);
-        let mesh = [MeshBuffer::new(&gpu.device), MeshBuffer::new(&gpu.device), MeshBuffer::new(&gpu.device)];
-        let images = vec![];
+        let pipeline = create_pipeline(&gpu, vertice_layout, layouts);
 
         Ok(Self {
             gpu,
             storage,
             sampler,
             atlas,
-            images,
             pipeline,
             mesh,
             screen,
@@ -150,8 +157,8 @@ impl Renderer {
         vertices: &[Vertex],
         offset: u64,
     ) {
-        let indices = Indices::new().with_offset(offset as _, true).as_slice();
-        self.mesh[self.current].indices.write(&self.gpu.device, &self.gpu.queue, offset * 6, &indices);
+        let indices = Indices::new().with_offset(offset as _, true);
+        self.mesh[self.current].indices.write(&self.gpu.device, &self.gpu.queue, offset * 6, indices.as_slice());
         self.mesh[self.current].vertices.write(&self.gpu.device, &self.gpu.queue, offset * 4, vertices);
         self.mesh[self.current].offset = offset;
 
@@ -167,26 +174,27 @@ impl Renderer {
         &mut self,
         elements: &[Element],
         transforms: &[Matrix3x2],
-        vertices: &[Vertex],
     ) {
-        let indices = (0..elements.len())
-            .flat_map(|i| Indices::new().with_offset(i as _, true).as_slice())
-            .collect::<Vec<_>>();
+        let mut indices = vec![];
+        let mut vertices = vec![];
+        (0..elements.len())
+            .for_each(|i| {
+                indices.extend_from_slice(Indices::new().with_offset(i as _, true).as_slice());
+                let id = AtlasId::new(elements[i].atlas_id());
+                let vert = if let Some(uv) = self.atlas.get_uv(&id) {
+                    Vertices::new().with_uv(*uv).with_id(i as _)
+                } else {
+                    Vertices::new().with_id(i as _)
+                };
+                vertices.extend_from_slice(&vert);
+            });
 
-        self.mesh[self.current].write_data(&self.gpu.device, &self.gpu.queue, &indices, vertices);
+        self.mesh[self.current].write_data(&self.gpu.device, &self.gpu.queue, &indices, &vertices);
         self.storage[self.current].write_data(&self.gpu.device, &self.gpu.queue, elements, transforms);
     }
 
-    pub fn push_image(&mut self, f: &dyn Fn() -> ImageData) -> TextureInfo {
+    pub fn render_image(&mut self, f: &dyn Fn() -> ImageData) -> Option<AtlasId> {
         let image = f();
-        let info = TextureInfo::ImageId(self.images.len() as _);
-        let texture_data = TextureData::new(&self.gpu, image);
-        self.images.push(texture_data);
-        info
-    }
-
-    pub fn push_atlas(&mut self, f: &dyn Fn() -> ImageData) -> Option<TextureInfo> {
-        let image = f();
-        self.atlas.push(image)
+        self.atlas.append(image)
     }
 }

@@ -130,6 +130,9 @@ version = "0.1.0"
 [[package]]
 name = "aplite_storage"
 version = "0.1.0"
+dependencies = [
+ "aplite_types",
+]
 
 [[package]]
 name = "aplite_types"

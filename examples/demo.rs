@@ -116,20 +116,9 @@ fn root() -> impl IntoView {
 }
 
 fn dummy() -> impl IntoView {
-    let (counter, set_counter) = Signal::create(0i32);
+    let (counter, set_counter) = Signal::create(0u32);
 
-    Effect::new(move |_| {
-        counter.with(|val| {
-            let color = if val % 3 == 0 {
-                "Rgba::RED"
-            } else if val % 2 == 0 {
-                "Rgba::GREEN"
-            } else {
-                "Rgba::BLUE"
-            };
-            eprint!("{val}: {color}     \r");
-        });
-    });
+    Effect::new(move |_| counter.with(|val| eprintln!("{val}")));
 
     let click = move || {
         set_counter.update(|num| *num += 1);
@@ -137,13 +126,7 @@ fn dummy() -> impl IntoView {
 
     let color = move |_| {
         counter.with(|val| {
-            if val % 3 == 0 {
-                Rgba::RED
-            } else if val % 2 == 0 {
-                Rgba::GREEN
-            } else {
-                Rgba::BLUE
-            }
+            Rgba::new((*val * 2 % 255) as u8, 0, 0, 255)
         })
     };
 
@@ -153,11 +136,19 @@ fn dummy() -> impl IntoView {
         .set_corners(|_| CornerRadius::homogen(47))
         .set_dragable(true)
         .set_size((200, 69))
-        .set_rotation(|_| 10.)
         .on_click(click);
 
     let circle = TestCircleWidget::new()
         .set_color(color)
+        .set_shape(move |_| {
+            counter.with(|val| {
+                if val % 2 == 0 {
+                    Shape::Circle
+                } else {
+                    Shape::RoundedRect
+                }
+            })
+        })
         .set_stroke_width(|_| 6)
         .set_dragable(true)
         .set_size((150, 150));

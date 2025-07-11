@@ -30,7 +30,7 @@ pub mod prelude {
         View,
         Style,
         Layout,
-        Node,
+        ViewNode,
         TestCircleWidget,
         HStack,
         VStack,

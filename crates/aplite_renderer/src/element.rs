@@ -110,7 +110,6 @@ pub struct Element {
     pub(crate) shape: Shape,
     pub(crate) rotation: f32,
     pub(crate) stroke_width: f32,
-    pub(crate) image_id: i32,
     pub(crate) atlas_id: i32,
     pub(crate) transform_id: u32,
 }
@@ -124,7 +123,6 @@ impl Element {
             shape: Shape::RoundedRect,
             rotation: 0.0,
             stroke_width: 0.0,
-            image_id: -1,
             atlas_id: -1,
             transform_id: 0,
         }
@@ -138,7 +136,6 @@ impl Element {
             shape: Shape::Circle,
             rotation: 0.0,
             stroke_width: 0.0,
-            image_id: -1,
             atlas_id: -1,
             transform_id: 0,
         }
@@ -152,7 +149,6 @@ impl Element {
             shape: Shape::RoundedRect,
             rotation: 0.0,
             stroke_width: 0.0,
-            image_id: -1,
             atlas_id: -1,
             transform_id: 0,
         }
@@ -166,10 +162,13 @@ impl Element {
             shape: Shape::Rect,
             rotation: 0.0,
             stroke_width: 0.0,
-            image_id: -1,
             atlas_id: -1,
             transform_id: 0,
         }
+    }
+
+    pub fn atlas_id(&self) -> i32 {
+        self.atlas_id
     }
 
     pub fn rotation(&self) -> f32 {
@@ -242,10 +241,6 @@ impl Element {
 
     pub fn set_transform_id(&mut self, val: u32) {
         self.transform_id = val;
-    }
-
-    pub fn set_image_id(&mut self, val: i32) {
-        self.image_id = val;
     }
 
     pub fn set_atlas_id(&mut self, val: i32) {

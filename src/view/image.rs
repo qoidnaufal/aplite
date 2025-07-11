@@ -4,7 +4,7 @@ use aplite_renderer::ImageData;
 use crate::context::widget_state::WidgetState;
 use crate::prelude::AspectRatio;
 
-use super::Node;
+use super::ViewNode;
 use super::ViewId;
 use super::Widget;
 use super::VIEW_STORAGE;
@@ -15,7 +15,7 @@ pub fn image<F: Fn() -> ImageData + 'static>(image_fn: F) -> Image {
 
 pub struct Image {
     id: ViewId,
-    node: Node,
+    node: ViewNode,
     state: WidgetState,
 }
 
@@ -26,7 +26,7 @@ impl Image {
             s.image_fn.borrow_mut().insert(id, Box::new(f));
             id
         });
-        let node = Node::new()
+        let node = ViewNode::new()
             .with_shape(Shape::Rect);
         let state = WidgetState::new()
             .with_name("Image")
@@ -69,7 +69,7 @@ impl Widget for Image {
         self.state
     }
 
-    fn node(&self) -> Node {
+    fn node(&self) -> ViewNode {
         self.node.clone()
     }
 }

@@ -63,26 +63,19 @@ impl Gpu {
             view_formats: vec![],
         };
 
-        let gpu = Self { surface, device, queue, config, };
-        gpu.configure();
-
-        Ok(gpu)
+        surface.configure(&device, &config);
+        Ok(Self { surface, device, queue, config })
     }
 
     pub(crate) fn reconfigure_size(&mut self, size: Size<u32>) {
         self.config.width = size.width();
         self.config.height = size.height();
-        self.configure();
+        self.surface.configure(&self.device, &self.config);
     }
 
     #[inline(always)]
     pub(crate) fn get_current_texture(&self) -> Result<wgpu::SurfaceTexture, wgpu::SurfaceError> {
         self.surface.get_current_texture()
-    }
-
-    #[inline(always)]
-    fn configure(&self) {
-        self.surface.configure(&self.device, &self.config);
     }
 
     /// this one uses [`winit::dpi::LogicalSize<u32>`]

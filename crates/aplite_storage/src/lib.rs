@@ -1,6 +1,7 @@
-mod vecmap;
+mod atlas_allocator;
 mod derived;
 mod tree;
+mod vecmap;
 
 pub use vecmap::{
     Key,

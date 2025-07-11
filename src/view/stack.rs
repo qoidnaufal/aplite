@@ -3,7 +3,7 @@ use aplite_renderer::Shape;
 
 use crate::{context::widget_state::WidgetState, prelude::Orientation};
 
-use super::{Node, ViewId, Widget, VIEW_STORAGE};
+use super::{ViewNode, ViewId, Widget, VIEW_STORAGE};
 
 pub fn v_stack<F>() -> VStack {
     VStack::new()
@@ -11,14 +11,14 @@ pub fn v_stack<F>() -> VStack {
 
 pub struct VStack {
     id: ViewId,
-    node: Node,
+    node: ViewNode,
     state: WidgetState,
 }
 
 impl VStack {
     pub fn new() -> Self {
         let id = VIEW_STORAGE.with(|s| s.create_entity());
-        let node = Node::new()
+        let node = ViewNode::new()
             .with_fill_color(Rgba::DARK_GRAY)
             .with_shape(Shape::Rect);
         let state = WidgetState::new()
@@ -57,7 +57,7 @@ impl Widget for VStack {
         self.state
     }
 
-    fn node(&self) -> Node {
+    fn node(&self) -> ViewNode {
         self.node.clone()
     }
 }
@@ -68,14 +68,14 @@ pub fn h_stack<F>() -> HStack {
 
 pub struct HStack {
     id: ViewId,
-    node: Node,
+    node: ViewNode,
     state: WidgetState,
 }
 
 impl HStack {
     pub fn new() -> Self {
         let id = VIEW_STORAGE.with(|s| s.create_entity());
-        let node = Node::new()
+        let node = ViewNode::new()
             .with_fill_color(Rgba::DARK_GRAY)
             .with_shape(Shape::Rect);
         let state = WidgetState::new()
@@ -115,7 +115,7 @@ impl Widget for HStack {
         self.state
     }
 
-    fn node(&self) -> Node {
+    fn node(&self) -> ViewNode {
         self.node.clone()
     }
 }

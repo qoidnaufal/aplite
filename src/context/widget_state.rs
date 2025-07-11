@@ -14,7 +14,7 @@ pub enum AspectRatio {
 
 #[derive(Debug, Clone, Copy)]
 pub struct WidgetState {
-    pub(crate) name: RwSignal<&'static str>,
+    pub(crate) name: &'static str,
     pub(crate) rect: RwSignal<Rect<u32>>,
     pub(crate) min_width: Option<u32>,
     pub(crate) min_height: Option<u32>,
@@ -30,6 +30,7 @@ pub struct WidgetState {
     pub(crate) hoverable: RwSignal<bool>,
     pub(crate) is_hovered: RwSignal<bool>,
     pub(crate) is_clicked: RwSignal<bool>,
+    pub(crate) trigger_callback: RwSignal<bool>,
 }
 
 impl Default for WidgetState {
@@ -47,7 +48,7 @@ impl WidgetState {
         let h = size.height();
 
         Self {
-            name: RwSignal::new("Root"),
+            name: "Root",
             rect: RwSignal::new(Rect::new((x, y), (w, h))),
             min_width: None,
             min_height: None,
@@ -63,6 +64,7 @@ impl WidgetState {
             hoverable: RwSignal::new(false),
             is_hovered: RwSignal::new(false),
             is_clicked: RwSignal::new(false),
+            trigger_callback: RwSignal::new(false),
         }
     }
 
@@ -113,7 +115,7 @@ impl WidgetState {
 impl WidgetState {
     pub fn new() -> Self {
         Self {
-            name: RwSignal::new(""),
+            name: "",
             rect: RwSignal::new(Rect::new((0, 0), (0, 0))),
             min_width: Some(1),
             min_height: Some(1),
@@ -129,6 +131,7 @@ impl WidgetState {
             hoverable: RwSignal::new(false),
             is_hovered: RwSignal::new(false),
             is_clicked: RwSignal::new(false),
+            trigger_callback: RwSignal::new(false),
         }
     }
 
@@ -192,7 +195,7 @@ impl WidgetState {
 // modifier
 impl WidgetState {
     pub fn set_name(&mut self, name: &'static str) {
-        self.name.set(name);
+        self.name = name;
     }
 
     pub fn set_alignment(&mut self, f: impl FnOnce(&mut Alignment)) {

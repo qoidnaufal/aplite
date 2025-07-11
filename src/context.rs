@@ -70,6 +70,7 @@ impl Context {
     pub(crate) fn layout_the_whole_window(&self, root_id: &ViewId) {
         self.calculate_size_recursive(root_id);
         self.recursive_layout_from_id(root_id);
+        self.toggle_dirty();
     }
 
     pub(crate) fn recursive_layout_from_id(&self, id: &ViewId) {
@@ -77,7 +78,6 @@ impl Context {
         if let Some(children) = children {
             children.iter().for_each(|child| self.recursive_layout_from_id(child));
         }
-        self.toggle_dirty();
     }
 
     fn calculate_size_recursive(&self, id: &ViewId) -> Size<u32> {
@@ -167,7 +167,7 @@ impl Context {
     }
 
     fn detect_hover(&mut self) {
-        if !self.cursor.is_dragging {
+        if !self.cursor.is_clicking() {
             let hovered = VIEW_STORAGE.with(|s| {
                 s.hoverable
                     .borrow()
@@ -193,17 +193,14 @@ impl Context {
     }
 
     pub(crate) fn handle_hover(&mut self) {
-        if self.cursor.is_idling() || self.cursor.is_unscoped() { return }
-
-        if let Some(hover_id) = self.cursor.hover.curr {
-            let dragable = VIEW_STORAGE.with(|s| {
-                s.get_widget_state(&hover_id)
-                    .dragable
-                    .get_untracked()
-            });
-            if self.cursor.is_dragging(&hover_id) {
-                self.cursor.is_dragging = true;
-                if dragable {
+        if !self.cursor.is_idling() {
+            if let Some(hover_id) = self.cursor.hover.curr {
+                let dragable = VIEW_STORAGE.with(|s| {
+                    s.get_widget_state(&hover_id)
+                        .dragable
+                        .get_untracked()
+                });
+                if self.cursor.is_dragging(&hover_id) && dragable {
                     self.handle_drag(&hover_id);
                 }
             }
@@ -215,6 +212,7 @@ impl Context {
         VIEW_STORAGE.with(|s| s.get_widget_state(hover_id).rect)
             .update_untracked(|rect| rect.set_pos(pos.into()));
         self.recursive_layout_from_id(hover_id);
+        self.toggle_dirty();
     }
 
     pub(crate) fn handle_click(&mut self, action: impl Into<MouseAction>, button: impl Into<MouseButton>) {
@@ -231,10 +229,9 @@ impl Context {
         if self.cursor.state.action == MouseAction::Released {
             if let Some(hover_id) = self.cursor.hover.curr.as_ref() {
                 VIEW_STORAGE.with(|s| {
-                    s.invoke_callback(hover_id);
-                    s.get_widget_state(hover_id)
-                        .is_clicked
-                        .set(false)
+                    let state = s.get_widget_state(hover_id);
+                    state.trigger_callback.set(true);
+                    state.is_clicked.set(false);
                 })
             }
         }
@@ -247,41 +244,29 @@ impl Context {
 // #                                                       #
 // #########################################################
 
-impl Context {
-    pub(crate) fn render(&self, root_id: ViewId, renderer: &mut Renderer) {
-        VIEW_STORAGE.with(|s| {
-            renderer.begin();
 
+// FIXME: this is shit, 2x triggering temporary allocation is shit
+// there should be a way to write each component individually
+impl Context {
+    pub(crate) fn prepare_data(&self, root_id: ViewId, renderer: &mut Renderer) {
+        VIEW_STORAGE.with(|s| {
             let screen = renderer.screen_size();
             let components = s.get_render_components(&root_id, screen);
 
             let mut elements = Vec::with_capacity(components.len());
             let mut transforms = Vec::with_capacity(components.len());
-            let mut mesh = Vec::with_capacity(components.len() * 4);
 
-            // FIXME: this is shit, triggering allocation is shit
-            // there should be a way to write each component individually
-            components.iter().enumerate().for_each(|(idx, (elem, vert, mat, img))| {
-                let info = img.as_ref().and_then(|image_fn| renderer.push_atlas(image_fn));
-                if let Some(info) = info {
-                    if let Some(uv) = info.get_uv() {
-                        vert.update_untracked(|vertices| vertices.set_uv(uv));
-                    }
-                    let atlas_id = info.get_atlas_id().unwrap_or(-1);
-                    let image_id = info.get_image_id().unwrap_or(-1);
-                    elem.update(|elem| {
-                        elem.set_atlas_id(atlas_id);
-                        elem.set_image_id(image_id);
-                    });
+            components.iter().for_each(|(elem, mat, img)| {
+                let info = img.as_ref().and_then(|image_fn| renderer.render_image(image_fn));
+                if let Some(id) = info {
+                    let atlas_id = id.get_id();
+                    elem.update_untracked(|elem| elem.set_atlas_id(atlas_id));
                 };
-                vert.update_untracked(|v| v.set_id(idx as _));
                 transforms.push(*mat);
                 elements.push(elem.get_untracked());
-                mesh.extend_from_slice(&vert.get_untracked());
             });
 
-            renderer.submit_data_batched(&elements, &transforms, &mesh);
-            renderer.finish();
+            renderer.submit_data_batched(&elements, &transforms);
         });
     }
 }

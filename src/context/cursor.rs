@@ -50,7 +50,6 @@ pub struct MouseState {
 pub struct MouseClick {
     pub pos: Vector2<f32>,
     pub offset: Vector2<f32>,
-    pub obj: Option<ViewId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -67,7 +66,6 @@ pub struct Cursor {
     pub state: MouseState,
     pub click: MouseClick,
     pub timer: std::time::Duration,
-    pub is_dragging: bool,
 }
 
 impl Default for Cursor {
@@ -86,10 +84,8 @@ impl Default for Cursor {
             click: MouseClick {
                 pos: Vector2::default(),
                 offset: Vector2::default(),
-                obj: None,
             },
             timer: std::time::Duration::from_millis(0),
-            is_dragging: false,
         }
     }
 }
@@ -109,13 +105,10 @@ impl Cursor {
         let start = std::time::Instant::now();
         match (self.state.action, self.state.button) {
             (MouseAction::Pressed, MouseButton::Left) => {
-                // self.click.obj = self.hover.curr;
                 self.click.pos = self.hover.pos;
             },
             (MouseAction::Released, MouseButton::Left) => {
                 self.timer = start.elapsed();
-                self.is_dragging = false;
-                // self.click.obj = None;
             },
             _ => {}
         }
@@ -124,7 +117,6 @@ impl Cursor {
     pub(crate) fn is_dragging(&self, hover_id: &ViewId) -> bool {
         self.is_clicking()
             && self.hover.curr.is_some_and(|id| &id == hover_id)
-        // self.click.obj.is_some_and(|click_id| &click_id == hover_id)
             && self.hover.pos != self.click.pos
     }
 
@@ -134,10 +126,7 @@ impl Cursor {
 
     pub(crate) fn is_idling(&self) -> bool {
         self.is_hovering_same_obj() && !self.is_clicking()
-    }
-
-    pub(crate) fn is_unscoped(&self) -> bool {
-        self.hover.curr.is_none() && self.hover.prev.is_none()
+        || self.hover.curr.is_none() && self.hover.prev.is_none()
     }
 
     pub(crate) fn is_clicking(&self) -> bool {

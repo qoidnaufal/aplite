@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::cell::RefCell;
 use aplite_reactive::*;
 use aplite_types::{Matrix3x2, Rgba, Size};
-use aplite_renderer::{CornerRadius, Element, ImageData, Shape, Vertices};
+use aplite_renderer::{CornerRadius, Element, ImageData, Shape};
 use aplite_storage::{entity, Entity, Tree};
 
 use crate::context::widget_state::WidgetState;
@@ -31,7 +31,6 @@ pub(crate) struct ViewStorage {
     pub(crate) tree: RefCell<Tree<ViewId>>,
     pub(crate) storage: RefCell<HashMap<ViewId, View>>,
     pub(crate) image_fn: RefCell<HashMap<ViewId, Box<dyn Fn() -> ImageData>>>,
-    pub(crate) callbacks: RefCell<HashMap<ViewId, Box<dyn Fn()>>>,
     pub(crate) hoverable: RefCell<Vec<ViewId>>,
     pub(crate) dirty: RwSignal<bool>,
 }
@@ -42,7 +41,6 @@ impl ViewStorage {
             tree: RefCell::new(Tree::with_capacity(1024)),
             storage: RefCell::new(HashMap::new()),
             image_fn: RefCell::new(HashMap::new()),
-            callbacks: RefCell::new(HashMap::new()),
             hoverable: RefCell::new(Vec::new()),
             dirty: RwSignal::new(false),
         }
@@ -78,24 +76,6 @@ impl ViewStorage {
         self.storage.borrow_mut().insert(sibling_id, sibling.into_view());
     }
 
-    pub(crate) fn add_on_click<F>(&self, id: ViewId, f: F)
-    where
-        F: Fn() + 'static,
-    {
-        self.callbacks.borrow_mut().insert(id, Box::new(f));
-    }
-
-    pub(crate) fn invoke_callback(&self, id: &ViewId) {
-        if let Some(callback) = self.callbacks.borrow().get(id) {
-            callback();
-        }
-    }
-
-    // pub(crate) fn get_element(&self, id: &ViewId) -> Element {
-    //     let storage = self.storage.borrow();
-    //     storage[id].node().get()
-    // }
-
     pub(crate) fn get_widget_state(&self, id: &ViewId) -> WidgetState {
         let storage = self.storage.borrow();
         storage[id].widget_state()
@@ -109,7 +89,7 @@ impl ViewStorage {
         &self,
         root_id: &ViewId,
         screen: Size<f32>
-    ) -> Vec<(RwSignal<Element>, RwSignal<Vertices>, Matrix3x2, Option<Box<dyn Fn() -> ImageData>>)> {
+    ) -> Vec<(RwSignal<Element>, Matrix3x2, Option<Box<dyn Fn() -> ImageData>>)> {
         self.get_all_members_of(root_id)
             .iter()
             .enumerate()
@@ -121,9 +101,8 @@ impl ViewStorage {
                         view.node.0.update(|elem| elem.set_transform_id(idx as _));
                         let image = self.image_fn.borrow_mut().remove(view_id);
                         let element = view.node.0;
-                        let vertices = view.vertices;
                         let transform = view.widget_state.get_transform(screen);
-                        (element, vertices, transform, image)
+                        (element, transform, image)
                     })
             })
             .collect()
@@ -149,16 +128,15 @@ impl Widget for Box<dyn IntoView> {
         self.as_ref().widget_state()
     }
 
-    fn node(&self) -> Node {
+    fn node(&self) -> ViewNode {
         self.as_ref().node()
     }
 }
 
 /// wrapper over [`Widget`] trait to be stored inside [`ViewStorage`]
 pub struct View {
-    node: Node,
+    node: ViewNode,
     widget_state: WidgetState,
-    vertices: RwSignal<Vertices>,
 }
 
 impl View {
@@ -166,16 +144,14 @@ impl View {
         Self {
             node: widget.node(),
             widget_state: widget.widget_state(),
-            vertices: RwSignal::new(Vertices::new()),
         }
     }
 
     pub(crate) fn window(size: Size<u32>) -> Self {
         let window_state = WidgetState::window(size);
         Self {
-            node: Node::new(),
+            node: ViewNode::new(),
             widget_state: window_state,
-            vertices: RwSignal::new(Vertices::new()),
         }
     }
 
@@ -187,7 +163,7 @@ impl View {
 impl std::fmt::Debug for View {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let state = self.widget_state();
-        let name = state.name.get_untracked();
+        let name = state.name;
 
         f.debug_struct("View")
             .field("name", &name)
@@ -199,7 +175,7 @@ impl std::fmt::Debug for View {
 pub trait Widget {
     fn id(&self) -> ViewId;
     fn widget_state(&self) -> WidgetState;
-    fn node(&self) -> Node;
+    fn node(&self) -> ViewNode;
 }
 
 // pub struct Callbacks {
@@ -226,14 +202,14 @@ pub trait Widget {
 
 pub struct TestCircleWidget {
     id: ViewId,
-    node: Node,
+    node: ViewNode,
     state: WidgetState,
 }
 
 impl TestCircleWidget {
     pub fn new() -> Self {
         let id = VIEW_STORAGE.with(|s| s.create_entity());
-        let node = Node::new()
+        let node = ViewNode::new()
             .with_shape(Shape::Circle)
             .with_stroke_width(5);
         let state = WidgetState::new()
@@ -272,15 +248,15 @@ impl Widget for TestCircleWidget {
         self.state
     }
 
-    fn node(&self) -> Node {
+    fn node(&self) -> ViewNode {
         self.node.clone()
     }
 }
 
-/// refcounted non reactive T which may needs to be updated by reactive system
-pub struct Node(RwSignal<Element>);
+/// A wrapper over [`Element`]
+pub struct ViewNode(RwSignal<Element>);
 
-impl Node {
+impl ViewNode {
     pub fn new() -> Self {
         Self(RwSignal::new(Element::new()))
     }
@@ -316,31 +292,31 @@ impl Node {
     }
 
     pub(crate) fn set_fill_color(&self, color: Rgba<u8>) {
-        self.0.update(|el| el.set_fill_color(color));
+        self.0.update_untracked(|el| el.set_fill_color(color));
     }
 
     pub(crate) fn set_stroke_color(&self, color: Rgba<u8>) {
-        self.0.update(|el| el.set_stroke_color(color));
+        self.0.update_untracked(|el| el.set_stroke_color(color));
     }
 
     pub(crate) fn set_stroke_width(&self, val: u32) {
-        self.0.update(|el| el.set_stroke_width(val));
+        self.0.update_untracked(|el| el.set_stroke_width(val));
     }
 
     pub(crate) fn set_shape(&self, shape: Shape) {
-        self.0.update(|el| el.set_shape(shape));
+        self.0.update_untracked(|el| el.set_shape(shape));
     }
 
     pub(crate) fn set_rotation(&self, val: f32) {
-        self.0.update(|el| el.set_rotation(val));
+        self.0.update_untracked(|el| el.set_rotation(val));
     }
 
     pub(crate) fn set_corner_radius(&self, val: CornerRadius) {
-        self.0.update(|el| el.set_corner_radius(val));
+        self.0.update_untracked(|el| el.set_corner_radius(val));
     }
 }
 
-impl Clone for Node {
+impl Clone for ViewNode {
     fn clone(&self) -> Self {
         Self(self.0)
     }
@@ -374,9 +350,12 @@ pub trait Style: Widget + Sized {
         F: FnEl<Rgba<u8>> + 'static
     {
         let node = self.node();
+        let dirty = VIEW_STORAGE.with(|s| s.dirty);
+
         Effect::new(move |prev| {
             let color = f(prev);
             node.set_stroke_color(color);
+            dirty.set(true);
             color
         });
         self
@@ -434,9 +413,11 @@ pub trait Style: Widget + Sized {
         F: FnEl<u32> + 'static
     {
         let node = self.node();
+        let dirty = VIEW_STORAGE.with(|s| s.dirty);
         Effect::new(move |prev| {
             let val = f(prev);
             node.set_stroke_width(val);
+            dirty.set(true);
             val
         });
         self
@@ -447,9 +428,11 @@ pub trait Style: Widget + Sized {
         F: FnEl<f32> + 'static
     {
         let node = self.node();
+        let dirty = VIEW_STORAGE.with(|s| s.dirty);
         Effect::new(move |prev| {
             let val = f(prev);
             node.set_rotation(val);
+            dirty.set(true);
             val
         });
         self
@@ -460,9 +443,11 @@ pub trait Style: Widget + Sized {
         F: FnEl<CornerRadius> + 'static
     {
         let node = self.node();
+        let dirty = VIEW_STORAGE.with(|s| s.dirty);
         Effect::new(move |prev| {
             let val = f(prev);
             node.set_corner_radius(val);
+            dirty.set(true);
             val
         });
         self
@@ -473,9 +458,11 @@ pub trait Style: Widget + Sized {
         F: FnEl<Shape> + 'static
     {
         let node = self.node();
+        let dirty = VIEW_STORAGE.with(|s| s.dirty);
         Effect::new(move |prev| {
             let shape = f(prev);
             node.set_shape(shape);
+            dirty.set(true);
             shape
         });
         self

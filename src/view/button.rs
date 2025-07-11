@@ -3,20 +3,20 @@ use aplite_renderer::Shape;
 use aplite_types::Rgba;
 use crate::context::widget_state::WidgetState;
 
-use super::{Node, ViewId, Widget, VIEW_STORAGE};
+use super::{ViewNode, ViewId, Widget, VIEW_STORAGE};
 
 pub fn button() -> Button { Button::new() }
 
 pub struct Button {
     id: ViewId,
-    node: Node,
+    node: ViewNode,
     state: WidgetState,
 }
 
 impl Button {
     pub fn new() -> Self {
         let id = VIEW_STORAGE.with(|s| s.create_entity());
-        let node = Node::new()
+        let node = ViewNode::new()
             .with_fill_color(Rgba::RED)
             .with_shape(Shape::RoundedRect);
         let state = WidgetState::new()
@@ -30,19 +30,15 @@ impl Button {
             state,
         }
     }
-
-    // pub fn append_child(self, child: impl IntoView) -> Self {
-    //     VIEW_STORAGE.with(|s| s.append_child(&self.id, child));
-    //     self
-    // }
-
-    // pub fn and(self, sibling: impl IntoView) -> Self {
-    //     VIEW_STORAGE.with(|s| s.add_sibling(&self.id, sibling));
-    //     self
-    // }
     
     pub fn on_click<F: Fn() + 'static>(self, f: F) -> Self {
-        VIEW_STORAGE.with(|s| s.add_on_click(self.id, f));
+        let trigger = self.state.trigger_callback;
+        Effect::new(move |_| {
+            if trigger.get() {
+                f();
+                trigger.set_untracked(false);
+            }
+        });
         self
     }
 
@@ -61,7 +57,7 @@ impl Widget for Button {
         self.state
     }
 
-    fn node(&self) -> Node {
+    fn node(&self) -> ViewNode {
         self.node.clone()
     }
 }
