@@ -29,8 +29,8 @@ pub(crate) struct Atlas {
 impl Atlas {
     const SIZE: Size<u32> = Size::new(2000, 2000);
 
-    pub(crate) fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
-        let used = Rect::new((0, 0), (0, 0));
+    pub(crate) fn new(device: &wgpu::Device) -> Self {
+        let used = Rect::new(0, 0, 0, 0);
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("texture atlas"),
             size: wgpu::Extent3d {
@@ -48,26 +48,26 @@ impl Atlas {
             view_formats: &[],
         });
 
-        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-        let width = Self::SIZE.width() * 4;
-        let padding = (align - width % align) % align;
-        let padded_width = width + padding;
-        let data = vec![0_u8; (padded_width * Self::SIZE.height()) as usize];
+        // let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        // let width = Self::SIZE.width() * 4;
+        // let padding = (align - width % align) % align;
+        // let padded_width = width + padding;
+        // let data = vec![0_u8; (padded_width * Self::SIZE.height()) as usize];
 
-        queue.write_texture(
-            texture.as_image_copy(),
-            &data,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(padded_width),
-                rows_per_image: None
-            },
-            wgpu::Extent3d {
-                width: Self::SIZE.width(),
-                height: Self::SIZE.height(),
-                depth_or_array_layers: 1,
-            }
-        );
+        // queue.write_texture(
+        //     texture.as_image_copy(),
+        //     &data,
+        //     wgpu::TexelCopyBufferLayout {
+        //         offset: 0,
+        //         bytes_per_row: Some(padded_width),
+        //         rows_per_image: None
+        //     },
+        //     wgpu::Extent3d {
+        //         width: Self::SIZE.width(),
+        //         height: Self::SIZE.height(),
+        //         depth_or_array_layers: 1,
+        //     }
+        // );
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let bind_group = Self::bind_group(device, &view);
@@ -112,8 +112,8 @@ impl Atlas {
 
         let resource_id = AtlasId::new(self.count);
         let uv = Rect::new(
-            ( min_x, min_y ),
-            ( max_x, max_y )
+            min_x, min_y,
+            max_x, max_y
         );
 
         self.position.insert(resource_id, self.used);
@@ -131,61 +131,61 @@ impl Atlas {
     }
 
     pub(crate) fn update(&mut self, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder) {
-        if self.pending_data.is_empty() { return }
+        if !self.pending_data.is_empty() {
+            for (id, data) in &self.pending_data {
+                let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+                let width = data.width() * 4;
+                let padding = (alignment - width % alignment) % alignment;
+                let padded_width = width + padding;
+                let mut padded_data = Vec::with_capacity((padded_width * data.height()) as usize);
 
-        for (id, data) in &self.pending_data {
-            let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-            let width = data.width() * 4;
-            let padding = (alignment - width % alignment) % alignment;
-            let padded_width = width + padding;
-            let mut padded_data = Vec::with_capacity((padded_width * data.height()) as usize);
+                let mut i = 0;
+                for _ in 0..data.height() {
+                    for _ in 0..width {
+                        padded_data.push(data.bytes[i]);
+                        i += 1;
+                    }
+                    while (padded_data.len() % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize) != 0 {
+                        padded_data.push(0);
+                    }
+                }
 
-            let mut i = 0;
-            for _ in 0..data.height() {
-                for _ in 0..width {
-                    padded_data.push(data.bytes[i]);
-                    i += 1;
-                }
-                while (padded_data.len() % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize) != 0 {
-                    padded_data.push(0);
-                }
+                let pos = self.position[id];
+                let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: None,
+                    contents: &padded_data,
+                    usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_WRITE,
+                });
+
+                encoder.copy_buffer_to_texture(
+                    wgpu::TexelCopyBufferInfo {
+                        buffer: &buffer,
+                        layout: wgpu::TexelCopyBufferLayout {
+                            offset: 0,
+                            bytes_per_row: Some(padded_width),
+                            rows_per_image: None,
+                        },
+                    },
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &self.texture,
+                        aspect: wgpu::TextureAspect::All,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d {
+                            x: pos.x(),
+                            y: pos.y(),
+                            z: 0,
+                        },
+                    },
+                    wgpu::Extent3d {
+                        width: data.width(),
+                        height: data.height(),
+                        depth_or_array_layers: 1,
+                    }
+                );
             }
 
-            let pos = self.position.get(id).unwrap();
-            let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: None,
-                contents: &padded_data,
-                usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_WRITE,
-            });
-
-            encoder.copy_buffer_to_texture(
-                wgpu::TexelCopyBufferInfo {
-                    buffer: &buffer,
-                    layout: wgpu::TexelCopyBufferLayout {
-                        offset: 0,
-                        bytes_per_row: Some(padded_width),
-                        rows_per_image: None,
-                    },
-                },
-                wgpu::TexelCopyTextureInfo {
-                    texture: &self.texture,
-                    aspect: wgpu::TextureAspect::All,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d {
-                        x: pos.x(),
-                        y: pos.y(),
-                        z: 0,
-                    },
-                },
-                wgpu::Extent3d {
-                    width: data.width(),
-                    height: data.height(),
-                    depth_or_array_layers: 1,
-                }
-            );
+            self.pending_data.clear();
         }
-
-        self.pending_data.clear();
     }
 
     pub(crate) fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
@@ -239,7 +239,7 @@ mod atlas_test {
         fn new() -> Self {
             Self {
                 max: Size::<u32>::new(900, 1350),
-                used: Rect::<u32>::new((0, 0), (0, 0)),
+                used: Rect::<u32>::new(0, 0, 0, 0),
                 data: vec![],
             }
         }
@@ -273,7 +273,7 @@ mod atlas_test {
         let mut packer = Packer::new();
         let mut ids = vec![];
         for _ in 0..8 {
-            let data = Rect::<u32>::new((0, 0), (450, 450));
+            let data = Rect::<u32>::new(0, 0, 450, 450);
             let id = packer.push(data);
             ids.push(id);
         }

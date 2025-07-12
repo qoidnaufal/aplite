@@ -1,9 +1,8 @@
 use aplite_reactive::*;
-use aplite_types::{Matrix3x2, Rect, Size, Vector2};
+use aplite_types::{Matrix3x2, Rect, Size, Vec2u};
 
 use crate::context::layout::{Alignment, Orientation, Padding};
-
-use super::cursor::Cursor;
+use crate::context::cursor::Cursor;
 
 #[derive(Debug, Clone, Copy)]
 pub enum AspectRatio {
@@ -37,7 +36,7 @@ impl Default for WidgetState {
     fn default() -> Self {
         Self {
             name: "",
-            rect: RwSignal::new(Rect::new((0, 0), (0, 0))),
+            rect: RwSignal::new(Rect::new(0, 0, 0, 0)),
             min_width: Some(1),
             min_height: Some(1),
             max_width: None,
@@ -117,7 +116,7 @@ impl WidgetState {
         self
     }
 
-    pub(crate) fn with_position(self, pos: impl Into<Vector2<u32>>) -> Self {
+    pub(crate) fn with_position(self, pos: impl Into<Vec2u>) -> Self {
         self.rect.update_untracked(|rect| rect.set_pos(pos.into()));
         self
     }
@@ -192,7 +191,7 @@ impl WidgetState {
         self.rect.update(|rect| rect.set_size(size.into()))
     }
 
-    pub fn set_position(&mut self, pos: Vector2<u32>) {
+    pub fn set_position(&mut self, pos: Vec2u) {
         self.rect.update(|rect| rect.set_pos(pos));
     }
 

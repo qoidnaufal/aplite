@@ -1,4 +1,4 @@
-use aplite_types::Vector2;
+use aplite_types::Vec2f;
 
 use crate::view::ViewId;
 
@@ -48,13 +48,13 @@ pub struct MouseState {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MouseClick {
-    pub pos: Vector2<f32>,
-    pub offset: Vector2<f32>,
+    pub pos: Vec2f,
+    pub offset: Vec2f,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MouseHover {
-    pub pos: Vector2<f32>,
+    pub pos: Vec2f,
     pub curr: Option<ViewId>,
     pub prev: Option<ViewId>,
     pub z_index: u32,
@@ -72,7 +72,7 @@ impl Default for Cursor {
     fn default() -> Self {
         Self {
             hover: MouseHover {
-                pos: Vector2::default(),
+                pos: Vec2f::default(),
                 curr: None,
                 prev: None,
                 z_index: 0,
@@ -82,8 +82,8 @@ impl Default for Cursor {
                 button: MouseButton::Left,
             },
             click: MouseClick {
-                pos: Vector2::default(),
-                offset: Vector2::default(),
+                pos: Vec2f::default(),
+                offset: Vec2f::default(),
             },
             timer: std::time::Duration::from_millis(0),
         }

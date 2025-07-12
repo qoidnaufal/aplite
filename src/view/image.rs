@@ -1,7 +1,7 @@
 use aplite_renderer::Shape;
 use aplite_renderer::ImageData;
 
-use crate::context::widget_state::WidgetState;
+use crate::widget_state::WidgetState;
 
 use super::ViewNode;
 use super::ViewId;

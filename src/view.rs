@@ -6,7 +6,7 @@ use aplite_types::{Matrix3x2, Rgba, Size};
 use aplite_renderer::{CornerRadius, Element, ImageData, Shape};
 use aplite_storage::{entity, Entity, Tree};
 
-use crate::context::widget_state::WidgetState;
+use crate::widget_state::WidgetState;
 
 mod button;
 mod image;
@@ -449,6 +449,7 @@ pub trait Style: Widget + Sized {
 
 impl<T> Style for T where T: Widget + Sized {}
 
+// TODO: is immediately calculate the size here a good idea?
 pub trait Layout: Widget + Sized {
     fn append_child(self, child: impl IntoView) -> Self {
         let self_z_index = self.widget_state().z_index;

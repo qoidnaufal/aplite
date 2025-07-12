@@ -1,6 +1,6 @@
 use std::ops::{Index, IndexMut};
 
-use crate::vector::{Vector, Vector2, Vector4};
+use crate::vector::{Vector, Vec2f, Vec4f};
 
 /// GPU's mat3x2 is actually a \[[`Vector<2, T>`]; 3\] in CPU
 /// # Representation:
@@ -17,7 +17,7 @@ pub struct Matrix<const M: usize, const N: usize> {
 impl<const M: usize, const N: usize> std::fmt::Debug for Matrix<M, N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = String::new();
-        s.push_str("\n");
+        s.push('\n');
         for n in 0..N {
             let (prefix, suffix) = match n {
                 0 => ("x │", "│\n"),
@@ -56,41 +56,47 @@ impl<const M: usize, const N: usize> IndexMut<usize> for Matrix<M, N> {
 }
 
 impl<const M: usize, const N: usize> Matrix<M, N> {
-    fn zero() -> Self {
-        Self { inner: [ Vector::<N, f32>::default(); M ] }
+    const fn zero() -> Self {
+        Self { inner: [ Vector::new_from_array([0.0; N]); M ] }
     }
 
     #[inline(always)]
-    pub fn data(&self) -> &[Vector<N, f32>] {
+    pub const fn data(&self) -> &[Vector<N, f32>] {
         &self.inner
     }
 
     const fn get_scale(&self) -> (f32, f32) {
-        (self.inner[0].x(), self.inner[1].y())
+        (self.inner[0].inner[0], self.inner[1].inner[1])
     }
 
     #[inline(always)]
-    pub fn with_translate(mut self, x: f32, y: f32) -> Self {
+    pub const fn with_translate(mut self, x: f32, y: f32) -> Self {
         self.set_translate(x, y);
         self
     }
 
     #[inline(always)]
-    pub fn set_translate(&mut self, x: f32, y: f32) {
-        self[M - 1].set_x(x);
-        self[M - 1].set_y(y);
+    pub const fn set_translate(&mut self, x: f32, y: f32) {
+        self.inner[M - 1].inner[0] = x;
+        self.inner[M - 1].inner[1] = y;
     }
 
     #[inline(always)]
-    pub fn with_scale(mut self, sx: f32, sy: f32) -> Self {
+    pub const fn with_scale(mut self, sx: f32, sy: f32) -> Self {
         self.set_scale(sx, sy);
         self
     }
 
     #[inline(always)]
-    pub fn set_scale(&mut self, sx: f32, sy: f32) {
-        self[0].mul_x(sx);
-        self[1].mul_y(sy);
+    pub const fn set_scale(&mut self, sx: f32, sy: f32) {
+        self.inner[0].inner[0] = sx;
+        self.inner[1].inner[1] = sy;
+    }
+
+    #[inline(always)]
+    pub const fn mul_scale(&mut self, sx: f32, sy: f32) {
+        self.inner[0].inner[0] *= sx;
+        self.inner[1].inner[1] *= sy;
     }
 
     #[inline(always)]
@@ -103,10 +109,10 @@ impl<const M: usize, const N: usize> Matrix<M, N> {
     #[inline(always)]
     /// rotation need to be in radians
     pub fn set_scale_and_rotation_rad(&mut self, sx: f32, sy: f32, rad: f32) {
-        self[0].set_x( rad.cos() * sx);
-        self[0].set_y(-rad.sin() * sy);
-        self[1].set_x( rad.sin() * sx);
-        self[1].set_y( rad.cos() * sy);
+        self[0].inner[0] = rad.cos() * sx;
+        self[0].inner[1] =-rad.sin() * sy;
+        self[1].inner[0] = rad.sin() * sx;
+        self[1].inner[1] = rad.cos() * sy;
     }
 
     #[inline(always)]
@@ -186,10 +192,10 @@ pub type Matrix4x4 = Matrix<4, 4>;
 impl Matrix4x4 {
     pub const IDENTITY: Self = Self {
         inner: [
-            Vector4::new(1.0, 0.0, 0.0, 0.0),
-            Vector4::new(0.0, 1.0, 0.0, 0.0),
-            Vector4::new(0.0, 0.0, 1.0, 0.0),
-            Vector4::new(0.0, 0.0, 0.0, 1.0),
+            Vec4f::new(1.0, 0.0, 0.0, 0.0),
+            Vec4f::new(0.0, 1.0, 0.0, 0.0),
+            Vec4f::new(0.0, 0.0, 1.0, 0.0),
+            Vec4f::new(0.0, 0.0, 0.0, 1.0),
         ]
     };
 }
@@ -199,15 +205,15 @@ pub type Matrix3x2 = Matrix<3, 2>;
 impl Matrix3x2 {
     pub const IDENTITY: Self = Self {
         inner: [
-            Vector2::new(1.0, 0.0),
-            Vector2::new(0.0, 1.0),
-            Vector2::new(0.0, 0.0),
+            Vec2f::new(1.0, 0.0),
+            Vec2f::new(0.0, 1.0),
+            Vec2f::new(0.0, 0.0),
         ]
     };
 
     /// Internally use [`dot_vec()`](Self::dot_vec) method,
     /// but better as this one use less data
-    pub fn transform_point(&self, point: Vector2<f32>) -> Vector2<f32> {
+    pub fn transform_point(&self, point: Vec2f) -> Vec2f {
         Matrix2x2 { inner: [self[0], self[1]] }.dot_vec(point) + self[2]
     }
 }
@@ -217,8 +223,8 @@ pub type Matrix2x2 = Matrix<2, 2>;
 impl Matrix2x2 {
     pub const IDENTITY: Self = Self {
         inner: [
-            Vector2::new(1.0, 0.0),
-            Vector2::new(0.0, 1.0)
+            Vec2f::new(1.0, 0.0),
+            Vec2f::new(0.0, 1.0),
         ]
     };
 }
@@ -226,13 +232,13 @@ impl Matrix2x2 {
 #[cfg(test)]
 mod matrix_test {
     use super::*;
-    use crate::vector::Vector3;
+    use crate::vector::Vec3f;
 
     #[test]
     fn mat_vec() {
         let mat3x2 = Matrix3x2::IDENTITY;
-        let point3 = Vector3::new(1.0, 1.0, 1.0);
-        let point2 = Vector2::new(1.0, 1.0);
+        let point3 = Vec3f::new(1.0, 1.0, 1.0);
+        let point2 = Vec2f::new(1.0, 1.0);
 
         let res = mat3x2.dot_vec(point3);
         let cpr = mat3x2.transform_point(point2);
@@ -254,7 +260,7 @@ mod matrix_test {
 
     #[test]
     fn rotation() {
-        let point = Vector2::new(1.0, 1.2);
+        let point = Vec2f::new(1.0, 1.2);
         let mat2x2 = Matrix2x2::IDENTITY.with_scale(1.3, 1.4).with_rotation_rad(30.);
         let res = mat2x2.dot_vec(point);
 

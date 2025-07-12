@@ -8,7 +8,7 @@ use crate::element::Element;
 use crate::screen::Screen;
 use crate::storage::Storage;
 use crate::gpu::Gpu;
-use crate::mesh::{Indices, MeshBuffer, Vertex};
+use crate::mesh::{Indices, MeshBuffer};
 use crate::util::{create_pipeline, Sampler};
 use crate::texture::{Atlas, AtlasId, ImageData};
 use crate::Vertices;
@@ -29,7 +29,7 @@ impl Renderer {
         let gpu = Gpu::new(Arc::clone(&window))?;
 
         let screen = Screen::new(&gpu.device, gpu.size().into(), window.scale_factor());
-        let atlas = Atlas::new(&gpu.device, &gpu.queue);
+        let atlas = Atlas::new(&gpu.device);
         let sampler = Sampler::new(&gpu.device);
         let vertice_layout = &[MeshBuffer::vertice_layout()];
 
@@ -106,9 +106,17 @@ impl Renderer {
             view,
             resolve_target: None,
             ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(color.into()),
+                load: wgpu::LoadOp::Clear(
+                    wgpu::Color {
+                        r: color.r() as _,
+                        g: color.g() as _,
+                        b: color.b() as _,
+                        a: color.a() as _,
+                    }
+                ),
                 store: wgpu::StoreOp::Store,
-            }
+            },
+            depth_slice: None,
         };
 
         self.atlas.update(&self.gpu.device, &mut encoder);
@@ -154,16 +162,28 @@ impl Renderer {
         &mut self,
         element: Element,
         transform: Matrix3x2,
-        vertices: &[Vertex],
         offset: u64,
     ) {
         let indices = Indices::new().with_offset(offset as _, true);
-        self.mesh[self.current].indices.write(&self.gpu.device, &self.gpu.queue, offset * 6, indices.as_slice());
-        self.mesh[self.current].vertices.write(&self.gpu.device, &self.gpu.queue, offset * 4, vertices);
-        self.mesh[self.current].offset = offset;
+        let vertices = self.atlas
+            .get_uv(&element.atlas_id)
+            .map(|uv| Vertices::new().with_uv(*uv).with_id(offset as _))
+            .unwrap_or(Vertices::new().with_id(offset as _));
 
-        self.storage[self.current].elements.write(&self.gpu.device, &self.gpu.queue, offset, &[element]);
-        self.storage[self.current].transforms.write(&self.gpu.device, &self.gpu.queue, offset, &[transform]);
+        self.mesh[self.current]
+            .indices
+            .write(&self.gpu.device, &self.gpu.queue, offset * 6, indices.as_slice());
+        self.mesh[self.current]
+            .vertices
+            .write(&self.gpu.device, &self.gpu.queue, offset * 4, vertices.as_slice());
+        self.storage[self.current]
+            .elements
+            .write(&self.gpu.device, &self.gpu.queue, offset, &[element]);
+        self.storage[self.current]
+            .transforms
+            .write(&self.gpu.device, &self.gpu.queue, offset, &[transform]);
+
+        self.mesh[self.current].offset = offset + 1;
     }
 
     pub fn finish(&mut self) {
@@ -179,13 +199,13 @@ impl Renderer {
         let mut vertices = vec![];
         (0..elements.len())
             .for_each(|i| {
-                indices.extend_from_slice(Indices::new().with_offset(i as _, true).as_slice());
-                let id = elements[i].atlas_id();
-                let vert = if let Some(uv) = self.atlas.get_uv(&id) {
-                    Vertices::new().with_uv(*uv).with_id(i as _)
-                } else {
-                    Vertices::new().with_id(i as _)
-                };
+                let atlas_id = elements[i].atlas_id();
+                let idx = Indices::new().with_offset(i as _, true);
+                let vert = self.atlas
+                    .get_uv(&atlas_id)
+                    .map(|uv| Vertices::new().with_uv(*uv).with_id(i as _))
+                    .unwrap_or(Vertices::new().with_id(i as _));
+                indices.extend_from_slice(idx.as_slice());
                 vertices.extend_from_slice(&vert);
             });
 

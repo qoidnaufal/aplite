@@ -1,7 +1,8 @@
 use aplite_types::Rgba;
 use aplite_renderer::Shape;
 
-use crate::{context::widget_state::WidgetState, prelude::Orientation};
+use crate::context::layout::Orientation;
+use crate::widget_state::WidgetState;
 
 use super::{ViewNode, ViewId, Widget, VIEW_STORAGE};
 

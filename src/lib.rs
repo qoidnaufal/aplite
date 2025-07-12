@@ -2,6 +2,7 @@ mod app;
 mod context;
 mod error;
 mod view;
+mod widget_state;
 
 pub mod prelude {
     use crate::error::ApliteError;
@@ -16,7 +17,7 @@ pub mod prelude {
 
     pub use crate::app::Aplite;
     pub use crate::context::Context;
-    pub use crate::context::widget_state::AspectRatio;
+    pub use crate::widget_state::AspectRatio;
     pub use crate::context::layout::{
         Alignment,
         Orientation,

@@ -46,6 +46,6 @@ impl std::ops::Deref for ImageData {
 
 impl From<Rgba<u8>> for ImageData {
     fn from(rgba: Rgba<u8>) -> Self {
-        Self::new((1, 1), &rgba.to_slice())
+        Self::new((1, 1), rgba.as_slice())
     }
 }

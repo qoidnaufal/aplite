@@ -2,17 +2,16 @@ use std::collections::HashMap;
 
 use aplite_reactive::*;
 use aplite_renderer::Renderer;
-use aplite_types::{Size, Vector2};
+use aplite_types::{Size, Vec2f};
 use winit::window::WindowId;
 
 use crate::view::ViewId;
 use crate::view::VIEW_STORAGE;
+use crate::widget_state::AspectRatio;
 
 pub mod layout;
-pub(crate) mod widget_state;
 pub(crate) mod cursor;
 
-use widget_state::AspectRatio;
 use cursor::{Cursor, MouseAction, MouseButton};
 use layout::{
     LayoutContext,
@@ -153,7 +152,7 @@ impl Context {
 // #########################################################
 
 impl Context {
-    pub(crate) fn handle_mouse_move(&mut self, root_id: &ViewId, pos: impl Into<Vector2<f32>>) {
+    pub(crate) fn handle_mouse_move(&mut self, root_id: &ViewId, pos: impl Into<Vec2f>) {
         if VIEW_STORAGE.with(|s| {
             s.get_all_members_of(root_id).is_empty()
         }) { return }
@@ -253,19 +252,15 @@ impl Context {
             let screen = renderer.screen_size();
             let components = s.get_render_components(&root_id, screen);
 
-            let mut elements = Vec::with_capacity(components.len());
-            let mut transforms = Vec::with_capacity(components.len());
-
-            components.iter().for_each(|(elem, mat, img)| {
-                let info = img.as_ref().and_then(|image_fn| renderer.render_image(image_fn));
-                if let Some(id) = info {
-                    elem.update_untracked(|elem| elem.set_atlas_id(id));
-                };
-                transforms.push(*mat);
-                elements.push(elem.get_untracked());
-            });
-
-            renderer.submit_data_batched(&elements, &transforms);
+            components.iter()
+                .enumerate()
+                .for_each(|(offset, (elem, mat, img))| {
+                    let info = img.as_ref().and_then(|image_fn| renderer.render_image(image_fn));
+                    if let Some(id) = info {
+                        elem.update_untracked(|elem| elem.set_atlas_id(id));
+                    };
+                    renderer.submit_data(elem.get_untracked(), *mat, offset as _);
+                });
         });
     }
 }

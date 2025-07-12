@@ -1,8 +1,8 @@
 use aplite_reactive::*;
 use aplite_renderer::Shape;
 use aplite_types::Rgba;
-use crate::context::widget_state::WidgetState;
 
+use crate::widget_state::WidgetState;
 use super::{ViewNode, ViewId, Widget, VIEW_STORAGE};
 
 pub fn button() -> Button { Button::new() }

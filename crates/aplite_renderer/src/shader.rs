@@ -13,7 +13,7 @@ struct Radius {
     bot_left: f32,
     bot_right: f32,
     top_right: f32,
-};
+}
 
 fn scale_radius(r: Radius, ew: f32) -> Radius {
     var ret: Radius;
@@ -33,7 +33,7 @@ struct Element {
     stroke_width: f32,
     atlas_id: i32,
     transform_id: u32,
-};
+}
 
 @group(1) @binding(0) var<storage> elements: array<Element>;
 @group(1) @binding(1) var<storage> transforms: array<mat3x2<f32>>;
@@ -42,9 +42,24 @@ fn get_pos(element: Element, pos: vec2<f32>) -> vec2f {
     let t = transforms[element.transform_id];
     let r = element.rotate;
 
+    let sx = t[0].x;
+    let sy = t[1].y;
+
+    let sin = sin(r);
+    let cos = cos(r);
+
+    // let sc0 = screen_t[0];
+    // let sc1 = screen_t[1];
+    // let sc2 = screen_t[2];
+
+    // let sct = mat2x2<f32>(
+    //     sc0.x, sc1.x,
+    //     sc0.y, sc1.y,
+    // );
+    
     let mat = mat2x2<f32>(
-        cos(r) * t[0].x, -sin(r) * t[1].y,
-        sin(r) * t[0].x,  cos(r) * t[1].y,
+        cos * sx, -sin * sy,
+        sin * sx,  cos * sy,
     );
 
     let translate = vec2f(t[2].x, t[2].y);
@@ -53,20 +68,21 @@ fn get_pos(element: Element, pos: vec2<f32>) -> vec2f {
 
 struct VertexInput {
     @location(0) pos: vec2<f32>,
-    @location(1) uv: vec2<f32>,
-    @location(2) id: u32,
+    @location(1) uv: vec2<f32>,    @location(2) id: u32,
+
 }
 
 struct FragmentPayload {
     @builtin(position) position: vec4<f32>,
     @location(0) @interpolate(flat) index: u32,
     @location(1) uv: vec2<f32>,
-};
+}
 
 @vertex
 fn vs_main(vertex: VertexInput) -> FragmentPayload {
     let element = elements[vertex.id];
 
+    // let pos = screen_t * vec3f(vertex.pos, 1.0);
     let pos = get_pos(element, vertex.pos);
     let s_pos = screen_t * vec3f(pos, 1.0);
 
@@ -138,7 +154,7 @@ pub const FRAGMENT: &str = r"
 struct Stroke {
     width: f32,
     color: vec4f,
-};
+}
 
 fn get_stroke(element: Element) -> Stroke {
     // let elem_t = transform[element.transform_id];
@@ -162,9 +178,9 @@ fn fs_main(in: FragmentPayload) -> @location(0) vec4<f32> {
 
     let stroke = get_stroke(element);
     let sdf = sdf(in.uv, element, stroke.width);
-    let fill = select(vec4f(0.0), element.color, sdf < 0.0);
     let blend = 1.0 - smoothstep(0.0, stroke.width, abs(sdf));
 
-    return mix(fill, stroke.color, blend);
+    let color = select(vec4f(0.0), element.color, sdf < 0.0);
+    return mix(color, stroke.color, blend);
 }
 ";

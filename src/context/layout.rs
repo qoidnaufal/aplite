@@ -1,8 +1,7 @@
 use aplite_reactive::*;
-use aplite_types::{Rect, Vector2};
+use aplite_types::{Rect, Vec2u};
 
-use crate::context::widget_state::WidgetState;
-
+use crate::widget_state::WidgetState;
 use crate::view::{ViewId, VIEW_STORAGE};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -199,7 +198,7 @@ impl Rules {
 
 pub(crate) struct LayoutContext<'a> {
     entity: &'a ViewId,
-    next_pos: Vector2<u32>,
+    next_pos: Vec2u,
     rules: Rules,
 }
 
@@ -211,7 +210,7 @@ impl<'a> LayoutContext<'a> {
         });
         Self {
             entity,
-            next_pos: Vector2::new(0, 0),
+            next_pos: Vec2u::new(0, 0),
             rules,
         }
     }

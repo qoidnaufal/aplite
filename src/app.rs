@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use aplite_reactive::{Effect, Get};
-use winit::dpi::{PhysicalPosition, PhysicalSize};
+use winit::dpi::{PhysicalPosition, PhysicalSize, LogicalSize};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
 use winit::event::{ElementState, MouseButton, WindowEvent};
@@ -49,7 +49,7 @@ impl Default for WindowAttributes {
 impl From<&WindowAttributes> for winit::window::WindowAttributes {
     fn from(w: &WindowAttributes) -> Self {
         Self::default()
-            .with_inner_size::<winit::dpi::LogicalSize<u32>>(w.inner_size.into())
+            .with_inner_size(LogicalSize::new(w.inner_size.width(), w.inner_size.height()))
             .with_title(w.title)
             .with_decorations(w.decorations)
             .with_transparent(w.transparent)
@@ -149,7 +149,7 @@ impl Aplite {
                 .to_logical(window.scale_factor());
 
             let root = s.create_entity();
-            let root_view = View::window(size.into());
+            let root_view = View::window(Size::new(size.width, size.height));
 
             s.storage.borrow_mut().insert(root, root_view);
             self.cx.root_window.insert(root, window_id);
@@ -211,17 +211,17 @@ impl Aplite {
     fn handle_redraw_request(&mut self, window_id: &WindowId, event_loop: &ActiveEventLoop) {
         if let Some((_, window)) = self.window.get(window_id).cloned() {
             // FIXME: not sure if retained mode works like this
-            self.submit_update(&window_id);
+            self.prepare_data(&window_id);
 
             #[cfg(feature = "render_stats")] let start = std::time::Instant::now();
 
             self.render(event_loop, window);
 
-            #[cfg(feature = "render_stats")] self.stats.inc(start.elapsed())
+            #[cfg(feature = "render_stats")] self.stats.inc(start.elapsed());
         }
     }
 
-    fn submit_update(&mut self, window_id: &WindowId) {
+    fn prepare_data(&mut self, window_id: &WindowId) {
         if let Some(renderer) = self.renderer.as_mut() {
             let (root_id, _) = self.window.get(window_id).unwrap();
             if self.cx.dirty().get_untracked() {

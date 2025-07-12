@@ -1,4 +1,4 @@
-use aplite_types::{Rect, Vector2};
+use aplite_types::{Rect, Vec2f};
 
 use crate::buffer::Buffer;
 
@@ -17,8 +17,8 @@ pub struct Vertices([Vertex; 4]);
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Vertex {
-    _pos: Vector2<f32>,
-    uv: Vector2<f32>,
+    _pos: Vec2f,
+    uv: Vec2f,
     id: u32,
 }
 
@@ -36,7 +36,7 @@ impl Indices {
         self
     }
 
-    pub(crate) fn as_slice(&self) -> &[u32] {
+    pub(crate) const fn as_slice(&self) -> &[u32] {
         &self.0
     }
 }
@@ -56,10 +56,10 @@ impl std::ops::DerefMut for Indices {
 
 impl Vertices {
     const VERTICES: Self = Self ([
-        Vertex { _pos: Vector2::new( -1.0,  1.0 ), uv: Vector2::new( 0.0, 0.0 ), id: 0 },
-        Vertex { _pos: Vector2::new( -1.0, -1.0 ), uv: Vector2::new( 0.0, 1.0 ), id: 0 },
-        Vertex { _pos: Vector2::new(  1.0, -1.0 ), uv: Vector2::new( 1.0, 1.0 ), id: 0 },
-        Vertex { _pos: Vector2::new(  1.0,  1.0 ), uv: Vector2::new( 1.0, 0.0 ), id: 0 },
+        Vertex { _pos: Vec2f::new(-1.0,  1.0), uv: Vec2f::new(0.0, 0.0), id: 0 },
+        Vertex { _pos: Vec2f::new(-1.0, -1.0), uv: Vec2f::new(0.0, 1.0), id: 0 },
+        Vertex { _pos: Vec2f::new( 1.0, -1.0), uv: Vec2f::new(1.0, 1.0), id: 0 },
+        Vertex { _pos: Vec2f::new( 1.0,  1.0), uv: Vec2f::new(1.0, 0.0), id: 0 },
     ]);
 
     #[inline(always)]
@@ -92,7 +92,7 @@ impl Vertices {
     }
 
     #[inline(always)]
-    pub(crate) fn as_slice(&self) -> &[Vertex] {
+    pub(crate) const fn as_slice(&self) -> &[Vertex] {
         self.0.as_slice()
     }
 }
@@ -168,12 +168,12 @@ impl MeshBuffer {
                 },
                 wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float32x2,
-                    offset: size_of::<Vector2<f32>>() as u64,
+                    offset: size_of::<Vec2f>() as u64,
                     shader_location: 1,
                 },
                 wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Uint32,
-                    offset: size_of::<Vector2<f32>>() as u64 * 2,
+                    offset: size_of::<Vec2f>() as u64 * 2,
                     shader_location: 2,
                 }
             ],

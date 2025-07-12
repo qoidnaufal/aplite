@@ -7,5 +7,3 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-winit.workspace = true
-wgpu.workspace = true

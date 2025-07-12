@@ -7,13 +7,13 @@ mod vector;
 mod rect;
 
 pub use num_traits::*;
-pub use size::Size;
+pub use size::{gcd, Size};
 pub use matrix::{Matrix4x4, Matrix3x2, Matrix2x2};
 pub use fraction::Fraction;
-pub use color::{color_u8, color_f32, Rgba};
+pub use color::{rgba_u8, rgba_f32, Rgba};
 pub use rect::Rect;
 pub use vector::{
-    Vector2,
-    Vector3,
-    Vector4,
+    Vec2u, Vec2f,
+    Vec3u, Vec3f,
+    Vec4u, Vec4f,
 };

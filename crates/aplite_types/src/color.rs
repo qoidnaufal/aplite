@@ -1,17 +1,18 @@
-use super::{Vector4, GpuPrimitive, NumDebugger};
+use crate::num_traits::{GpuPrimitive, NumDebugger};
+use crate::vector::{Vector, Vec4f};
 
-pub const fn color_u8(r: u8, g: u8, b: u8, a: u8) -> Rgba<u8> {
+pub const fn rgba_u8(r: u8, g: u8, b: u8, a: u8) -> Rgba<u8> {
     Rgba::new(r, g, b, a)
 }
 
 /// value must be between 0.0 and 1.0
-pub const fn color_f32(r: f32, g: f32, b: f32, a: f32) -> Rgba<f32> {
+pub const fn rgba_f32(r: f32, g: f32, b: f32, a: f32) -> Rgba<f32> {
     Rgba::new(r, g, b, a)
 }
 
 #[derive(Clone, Copy)]
 pub struct Rgba<T: GpuPrimitive> {
-    inner: Vector4<T>
+    inner: Vector<4, T>
 }
 
 impl<T: GpuPrimitive + NumDebugger> std::fmt::Debug for Rgba<T> {
@@ -23,23 +24,23 @@ impl<T: GpuPrimitive + NumDebugger> std::fmt::Debug for Rgba<T> {
 
 impl<T: GpuPrimitive> Rgba<T> {
     pub const fn new(r: T, g: T, b: T, a: T) -> Self {
-        Self { inner: Vector4::new(r, g, b, a) }
+        Self { inner: Vector::new_from_array([r, g, b, a]) }
     }
 
     #[inline(always)]
-    pub const fn to_slice(self) -> [T; 4] { self.inner.slice() }
+    pub const fn as_slice(&self) -> &[T] { self.inner.as_slice() }
 
     #[inline(always)]
-    pub const fn r(&self) -> T { self.inner.x() }
+    pub const fn r(&self) -> T { self.inner.inner[0] }
 
     #[inline(always)]
-    pub const fn g(&self) -> T { self.inner.y() }
+    pub const fn g(&self) -> T { self.inner.inner[1] }
 
     #[inline(always)]
-    pub const fn b(&self) -> T { self.inner.z() }
+    pub const fn b(&self) -> T { self.inner.inner[2] }
 
     #[inline(always)]
-    pub const fn a(&self) -> T { self.inner.w() }
+    pub const fn a(&self) -> T { self.inner.inner[3] }
 }
 
 impl Rgba<u8> {
@@ -54,17 +55,6 @@ impl Rgba<u8> {
     pub const LIGHT_GRAY: Self = Rgba::new(69, 69, 69, 255);
     pub const DARK_GRAY: Self = Self::new(30, 30, 30, 255);
     pub const DARK_GREEN: Self = Self::new(10, 30, 15, 255);
-}
-
-impl From<Rgba<u8>> for wgpu::Color {
-    fn from(val: Rgba<u8>) -> Self {
-        Self {
-            r: val.r() as f64 / u8::MAX as f64,
-            g: val.g() as f64 / u8::MAX as f64,
-            b: val.b() as f64 / u8::MAX as f64,
-            a: val.a() as f64 / u8::MAX as f64,
-        }
-    }
 }
 
 // taken straight up from kludgine
@@ -95,7 +85,7 @@ impl Rgba<f32> {
         self.into()
     }
 
-    pub fn to_vec_f32(self) -> Vector4<f32> {
+    pub fn to_vec4f(self) -> Vec4f {
         self.into()
     }
 }
@@ -105,7 +95,7 @@ impl Rgba<u8> {
         self.into()
     }
 
-    pub fn to_vec_f32(self) -> Vector4<f32> {
+    pub fn to_vec4f(self) -> Vec4f {
         self.f32().into()
     }
 }
@@ -132,8 +122,8 @@ impl From<Rgba<f32>> for Rgba<u8> {
     }
 }
 
-impl From<Vector4<f32>> for Rgba<u8> {
-    fn from(val: Vector4<f32>) -> Self {
+impl From<Vec4f> for Rgba<u8> {
+    fn from(val: Vec4f) -> Self {
         Self::new(
             (val.x() * u8::MAX as f32).round() as u8,
             (val.y() * u8::MAX as f32).round() as u8,
@@ -143,7 +133,7 @@ impl From<Vector4<f32>> for Rgba<u8> {
     }
 }
 
-impl From<Rgba<u8>> for Vector4<f32> {
+impl From<Rgba<u8>> for Vec4f {
     fn from(rgba: Rgba<u8>) -> Self {
         Self::new(
             rgba.r() as f32 / u8::MAX as f32,
@@ -154,7 +144,7 @@ impl From<Rgba<u8>> for Vector4<f32> {
     }
 }
 
-impl From<Rgba<f32>> for Vector4<f32> {
+impl From<Rgba<f32>> for Vec4f {
     fn from(rgba: Rgba<f32>) -> Self {
         Self::new(
             rgba.r(),
