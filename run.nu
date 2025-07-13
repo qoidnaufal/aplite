@@ -13,3 +13,10 @@ def "main git" [message] {
     ^git commit -m $message
     ^git push origin main
 }
+
+def "main log" [head] {
+    ^git log --pretty=%h»¦«%aN»¦«%s»¦«%aD
+    | lines
+    | split column "»¦«" sha1 committer desc merged_at
+    | first $head
+}
