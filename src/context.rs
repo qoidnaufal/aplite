@@ -235,9 +235,6 @@ impl Context {
 // #                                                       #
 // #########################################################
 
-
-// FIXME: this is shit, 2x triggering temporary allocation is shit
-// there should be a way to write each component individually
 impl Context {
     pub(crate) fn prepare_data(&self, root_id: ViewId, renderer: &mut Renderer) {
         VIEW_STORAGE.with(|s| {

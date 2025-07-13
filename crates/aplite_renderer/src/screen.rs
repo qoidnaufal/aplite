@@ -50,10 +50,10 @@ impl Screen {
         }
     }
 
-    pub(crate) fn update_transform<F: Fn(&mut Matrix3x2)>(&mut self, f: F) {
-        f(&mut self.screen_transform);
-        self.is_resized = true;
-    }
+    // pub(crate) fn update_transform<F: Fn(&mut Matrix3x2)>(&mut self, f: F) {
+    //     f(&mut self.screen_transform);
+    //     self.is_resized = true;
+    // }
 
     pub(crate) fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

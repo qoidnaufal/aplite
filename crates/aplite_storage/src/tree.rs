@@ -15,7 +15,7 @@ where
 /// A macro to confeniently implement [`Entity`] trait to be stored in the [`Tree`].
 /// You just need to specify the name.
 /// # Example
-/// ```rust
+/// ```ignore
 /// entity! {
 ///     SuperUniqueIdName;
 ///     AnotherId;

@@ -25,12 +25,11 @@ This is an example from the current (incomplete) works I've accomplished so far:
 ```rust
 use aplite::prelude::*;
 
-fn dummy() -> impl IntoView {
-    let (counter, set_counter) = Signal::create(0i32);
+fn root() -> impl IntoView {
+    let (counter, set_counter) = Signal::create(0u32);
+    let (rotate, set_rotate) = Signal::create(0.0);
 
-    Effect::new(move |_| {
-        counter.with(|val| eprintln!("{val}"));
-    });
+    Effect::new(move |_| counter.with(|val| eprint!("Counter: {val}    \r")));
 
     let click = move || {
         set_counter.update(|num| *num += 1);
@@ -48,22 +47,43 @@ fn dummy() -> impl IntoView {
         })
     };
 
+    let click2 = move || {
+        set_rotate.update(|val| *val += 30.0);
+    };
+
     let button = Button::new()
+        .set_stroke_color(|_| Rgba::WHITE)
+        .set_stroke_width(|_| 6)
+        .set_rotation(move |_| rotate.get())
+        .set_corners(|_| CornerRadius::homogen(47))
+        .set_dragable(true)
+        .set_size((200, 69))
         .on_click(click);
 
-    let circle = TestCircleWidget::new()
-        .set_color(color);
+    let circle = CircleWidget::new()
+        .set_color(color)
+        .set_shape(move |_| {
+            counter.with(|val| {
+                if val % 2 == 0 {
+                    Shape::Circle
+                } else {
+                    Shape::RoundedRect
+                }
+            })
+        })
+        .on_click(click2)
+        .set_stroke_width(|_| 6)
+        .set_dragable(true)
+        .set_size((150, 150));
 
     button.and(circle)
 }
 
 fn main() -> AppResult {
     Aplite::new(root)
-        .set_window_attributes(|window| {
-            window.set_title("Dummy");
-            window.set_inner_size((500, 500));
-        })
-        .set_background_color(Rgba::DARK_GRAY)
+        .with_inner_size((500, 500))
+        .with_title("Dummy")
+        .with_background_color(Rgba::DARK_GRAY)
         .launch()
 }
 ```

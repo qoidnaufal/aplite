@@ -24,6 +24,7 @@ pub enum RendererError {
     ShouldResize,
     ShouldExit,
     TimeOut,
+    PollError,
 }
 
 impl std::fmt::Display for RendererError {
@@ -60,5 +61,11 @@ impl From<wgpu::SurfaceError>  for RendererError {
             wgpu::SurfaceError::OutOfMemory => Self::ShouldExit,
             wgpu::SurfaceError::Other => Self::TextureAcquiringFailed,
         }
+    }
+}
+
+impl From<wgpu::PollError> for RendererError {
+    fn from(_: wgpu::PollError) -> Self {
+        Self::PollError
     }
 }

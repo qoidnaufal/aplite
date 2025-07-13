@@ -28,7 +28,7 @@ impl Renderer {
     pub fn new(window: Arc<Window>) -> Result<Self, RendererError> {
         let gpu = Gpu::new(Arc::clone(&window))?;
 
-        let screen = Screen::new(&gpu.device, gpu.size().into(), window.scale_factor());
+        let mut screen = Screen::new(&gpu.device, gpu.size().into(), window.scale_factor());
         let atlas = Atlas::new(&gpu.device);
         let sampler = Sampler::new(&gpu.device);
         let vertice_layout = &[MeshBuffer::vertice_layout()];
@@ -51,6 +51,8 @@ impl Renderer {
         ];
 
         let pipeline = create_pipeline(&gpu, vertice_layout, layouts);
+
+        screen.size.write(&gpu.device, &gpu.queue, 0, &[gpu.size().into()]);
 
         Ok(Self {
             gpu,
@@ -88,19 +90,22 @@ impl Renderer {
             self.gpu.reconfigure_size(new_size);
         }
 
-        self.screen.update_transform(|mat| {
-            mat.set_scale(s.width(), s.height());
-            mat.set_translate(s.width() - 1.0, 1.0 - s.height());
-        });
+        let transform = Matrix3x2::IDENTITY
+            .with_scale(s.width(), s.height())
+            .with_translate(s.width() - 1.0, 1.0 - s.height());
+        self.screen
+            .transform
+            .write(&self.gpu.device, &self.gpu.queue, 0, &[transform]);
+        // self.screen.update_transform(|mat| {
+        //     mat.set_scale(s.width(), s.height());
+        //     mat.set_translate(s.width() - 1.0, 1.0 - s.height());
+        // });
     }
 
     pub fn render(&mut self, color: Rgba<u8>, window: Arc<Window>) -> Result<(), RendererError> {
-        let frame = self.gpu.get_current_texture()?;
-        let view = &frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self
-            .gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("render encoder") });
+        let surface = self.gpu.get_surface_texture()?;
+        let view = &surface.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self.gpu.create_command_encoder();
 
         let desc = wgpu::RenderPassColorAttachment {
             view,
@@ -124,8 +129,9 @@ impl Renderer {
 
         window.pre_present_notify();
 
-        self.gpu.queue.submit([encoder.finish()]);
-        frame.present();
+        let submission_id = self.gpu.submit_encoder(encoder);
+        self.gpu.poll_wait(submission_id)?;
+        surface.present();
 
         Ok(())
     }
@@ -153,9 +159,14 @@ impl Renderer {
     }
 }
 
+// FIXME: this feels immediate mode to me, idk
 impl Renderer {
     pub fn begin(&mut self) {
         self.current = (self.current + 1) % 3;
+    }
+
+    pub fn finish(&mut self) {
+        // self.screen.write(&self.gpu.device, &self.gpu.queue);
     }
 
     pub fn submit_data(
@@ -184,10 +195,6 @@ impl Renderer {
             .write(&self.gpu.device, &self.gpu.queue, offset, &[transform]);
 
         self.mesh[self.current].offset = offset + 1;
-    }
-
-    pub fn finish(&mut self) {
-        self.screen.write(&self.gpu.device, &self.gpu.queue);
     }
 
     pub fn submit_data_batched(

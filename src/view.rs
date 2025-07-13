@@ -50,6 +50,7 @@ impl ViewStorage {
         self.tree.borrow_mut().create_entity()
     }
 
+    // FIXME: there's logic error when appending on a fn() -> impl IntoView
     pub(crate) fn append_child(&self, id: &ViewId, child: impl IntoView) {
         let child_id = child.id();
         let state = child.widget_state();

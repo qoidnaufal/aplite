@@ -3,6 +3,18 @@ use std::cell::RefCell;
 use crate::graph::{EffectId, GRAPH};
 use crate::subscriber::Subscriber;
 
+/// [`Effect`] is a scope to synchronize the reactive node (eg: [`Signal`](crate::signal::Signal)) with anything.
+/// I remember Greg Johnstone, the creator of Leptos, said that an this should only be used
+/// to synchronize reactive node with non reactive API, but so far I don't think I encounter any error.
+/// # Example
+/// ```ignore
+/// let (counter, set_counter) = Signal::create(0i32);
+
+/// Effect::new(move |_| eprintln!("{}", counter.get()));
+///
+/// // and then do something with the set_counter
+/// let on_click = move || set_counter.update(|num| *num += 1);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Effect {
     id: EffectId,

@@ -46,15 +46,31 @@ impl Default for WindowAttributes {
     }
 }
 
+#[cfg(target_os = "macos")]
+impl From<&WindowAttributes> for winit::window::WindowAttributes {
+    fn from(w: &WindowAttributes) -> Self {
+        use winit::platform::macos::WindowAttributesExtMacOS;
+
+        Self::default()
+            .with_inner_size(LogicalSize::new(w.inner_size.width(), w.inner_size.height()))
+            .with_title(w.title)
+            .with_transparent(w.transparent)
+            .with_maximized(w.maximized)
+            .with_resizable(w.resizable)
+            .with_titlebar_hidden(!w.decorations)
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
 impl From<&WindowAttributes> for winit::window::WindowAttributes {
     fn from(w: &WindowAttributes) -> Self {
         Self::default()
             .with_inner_size(LogicalSize::new(w.inner_size.width(), w.inner_size.height()))
             .with_title(w.title)
-            .with_decorations(w.decorations)
             .with_transparent(w.transparent)
             .with_maximized(w.maximized)
             .with_resizable(w.resizable)
+            .with_decorations(w.decorations)
     }
 }
 
@@ -64,7 +80,7 @@ pub struct Aplite {
     window: HashMap<WindowId, Arc<Window>>,
     root_view_id: HashMap<WindowId, ViewId>,
     window_attributes: WindowAttributes,
-    views: Vec<Box<dyn FnOnce(WindowId) -> Box<dyn IntoView>>>,
+    pending_views: Vec<Box<dyn FnOnce(WindowId) -> Box<dyn IntoView>>>,
 
     #[cfg(feature = "render_stats")]
     stats: aplite_stats::Stats,
@@ -74,7 +90,7 @@ pub struct Aplite {
 impl Aplite {
     pub fn new<IV: IntoView + 'static>(view_fn: impl FnOnce() -> IV + 'static) -> Self {
         let mut app = Self::new_empty();
-        app.views.push(Box::new(|_| Box::new(view_fn())));
+        app.pending_views.push(Box::new(|_| Box::new(view_fn())));
         app
     }
 
@@ -85,7 +101,7 @@ impl Aplite {
             window: HashMap::with_capacity(4),
             root_view_id: HashMap::with_capacity(4),
             window_attributes: WindowAttributes::default(),
-            views: Vec::with_capacity(4),
+            pending_views: Vec::with_capacity(4),
 
             #[cfg(feature = "render_stats")]
             stats: aplite_stats::Stats::new(),
@@ -157,7 +173,7 @@ impl Aplite {
             self.root_view_id.insert(window_id, root);
             self.window.insert(window_id, Arc::clone(&window));
 
-            if let Some(view_fn) = self.views.pop() {
+            if let Some(view_fn) = self.pending_views.pop() {
                 let view = view_fn(window_id);
                 view.widget_state().z_index.update(|z_index| *z_index += 1);
                 s.append_child(&root, view);
@@ -173,6 +189,7 @@ impl Aplite {
         Ok((view_id, window))
     }
 
+    /// Create new [`Window`]
     fn create_window(
         event_loop: &ActiveEventLoop,
         attributes: &WindowAttributes,
@@ -181,19 +198,20 @@ impl Aplite {
         Ok(Arc::new(window))
     }
 
+    /// Initialize the [`Renderer`]
     fn initialize_renderer(&mut self, window: Arc<Window>) -> Result<(), ApliteError> {
         let renderer = Renderer::new(Arc::clone(&window))?;
         self.renderer = Some(renderer);
         Ok(())
     }
 
+    /// Track the [`Window`] with the associated root [`ViewId`] for rendering
     fn track_window(&mut self, view_id: ViewId, window: Arc<Window>) {
         let dirty = self.cx.dirty();
 
         Effect::new(move |_| {
-            // FIXME: this should coresponds to root_id & window_id
-            dirty.with(|id| {
-                if id.is_some_and(|id| id == view_id) {
+            dirty.with(|root_id| {
+                if root_id.is_some_and(|id| id == view_id) {
                     window.request_redraw();
                 }
             })
@@ -222,13 +240,18 @@ impl Aplite {
         }
     }
 
+    // FIXME: not sure if retained mode works like this
     fn handle_redraw_request(&mut self, window_id: &WindowId, event_loop: &ActiveEventLoop) {
         if let Some(window) = self.window.get(window_id).cloned() {
-            // FIXME: not sure if retained mode works like this
-            self.prepare_data(&window_id);
-
             #[cfg(feature = "render_stats")] let start = std::time::Instant::now();
 
+            // if let Some(renderer) = self.renderer.as_mut() {
+            //     let root_id = self.root_view_id[window_id];
+
+            //     self.cx.prepare_data(root_id, renderer);
+            // }
+
+            self.prepare_data(window_id);
             self.render(event_loop, window);
 
             #[cfg(feature = "render_stats")] self.stats.inc(start.elapsed());

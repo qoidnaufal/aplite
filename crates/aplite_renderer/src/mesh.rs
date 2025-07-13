@@ -153,7 +153,7 @@ impl MeshBuffer {
     }
 
     pub(crate) fn vertices_slice(&self) -> wgpu::BufferSlice {
-        self.vertices.slice(0..self.offset * 6)
+        self.vertices.slice(0..self.offset * 4)
     }
 
     pub(crate) fn vertice_layout<'a>() -> wgpu::VertexBufferLayout<'a> {

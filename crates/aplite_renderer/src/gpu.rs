@@ -30,7 +30,6 @@ impl Gpu {
             ..Default::default()
         });
         let surface = instance.create_surface(window)?;
-
         let (adapter, device, queue) = block_on(async {
             let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions {
                 compatible_surface: Some(&surface),
@@ -44,7 +43,6 @@ impl Gpu {
 
             Ok::<(wgpu::Adapter, wgpu::Device, wgpu::Queue), RendererError>((adapter, device, queue))
         })?;
-
         let surface_capabilites = surface.get_capabilities(&adapter);
         let format = surface_capabilites
             .formats
@@ -74,13 +72,28 @@ impl Gpu {
     }
 
     #[inline(always)]
-    pub(crate) fn get_current_texture(&self) -> Result<wgpu::SurfaceTexture, wgpu::SurfaceError> {
-        self.surface.get_current_texture()
+    pub(crate) fn get_surface_texture(&self) -> Result<wgpu::SurfaceTexture, RendererError> {
+        let surface = self.surface.get_current_texture()?;
+        Ok(surface)
     }
 
     /// this one uses [`winit::dpi::LogicalSize<u32>`]
     #[inline(always)]
     pub(crate) fn size(&self) -> Size<u32> {
         Size::new(self.config.width, self.config.height)
+    }
+
+    pub(crate) fn create_command_encoder(&self) -> wgpu::CommandEncoder {
+        let label = Some("render encoder");
+        self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label })
+    }
+
+    pub(crate) fn submit_encoder(&self, encoder: wgpu::CommandEncoder) -> wgpu::SubmissionIndex {
+        self.queue.submit([encoder.finish()])
+    }
+
+    pub(crate) fn poll_wait(&self, index: wgpu::SubmissionIndex) -> Result<(), RendererError> {
+        self.device.poll(wgpu::PollType::WaitForSubmissionIndex(index))?;
+        Ok(())
     }
 }
