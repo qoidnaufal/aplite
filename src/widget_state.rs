@@ -3,6 +3,7 @@ use aplite_types::{Matrix3x2, Rect, Size, Vec2u};
 
 use crate::context::layout::{Alignment, Orientation, Padding};
 use crate::context::cursor::Cursor;
+use crate::view::ViewId;
 
 #[derive(Debug, Clone, Copy)]
 pub enum AspectRatio {
@@ -14,6 +15,7 @@ pub enum AspectRatio {
 #[derive(Debug, Clone, Copy)]
 pub struct WidgetState {
     pub(crate) name: &'static str,
+    pub(crate) root_id: RwSignal<Option<ViewId>>,
     pub(crate) rect: RwSignal<Rect<u32>>,
     pub(crate) min_width: Option<u32>,
     pub(crate) min_height: Option<u32>,
@@ -36,6 +38,7 @@ impl Default for WidgetState {
     fn default() -> Self {
         Self {
             name: "",
+            root_id: RwSignal::new(None),
             rect: RwSignal::new(Rect::new(0, 0, 0, 0)),
             min_width: Some(1),
             min_height: Some(1),

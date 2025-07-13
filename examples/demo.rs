@@ -64,7 +64,7 @@ fn root() -> impl IntoView {
             Button::new()
                 .set_corners(|_| CornerRadius::homogen(70))
                 .set_rotation(move |_| {
-                    counter.with(|val| *val as f32)
+                    counter.with(|val| *val as f32 * 3.0)
                 })
                 .set_color(move |_| {
                     counter.with(|val| {

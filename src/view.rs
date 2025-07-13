@@ -32,7 +32,7 @@ pub(crate) struct ViewStorage {
     pub(crate) storage: RefCell<HashMap<ViewId, View>>,
     pub(crate) image_fn: RefCell<HashMap<ViewId, Box<dyn Fn() -> ImageData>>>,
     pub(crate) hoverable: RefCell<Vec<ViewId>>,
-    pub(crate) dirty: RwSignal<bool>,
+    pub(crate) dirty: RwSignal<Option<ViewId>>,
 }
 
 impl ViewStorage {
@@ -42,7 +42,7 @@ impl ViewStorage {
             storage: RefCell::new(HashMap::new()),
             image_fn: RefCell::new(HashMap::new()),
             hoverable: RefCell::new(Vec::new()),
-            dirty: RwSignal::new(false),
+            dirty: RwSignal::new(None),
         }
     }
 
@@ -53,27 +53,47 @@ impl ViewStorage {
     pub(crate) fn append_child(&self, id: &ViewId, child: impl IntoView) {
         let child_id = child.id();
         let state = child.widget_state();
+        let child_root = state.root_id;
+
         if state.hoverable.get_untracked() || state.dragable.get_untracked() {
             let mut hoverable = self.hoverable.borrow_mut();
             if !hoverable.contains(&child_id) {
                 hoverable.push(child_id);
             }
         }
+
         self.tree.borrow_mut().add_child(id, child_id);
         self.storage.borrow_mut().insert(child_id, child.into_view());
+
+        let root = self.tree
+            .borrow()
+            .get_ancestor(id)
+            .copied()
+            .unwrap_or(*id);
+        child_root.set(Some(root));
     }
 
     pub(crate) fn add_sibling(&self, id: &ViewId, sibling: impl IntoView) {
         let sibling_id = sibling.id();
         let state = sibling.widget_state();
+        let sibling_root = state.root_id;
+
         if state.hoverable.get_untracked() || state.dragable.get_untracked() {
             let mut hoverable = self.hoverable.borrow_mut();
             if !hoverable.contains(&sibling_id) {
                 hoverable.push(sibling_id);
             }
         }
+
         self.tree.borrow_mut().add_sibling(id, sibling_id);
         self.storage.borrow_mut().insert(sibling_id, sibling.into_view());
+
+        let root = self.tree
+            .borrow()
+            .get_ancestor(id)
+            .copied()
+            .unwrap_or(*id);
+        sibling_root.set(Some(root));
     }
 
     pub(crate) fn get_widget_state(&self, id: &ViewId) -> WidgetState {
@@ -310,11 +330,12 @@ pub trait Style: Widget + Sized {
     {
         let node = self.node();
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
+        let root_id = self.widget_state().root_id;
 
         Effect::new(move |prev| {
             let color = f(prev);
             node.set_fill_color(color);
-            dirty.set(true);
+            dirty.set(root_id.get_untracked());
             color
         });
         self
@@ -326,11 +347,12 @@ pub trait Style: Widget + Sized {
     {
         let node = self.node();
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
+        let root_id = self.widget_state().root_id;
 
         Effect::new(move |prev| {
             let color = f(prev);
             node.set_stroke_color(color);
-            dirty.set(true);
+            dirty.set(root_id.get_untracked());
             color
         });
         self
@@ -347,6 +369,7 @@ pub trait Style: Widget + Sized {
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
         let is_hovered = self.widget_state().is_hovered;
         let is_clicked = self.widget_state().is_clicked;
+        let root_id = self.widget_state().root_id;
 
         Effect::new(move |prev| {
             let color = f(prev);
@@ -357,7 +380,7 @@ pub trait Style: Widget + Sized {
             } else {
                 node.set_fill_color(init_color);
             }
-            dirty.set(true);
+            dirty.set(root_id.get_untracked());
             color
         });
         self
@@ -371,13 +394,14 @@ pub trait Style: Widget + Sized {
         let node = self.node();
         let is_clicked = self.widget_state().is_clicked;
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
+        let root_id = self.widget_state().root_id;
 
         Effect::new(move |prev| {
             let color = f(prev);
             if is_clicked.get() {
                 node.set_fill_color(color);
             }
-            dirty.set(true);
+            dirty.set(root_id.get_untracked());
             color
         });
         self
@@ -389,10 +413,12 @@ pub trait Style: Widget + Sized {
     {
         let node = self.node();
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
+        let root_id = self.widget_state().root_id;
+
         Effect::new(move |prev| {
             let val = f(prev);
             node.set_stroke_width(val);
-            dirty.set(true);
+            dirty.set(root_id.get_untracked());
             val
         });
         self
@@ -404,10 +430,12 @@ pub trait Style: Widget + Sized {
     {
         let node = self.node();
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
+        let root_id = self.widget_state().root_id;
+
         Effect::new(move |prev| {
             let val = f(prev);
             node.set_rotation(val);
-            dirty.set(true);
+            dirty.set(root_id.get_untracked());
             val
         });
         self
@@ -419,10 +447,12 @@ pub trait Style: Widget + Sized {
     {
         let node = self.node();
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
+        let root_id = self.widget_state().root_id;
+
         Effect::new(move |prev| {
             let val = f(prev);
             node.set_corner_radius(val);
-            dirty.set(true);
+            dirty.set(root_id.get_untracked());
             val
         });
         self
@@ -434,10 +464,12 @@ pub trait Style: Widget + Sized {
     {
         let node = self.node();
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
+        let root_id = self.widget_state().root_id;
+
         Effect::new(move |prev| {
             let shape = f(prev);
             node.set_shape(shape);
-            dirty.set(true);
+            dirty.set(root_id.get_untracked());
             shape
         });
         self
@@ -466,8 +498,12 @@ pub trait Layout: Widget + Sized {
         let self_z_index = self.widget_state().z_index;
         let child_z_index = child.widget_state().z_index;
 
+        let self_root = self.widget_state().root_id;
+        let child_root = child.widget_state().root_id;
+
         Effect::new(move |_| {
             child_z_index.set(self_z_index.get() + 1);
+            child_root.set(self_root.get());
         });
 
         VIEW_STORAGE.with(|s| s.append_child(&self.id(), child));
@@ -478,8 +514,12 @@ pub trait Layout: Widget + Sized {
         let self_z_index = self.widget_state().z_index;
         let sibling_z_index = sibling.widget_state().z_index;
 
+        let self_root = self.widget_state().root_id;
+        let sibling_root = sibling.widget_state().root_id;
+
         Effect::new(move |_| {
             sibling_z_index.set(self_z_index.get());
+            sibling_root.set(self_root.get());
         });
 
         VIEW_STORAGE.with(|s| s.add_sibling(&self.id(), sibling));

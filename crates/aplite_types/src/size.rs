@@ -68,17 +68,38 @@ impl Size<u32> {
         Fraction::new(self.width() / gcd, self.height() / gcd)
     }
 
-    pub fn adjust_width(&mut self, aspect_ratio: Fraction<u32>) {
+    pub fn adjust_width_aspect_ratio(&mut self, aspect_ratio: Fraction<u32>) {
         self.set_width(self.height() * aspect_ratio)
     }
 
-    pub fn adjust_height(&mut self, aspect_ratio: Fraction<u32>) {
+    pub fn adjust_height_aspect_ratio(&mut self, aspect_ratio: Fraction<u32>) {
         self.set_height(self.width() / aspect_ratio)
     }
 
     #[inline(always)]
     pub fn f32(self) -> Size<f32> {
         Size { inner: self.inner.f32() }
+    }
+
+    #[inline(always)]
+    pub fn min(self, other: Self) -> Self {
+        Self::new(
+            self.width().min(other.width()),
+            self.height().min(other.height())
+        )
+    }
+
+    #[inline(always)]
+    pub fn max(self, other: Self) -> Self {
+        Self::new(
+            self.width().max(other.width()),
+            self.height().max(other.height())
+        )
+    }
+
+    #[inline(always)]
+    pub fn clamp(self, start: Self, end: Self) -> Self {
+        self.max(start).min(end)
     }
 }
 
@@ -107,26 +128,39 @@ impl Size<f32> {
     pub fn u32(self) -> Size<u32> {
         Size { inner: self.inner.u32() }
     }
+
+    #[inline(always)]
+    pub const fn min(self, other: Self) -> Self {
+        Self::new(
+            self.width().min(other.width()),
+            self.height().min(other.height())
+        )
+    }
+
+    #[inline(always)]
+    pub const fn max(self, other: Self) -> Self {
+        Self::new(
+            self.width().max(other.width()),
+            self.height().max(other.height())
+        )
+    }
+
+    #[inline(always)]
+    pub const fn clamp(self, start: Self, end: Self) -> Self {
+        self.max(start).min(end)
+    }
 }
 
 impl<T: GpuPrimitive + PartialOrd + Ord> Size<T> {
-    pub fn max(self, min_width: Option<T>, min_height: Option<T>) -> Self {
-        let width = if let Some(min_width) = min_width {
-            self.width().max(min_width)
-        } else { self.width() };
-        let height = if let Some(min_height) = min_height {
-            self.height().max(min_height)
-        } else { self.height() };
+    pub fn adjust_on_min_constraints(self, min_width: Option<T>, min_height: Option<T>) -> Self {
+        let width = min_width.map(|w| self.width().max(w)).unwrap_or(self.width());
+        let height = min_height.map(|h| self.height().max(h)).unwrap_or(self.height());
         Self::new(width, height)
     }
 
-    pub fn min(self, max_width: Option<T>, max_height: Option<T>) -> Self {
-        let width = if let Some(max_width) = max_width {
-            self.width().min(max_width)
-        } else { self.width() };
-        let height = if let Some(max_height) = max_height {
-            self.height().min(max_height)
-        } else { self.height() };
+    pub fn adjust_on_max_constraints(self, max_width: Option<T>, max_height: Option<T>) -> Self {
+        let width = max_width.map(|w| self.width().min(w)).unwrap_or(self.width());
+        let height = max_height.map(|h| self.height().min(h)).unwrap_or(self.height());
         Self::new(width, height)
     }
 }

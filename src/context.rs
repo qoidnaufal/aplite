@@ -1,9 +1,6 @@
-use std::collections::HashMap;
-
 use aplite_reactive::*;
 use aplite_renderer::Renderer;
 use aplite_types::{Size, Vec2f};
-use winit::window::WindowId;
 
 use crate::view::ViewId;
 use crate::view::VIEW_STORAGE;
@@ -20,14 +17,12 @@ use layout::{
 
 // i think this one could be a reactive system too
 pub struct Context {
-    pub(crate) root_window: HashMap<ViewId, WindowId>,
     cursor: Cursor,
 }
 
 impl Default for Context {
     fn default() -> Self {
         Self {
-            root_window: HashMap::new(),
             cursor: Cursor::new(),
         }
     }
@@ -46,16 +41,16 @@ impl Context {
 // ########################################################
 
 impl Context {
-    pub(crate) fn dirty(&self) -> RwSignal<bool> {
+    pub(crate) fn dirty(&self) -> RwSignal<Option<ViewId>> {
         VIEW_STORAGE.with(|s| s.dirty)
     }
 
-    pub(crate) fn toggle_dirty(&self) {
-        VIEW_STORAGE.with(|s| s.dirty.set(true))
+    pub(crate) fn toggle_dirty(&self, root_id: Option<ViewId>) {
+        VIEW_STORAGE.with(|s| s.dirty.set(root_id))
     }
 
     pub(crate) fn toggle_clean(&self) {
-        VIEW_STORAGE.with(|s| s.dirty.set(false))
+        VIEW_STORAGE.with(|s| s.dirty.set(None))
     }
 }
 
@@ -69,7 +64,7 @@ impl Context {
     pub(crate) fn layout_the_whole_window(&self, root_id: &ViewId) {
         self.calculate_size_recursive(root_id);
         self.recursive_layout_from_id(root_id);
-        self.toggle_dirty();
+        self.toggle_dirty(Some(*root_id));
     }
 
     pub(crate) fn recursive_layout_from_id(&self, id: &ViewId) {
@@ -83,8 +78,6 @@ impl Context {
         let widget_state = VIEW_STORAGE.with(|s| s.get_widget_state(id));
         let padding = widget_state.padding();
         let mut size = widget_state.rect.read_untracked(|rect| rect.size());
-
-        let mut resized = false;
 
         let maybe_children = VIEW_STORAGE.with(|s| {
             s.tree.borrow()
@@ -119,27 +112,21 @@ impl Context {
 
         if let AspectRatio::Defined(tuple) = widget_state.image_aspect_ratio() {
             VIEW_STORAGE.with(|s| {
-                if let Some(parent) = s.tree.borrow().get_parent(id) {
-                    match s.get_widget_state(parent).orientation() {
-                        Orientation::Vertical => size.adjust_height(tuple.into()),
-                        Orientation::Horizontal => size.adjust_width(tuple.into()),
-                    }
-                } else {
-                    size.adjust_width(tuple.into());
+                match s.tree.borrow().get_parent(id) {
+                    Some(parent) if s
+                        .get_widget_state(parent)
+                        .orientation
+                        .is_vertical() => size.adjust_height_aspect_ratio(tuple.into()),
+                    _ => size.adjust_width_aspect_ratio(tuple.into()),
                 }
             });
-            widget_state.rect.update_untracked(|rect| rect.set_size(size));
         }
 
         let final_size = size
-            .max(widget_state.min_width(), widget_state.min_height())
-            .min(widget_state.max_width(), widget_state.max_height());
+            .adjust_on_min_constraints(widget_state.min_width(), widget_state.min_height())
+            .adjust_on_max_constraints(widget_state.max_width(), widget_state.max_height());
 
-        resized |= final_size != widget_state.rect.read_untracked(|rect| rect.size());
-
-        if resized {
-            widget_state.rect.update_untracked(|state| state.set_size(final_size));
-        }
+        widget_state.rect.update_untracked(|state| state.set_size(final_size));
 
         final_size
     }
@@ -209,10 +196,10 @@ impl Context {
 
     fn handle_drag(&mut self, hover_id: &ViewId) {
         let pos = self.cursor.hover.pos - self.cursor.click.offset;
-        VIEW_STORAGE.with(|s| s.get_widget_state(hover_id).rect)
-            .update_untracked(|rect| rect.set_pos(pos.into()));
+        let state = VIEW_STORAGE.with(|s| s.get_widget_state(hover_id));
+        state.rect.update_untracked(|rect| rect.set_pos(pos.into()));
         self.recursive_layout_from_id(hover_id);
-        self.toggle_dirty();
+        self.toggle_dirty(state.root_id.get());
     }
 
     pub(crate) fn handle_click(&mut self, action: impl Into<MouseAction>, button: impl Into<MouseButton>) {
@@ -227,11 +214,12 @@ impl Context {
             });
         }
         if self.cursor.state.action == MouseAction::Released {
-            if let Some(hover_id) = self.cursor.hover.curr.as_ref()
-                && !self.cursor.is_dragging.get_untracked() {
+            if let Some(hover_id) = self.cursor.hover.curr.as_ref() {
                 VIEW_STORAGE.with(|s| {
                     let state = s.get_widget_state(hover_id);
-                    state.trigger_callback.set(true);
+                    if !self.cursor.is_dragging.get_untracked() {
+                        state.trigger_callback.set(true);
+                    }
                     state.is_clicked.set(false);
                 });
             }

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use aplite_reactive::{Effect, Get};
+use aplite_reactive::{Effect, Get, Update, With};
 use winit::dpi::{PhysicalPosition, PhysicalSize, LogicalSize};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
@@ -61,7 +61,8 @@ impl From<&WindowAttributes> for winit::window::WindowAttributes {
 pub struct Aplite {
     renderer: Option<Renderer>,
     cx: Context,
-    window: HashMap<WindowId, (ViewId, Arc<Window>)>,
+    window: HashMap<WindowId, Arc<Window>>,
+    root_view_id: HashMap<WindowId, ViewId>,
     window_attributes: WindowAttributes,
     views: Vec<Box<dyn FnOnce(WindowId) -> Box<dyn IntoView>>>,
 
@@ -82,6 +83,7 @@ impl Aplite {
             renderer: None,
             cx: Context::new(),
             window: HashMap::with_capacity(4),
+            root_view_id: HashMap::with_capacity(4),
             window_attributes: WindowAttributes::default(),
             views: Vec::with_capacity(4),
 
@@ -140,7 +142,7 @@ impl Aplite {
         event_loop: &ActiveEventLoop,
     ) -> Result<(ViewId, Arc<Window>), ApliteError> {
         let attributes = &self.window_attributes;
-        let window = event_loop.create_window(attributes.into())?;
+        let window = Self::create_window(event_loop, attributes)?;
         let window_id = window.id();
 
         let view_id = VIEW_STORAGE.with(|s| {
@@ -152,10 +154,12 @@ impl Aplite {
             let root_view = View::window(Size::new(size.width, size.height));
 
             s.storage.borrow_mut().insert(root, root_view);
-            self.cx.root_window.insert(root, window_id);
+            self.root_view_id.insert(window_id, root);
+            self.window.insert(window_id, Arc::clone(&window));
 
             if let Some(view_fn) = self.views.pop() {
                 let view = view_fn(window_id);
+                view.widget_state().z_index.update(|z_index| *z_index += 1);
                 s.append_child(&root, view);
 
                 self.cx.layout_the_whole_window(&root);
@@ -166,7 +170,15 @@ impl Aplite {
             root
         });
 
-        Ok((view_id, Arc::new(window)))
+        Ok((view_id, window))
+    }
+
+    fn create_window(
+        event_loop: &ActiveEventLoop,
+        attributes: &WindowAttributes,
+    ) -> Result<Arc<Window>, ApliteError> {
+        let window = event_loop.create_window(attributes.into())?;
+        Ok(Arc::new(window))
     }
 
     fn initialize_renderer(&mut self, window: Arc<Window>) -> Result<(), ApliteError> {
@@ -175,14 +187,16 @@ impl Aplite {
         Ok(())
     }
 
-    fn add_window(&mut self, view_id: ViewId, window: Arc<Window>) {
-        let window_id = window.id();
-        self.window.insert(window_id, (view_id, Arc::clone(&window)));
-
+    fn track_window(&mut self, view_id: ViewId, window: Arc<Window>) {
         let dirty = self.cx.dirty();
+
         Effect::new(move |_| {
             // FIXME: this should coresponds to root_id & window_id
-            if dirty.get() { window.request_redraw() }
+            dirty.with(|id| {
+                if id.is_some_and(|id| id == view_id) {
+                    window.request_redraw();
+                }
+            })
         });
     }
 }
@@ -209,7 +223,7 @@ impl Aplite {
     }
 
     fn handle_redraw_request(&mut self, window_id: &WindowId, event_loop: &ActiveEventLoop) {
-        if let Some((_, window)) = self.window.get(window_id).cloned() {
+        if let Some(window) = self.window.get(window_id).cloned() {
             // FIXME: not sure if retained mode works like this
             self.prepare_data(&window_id);
 
@@ -222,9 +236,9 @@ impl Aplite {
     }
 
     fn prepare_data(&mut self, window_id: &WindowId) {
-        if let Some(renderer) = self.renderer.as_mut() {
-            let (root_id, _) = self.window.get(window_id).unwrap();
-            if self.cx.dirty().get_untracked() {
+        if let Some(renderer) = self.renderer.as_mut()
+            && let Some(root_id) = self.root_view_id.get(window_id) {
+            if self.cx.dirty().get_untracked().is_some_and(|id| id == *root_id) {
                 renderer.begin();
                 self.cx.prepare_data(*root_id, renderer);
             }
@@ -259,7 +273,7 @@ impl Aplite {
 
     fn handle_mouse_move(&mut self, window_id: &WindowId, pos: PhysicalPosition<f64>) {
         if let Some(renderer) = self.renderer.as_mut()
-            && let Some((root, _)) = self.window.get(window_id) {
+            && let Some(root) = self.root_view_id.get(window_id) {
             let logical_pos = pos.to_logical::<f32>(renderer.scale_factor());
             self.cx.handle_mouse_move(root, (logical_pos.x, logical_pos.y));
         }
@@ -269,8 +283,9 @@ impl Aplite {
 impl ApplicationHandler for Aplite {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         match self.initialize_window(event_loop) {
-            Ok((view_id, window)) if self.initialize_renderer(Arc::clone(&window))
-                .is_ok() => self.add_window(view_id, window),
+            Ok((view_id, window)) if self
+                .initialize_renderer(Arc::clone(&window))
+                .is_ok() => self.track_window(view_id, window),
             _ => event_loop.exit(),
         }
     }

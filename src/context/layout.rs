@@ -50,6 +50,16 @@ pub enum Orientation {
     Horizontal,
 }
 
+impl Orientation {
+    pub fn is_vertical(&self) -> bool {
+        matches!(self, Self::Vertical)
+    }
+
+    pub fn is_horizontal(&self) -> bool {
+        matches!(self, Self::Horizontal)
+    }
+}
+
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Padding {
     top: u32,

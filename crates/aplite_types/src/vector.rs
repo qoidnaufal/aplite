@@ -77,6 +77,27 @@ impl Vec2f {
 
     #[inline(always)]
     pub const fn div_y(&mut self, y: f32) { self.inner[1] /= y }
+
+    #[inline(always)]
+    pub const fn min(self, other: Self) -> Self {
+        Self::new(
+            self.x().min(other.x()),
+            self.y().min(other.y())
+        )
+    }
+
+    #[inline(always)]
+    pub const fn max(self, other: Self) -> Self {
+        Self::new(
+            self.x().max(other.x()),
+            self.y().max(other.y())
+        )
+    }
+
+    #[inline(always)]
+    pub const fn clamp(self, start: Self, end: Self) -> Self {
+        self.max(start).min(end)
+    }
 }
 
 pub type Vec2u = Vector<2, u32>;
@@ -120,6 +141,27 @@ impl Vec2u {
 
     #[inline(always)]
     pub const fn div_y(&mut self, y: u32) { self.inner[1] /= y }
+
+    #[inline(always)]
+    pub fn min(self, other: Self) -> Self {
+        Self::new(
+            self.x().min(other.x()),
+            self.y().min(other.y())
+        )
+    }
+
+    #[inline(always)]
+    pub fn max(self, other: Self) -> Self {
+        Self::new(
+            self.x().max(other.x()),
+            self.y().max(other.y())
+        )
+    }
+
+    #[inline(always)]
+    pub fn clamp(self, start: Self, end: Self) -> Self {
+        self.max(start).min(end)
+    }
 }
 
 pub type Vec3f = Vector<3, f32>;
