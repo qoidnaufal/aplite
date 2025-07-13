@@ -28,7 +28,7 @@ impl Renderer {
     pub fn new(window: Arc<Window>) -> Result<Self, RendererError> {
         let gpu = Gpu::new(Arc::clone(&window))?;
 
-        let mut screen = Screen::new(&gpu.device, gpu.size().into(), window.scale_factor());
+        let screen = Screen::new(&gpu.device, gpu.size().into(), window.scale_factor());
         let atlas = Atlas::new(&gpu.device);
         let sampler = Sampler::new(&gpu.device);
         let vertice_layout = &[MeshBuffer::vertice_layout()];
@@ -51,8 +51,6 @@ impl Renderer {
         ];
 
         let pipeline = create_pipeline(&gpu, vertice_layout, layouts);
-
-        screen.size.write(&gpu.device, &gpu.queue, 0, &[gpu.size().into()]);
 
         Ok(Self {
             gpu,
@@ -79,27 +77,29 @@ impl Renderer {
     /// Corresponds to [`winit::dpi::LogicalSize<u32>`]
     /// This one will not be updated when the window is resized.
     /// Important to determine the transform of an [`Element`].
-    pub fn screen_size(&self) -> Size<f32> { self.screen.screen_size() }
+    pub fn screen_res(&self) -> Size<f32> { self.screen.screen_size() }
 
     pub fn resize(&mut self, new_size: Size<u32>) {
-        let res = self.screen.screen_size();
-        let ns = new_size.f32();
-        let s = res / ns;
-
         if new_size.width() > 0 && new_size.height() > 0 {
             self.gpu.reconfigure_size(new_size);
+
+            let res = self.screen_res();
+            let ns = new_size.f32();
+            let scale = res / ns;
+            let sx = scale.width();
+            let sy = scale.height();
+
+            self.screen
+                .write(
+                    &self.gpu.device,
+                    &self.gpu.queue,
+                    Matrix3x2::IDENTITY
+                        .with_scale(sx, sy)
+                        .with_translate(sx - 1.0, 1.0 - sy),
+                    res
+                );
         }
 
-        let transform = Matrix3x2::IDENTITY
-            .with_scale(s.width(), s.height())
-            .with_translate(s.width() - 1.0, 1.0 - s.height());
-        self.screen
-            .transform
-            .write(&self.gpu.device, &self.gpu.queue, 0, &[transform]);
-        // self.screen.update_transform(|mat| {
-        //     mat.set_scale(s.width(), s.height());
-        //     mat.set_translate(s.width() - 1.0, 1.0 - s.height());
-        // });
     }
 
     pub fn render(&mut self, color: Rgba<u8>, window: Arc<Window>) -> Result<(), RendererError> {
@@ -165,9 +165,8 @@ impl Renderer {
         self.current = (self.current + 1) % 3;
     }
 
-    pub fn finish(&mut self) {
-        // self.screen.write(&self.gpu.device, &self.gpu.queue);
-    }
+    // pub fn finish(&mut self) {
+    // }
 
     pub fn submit_data(
         &mut self,

@@ -4,19 +4,21 @@ use super::buffer::Buffer;
 
 pub(crate) struct Screen {
     pub(crate) transform: Buffer<Matrix3x2>,
+    // FIXME: not needed
     pub(crate) size: Buffer<Size<f32>>,
     pub(crate) bind_group: wgpu::BindGroup,
 
-    screen_transform: Matrix3x2,
-    screen_size: Size<f32>,
+    // FIXME: not needed
+    screen_resolution: Size<f32>,
     pub(crate) scale_factor: f64,
-
-    res_changed: bool,
-    is_resized: bool,
 }
 
 impl Screen {
-    pub(crate) fn new(device: &wgpu::Device, screen_size: Size<f32>, scale_factor: f64) -> Self {
+    pub(crate) fn new(
+        device: &wgpu::Device,
+        screen_resolution: Size<f32>,
+        scale_factor: f64,
+    ) -> Self {
         let uniform = wgpu::BufferUsages::UNIFORM;
         let transform = Buffer::<Matrix3x2>::new(device, 1, uniform, "screen transform");
         let size = Buffer::<Size<f32>>::new(device, 1, uniform, "screen scaler");
@@ -29,25 +31,22 @@ impl Screen {
             transform,
             size,
             bind_group,
-            screen_transform: Matrix3x2::IDENTITY,
-            screen_size,
+            screen_resolution,
             scale_factor,
-            res_changed: true,
-            is_resized: true,
         }
     }
 
-    pub(crate) fn screen_size(&self) -> Size<f32> { self.screen_size }
+    pub(crate) fn screen_size(&self) -> Size<f32> { self.screen_resolution }
 
-    pub(crate) fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        if self.res_changed {
-            self.size.write(device, queue, 0, &[self.screen_size]);
-            self.res_changed = false;
-        }
-        if self.is_resized {
-            self.transform.write(device, queue, 0, &[self.screen_transform]);
-            self.is_resized = false;
-        }
+    pub(crate) fn write(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        matrix: Matrix3x2,
+        screen: Size<f32>,
+    ) {
+        self.transform.write(device, queue, 0, &[matrix]);
+        self.size.write(device, queue, 0, &[screen]);
     }
 
     // pub(crate) fn update_transform<F: Fn(&mut Matrix3x2)>(&mut self, f: F) {

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use aplite_reactive::{Effect, Get, Update, With};
+use aplite_reactive::{Effect, Update, With};
 use winit::dpi::{PhysicalPosition, PhysicalSize, LogicalSize};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
@@ -261,11 +261,9 @@ impl Aplite {
     fn prepare_data(&mut self, window_id: &WindowId) {
         if let Some(renderer) = self.renderer.as_mut()
             && let Some(root_id) = self.root_view_id.get(window_id) {
-            if self.cx.dirty().get_untracked().is_some_and(|id| id == *root_id) {
-                renderer.begin();
-                self.cx.prepare_data(*root_id, renderer);
-            }
-            renderer.finish();
+            renderer.begin();
+            self.cx.prepare_data(*root_id, renderer);
+            // renderer.finish();
             self.cx.toggle_clean();
         }
     }
@@ -273,7 +271,7 @@ impl Aplite {
     fn render(&mut self, event_loop: &ActiveEventLoop, window: Arc<Window>) {
         if let Some(renderer) = self.renderer.as_mut() {
             if let Err(err) = renderer.render(Rgba::TRANSPARENT, window) {
-                let size = renderer.screen_size().u32();
+                let size = renderer.screen_res().u32();
                 match err {
                     RendererError::ShouldResize => self.handle_resize(WinitSize::Logical(size)),
                     RendererError::ShouldExit => event_loop.exit(),

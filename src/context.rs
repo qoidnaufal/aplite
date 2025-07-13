@@ -238,7 +238,7 @@ impl Context {
 impl Context {
     pub(crate) fn prepare_data(&self, root_id: ViewId, renderer: &mut Renderer) {
         VIEW_STORAGE.with(|s| {
-            let screen = renderer.screen_size();
+            let screen = renderer.screen_res();
             let components = s.get_render_components(&root_id, screen);
 
             components.iter()
