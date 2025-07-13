@@ -200,6 +200,7 @@ impl Context {
                         .get_untracked()
                 });
                 if self.cursor.is_dragging(&hover_id) && dragable {
+                    self.cursor.is_dragging.set_untracked(true);
                     self.handle_drag(&hover_id);
                 }
             }
@@ -226,13 +227,16 @@ impl Context {
             });
         }
         if self.cursor.state.action == MouseAction::Released {
-            if let Some(hover_id) = self.cursor.hover.curr.as_ref() {
+            if let Some(hover_id) = self.cursor.hover.curr.as_ref()
+                && !self.cursor.is_dragging.get_untracked() {
                 VIEW_STORAGE.with(|s| {
                     let state = s.get_widget_state(hover_id);
                     state.trigger_callback.set(true);
                     state.is_clicked.set(false);
-                })
+                });
             }
+
+            self.cursor.is_dragging.set_untracked(false);
         }
     }
 }

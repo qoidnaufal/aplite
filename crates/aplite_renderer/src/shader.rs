@@ -38,38 +38,28 @@ struct Element {
 @group(1) @binding(0) var<storage> elements: array<Element>;
 @group(1) @binding(1) var<storage> transforms: array<mat3x2<f32>>;
 
-fn get_pos(element: Element, pos: vec2<f32>) -> vec2f {
+// scale -> rotate -> translate
+fn transform_point(element: Element, pos: vec2<f32>) -> vec2f {
     let t = transforms[element.transform_id];
     let r = element.rotate;
 
-    let sx = t[0].x;
-    let sy = t[1].y;
+    let s_mat = mat2x2<f32>(t[0], t[1]);
 
     let sin = sin(r);
     let cos = cos(r);
-
-    // let sc0 = screen_t[0];
-    // let sc1 = screen_t[1];
-    // let sc2 = screen_t[2];
-
-    // let sct = mat2x2<f32>(
-    //     sc0.x, sc1.x,
-    //     sc0.y, sc1.y,
-    // );
     
-    let mat = mat2x2<f32>(
-        cos * sx, -sin * sy,
-        sin * sx,  cos * sy,
+    let r_mat = mat2x2<f32>(
+        cos, -sin,
+        sin,  cos,
     );
 
-    let translate = vec2f(t[2].x, t[2].y);
-    return mat * pos + translate;
+    return r_mat * s_mat * pos + t[2];
 }
 
 struct VertexInput {
     @location(0) pos: vec2<f32>,
-    @location(1) uv: vec2<f32>,    @location(2) id: u32,
-
+    @location(1) uv: vec2<f32>,
+    @location(2) id: u32,
 }
 
 struct FragmentPayload {
@@ -82,9 +72,8 @@ struct FragmentPayload {
 fn vs_main(vertex: VertexInput) -> FragmentPayload {
     let element = elements[vertex.id];
 
-    // let pos = screen_t * vec3f(vertex.pos, 1.0);
-    let pos = get_pos(element, vertex.pos);
-    let s_pos = screen_t * vec3f(pos, 1.0);
+    let pos = transform_point(element, vertex.pos);
+    let s_pos = mat2x2<f32>(screen_t[0], screen_t[1]) * pos + screen_t[2];
 
     var out: FragmentPayload;
     out.uv = select(vertex.uv * 2 - 1, vertex.uv, element.atlas_id > -1);

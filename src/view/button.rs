@@ -24,7 +24,6 @@ impl Button {
         let state = WidgetState::new()
             .with_name("Button")
             .with_size((80, 30));
-        state.hoverable.set(true);
 
         Self {
             id,

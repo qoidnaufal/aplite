@@ -1,3 +1,4 @@
+use aplite_reactive::RwSignal;
 use aplite_types::Vec2f;
 
 use crate::view::ViewId;
@@ -66,6 +67,7 @@ pub struct Cursor {
     pub state: MouseState,
     pub click: MouseClick,
     pub timer: std::time::Duration,
+    pub is_dragging: RwSignal<bool>,
 }
 
 impl Default for Cursor {
@@ -86,6 +88,7 @@ impl Default for Cursor {
                 offset: Vec2f::default(),
             },
             timer: std::time::Duration::from_millis(0),
+            is_dragging: RwSignal::new(false),
         }
     }
 }

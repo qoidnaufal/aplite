@@ -200,6 +200,17 @@ impl CircleWidget {
             state,
         }
     }
+    
+    pub fn on_click<F: Fn() + 'static>(self, f: F) -> Self {
+        let trigger = self.state.trigger_callback;
+        Effect::new(move |_| {
+            if trigger.get() {
+                f();
+                trigger.set_untracked(false);
+            }
+        });
+        self
+    }
 
     pub fn state(mut self, f: impl Fn(&mut WidgetState)) -> Self {
         f(&mut self.state);

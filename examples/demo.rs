@@ -117,8 +117,9 @@ fn root() -> impl IntoView {
 
 fn dummy() -> impl IntoView {
     let (counter, set_counter) = Signal::create(0u32);
+    let (rotate, set_rotate) = Signal::create(0.0);
 
-    Effect::new(move |_| counter.with(|val| eprintln!("{val}")));
+    Effect::new(move |_| counter.with(|val| eprint!("Counter: {val}    \r")));
 
     let click = move || {
         set_counter.update(|num| *num += 1);
@@ -126,13 +127,24 @@ fn dummy() -> impl IntoView {
 
     let color = move |_| {
         counter.with(|val| {
-            Rgba::new((*val * 2 % 255) as u8, 0, 0, 255)
+            if val % 3 == 0 {
+                Rgba::RED
+            } else if val % 2 == 0 {
+                Rgba::GREEN
+            } else {
+                Rgba::BLUE
+            }
         })
+    };
+
+    let click2 = move || {
+        set_rotate.update(|val| *val += 30.0);
     };
 
     let button = Button::new()
         .set_stroke_color(|_| Rgba::WHITE)
         .set_stroke_width(|_| 6)
+        .set_rotation(move |_| rotate.get())
         .set_corners(|_| CornerRadius::homogen(47))
         .set_dragable(true)
         .set_size((200, 69))
@@ -149,6 +161,7 @@ fn dummy() -> impl IntoView {
                 }
             })
         })
+        .on_click(click2)
         .set_stroke_width(|_| 6)
         .set_dragable(true)
         .set_size((150, 150));
