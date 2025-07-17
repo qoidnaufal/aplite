@@ -101,6 +101,18 @@ impl Size<u32> {
     pub fn clamp(self, start: Self, end: Self) -> Self {
         self.max(start).min(end)
     }
+
+    pub fn adjust_on_min_constraints(self, min_width: Option<u32>, min_height: Option<u32>) -> Self {
+        let width = min_width.map(|w| self.width().max(w)).unwrap_or(self.width());
+        let height = min_height.map(|h| self.height().max(h)).unwrap_or(self.height());
+        Self::new(width, height)
+    }
+
+    pub fn adjust_on_max_constraints(self, max_width: Option<u32>, max_height: Option<u32>) -> Self {
+        let width = max_width.map(|w| self.width().min(w)).unwrap_or(self.width());
+        let height = max_height.map(|h| self.height().min(h)).unwrap_or(self.height());
+        Self::new(width, height)
+    }
 }
 
 impl Size<f32> {
@@ -149,16 +161,14 @@ impl Size<f32> {
     pub const fn clamp(self, start: Self, end: Self) -> Self {
         self.max(start).min(end)
     }
-}
 
-impl<T: GpuPrimitive + PartialOrd + Ord> Size<T> {
-    pub fn adjust_on_min_constraints(self, min_width: Option<T>, min_height: Option<T>) -> Self {
+    pub fn adjust_on_min_constraints(self, min_width: Option<f32>, min_height: Option<f32>) -> Self {
         let width = min_width.map(|w| self.width().max(w)).unwrap_or(self.width());
         let height = min_height.map(|h| self.height().max(h)).unwrap_or(self.height());
         Self::new(width, height)
     }
 
-    pub fn adjust_on_max_constraints(self, max_width: Option<T>, max_height: Option<T>) -> Self {
+    pub fn adjust_on_max_constraints(self, max_width: Option<f32>, max_height: Option<f32>) -> Self {
         let width = max_width.map(|w| self.width().min(w)).unwrap_or(self.width());
         let height = max_height.map(|h| self.height().min(h)).unwrap_or(self.height());
         Self::new(width, height)

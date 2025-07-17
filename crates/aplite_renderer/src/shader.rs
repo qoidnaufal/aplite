@@ -43,7 +43,7 @@ fn transform_point(element: Element, pos: vec2<f32>) -> vec2f {
     let t = transforms[element.transform_id];
     let r = element.rotate;
 
-    let s_mat = mat2x2<f32>(t[0], t[1]);
+    let e_mat = mat2x2<f32>(t[0], t[1]);
 
     let sin = sin(r);
     let cos = cos(r);
@@ -53,7 +53,9 @@ fn transform_point(element: Element, pos: vec2<f32>) -> vec2f {
         sin,  cos,
     );
 
-    return r_mat * s_mat * pos + t[2];
+    let s_mat = mat2x2<f32>(screen_t[0], screen_t[1]);
+
+    return s_mat * (r_mat * e_mat * pos + t[2]) + screen_t[2];
 }
 
 struct VertexInput {
@@ -73,12 +75,11 @@ fn vs_main(vertex: VertexInput) -> FragmentPayload {
     let element = elements[vertex.id];
 
     let pos = transform_point(element, vertex.pos);
-    let s_pos = mat2x2<f32>(screen_t[0], screen_t[1]) * pos + screen_t[2];
 
     var out: FragmentPayload;
     out.uv = select(vertex.uv * 2 - 1, vertex.uv, element.atlas_id > -1);
     out.index = vertex.id;
-    out.position = vec4f(s_pos, 0.0, 1.0);
+    out.position = vec4f(pos, 0.0, 1.0);
     return out;
 }
 ";

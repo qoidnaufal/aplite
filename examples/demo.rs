@@ -3,15 +3,15 @@ use AspectRatio::Defined;
 
 fn first_row() -> impl IntoView {
     HStack::new()
-        .append_child(
+        .child(
             Image::new(|| image_reader("examples/assets/image1.jpg"))
                 .state(|state| state.set_image_aspect_ratio(Defined((8, 5))))
         )
-        .append_child(
+        .child(
             Image::new(|| image_reader("examples/assets/image2.jpg"))
                 .set_dragable(true)
         )
-        .append_child(
+        .child(
             CircleWidget::new()
                 .set_color(|_| Rgba::PURPLE)
                 .set_hover_color(|_| Rgba::RED)
@@ -21,7 +21,7 @@ fn first_row() -> impl IntoView {
             s.set_spacing(40);
             s.set_padding(Padding::new(20, 20, 40, 40));
         })
-        .set_corners(|_| CornerRadius::homogen(10))
+        .set_corners(|_| CornerRadius::new_all(10.))
         .set_stroke_width(|_| 5)
         .set_color(|_| Rgba::DARK_GRAY)
         .set_stroke_color(|_| Rgba::LIGHT_GRAY)
@@ -34,33 +34,33 @@ fn button_stack(
     color: impl FnMut(Option<Rgba<u8>>) -> Rgba<u8> + 'static,
 ) -> impl IntoView {
     VStack::new()
-        .append_child(
+        .child(
             Button::new()
                 .set_hover_color(|_| Rgba::BLUE)
                 .set_stroke_width(|_| 5)
-                .set_corners(|_| CornerRadius::new(80, 80, 0, 0))
+                .set_corners(|_| CornerRadius::new_each(80., 80., 0., 0.))
                 .set_click_color(|_| Rgba::DARK_GRAY)
                 .on_click(inc)
         )
-        .append_child(
+        .child(
             Button::new()
                 .set_color(|_| Rgba::GREEN)
                 .set_hover_color(|_| Rgba::LIGHT_GRAY)
                 .set_click_color(|_| Rgba::DARK_GREEN)
                 .set_stroke_width(|_| 5)
-                .set_corners(|_| CornerRadius::homogen(50))
+                .set_corners(|_| CornerRadius::new_all(50.))
                 .on_click(dec)
         )
-        .append_child(
+        .child(
             Button::new()
                 .set_color(|_| Rgba::BLUE)
                 .set_hover_color(move |_| Rgba::PURPLE)
                 .set_stroke_width(|_| 5)
-                .set_corners(|_| CornerRadius::new(0, 69, 0, 69))
+                .set_corners(|_| CornerRadius::new_each(0., 69., 0., 69.))
         )
-        .append_child(
+        .child(
             Button::new()
-                .set_corners(|_| CornerRadius::homogen(70))
+                .set_corners(|_| CornerRadius::new_all(70.))
                 .set_rotation(rotation)
                 .set_color(color)
         )
@@ -84,8 +84,8 @@ fn second_row(
     color: impl FnMut(Option<Rgba<u8>>) -> Rgba<u8> + 'static,
 ) -> impl IntoView {
     HStack::new()
-        .append_child(button_stack(inc, dec, rotation, color))
-        .append_child(
+        .child(button_stack(inc, dec, rotation, color))
+        .child(
             CircleWidget::new()
                 .set_color(|_| Rgba::BLACK)
                 .set_hover_color(|_| Rgba::GREEN)

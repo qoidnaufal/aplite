@@ -1,4 +1,4 @@
-use aplite_types::Rgba;
+use aplite_types::{CornerRadius, Rgba};
 
 use crate::texture::AtlasId;
 
@@ -7,7 +7,7 @@ use crate::texture::AtlasId;
 pub struct Element {
     pub(crate) fill_color: Rgba<f32>,
     pub(crate) stroke_color: Rgba<f32>,
-    pub(crate) corners: CornerRadius,
+    pub(crate) corners: CornerRadius<f32>,
     pub(crate) shape: Shape,
     pub(crate) rotation: f32,
     pub(crate) stroke_width: f32,
@@ -24,104 +24,12 @@ pub enum Shape {
     Triangle = 3,
 }
 
-// impl Shape {
-//     pub(crate) fn is_triangle(&self) -> bool { matches!(self, Self::Triangle) }
-
-//     pub(crate) fn is_rounded_rect(&self) -> bool { matches!(self, Self::RoundedRect) }
-// }
-
-#[repr(C, align(16))]
-#[derive(Default, Debug, Clone, Copy)]
-pub struct CornerRadius {
-    tl: f32,
-    bl: f32,
-    br: f32,
-    tr: f32,
-}
-
-impl From<u32> for CornerRadius {
-    fn from(val: u32) -> Self {
-        Self {
-            tl: val as _,
-            bl: val as _,
-            br: val as _,
-            tr: val as _,
-        }
-    }
-}
-
-impl CornerRadius {
-    /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
-    /// Doesn't necessarily mean that you can't put a value more than 100
-    pub const fn new(tl: u32, bl: u32, br: u32, tr: u32) -> Self {
-        Self {
-            tl: tl as _,
-            bl: bl as _,
-            br: br as _,
-            tr: tr as _,
-        }
-    }
-
-    /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
-    /// Doesn't necessarily mean that you can't put a value more than 100
-    pub const fn homogen(r: u32) -> Self {
-        Self {
-            tl: r as _,
-            bl: r as _,
-            br: r as _,
-            tr: r as _,
-        }
-    }
-
-    /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
-    /// Doesn't necessarily mean that you can't put a value more than 100
-    pub fn set_each(&mut self, tl: u32, bl: u32, br: u32, tr: u32) {
-        self.tl = tl as _;
-        self.bl = bl as _;
-        self.br = br as _;
-        self.tr = tr as _;
-    }
-
-    /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
-    /// Doesn't necessarily mean that you can't put a value more than 100
-    pub fn set_all(&mut self, val: u32) {
-        self.tl = val as _;
-        self.bl = val as _;
-        self.br = val as _;
-        self.tr = val as _;
-    }
-
-    /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
-    /// Doesn't necessarily mean that you can't put a value more than 100
-    pub fn set_top_left(&mut self, val: u32) {
-        self.tl = val as _;
-    }
-
-    /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
-    /// Doesn't necessarily mean that you can't put a value more than 100
-    pub fn set_bot_left(&mut self, val: u32) {
-        self.bl = val as _;
-    }
-
-    /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
-    /// Doesn't necessarily mean that you can't put a value more than 100
-    pub fn set_bot_right(&mut self, val: u32) {
-        self.br = val as _;
-    }
-
-    /// It's recommended the value is between 0-100, where 0 means fully square and 100 means fully rounded
-    /// Doesn't necessarily mean that you can't put a value more than 100
-    pub fn set_top_right(&mut self, val: u32) {
-        self.tr = val as _;
-    }
-}
-
 impl Element {
     pub const fn new() -> Self {
         Self {
             fill_color: Rgba::new(1., 0., 0., 1.),
             stroke_color: Rgba::new(1., 1., 1., 1.),
-            corners: CornerRadius::homogen(25),
+            corners: CornerRadius::new_all(25.),
             shape: Shape::RoundedRect,
             rotation: 0.0,
             stroke_width: 0.0,
@@ -148,7 +56,7 @@ impl Element {
         self
     }
 
-    pub fn with_corner_radius(mut self, corner_radius: CornerRadius) -> Self {
+    pub fn with_corner_radius(mut self, corner_radius: CornerRadius<f32>) -> Self {
         self.corners = corner_radius;
         self
     }
@@ -194,7 +102,7 @@ impl Element {
         self.rotation = val;
     }
 
-    pub fn set_corner_radius(&mut self, val: CornerRadius) {
+    pub fn set_corner_radius(&mut self, val: CornerRadius<f32>) {
         self.corners = val;
     }
 

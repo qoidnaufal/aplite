@@ -9,11 +9,8 @@ pub mod prelude {
 
     pub use aplite_reactive::*;
     pub use aplite_renderer::image_reader;
-    pub use aplite_renderer::{
-        Shape,
-        CornerRadius,
-    };
-    pub use aplite_types::Rgba;
+    pub use aplite_renderer::Shape;
+    pub use aplite_types::{Rgba, CornerRadius};
 
     pub use crate::app::Aplite;
     pub use crate::context::Context;

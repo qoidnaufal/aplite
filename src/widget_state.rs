@@ -258,22 +258,4 @@ impl WidgetState {
             .with_translate(x, y)
             .with_scale(scale.width(), scale.height())
     }
-
-    // pub(crate) fn texture_id(&self) -> i32 { self.texture_id }
 }
-
-// impl RenderElementSource for Properties {
-//     fn fill_color(&self) -> Rgba<f32> { self.fill_color().into() }
-
-//     fn stroke_color(&self) -> Rgba<f32> { self.stroke_color().into() }
-
-//     fn rect(&self) -> Rect<f32> { self.rect.into() }
-
-//     fn corners(&self) -> CornerRadius { self.corners() }
-
-//     fn shape(&self) -> Shape { self.shape() }
-
-//     fn rotation(&self) -> f32 { self.rotation() }
-
-//     fn stroke_width(&self) -> f32 { self.stroke_width() as _ }
-// }

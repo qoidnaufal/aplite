@@ -2,8 +2,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::collections::HashMap;
 use std::cell::RefCell;
 use aplite_reactive::*;
-use aplite_types::{Matrix3x2, Rgba, Size};
-use aplite_renderer::{CornerRadius, Element, ImageData, Shape};
+use aplite_types::{Matrix3x2, Rgba, Size, CornerRadius};
+use aplite_renderer::{Element, ImageData, Shape};
 use aplite_storage::{entity, Entity, Tree};
 
 use crate::widget_state::WidgetState;
@@ -287,7 +287,7 @@ impl ViewNode {
         self
     }
 
-    pub fn with_corner_radius(self, val: CornerRadius) -> Self {
+    pub fn with_corner_radius(self, val: CornerRadius<f32>) -> Self {
         self.set_corner_radius(val);
         self
     }
@@ -313,7 +313,7 @@ impl ViewNode {
         self.0.update_untracked(|el| el.set_rotation(val.to_radians()));
     }
 
-    pub(crate) fn set_corner_radius(&self, val: CornerRadius) {
+    pub(crate) fn set_corner_radius(&self, val: CornerRadius<f32>) {
         self.0.update_untracked(|el| el.set_corner_radius(val));
     }
 }
@@ -444,7 +444,7 @@ pub trait Style: Widget + Sized {
 
     fn set_corners<F>(self, mut f: F) -> Self
     where
-        F: FnEl<CornerRadius> + 'static
+        F: FnEl<CornerRadius<f32>> + 'static
     {
         let node = self.node();
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
@@ -495,7 +495,7 @@ impl<T> Style for T where T: Widget + Sized {}
 
 // TODO: is immediately calculate the size here a good idea?
 pub trait Layout: Widget + Sized {
-    fn append_child(self, child: impl IntoView) -> Self {
+    fn child(self, child: impl IntoView) -> Self {
         let self_z_index = self.widget_state().z_index;
         let child_z_index = child.widget_state().z_index;
 

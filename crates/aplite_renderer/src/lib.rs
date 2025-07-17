@@ -10,7 +10,7 @@ mod renderer;
 mod mesh;
 
 pub use renderer::Renderer;
-pub use element::{Element, Shape, CornerRadius};
+pub use element::{Element, Shape};
 pub use texture::ImageData;
 pub use mesh::Vertices;
 pub use texture::image_reader;
