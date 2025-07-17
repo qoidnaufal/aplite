@@ -1,7 +1,7 @@
 use aplite_reactive::*;
-use aplite_types::{Rect, Vec2u};
+use aplite_types::{Rect, Size, Vec2u};
 
-use crate::widget_state::WidgetState;
+use crate::widget_state::{AspectRatio, WidgetState};
 use crate::view::{ViewId, VIEW_STORAGE};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -206,16 +206,16 @@ impl Rules {
     }
 }
 
-pub(crate) struct LayoutContext<'a> {
-    entity: &'a ViewId,
+pub(crate) struct LayoutContext {
+    entity: ViewId,
     next_pos: Vec2u,
     rules: Rules,
 }
 
-impl<'a> LayoutContext<'a> {
-    pub(crate) fn new(entity: &'a ViewId) -> Self {
+impl LayoutContext {
+    pub(crate) fn new(entity: ViewId) -> Self {
         let rules = VIEW_STORAGE.with(|s| {
-            let widget_state = s.get_widget_state(entity);
+            let widget_state = s.get_widget_state(&entity);
             Rules::new(&widget_state)
         });
         Self {
@@ -225,48 +225,35 @@ impl<'a> LayoutContext<'a> {
         }
     }
 
-    fn query_children(&mut self, children: Option<&Vec<ViewId>>) -> (u32, u32) {
-        if let Some(children) = children {
-            (children.iter().map(|child| {
-                let rect = VIEW_STORAGE.with(|s| {
-                    s.get_widget_state(child).rect
-                });
-                rect.read_untracked(|rect| {
-                    match self.rules.orientation {
-                        Orientation::Vertical => rect.size().height(),
-                        Orientation::Horizontal => rect.size().width(),
-                    }
-                })
-            }).sum(), children.len() as u32)
-        } else { (0, 0) }
-    }
-
     fn initialize_next_pos(&mut self, children: Option<&Vec<ViewId>>) {
-        let (child_size, child_len) = self.query_children(children);
+        let (stretch_factor, child_len) = children.map(|c| {(
+            c.iter()
+                .map(|child| {
+                    let rect = VIEW_STORAGE.with(|s| {
+                        s.get_widget_state(child).rect
+                    });
+                    rect.read_untracked(|rect| {
+                        match self.rules.orientation {
+                            Orientation::Vertical => rect.size().height(),
+                            Orientation::Horizontal => rect.size().width(),
+                        }
+                    })
+                })
+                .sum(),
+                c.len() as u32)
+        }).unwrap_or_default();
 
         match self.rules.orientation {
             Orientation::Vertical => {
                 self.next_pos.set_x(self.rules.offset_x());
-                self.next_pos.set_y(self.rules.start_y(child_size, child_len));
+                self.next_pos.set_y(self.rules.start_y(stretch_factor, child_len));
             }
             Orientation::Horizontal => {
-                self.next_pos.set_x(self.rules.start_x(child_size, child_len));
+                self.next_pos.set_x(self.rules.start_x(stretch_factor, child_len));
                 self.next_pos.set_y(self.rules.offset_y());
             }
         }
     }
-
-    // fn get_children(&self) -> Option<Vec<ViewId>> {
-    //     VIEW_STORAGE.with(|s| {
-    //         let tree = s.tree.borrow();
-    //         tree.get_all_children(self.entity)
-    //             .map(|children| {
-    //                 children.iter()
-    //                     .map(|id| **id)
-    //                     .collect::<Vec<_>>()
-    //             })
-    //     })
-    // }
 
     fn assign_position(&mut self, child: &ViewId) {
         let rect = VIEW_STORAGE.with(|s| {
@@ -305,25 +292,70 @@ impl<'a> LayoutContext<'a> {
         }
     }
 
-    pub(crate) fn calculate(&mut self) -> Option<Vec<ViewId>> {
-        let children = VIEW_STORAGE.with(|s| {
-            s.tree
-                .borrow()
-                .get_all_children(self.entity)
-                .map(|vec| {
-                    vec.iter()
-                        .map(|id| **id)
-                        .collect::<Vec<_>>()
-                })
-        });
+    pub(crate) fn calculate(&mut self) {
+        let children = VIEW_STORAGE.with(|s| s.tree.borrow().get_all_children(&self.entity));
         self.initialize_next_pos(children.as_ref());
 
-        if let Some(children) = children.as_ref() {
+        if let Some(children) = children {
             children.iter().for_each(|child| {
                 self.assign_position(child);
             });
+            children.iter().for_each(|child| {
+                Self::new(*child).calculate();
+            });
         }
-
-        children
     }
+}
+
+pub(crate) fn calculate_size_recursive(id: &ViewId) -> Size<u32> {
+    let widget_state = VIEW_STORAGE.with(|s| s.get_widget_state(id));
+    let padding = widget_state.padding();
+    let mut size = widget_state.rect.read_untracked(|rect| rect.size());
+
+    let maybe_children = VIEW_STORAGE.with(|s| s.tree.borrow().get_all_children(id));
+    if let Some(children) = maybe_children {
+        children.iter().for_each(|child_id| {
+            let child_size = calculate_size_recursive(child_id);
+            match widget_state.orientation() {
+                Orientation::Vertical => {
+                    size.add_height(child_size.height());
+                    size.set_width(size.width().max(child_size.width() + padding.horizontal()));
+                }
+                Orientation::Horizontal => {
+                    size.set_height(size.height().max(child_size.height() + padding.vertical()));
+                    size.add_width(child_size.width());
+                }
+            }
+        });
+        let child_len = children.len() as u32;
+        let stretch = widget_state.spacing() * (child_len - 1);
+        match widget_state.orientation() {
+            Orientation::Vertical => {
+                size.add_height(padding.vertical() + stretch);
+            },
+            Orientation::Horizontal => {
+                size.add_width(padding.horizontal() + stretch);
+            },
+        }
+    }
+
+    if let AspectRatio::Defined(tuple) = widget_state.image_aspect_ratio() {
+        VIEW_STORAGE.with(|s| {
+            match s.tree.borrow().get_parent(id) {
+                Some(parent) if s
+                    .get_widget_state(parent)
+                    .orientation
+                    .is_vertical() => size.adjust_height_aspect_ratio(tuple.into()),
+                _ => size.adjust_width_aspect_ratio(tuple.into()),
+            }
+        });
+    }
+
+    let final_size = size
+        .adjust_on_min_constraints(widget_state.min_width(), widget_state.min_height())
+        .adjust_on_max_constraints(widget_state.max_width(), widget_state.max_height());
+
+    widget_state.rect.update_untracked(|state| state.set_size(final_size));
+
+    final_size
 }

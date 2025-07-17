@@ -1,21 +1,16 @@
+pub(crate) mod cursor;
+pub mod layout;
+
 use aplite_reactive::*;
 use aplite_renderer::Renderer;
-use aplite_types::{Size, Vec2f};
+use aplite_types::Vec2f;
 
-use crate::view::ViewId;
-use crate::view::VIEW_STORAGE;
-use crate::widget_state::AspectRatio;
-
-pub mod layout;
-pub(crate) mod cursor;
+use crate::view::{VIEW_STORAGE, ViewId};
 
 use cursor::{Cursor, MouseAction, MouseButton};
-use layout::{
-    LayoutContext,
-    Orientation,
-};
+use layout::{LayoutContext, calculate_size_recursive};
 
-// i think this one could be a reactive system too
+// FIXME: use this as the main building block to build the widget
 pub struct Context {
     cursor: Cursor,
 }
@@ -49,9 +44,9 @@ impl Context {
         VIEW_STORAGE.with(|s| s.dirty.set(root_id))
     }
 
-    pub(crate) fn toggle_clean(&self) {
-        VIEW_STORAGE.with(|s| s.dirty.set(None))
-    }
+    // pub(crate) fn toggle_clean(&self) {
+    //     VIEW_STORAGE.with(|s| s.dirty.set(None))
+    // }
 }
 
 // #########################################################
@@ -62,73 +57,9 @@ impl Context {
 
 impl Context {
     pub(crate) fn layout_the_whole_window(&self, root_id: &ViewId) {
-        self.calculate_size_recursive(root_id);
-        self.recursive_layout_from_id(root_id);
+        calculate_size_recursive(root_id);
+        LayoutContext::new(*root_id).calculate();
         self.toggle_dirty(Some(*root_id));
-    }
-
-    pub(crate) fn recursive_layout_from_id(&self, id: &ViewId) {
-        let children = LayoutContext::new(id).calculate();
-        if let Some(children) = children {
-            children.iter().for_each(|child| self.recursive_layout_from_id(child));
-        }
-    }
-
-    fn calculate_size_recursive(&self, id: &ViewId) -> Size<u32> {
-        let widget_state = VIEW_STORAGE.with(|s| s.get_widget_state(id));
-        let padding = widget_state.padding();
-        let mut size = widget_state.rect.read_untracked(|rect| rect.size());
-
-        let maybe_children = VIEW_STORAGE.with(|s| {
-            s.tree.borrow()
-                .get_all_children(id)
-                .map(|v| v.iter().map(|c| **c).collect::<Vec<_>>())
-        });
-        if let Some(children) = maybe_children {
-            children.iter().for_each(|child_id| {
-                let child_size = self.calculate_size_recursive(child_id);
-                match widget_state.orientation() {
-                    Orientation::Vertical => {
-                        size.add_height(child_size.height());
-                        size.set_width(size.width().max(child_size.width() + padding.horizontal()));
-                    }
-                    Orientation::Horizontal => {
-                        size.set_height(size.height().max(child_size.height() + padding.vertical()));
-                        size.add_width(child_size.width());
-                    }
-                }
-            });
-            let child_len = children.len() as u32;
-            let stretch = widget_state.spacing() * (child_len - 1);
-            match widget_state.orientation() {
-                Orientation::Vertical => {
-                    size.add_height(padding.vertical() + stretch);
-                },
-                Orientation::Horizontal => {
-                    size.add_width(padding.horizontal() + stretch);
-                },
-            }
-        }
-
-        if let AspectRatio::Defined(tuple) = widget_state.image_aspect_ratio() {
-            VIEW_STORAGE.with(|s| {
-                match s.tree.borrow().get_parent(id) {
-                    Some(parent) if s
-                        .get_widget_state(parent)
-                        .orientation
-                        .is_vertical() => size.adjust_height_aspect_ratio(tuple.into()),
-                    _ => size.adjust_width_aspect_ratio(tuple.into()),
-                }
-            });
-        }
-
-        let final_size = size
-            .adjust_on_min_constraints(widget_state.min_width(), widget_state.min_height())
-            .adjust_on_max_constraints(widget_state.max_width(), widget_state.max_height());
-
-        widget_state.rect.update_untracked(|state| state.set_size(final_size));
-
-        final_size
     }
 }
 
@@ -161,12 +92,12 @@ impl Context {
                     .filter_map(|id| {
                         let state = s.get_widget_state(id);
                         state.detect_hover(&self.cursor)
-                            .then_some((*id, state.z_index.get_untracked()))
+                            .then_some((state.z_index.get_untracked(), *id))
                     }).max()
             });
 
             match hovered {
-                Some((id, z_index)) => {
+                Some((z_index, id)) => {
                     self.cursor.hover.prev = self.cursor.hover.curr.replace(id);
                     self.cursor.hover.z_index = z_index;
                 },
@@ -198,7 +129,7 @@ impl Context {
         let pos = self.cursor.hover.pos - self.cursor.click.offset;
         let state = VIEW_STORAGE.with(|s| s.get_widget_state(hover_id));
         state.rect.update_untracked(|rect| rect.set_pos(pos.into()));
-        self.recursive_layout_from_id(hover_id);
+        LayoutContext::new(*hover_id).calculate();
         self.toggle_dirty(state.root_id.get());
     }
 
@@ -238,6 +169,7 @@ impl Context {
 impl Context {
     pub(crate) fn prepare_data(&self, root_id: ViewId, renderer: &mut Renderer) {
         VIEW_STORAGE.with(|s| {
+            // TODO: let scene = renderer.request_scene();
             let screen = renderer.screen_res();
             let components = s.get_render_components(&root_id, screen);
 
@@ -251,5 +183,6 @@ impl Context {
                     renderer.submit_data(elem.get_untracked(), *mat, offset as _);
                 });
         });
+        // TODO: renderer.encode_scene(scene);
     }
 }

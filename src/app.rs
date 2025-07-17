@@ -16,12 +16,6 @@ use crate::context::Context;
 use crate::error::ApliteError;
 use crate::view::{IntoView, View, ViewId, VIEW_STORAGE};
 
-#[derive(Debug)]
-enum WinitSize {
-    Logical(Size<u32>),
-    Physical(PhysicalSize<u32>),
-}
-
 pub(crate) const DEFAULT_SCREEN_SIZE: Size<u32> = Size::new(800, 600);
 
 pub struct WindowAttributes {
@@ -221,16 +215,10 @@ impl Aplite {
 
 // window event
 impl Aplite {
-    fn handle_resize(&mut self, winit_size: WinitSize) {
+    fn handle_resize(&mut self, size: PhysicalSize<u32>) {
         if let Some(renderer) = self.renderer.as_mut() {
-            let size = match winit_size {
-                WinitSize::Logical(size) => size,
-                WinitSize::Physical(size) => {
-                    let logical = size.to_logical::<u32>(renderer.scale_factor());
-                    (logical.width, logical.height).into()
-                },
-            };
-            renderer.resize(size);
+            let logical = size.to_logical::<u32>(renderer.scale_factor());
+            renderer.resize(Size::new(logical.width, logical.height));
         }
     }
 
@@ -240,45 +228,16 @@ impl Aplite {
         }
     }
 
-    // FIXME: not sure if retained mode works like this
-    fn handle_redraw_request(&mut self, window_id: &WindowId, event_loop: &ActiveEventLoop) {
-        if let Some(window) = self.window.get(window_id).cloned() {
-            #[cfg(feature = "render_stats")] let start = std::time::Instant::now();
-
-            // if let Some(renderer) = self.renderer.as_mut() {
-            //     let root_id = self.root_view_id[window_id];
-
-            //     self.cx.prepare_data(root_id, renderer);
-            // }
-
-            self.prepare_data(window_id);
-            self.render(event_loop, window);
-
-            #[cfg(feature = "render_stats")] self.stats.inc(start.elapsed());
-        }
-    }
-
-    fn prepare_data(&mut self, window_id: &WindowId) {
+    fn handle_mouse_move(&mut self, window_id: &WindowId, pos: PhysicalPosition<f64>) {
         if let Some(renderer) = self.renderer.as_mut()
-            && let Some(root_id) = self.root_view_id.get(window_id) {
-            renderer.begin();
-            self.cx.prepare_data(*root_id, renderer);
-            // renderer.finish();
-            self.cx.toggle_clean();
+            && let Some(root) = self.root_view_id.get(window_id) {
+            let logical_pos = pos.to_logical::<f32>(renderer.scale_factor());
+            self.cx.handle_mouse_move(root, (logical_pos.x, logical_pos.y));
         }
     }
 
-    fn render(&mut self, event_loop: &ActiveEventLoop, window: Arc<Window>) {
-        if let Some(renderer) = self.renderer.as_mut() {
-            if let Err(err) = renderer.render(Rgba::TRANSPARENT, window) {
-                let size = renderer.screen_res().u32();
-                match err {
-                    RendererError::ShouldResize => self.handle_resize(WinitSize::Logical(size)),
-                    RendererError::ShouldExit => event_loop.exit(),
-                    _ => {}
-                }
-            }
-        }
+    fn handle_click(&mut self, state: ElementState, button: MouseButton) {
+        self.cx.handle_click(state, button);
     }
 
     fn handle_close_request(&mut self, window_id: &WindowId, event_loop: &ActiveEventLoop) {
@@ -288,15 +247,28 @@ impl Aplite {
         }
     }
 
-    fn handle_click(&mut self, state: ElementState, button: MouseButton) {
-        self.cx.handle_click(state, button);
-    }
+    // WARN: not sure if retained mode works like this
+    fn handle_redraw_request(&mut self, window_id: &WindowId, event_loop: &ActiveEventLoop) {
+        if let Some(window) = self.window.get(window_id).cloned()
+        && let Some(root_id) = self.root_view_id.get(window_id)
+        && let Some(renderer) = self.renderer.as_mut()
+        {
+            #[cfg(feature = "render_stats")] let start = std::time::Instant::now();
 
-    fn handle_mouse_move(&mut self, window_id: &WindowId, pos: PhysicalPosition<f64>) {
-        if let Some(renderer) = self.renderer.as_mut()
-            && let Some(root) = self.root_view_id.get(window_id) {
-            let logical_pos = pos.to_logical::<f32>(renderer.scale_factor());
-            self.cx.handle_mouse_move(root, (logical_pos.x, logical_pos.y));
+            renderer.begin();
+            self.cx.prepare_data(*root_id, renderer);
+            // TODO: this should be window.pre_present_notify(),
+            // and the renderer.finish()
+            if let Err(err) = renderer.render(Rgba::TRANSPARENT, window) {
+                let size = renderer.screen_res().u32();
+                match err {
+                    RendererError::ShouldResize => renderer.resize(size),
+                    RendererError::ShouldExit => event_loop.exit(),
+                    _ => {}
+                }
+            }
+
+            #[cfg(feature = "render_stats")] self.stats.inc(start.elapsed());
         }
     }
 }
@@ -320,7 +292,7 @@ impl ApplicationHandler for Aplite {
         match event {
             WindowEvent::CloseRequested => self.handle_close_request(&window_id, event_loop),
             WindowEvent::RedrawRequested => self.handle_redraw_request(&window_id, event_loop),
-            WindowEvent::Resized(s) => self.handle_resize(WinitSize::Physical(s)),
+            WindowEvent::Resized(s) => self.handle_resize(s),
             WindowEvent::MouseInput { state, button, .. } => self.handle_click(state, button),
             WindowEvent::CursorMoved { position, .. } => self.handle_mouse_move(&window_id, position),
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => self.set_scale_factor(scale_factor),

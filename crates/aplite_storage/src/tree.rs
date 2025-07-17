@@ -170,7 +170,7 @@ impl<E: Entity> Tree<E> {
     }
 
     /// get all the entities which has no parent
-    pub fn get_all_ancestor(&self) -> Vec<&E> {
+    pub fn get_all_roots(&self) -> Vec<&E> {
         self.entities
             .iter()
             .filter(|e| self.get_parent(e).is_none())
@@ -179,7 +179,7 @@ impl<E: Entity> Tree<E> {
     }
 
     /// get the root of an entity
-    pub fn get_ancestor<'a>(&'a self, entity: &'a E) -> Option<&'a E> {
+    pub fn get_root<'a>(&'a self, entity: &'a E) -> Option<&'a E> {
         let mut current = entity;
         while let Some(parent) = self.get_parent(current) {
             current = parent;
@@ -257,12 +257,12 @@ impl<E: Entity> Tree<E> {
         }
     }
 
-    pub fn get_all_children(&self, entity: &E) -> Option<Vec<&E>> {
+    pub fn get_all_children(&self, entity: &E) -> Option<Vec<E>> {
         self.get_first_child(entity).map(|first| {
             let mut curr = first;
-            let mut children = vec![curr];
+            let mut children = vec![*curr];
             while let Some(next) = self.get_next_sibling(curr) {
-                children.push(next);
+                children.push(*next);
                 curr = next;
             }
             children
@@ -273,8 +273,8 @@ impl<E: Entity> Tree<E> {
         let mut members = vec![];
         if let Some(children) = self.get_all_children(entity) {
             children.iter().for_each(|id| {
-                members.push(**id);
-                let inner = self.get_all_members_of(*id);
+                members.push(*id);
+                let inner = self.get_all_members_of(id);
                 members.extend_from_slice(&inner);
             });
         }
@@ -434,7 +434,7 @@ impl<E: Entity> std::fmt::Debug for Tree<E> {
                 Some(parent) => {
                     if let Some(children) = tree.get_all_children(parent) {
                         children.iter().for_each(|child| {
-                            let ancestor_sibling = tree.ancestors_with_sibling(*child);
+                            let ancestor_sibling = tree.ancestors_with_sibling(child);
                             let loc = ancestor_sibling
                                 .iter()
                                 .enumerate()
@@ -442,8 +442,8 @@ impl<E: Entity> std::fmt::Debug for Tree<E> {
                                 .max()
                                 .unwrap_or_default();
 
-                            let depth = tree.depth(*child);
-                            let frame = get_frame(tree, *child);
+                            let depth = tree.depth(child);
+                            let frame = get_frame(tree, child);
                             let len = frame.len() / 2;
 
                             let mut connector_indent = 0;
@@ -460,12 +460,12 @@ impl<E: Entity> std::fmt::Debug for Tree<E> {
                             let format = format!("{:indent$}{frame} {child:?}\n", "");
                             s.push_str(format.as_str());
 
-                            recursive_print(tree, Some(*child), s);
+                            recursive_print(tree, Some(child), s);
                         });
                     }
                 },
                 None => {
-                    let ancestors = tree.get_all_ancestor();
+                    let ancestors = tree.get_all_roots();
                     ancestors
                         .iter()
                         .enumerate()
@@ -521,7 +521,7 @@ mod tree_test {
         let tree = setup_tree();
         eprintln!("{:?}", tree);
 
-        let ancestor = tree.get_ancestor(&Id(9));
+        let ancestor = tree.get_root(&Id(9));
         let parent = tree.get_parent(&Id(6));
         let four_is_mem_of_two = tree.is_member_of(&Id(4), &Id(2));
         let nine_is_mem_of_two = tree.is_member_of(&Id(9), &Id(2));

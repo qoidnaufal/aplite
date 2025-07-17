@@ -68,7 +68,7 @@ impl ViewStorage {
 
         let root = self.tree
             .borrow()
-            .get_ancestor(id)
+            .get_root(id)
             .copied()
             .unwrap_or(*id);
         child_root.set(Some(root));
@@ -91,7 +91,7 @@ impl ViewStorage {
 
         let root = self.tree
             .borrow()
-            .get_ancestor(id)
+            .get_root(id)
             .copied()
             .unwrap_or(*id);
         sibling_root.set(Some(root));
