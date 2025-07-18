@@ -62,8 +62,8 @@ impl Default for WidgetState {
 // internal data management
 impl WidgetState {
     pub(crate) fn window(size: Size<u32>) -> Self {
-        let x = size.width() / 2;
-        let y = size.height() / 2;
+        let x = 0;
+        let y = 0;
         let w = size.width();
         let h = size.height();
 
@@ -83,28 +83,26 @@ impl WidgetState {
 
     // FIXME: consider rotation & maybe some precision
     pub(crate) fn detect_hover(&self, cursor: &Cursor) -> bool {
-        let pos = cursor.hover.pos;
         let rect = self.rect.get_untracked();
-        let x = rect.x() as f32;
-        let y = rect.y() as f32;
 
-        let x_cursor = pos.x();
-        let y_cursor = pos.y();
+        // let pos = cursor.hover.pos;
+        // let x = rect.x() as f32;
+        // let y = rect.y() as f32;
+        // let x_cursor = pos.x();
+        // let y_cursor = pos.y();
+        // let width = rect.width() as f32 / 2.0;
+        // let height = rect.height() as f32 / 2.0;
 
-        let width = rect.width() as f32 / 2.0;
-        let height = rect.height() as f32 / 2.0;
+        // let is_hovered = (y - height..y + height).contains(&y_cursor)
+        //     && (x - width..x + width).contains(&x_cursor)
+        //     && cursor.hover.z_index <= self.z_index.get_untracked();
 
-        // let angled = if self.shape.is_triangle() {
-        //     let c_tangen = tan(x_cursor - x, y_cursor - y + height);
-        //     let t_tangen = tan(width / 2.0, height);
-        //     (t_tangen - c_tangen).is_sign_negative()
-        // } else { true };
+        let is_hovered = rect.contains(cursor.hover.pos.u32())
+            && cursor.hover.z_index <= self.z_index.get_untracked();
 
-        self.is_hovered.set((y - height..y + height).contains(&y_cursor)
-            && (x - width..x + width).contains(&x_cursor)
-            && cursor.hover.z_index <= self.z_index.get_untracked());
+        self.is_hovered.set(is_hovered);
 
-        self.is_hovered.get_untracked()
+        is_hovered
     }
 }
 
@@ -168,12 +166,6 @@ impl WidgetState {
         self.set_padding(value);
         self
     }
-
-    // pub fn with_textured(mut self, value: bool) -> Self {
-    //     let value = if value { 0 } else { -1 };
-    //     self.set_texture_id(value);
-    //     self
-    // }
 }
 
 // modifier
@@ -249,13 +241,11 @@ impl WidgetState {
 
     pub(crate) fn get_transform(&self, screen: Size<f32>) -> Matrix3x2 {
         let rect = self.rect.read_untracked(|rect| rect.f32());
-        let size = rect.size();
-        let x = rect.x() / screen.width() * 2.0 - 1.0;
-        let y = 1.0 - rect.y() / screen.height() * 2.0;
-        let scale = size / screen;
+        let tx = rect.center_x() / screen.width() * 2.0 - 1.0;
+        let ty = 1.0 - rect.center_y() / screen.height() * 2.0;
+        let sx = rect.width() / screen.width();
+        let sy = rect.height() / screen.height();
 
-        Matrix3x2::IDENTITY
-            .with_translate(x, y)
-            .with_scale(scale.width(), scale.height())
+        Matrix3x2::from_scale_translate(sx, sy, tx, ty)
     }
 }

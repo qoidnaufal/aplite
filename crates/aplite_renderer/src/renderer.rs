@@ -6,10 +6,11 @@ use super::RendererError;
 
 use crate::element::Element;
 use crate::screen::Screen;
+use crate::shader::render_shader;
 use crate::storage::Storage;
 use crate::gpu::Gpu;
 use crate::mesh::{Indices, MeshBuffer};
-use crate::util::{create_pipeline, Sampler};
+use crate::util::Sampler;
 use crate::texture::{Atlas, AtlasId, ImageData};
 use crate::Vertices;
 
@@ -19,7 +20,6 @@ pub struct Renderer {
     storage: [Storage; 3],
     atlas: Atlas,
     sampler: Sampler,
-    pipeline: wgpu::RenderPipeline,
     mesh: [MeshBuffer; 3],
     current: usize,
 }
@@ -31,40 +31,33 @@ impl Renderer {
         let screen = Screen::new(&gpu.device, gpu.size().into(), window.scale_factor());
         let atlas = Atlas::new(&gpu.device);
         let sampler = Sampler::new(&gpu.device);
-        let vertice_layout = &[MeshBuffer::vertice_layout()];
 
         let storage = [
             Storage::new(&gpu.device),
             Storage::new(&gpu.device),
             Storage::new(&gpu.device),
         ];
+
         let mesh = [
             MeshBuffer::new(&gpu.device),
             MeshBuffer::new(&gpu.device),
             MeshBuffer::new(&gpu.device),
         ];
-        let layouts = &[
-            &Screen::bind_group_layout(&gpu.device),
-            &Storage::bind_group_layout(&gpu.device),
-            &Atlas::bind_group_layout(&gpu.device),
-            &Sampler::bind_group_layout(&gpu.device),
-        ];
-
-        let pipeline = create_pipeline(&gpu, vertice_layout, layouts);
 
         Ok(Self {
             gpu,
             storage,
             sampler,
             atlas,
-            pipeline,
             mesh,
             screen,
             current: 0,
         })
     }
 
-    pub const fn scale_factor(&self) -> f64 { self.screen.scale_factor }
+    pub const fn scale_factor(&self) -> f64 {
+        self.screen.scale_factor
+    }
 
     pub fn set_scale_factor(&mut self, scale_factor: f64) {
         self.screen.scale_factor = scale_factor;
@@ -72,12 +65,16 @@ impl Renderer {
 
     /// Corresponds to [`winit::dpi::LogicalSize<u32>`]
     /// This one will be updated when the window is resized
-    pub fn surface_size(&self) -> Size<u32> { self.gpu.size() }
+    pub fn surface_size(&self) -> Size<u32> {
+        self.gpu.size()
+    }
 
     /// Corresponds to [`winit::dpi::LogicalSize<u32>`]
     /// This one will not be updated when the window is resized.
     /// Important to determine the transform of an [`Element`].
-    pub fn screen_res(&self) -> Size<f32> { self.screen.screen_size() }
+    pub fn screen_res(&self) -> Size<f32> {
+        self.screen.screen_size()
+    }
 
     pub fn resize(&mut self, new_size: Size<u32>) {
         if new_size.width() > 0 && new_size.height() > 0 {
@@ -138,6 +135,15 @@ impl Renderer {
 
     fn encode(&self, encoder: &mut wgpu::CommandEncoder, desc: wgpu::RenderPassColorAttachment) {
         if self.mesh[self.current].offset == 0 { return }
+        let buffers = &[MeshBuffer::vertice_layout()];
+        let bind_group_layouts = &[
+            &Screen::bind_group_layout(&self.gpu.device),
+            &Storage::bind_group_layout(&self.gpu.device),
+            &Atlas::bind_group_layout(&self.gpu.device),
+            &Sampler::bind_group_layout(&self.gpu.device),
+        ];
+
+        let pipeline = Pipeline::render(&self.gpu, buffers, bind_group_layouts);
 
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("render pass"),
@@ -145,7 +151,7 @@ impl Renderer {
             ..Default::default()
         });
 
-        pass.set_pipeline(&self.pipeline);
+        pass.set_pipeline(pipeline.get_render_pipeline());
 
         pass.set_index_buffer(self.mesh[self.current].indices_slice(), wgpu::IndexFormat::Uint32);
         pass.set_vertex_buffer(0, self.mesh[self.current].vertices_slice());
@@ -222,5 +228,96 @@ impl Renderer {
     pub fn render_image(&mut self, f: &dyn Fn() -> ImageData) -> Option<AtlasId> {
         let image = f();
         self.atlas.append(image)
+    }
+}
+
+#[allow(unused)]
+pub(crate) enum Pipeline {
+    Render(wgpu::RenderPipeline),
+    Compute(wgpu::ComputePipeline),
+}
+
+impl Pipeline {
+    pub(crate) fn render(
+        gpu: &Gpu,
+        buffers: &[wgpu::VertexBufferLayout<'_>],
+        bind_group_layouts: &[&wgpu::BindGroupLayout],
+    ) -> Self {
+        let device = &gpu.device;
+        let format = gpu.config.format;
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("shader"), source: wgpu::ShaderSource::Wgsl(render_shader())
+        });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("pipeline layout"),
+            bind_group_layouts,
+            push_constant_ranges: &[],
+        });
+        let blend_comp = wgpu::BlendComponent {
+            operation: wgpu::BlendOperation::Add,
+            src_factor: wgpu::BlendFactor::SrcAlpha,
+            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+        };
+
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("render pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers,
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                ..Default::default()
+            },
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState {
+                        color: blend_comp,
+                        alpha: blend_comp,
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            depth_stencil: None,
+            multiview: None,
+            cache: None,
+        });
+
+        Self::Render(pipeline)
+    }
+
+    pub(crate) fn get_render_pipeline(&self) -> &wgpu::RenderPipeline {
+        match self {
+            Pipeline::Render(render_pipeline) => render_pipeline,
+            Pipeline::Compute(_) => panic!("expected render pipeline, get a compute instead"),
+        }
+    }
+}
+
+pub struct Scene {
+    surface_size: Size<u32>,
+    triangles: Vec<Vertices>,
+}
+
+use aplite_types::Rect;
+
+impl Scene {
+    pub(crate) fn push(&mut self, bbox: Rect<u32>) {
+        if bbox.r() > self.surface_size.width() {}
     }
 }

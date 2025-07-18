@@ -109,7 +109,7 @@ impl ViewStorage {
     pub(crate) fn get_render_components(
         &self,
         root_id: &ViewId,
-        screen: Size<f32>
+        screen: Size<f32>,
     ) -> Vec<(RwSignal<Element>, Matrix3x2, Option<Box<dyn Fn() -> ImageData>>)> {
         self.get_all_members_of(root_id)
             .iter()

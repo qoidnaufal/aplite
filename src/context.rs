@@ -71,9 +71,7 @@ impl Context {
 
 impl Context {
     pub(crate) fn handle_mouse_move(&mut self, root_id: &ViewId, pos: impl Into<Vec2f>) {
-        if VIEW_STORAGE.with(|s| {
-            s.get_all_members_of(root_id).is_empty()
-        }) { return }
+        if VIEW_STORAGE.with(|s| s.get_all_members_of(root_id).is_empty()) { return }
         self.cursor.hover.pos = pos.into();
 
         #[cfg(feature = "cursor_stats")] let start = std::time::Instant::now();
@@ -169,7 +167,7 @@ impl Context {
 impl Context {
     pub(crate) fn prepare_data(&self, root_id: ViewId, renderer: &mut Renderer) {
         VIEW_STORAGE.with(|s| {
-            // TODO: let scene = renderer.request_scene();
+            // TODO: let scene = renderer.new_scene();
             let screen = renderer.screen_res();
             let components = s.get_render_components(&root_id, screen);
 

@@ -84,7 +84,21 @@ impl Rect<u32> {
 
     #[inline(always)]
     pub const fn b(&self) -> u32 { self.y() + self.height() }
+
+    pub const fn center_x(&self) -> u32 { self.x() + self.width() / 2 }
+
+    pub const fn center_y(&self) -> u32 { self.y() + self.height() / 2 }
+
+    pub const fn area(&self) -> u32 {
+        self.width() * self.height()
+    }
+
+    pub fn contains(&self, p: Vec2u) -> bool {
+        (self.x()..self.r()).contains(&p.x())
+        && (self.y()..self.b()).contains(&p.y())
+    }
 }
+
 impl Rect<f32> {
     #[inline(always)]
     pub const fn pos(&self) -> Vec2f {
@@ -155,6 +169,14 @@ impl Rect<f32> {
 
     #[inline(always)]
     pub const fn b(&self) -> f32 { self.y() + self.height() }
+
+    pub const fn center_x(&self) -> f32 { self.x() + self.width() / 2. }
+
+    pub const fn center_y(&self) -> f32 { self.y() + self.height() / 2. }
+
+    pub const fn area(&self) -> f32 {
+        self.width() * self.height()
+    }
 }
 
 impl Rect<u32> {

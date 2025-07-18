@@ -9,14 +9,12 @@ fn first_row() -> impl IntoView {
         )
         .child(
             Image::new(|| image_reader("examples/assets/image2.jpg"))
-                .set_dragable(true)
         )
         .child(
             CircleWidget::new()
                 .set_color(|_| Rgba::PURPLE)
                 .set_hover_color(|_| Rgba::RED)
         )
-        .set_dragable(true)
         .state(|s| {
             s.set_spacing(40);
             s.set_padding(Padding::new(20, 20, 40, 40));
@@ -64,13 +62,13 @@ fn button_stack(
                 .set_rotation(rotation)
                 .set_color(color)
         )
-        .set_color(|_| Rgba::TRANSPARENT)
+        .set_color(|_| Rgba::new(0, 0, 0, 30))
         .set_dragable(true)
         .state(|s| {
             s.set_min_width(400);
             s.set_alignment(|align| {
-                align.set_h(HAlign::Left);
-                align.set_v(VAlign::Bottom);
+                align.set_h(AlignH::Center);
+                align.set_v(AlignV::Middle);
             });
             s.set_padding(Padding::all(10));
             s.set_spacing(5);

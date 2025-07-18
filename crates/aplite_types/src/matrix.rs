@@ -2,13 +2,13 @@ use std::ops::{Index, IndexMut};
 
 use crate::vector::{Vector, Vec2f, Vec4f};
 
-/// GPU's mat3x2 is actually a \[[`Vector<2, T>`]; 3\] in CPU
+/// mat3x2 is composed as \[[`Vector<2, T>`]; 3\]
 /// # Representation:
-/// CPU:     │ GPU:
-/// x  ,  y  │ x: x0, x1, x2
-/// x0 , y0  │ y: y0, y1, y2
-/// x1 , y1  │ 
-/// x2 , y2  │ 
+/// Composition:   │ Multiplication:
+/// (x , y)        │ x: x0, x1, x2
+/// x0 , y0        │ y: y0, y1, y2
+/// x1 , y1        │ 
+/// x2 , y2        │ 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Matrix<const M: usize, const N: usize> {
     inner: [Vector<N, f32>; M]
@@ -210,6 +210,70 @@ impl Matrix3x2 {
             Vec2f::new(0.0, 0.0),
         ]
     };
+
+    pub const fn identity() -> Self {
+        Self::IDENTITY
+    }
+
+    pub const fn from_scale(sx: f32, sy: f32) -> Self {
+        Self {
+            inner: [
+                Vec2f::new(sx, 0.),
+                Vec2f::new(0., sy),
+                Vec2f::new(0., 0.)
+            ]
+        }
+    }
+
+    pub fn from_rotate_deg(deg: f32) -> Self {
+        let rad = deg.to_radians();
+        Self::from_rotate_rad(rad)
+    }
+
+    pub fn from_rotate_rad(rad: f32) -> Self {
+        Self {
+            inner: [
+                Vec2f::new(rad.cos(), -rad.sin()),
+                Vec2f::new(rad.sin(),  rad.cos()),
+                Vec2f::new(0., 0.)
+            ]
+        }
+    }
+
+    pub const fn from_translate(tx: f32, ty: f32) -> Self {
+        Self {
+            inner: [
+                Vec2f::new(0., 0.),
+                Vec2f::new(0., 0.),
+                Vec2f::new(tx, ty)
+            ]
+        }
+    }
+
+    pub const fn from_scale_translate(sx: f32, sy: f32, tx: f32, ty: f32) -> Self {
+        Self {
+            inner: [
+                Vec2f::new(sx, 0.),
+                Vec2f::new(0., sy),
+                Vec2f::new(tx, ty)
+            ]
+        }
+    }
+
+    pub fn from_scale_deg_translate(sx: f32, sy: f32, deg: f32, tx: f32, ty: f32) -> Self {
+        let rad = deg.to_radians();
+        Self::from_scale_rad_translate(sx, sy, rad, tx, ty)
+    }
+
+    pub fn from_scale_rad_translate(sx: f32, sy: f32, rad: f32, tx: f32, ty: f32) -> Self {
+        Self {
+            inner: [
+                Vec2f::new(sx * rad.cos(), sx * -rad.sin()),
+                Vec2f::new(sy * rad.sin(), sy *  rad.cos()),
+                Vec2f::new(tx, ty)
+            ]
+        }
+    }
 
     /// Internally use [`dot_vec()`](Self::dot_vec) method,
     /// but better as this one use less data

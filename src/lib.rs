@@ -19,8 +19,8 @@ pub mod prelude {
         Alignment,
         Orientation,
         Padding,
-        VAlign,
-        HAlign
+        AlignV,
+        AlignH
     };
     pub use crate::view::{
         Widget,

@@ -215,9 +215,18 @@ impl Aplite {
 
 // window event
 impl Aplite {
-    fn handle_resize(&mut self, size: PhysicalSize<u32>) {
+    fn handle_resize(&mut self, size: PhysicalSize<u32>, window_id: WindowId) {
         if let Some(renderer) = self.renderer.as_mut() {
             let logical = size.to_logical::<u32>(renderer.scale_factor());
+            let root_id = self.root_view_id[&window_id];
+            VIEW_STORAGE.with(|s| {
+                if let Some(window_state) = s.storage.borrow().get(&root_id) {
+                    window_state.widget_state().rect.update_untracked(|rect| {
+                        rect.set_size(Size::new(logical.width, logical.height));
+                    });
+                }
+            });
+            crate::context::layout::LayoutContext::new(root_id).calculate();
             renderer.resize(Size::new(logical.width, logical.height));
         }
     }
@@ -292,7 +301,7 @@ impl ApplicationHandler for Aplite {
         match event {
             WindowEvent::CloseRequested => self.handle_close_request(&window_id, event_loop),
             WindowEvent::RedrawRequested => self.handle_redraw_request(&window_id, event_loop),
-            WindowEvent::Resized(s) => self.handle_resize(s),
+            WindowEvent::Resized(s) => self.handle_resize(s, window_id),
             WindowEvent::MouseInput { state, button, .. } => self.handle_click(state, button),
             WindowEvent::CursorMoved { position, .. } => self.handle_mouse_move(&window_id, position),
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => self.set_scale_factor(scale_factor),

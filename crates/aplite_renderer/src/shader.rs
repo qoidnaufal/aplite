@@ -1,7 +1,10 @@
 pub(crate) fn create_shader<'a>(input: &'a [&str]) -> std::borrow::Cow<'a, str> {
-    let mut s = String::new();
-    input.iter().for_each(|shader| s.push_str(shader));
-    s.into()
+    let shader = input.iter().cloned().collect::<String>();
+    shader.into()
+}
+
+pub(crate) fn render_shader<'a>() -> std::borrow::Cow<'a, str> {
+    create_shader(&[VERTEX, SDF, FRAGMENT])
 }
 
 pub const VERTEX: &str = r"
@@ -172,5 +175,11 @@ fn fs_main(in: FragmentPayload) -> @location(0) vec4<f32> {
 
     let color = select(vec4f(0.0), element.color, sdf < 0.0);
     return mix(color, stroke.color, blend);
+}
+";
+
+pub const COMPUTE_SDF: &str = r"
+@compute @workgroup_size(16, 16)
+fn compute(@builtin(global_invocation_id) id: vec3u) {
 }
 ";
