@@ -9,7 +9,7 @@ use winit::application::ApplicationHandler;
 
 use aplite_reactive::{Effect, Update, With};
 use aplite_types::{Size, Rgba};
-use aplite_renderer::{Gpu, Renderer, RendererError};
+use aplite_renderer::{SurfaceHandle, GpuDevice, Renderer, RendererError};
 use aplite_future::block_on;
 
 use crate::prelude::ApliteResult;
@@ -19,16 +19,10 @@ use crate::view::{IntoView, View, ViewId, VIEW_STORAGE};
 
 pub(crate) const DEFAULT_SCREEN_SIZE: LogicalSize<u32> = LogicalSize::new(800, 600);
 
-pub(crate) struct WindowHandle {
-    pub(crate) window: Arc<Window>,
-    pub(crate) surface: wgpu::Surface<'static>,
-    pub(crate) config: wgpu::SurfaceConfiguration,
-}
-
 pub struct Aplite {
     cx: Context,
     renderer: Option<Renderer>,
-    window: HashMap<WindowId, WindowHandle>,
+    window: HashMap<WindowId, SurfaceHandle>,
     root_view_id: HashMap<WindowId, ViewId>,
     pending_views: Vec<Box<dyn FnOnce(WindowId) -> Box<dyn IntoView>>>,
     window_attributes_fn: Option<fn(&mut WindowAttributes)>,
@@ -92,12 +86,11 @@ impl Aplite {
         let window = event_loop.create_window(attributes)?;
         let window = Arc::new(window);
         let window_id = window.id();
+        let size = window
+            .inner_size()
+            .to_logical(window.scale_factor());
 
         let view_id = VIEW_STORAGE.with(|s| {
-            let size = window
-                .inner_size()
-                .to_logical(window.scale_factor());
-
             let root = s.create_entity();
             let root_view = View::window(Size::new(size.width, size.height));
 
@@ -117,31 +110,23 @@ impl Aplite {
             root
         });
 
-        let Gpu {
-            surface,
-            device,
-            queue,
-            config
-        } = block_on(async {Gpu::new(Arc::clone(&window)).await})?;
+        let surface_handle = block_on(async {SurfaceHandle::new(Arc::clone(&window)).await})?;
 
-        let window_handle = WindowHandle {
-            window: Arc::clone(&window),
-            surface,
-            config,
-        };
-        self.window.insert(window_id, window_handle);
-
-        if self.renderer.is_none() {
-            let size = window.inner_size();
+        if let Some(renderer) = self.renderer.as_ref() {
+            surface_handle.configure(&renderer.device);
+        } else {
+            let gpu = block_on(async { GpuDevice::new(&surface_handle.adapter).await})?;
             let renderer = Renderer::new(
-                device,
-                queue,
+                gpu.device,
+                gpu.queue,
                 Size::new(size.width as f32, size.height as f32),
                 window.scale_factor()
             );
+            surface_handle.configure(&renderer.device);
             self.renderer = Some(renderer);
         }
 
+        self.window.insert(window_id, surface_handle);
         self.track_window(view_id, window);
 
         Ok(())

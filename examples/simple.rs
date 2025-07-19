@@ -52,7 +52,6 @@ fn simple() -> impl IntoView {
 
 fn main() -> ApliteResult {
     Aplite::new(simple)
-        .with_title("Dummy")
-        .with_background_color(Rgba::DARK_GRAY)
+        .set_window_attributes(|window| window.title = "Simple Demo".to_string())
         .launch()
 }
