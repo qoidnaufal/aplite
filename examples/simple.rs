@@ -34,7 +34,7 @@ fn simple() -> impl IntoView {
         .set_stroke_color(|_| Rgba::WHITE)
         .set_stroke_width(|_| 6)
         .set_rotation(move |_| rotate.get())
-        .set_corners(|_| CornerRadius::new_all(47.))
+        .set_corners(|_| CornerRadius::splat(47.))
         .set_dragable(true)
         .set_size((200, 69))
         .on_click(click_count);

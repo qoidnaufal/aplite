@@ -8,7 +8,6 @@ repository.workspace = true
 
 [dependencies]
 aplite_types.workspace = true
-aplite_future = { path = "../aplite_future" }
 winit.workspace = true
 wgpu.workspace = true
 

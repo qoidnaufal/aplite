@@ -1,109 +1,87 @@
-use crate::num_traits::GpuPrimitive;
-use crate::vector::{Vector, Vec2u, Vec2f};
 use crate::corner_radius::CornerRadius;
 use crate::size::Size;
+use crate::Vec2f;
 
 use super::Rect;
 
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct RoundedRect<T: GpuPrimitive> {
-    inner: Vector<4, T>,
-    radius: CornerRadius<T>,
+#[repr(C, align(16))]
+#[derive(Default, Debug, Clone, Copy)]
+pub struct RoundedRect {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub radius: CornerRadius,
 }
 
-impl<T: GpuPrimitive> RoundedRect<T> {
-    pub const fn new(rect: Rect<T>, radius: CornerRadius<T>) -> Self {
+impl RoundedRect {
+    #[inline(always)]
+    pub const fn new(x: f32, y: f32, width: f32, height: f32, radius: CornerRadius) -> Self {
+        Self { x, y, width, height, radius }
+    }
+
+    #[inline(always)]
+    pub const fn from_rect_radius(rect: Rect, radius: CornerRadius) -> Self {
         Self {
-            inner: Vector::new_from_array(rect.into_array()),
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
             radius,
         }
     }
 
-    pub const fn size(&self) -> Size<T> {
-        Size::new(self.inner.inner[2], self.inner.inner[3])
+    #[inline(always)]
+    pub const fn from_rect_radius_splat(rect: Rect, radius: f32) -> Self {
+        Self::from_rect_radius(rect, CornerRadius::splat(radius))
     }
 
-    pub const fn radius(&self) -> CornerRadius<T> {
+    #[inline(always)]
+    pub fn from_points_radius(p1: Vec2f, p2: Vec2f, radius: CornerRadius) -> Self {
+        let rect = Rect::from_points(p1, p2);
+        Self::from_rect_radius(rect, radius)
+    }
+
+    #[inline(always)]
+    pub const fn from_point_size_radius(point: Vec2f, size: Size, radius: CornerRadius) -> Self {
+        let rect = Rect::from_point_size(point, size);
+        Self::from_rect_radius(rect, radius)
+    }
+
+    #[inline(always)]
+    pub const fn size(&self) -> Size {
+        Size::new(self.width, self.height)
+    }
+
+    #[inline(always)]
+    pub const fn radius(&self) -> CornerRadius {
         self.radius
     }
 
-    pub const fn set_pos(&mut self, x: T, y: T) {
-        self.inner.inner[0] = x;
-        self.inner.inner[1] = y;
+    #[inline(always)]
+    pub const fn set_pos(&mut self, x: f32, y: f32) {
+        self.x = x;
+        self.y = y;
     }
 
-    pub const fn set_size(&mut self, width: T, height: T) {
-        self.inner.inner[2] = width;
-        self.inner.inner[3] = height;
+    #[inline(always)]
+    pub const fn set_size(&mut self, width: f32, height: f32) {
+        self.width = width;
+        self.height = height;
     }
 
-    pub const fn set_radius_all(&mut self, val: T) {
-        self.radius.set_all(val);
+    pub const fn set_radius(&mut self, radius: CornerRadius) {
+        self.radius = radius
+    }
+
+    #[inline(always)]
+    pub const fn set_radius_all(&mut self, val: f32) {
+        self.radius.set_all(val)
     }
 
     /// set each corner radius in counter clockwise direction starting from top left
-    pub const fn set_radius_each(&mut self, tl: T, bl: T, br: T, tr: T) {
-        self.radius.set_each(tl, bl, br, tr);
-    }
-}
-
-impl RoundedRect<u32> {
-    pub const fn from_pos_size_radius(pos: Vec2u, size: Size<u32>, radius: CornerRadius<u32>) -> Self {
-        Self {
-            inner: Vector::new_from_array([
-                pos.x(),
-                pos.y(),
-                size.width(),
-                size.height(),
-            ]),
-            radius,
-        }
-    }
-
-    pub fn from_points_radius(p1: Vec2u, p2: Vec2u, radius: CornerRadius<u32>) -> Self {
-        Self {
-            inner: Vector::new_from_array(Rect::<u32>::from_points(p1, p2).into_array()),
-            radius,
-        }
-    }
-
-    pub const fn pos(&self) -> Vec2u {
-        Vec2u::new(self.inner.x(), self.inner.y())
-    }
-}
-
-impl RoundedRect<f32> {
-    pub const fn from_pos_size_radius(pos: Vec2f, size: Size<f32>, radius: CornerRadius<f32>) -> Self {
-        Self {
-            inner: Vector::new_from_array([
-                pos.x(),
-                pos.y(),
-                size.width(),
-                size.height(),
-            ]),
-            radius,
-        }
-    }
-
-    pub const fn from_points_radius(p1: Vec2f, p2: Vec2f, radius: CornerRadius<f32>) -> Self {
-        Self {
-            inner: Vector::new_from_array(Rect::<f32>::from_points(p1, p2).into_array()),
-            radius,
-        }
-    }
-
-    pub const fn pos(&self) -> Vec2f {
-        Vec2f::new(self.inner.x(), self.inner.y())
-    }
-}
-
-impl<T: GpuPrimitive> std::fmt::Debug for RoundedRect<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RoundedRect")
-            .field("pos", &[self.inner.inner[0], self.inner.inner[1]])
-            .field("size", &[self.inner.inner[2], self.inner.inner[3]])
-            .field("radius", &self.radius)
-            .finish()
+    #[inline(always)]
+    pub const fn set_radius_each(&mut self, tl: f32, bl: f32, br: f32, tr: f32) {
+        self.radius.set_each(tl, bl, br, tr)
     }
 }

@@ -1,159 +1,39 @@
 use crate::fraction::Fraction;
-use crate::num_traits::{GpuPrimitive, NumDebugger};
-use crate::vector::Vector;
 
 /// corresponds to [`winit::dpi::LogicalSize<T>`]
-#[derive(Clone, Copy)]
-pub struct Size<T: GpuPrimitive> {
-    inner: Vector<2, T>
+#[derive(Default, Debug, Clone, Copy)]
+pub struct Size {
+    pub width: f32,
+    pub height: f32,
 }
 
-impl<T: GpuPrimitive + NumDebugger> std::fmt::Debug for Size<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = self.inner.debug_formatter("Size");
-        write!(f, "{s}")
-    }
-}
-
-impl<T: GpuPrimitive> Default for Size<T> {
-    fn default() -> Self {
-        Self {
-            inner: Vector::default()
-        }
-    }
-}
-
-impl<T: GpuPrimitive> Size<T> {
+impl Size {
     #[inline(always)]
-    pub const fn new(width: T, height: T) -> Self {
-        Self { inner: Vector::new_from_array([width, height]) }
+    pub const fn new(width: f32, height: f32) -> Self {
+        Self { width, height }
     }
 
     #[inline(always)]
-    pub const fn width(&self) -> T { self.inner.inner[0] }
-
-    #[inline(always)]
-    pub const fn height(&self) -> T { self.inner.inner[1] }
-
-    #[inline(always)]
-    pub const fn set_width(&mut self, val: T) { self.inner.inner[0] = val }
-
-    #[inline(always)]
-    pub const fn set_height(&mut self, val: T) { self.inner.inner[1] = val }
-}
-
-impl Size<u32> {
-    #[inline(always)]
-    pub const fn add_width(&mut self, val: u32) { self.inner.add_x(val) }
-
-    #[inline(always)]
-    pub const fn add_height(&mut self, val: u32) { self.inner.add_y(val) }
-
-    #[inline(always)]
-    pub const fn mul_width(&mut self, val: u32) { self.inner.mul_x(val) }
-
-    #[inline(always)]
-    pub const fn mul_height(&mut self, val: u32) { self.inner.mul_y(val) }
-
-    #[inline(always)]
-    pub const fn area(&self) -> u32 { self.width() * self.height() }
-
-    #[inline(always)]
-    pub const fn diagonal(&self) -> u32 {
-        (self.width().pow(2) + self.height().pow(2)).isqrt()
-    }
-
-    pub fn aspect_ratio(&self) -> Fraction<u32> {
-        let gcd = gcd(self.width(), self.height());
-        Fraction::new(self.width() / gcd, self.height() / gcd)
-    }
-
-    pub fn adjust_width_aspect_ratio(&mut self, aspect_ratio: Fraction<u32>) {
-        self.set_width(self.height() * aspect_ratio)
-    }
-
-    pub fn adjust_height_aspect_ratio(&mut self, aspect_ratio: Fraction<u32>) {
-        self.set_height(self.width() / aspect_ratio)
-    }
-
-    #[inline(always)]
-    pub fn f32(self) -> Size<f32> {
-        Size { inner: self.inner.f32() }
-    }
-
-    #[inline(always)]
-    pub fn min(self, other: Self) -> Self {
-        Self::new(
-            self.width().min(other.width()),
-            self.height().min(other.height())
-        )
-    }
-
-    #[inline(always)]
-    pub fn max(self, other: Self) -> Self {
-        Self::new(
-            self.width().max(other.width()),
-            self.height().max(other.height())
-        )
-    }
-
-    #[inline(always)]
-    pub fn clamp(self, start: Self, end: Self) -> Self {
-        self.max(start).min(end)
-    }
-
-    pub fn adjust_on_min_constraints(self, min_width: Option<u32>, min_height: Option<u32>) -> Self {
-        let width = min_width.map(|w| self.width().max(w)).unwrap_or(self.width());
-        let height = min_height.map(|h| self.height().max(h)).unwrap_or(self.height());
-        Self::new(width, height)
-    }
-
-    pub fn adjust_on_max_constraints(self, max_width: Option<u32>, max_height: Option<u32>) -> Self {
-        let width = max_width.map(|w| self.width().min(w)).unwrap_or(self.width());
-        let height = max_height.map(|h| self.height().min(h)).unwrap_or(self.height());
-        Self::new(width, height)
-    }
-}
-
-impl Size<f32> {
-    #[inline(always)]
-    pub const fn add_width(&mut self, val: f32) { self.inner.add_x(val) }
-
-    #[inline(always)]
-    pub const fn add_height(&mut self, val: f32) { self.inner.add_y(val) }
-
-    #[inline(always)]
-    pub const fn mul_width(&mut self, val: f32) { self.inner.mul_x(val) }
-
-    #[inline(always)]
-    pub const fn mul_height(&mut self, val: f32) { self.inner.mul_y(val) }
-
-    #[inline(always)]
-    pub const fn area(&self) -> f32 { self.width() * self.height() }
+    pub const fn area(&self) -> f32 { self.width * self.height }
 
     #[inline(always)]
     pub fn diagonal(&self) -> f32 {
-        (self.width().powi(2) + self.height().powi(2)).sqrt()
-    }
-
-    #[inline(always)]
-    pub fn u32(self) -> Size<u32> {
-        Size { inner: self.inner.u32() }
+        (self.width.powi(2) + self.height.powi(2)).sqrt()
     }
 
     #[inline(always)]
     pub const fn min(self, other: Self) -> Self {
         Self::new(
-            self.width().min(other.width()),
-            self.height().min(other.height())
+            self.width.min(other.width),
+            self.height.min(other.height)
         )
     }
 
     #[inline(always)]
     pub const fn max(self, other: Self) -> Self {
         Self::new(
-            self.width().max(other.width()),
-            self.height().max(other.height())
+            self.width.max(other.width),
+            self.height.max(other.height)
         )
     }
 
@@ -163,89 +43,97 @@ impl Size<f32> {
     }
 
     pub fn adjust_on_min_constraints(self, min_width: Option<f32>, min_height: Option<f32>) -> Self {
-        let width = min_width.map(|w| self.width().max(w)).unwrap_or(self.width());
-        let height = min_height.map(|h| self.height().max(h)).unwrap_or(self.height());
+        let width = min_width.map(|w| self.width.max(w)).unwrap_or(self.width);
+        let height = min_height.map(|h| self.height.max(h)).unwrap_or(self.height);
         Self::new(width, height)
     }
 
     pub fn adjust_on_max_constraints(self, max_width: Option<f32>, max_height: Option<f32>) -> Self {
-        let width = max_width.map(|w| self.width().min(w)).unwrap_or(self.width());
-        let height = max_height.map(|h| self.height().min(h)).unwrap_or(self.height());
+        let width = max_width.map(|w| self.width.min(w)).unwrap_or(self.width);
+        let height = max_height.map(|h| self.height.min(h)).unwrap_or(self.height);
         Self::new(width, height)
+    }
+    
+    pub fn adjust_width_aspect_ratio(&mut self, aspect_ratio: Fraction) {
+        self.width = self.height * aspect_ratio
+    }
+
+    pub fn adjust_height_aspect_ratio(&mut self, aspect_ratio: Fraction) {
+        self.height = self.width / aspect_ratio
+    }
+
+    pub fn aspect_ratio(&self) -> Fraction {
+        let gcd = gcd(self.width, self.height);
+        Fraction::new(self.width / gcd, self.height / gcd)
     }
 }
 
 // arithmetic operation
 
-impl<T: GpuPrimitive> std::ops::Mul<T> for Size<T> {
+impl std::ops::Mul<f32> for Size {
     type Output = Self;
-    fn mul(self, rhs: T) -> Self::Output {
-        Self::new(self.width() * rhs, self.height() * rhs)
+    fn mul(self, rhs: f32) -> Self::Output {
+        Self::new(self.width * rhs, self.height * rhs)
     }
 }
 
-impl<T: GpuPrimitive> std::ops::MulAssign<T> for Size<T> {
-    fn mul_assign(&mut self, rhs: T) {
+impl std::ops::MulAssign<f32> for Size {
+    fn mul_assign(&mut self, rhs: f32) {
         *self = *self * rhs
     }
 }
 
-impl<T: GpuPrimitive> std::ops::Div<T> for Size<T> {
+impl std::ops::Div<f32> for Size {
     type Output = Self;
-    fn div(self, rhs: T) -> Self::Output {
-        Self::new(self.width() / rhs, self.height() / rhs)
+    fn div(self, rhs: f32) -> Self::Output {
+        Self::new(self.width / rhs, self.height / rhs)
     }
 }
 
-impl<T: GpuPrimitive> std::ops::Div<Self> for Size<T> {
+impl std::ops::Div<Self> for Size {
     type Output = Self;
     fn div(self, rhs: Self) -> Self::Output {
-        Self::new(self.width() / rhs.width(), self.height() / rhs.height())
+        Self::new(self.width / rhs.width, self.height / rhs.height)
     }
 }
 
 // logical operation
 
-impl<T: GpuPrimitive> PartialEq for Size<T> {
+impl PartialEq for Size {
     fn eq(&self, other: &Self) -> bool {
-        self.inner == other.inner
+        self.width == other.width
+        && self.height == other.height
     }
 }
 
-impl<T: GpuPrimitive + Eq> Eq for Size<T> {}
+impl Eq for Size {}
+
+impl PartialOrd for Size {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.area().partial_cmp(&other.area())
+    }
+}
 
 // type conversion
 
-impl From<Size<u32>> for Size<f32> {
-    fn from(value: Size<u32>) -> Self {
-        value.f32()
+impl From<(u32, u32)> for Size {
+    fn from(value: (u32, u32)) -> Self {
+        Self::new(value.0 as f32, value.1 as f32)
     }
 }
 
-impl From<Size<f32>> for Size<u32> {
-    fn from(value: Size<f32>) -> Self {
-        value.u32()
-    }
-}
-
-impl<T: GpuPrimitive> From<(T, T)> for Size<T> {
-    fn from(value: (T, T)) -> Self {
+impl From<(f32, f32)> for Size {
+    fn from(value: (f32, f32)) -> Self {
         Self::new(value.0, value.1)
     }
 }
 
-impl<T: GpuPrimitive> From<Size<T>> for Vector<2, T> {
-    fn from(value: Size<T>) -> Self {
-        value.inner
-    }
-}
-
 /// global common divisor
-pub fn gcd(a: u32, b: u32) -> u32 {
+pub fn gcd(a: f32, b: f32) -> f32 {
     let mut ret = a;
     let mut rem = b;
     loop {
-        if rem == 0 { break }
+        if rem == 0.0 { break }
         let temp = ret;
         ret = rem;
         rem = temp / rem;
@@ -259,10 +147,10 @@ mod gcd_test {
 
     #[test]
     fn test_gcd() {
-        let width = 2560;
-        let height = 1600;
+        let width = 2560.;
+        let height = 1600.;
         let gcd = gcd(width, height);
         let fraction = [width/gcd, height/gcd];
-        assert_eq!(fraction, [5, 3]);
+        assert_eq!(fraction, [5., 3.]);
     }
 }

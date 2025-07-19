@@ -1,5 +1,5 @@
 use aplite_reactive::*;
-use aplite_types::{Matrix3x2, Rect, Size, Vec2u};
+use aplite_types::{Matrix3x2, Rect, Size, Vec2f};
 
 use crate::context::layout::{Alignment, Orientation, Padding};
 use crate::context::cursor::Cursor;
@@ -16,15 +16,15 @@ pub enum AspectRatio {
 pub struct WidgetState {
     pub(crate) name: &'static str,
     pub(crate) root_id: RwSignal<Option<ViewId>>,
-    pub(crate) rect: RwSignal<Rect<u32>>,
-    pub(crate) min_width: Option<u32>,
-    pub(crate) min_height: Option<u32>,
-    pub(crate) max_width: Option<u32>,
-    pub(crate) max_height: Option<u32>,
+    pub(crate) rect: RwSignal<Rect>,
+    pub(crate) min_width: Option<f32>,
+    pub(crate) min_height: Option<f32>,
+    pub(crate) max_width: Option<f32>,
+    pub(crate) max_height: Option<f32>,
     pub(crate) alignment: Alignment,
     pub(crate) orientation: Orientation,
     pub(crate) padding: Padding,
-    pub(crate) spacing: u32,
+    pub(crate) spacing: f32,
     pub(crate) z_index: RwSignal<u32>,
     pub(crate) image_aspect_ratio: AspectRatio,
     pub(crate) dragable: RwSignal<bool>,
@@ -39,14 +39,14 @@ impl Default for WidgetState {
         Self {
             name: "",
             root_id: RwSignal::new(None),
-            rect: RwSignal::new(Rect::new(0, 0, 0, 0)),
-            min_width: Some(1),
-            min_height: Some(1),
+            rect: RwSignal::new(Rect::new(0., 0., 0., 0.)),
+            min_width: Some(1.),
+            min_height: Some(1.),
             max_width: None,
             max_height: None,
             alignment: Alignment::new(),
             orientation: Orientation::Vertical,
-            spacing: 0,
+            spacing: 0.,
             z_index: RwSignal::new(0),
             padding: Padding::default(),
             image_aspect_ratio: AspectRatio::Undefined,
@@ -61,11 +61,11 @@ impl Default for WidgetState {
 
 // internal data management
 impl WidgetState {
-    pub(crate) fn window(size: Size<u32>) -> Self {
-        let x = 0;
-        let y = 0;
-        let w = size.width();
-        let h = size.height();
+    pub(crate) fn window(size: Size) -> Self {
+        let x = 0.;
+        let y = 0.;
+        let w = size.width;
+        let h = size.height;
 
         Self::new()
             .with_name("Root")
@@ -85,19 +85,7 @@ impl WidgetState {
     pub(crate) fn detect_hover(&self, cursor: &Cursor) -> bool {
         let rect = self.rect.get_untracked();
 
-        // let pos = cursor.hover.pos;
-        // let x = rect.x() as f32;
-        // let y = rect.y() as f32;
-        // let x_cursor = pos.x();
-        // let y_cursor = pos.y();
-        // let width = rect.width() as f32 / 2.0;
-        // let height = rect.height() as f32 / 2.0;
-
-        // let is_hovered = (y - height..y + height).contains(&y_cursor)
-        //     && (x - width..x + width).contains(&x_cursor)
-        //     && cursor.hover.z_index <= self.z_index.get_untracked();
-
-        let is_hovered = rect.contains(cursor.hover.pos.u32())
+        let is_hovered = rect.contains(cursor.hover.pos)
             && cursor.hover.z_index <= self.z_index.get_untracked();
 
         self.is_hovered.set(is_hovered);
@@ -117,32 +105,32 @@ impl WidgetState {
         self
     }
 
-    pub(crate) fn with_position(self, pos: impl Into<Vec2u>) -> Self {
+    pub(crate) fn with_position(self, pos: impl Into<Vec2f>) -> Self {
         self.rect.update_untracked(|rect| rect.set_pos(pos.into()));
         self
     }
 
-    pub fn with_size(mut self, size: impl Into<Size<u32>>) -> Self {
+    pub fn with_size(mut self, size: impl Into<Size>) -> Self {
         self.set_size(size);
         self
     }
 
-    pub fn with_min_width(mut self, value: u32) -> Self {
+    pub fn with_min_width(mut self, value: f32) -> Self {
         self.set_min_width(value);
         self
     }
 
-    pub fn with_min_height(mut self, value: u32) -> Self {
+    pub fn with_min_height(mut self, value: f32) -> Self {
         self.set_min_height(value);
         self
     }
 
-    pub fn with_max_width(mut self, value: u32) -> Self {
+    pub fn with_max_width(mut self, value: f32) -> Self {
         self.set_max_width(value);
         self
     }
 
-    pub fn with_max_height(mut self, value: u32) -> Self {
+    pub fn with_max_height(mut self, value: f32) -> Self {
         self.set_max_height(value);
         self
     }
@@ -157,7 +145,7 @@ impl WidgetState {
         self
     }
 
-    pub fn with_spacing(mut self, value: u32) -> Self {
+    pub fn with_spacing(mut self, value: f32) -> Self {
         self.set_spacing(value);
         self
     }
@@ -182,27 +170,27 @@ impl WidgetState {
         self.orientation = orientation;
     }
 
-    pub fn set_size(&mut self, size: impl Into<Size<u32>>) {
+    pub fn set_size(&mut self, size: impl Into<Size>) {
         self.rect.update(|rect| rect.set_size(size.into()))
     }
 
-    pub fn set_position(&mut self, pos: Vec2u) {
+    pub fn set_position(&mut self, pos: Vec2f) {
         self.rect.update(|rect| rect.set_pos(pos));
     }
 
-    pub fn set_min_width(&mut self, value: u32) {
+    pub fn set_min_width(&mut self, value: f32) {
         self.min_width = Some(value)
     }
 
-    pub fn set_min_height(&mut self, value: u32) {
+    pub fn set_min_height(&mut self, value: f32) {
         self.min_height = Some(value)
     }
 
-    pub fn set_max_width(&mut self, value: u32) {
+    pub fn set_max_width(&mut self, value: f32) {
         self.max_width = Some(value)
     }
 
-    pub fn set_max_height(&mut self, value: u32) {
+    pub fn set_max_height(&mut self, value: f32) {
         self.max_height = Some(value)
     }
 
@@ -210,7 +198,7 @@ impl WidgetState {
         self.padding = value;
     }
 
-    pub fn set_spacing(&mut self, value: u32) {
+    pub fn set_spacing(&mut self, value: f32) {
         self.spacing = value
     }
 
@@ -225,26 +213,14 @@ impl WidgetState {
 
     pub(crate) fn orientation(&self) -> Orientation { self.orientation }
 
-    pub(crate) fn min_width(&self) -> Option<u32> { self.min_width }
-
-    pub(crate) fn min_height(&self) -> Option<u32> { self.min_height }
-
-    pub(crate) fn max_width(&self) -> Option<u32> { self.max_width }
-
-    pub(crate) fn max_height(&self) -> Option<u32> { self.max_height }
-
     pub(crate) fn image_aspect_ratio(&self) -> AspectRatio { self.image_aspect_ratio }
 
-    pub(crate) fn padding(&self) -> Padding { self.padding }
-
-    pub(crate) fn spacing(&self) -> u32 { self.spacing }
-
-    pub(crate) fn get_transform(&self, screen: Size<f32>) -> Matrix3x2 {
-        let rect = self.rect.read_untracked(|rect| rect.f32());
-        let tx = rect.center_x() / screen.width() * 2.0 - 1.0;
-        let ty = 1.0 - rect.center_y() / screen.height() * 2.0;
-        let sx = rect.width() / screen.width();
-        let sy = rect.height() / screen.height();
+    pub(crate) fn get_transform(&self, screen: Size) -> Matrix3x2 {
+        let rect = self.rect.get_untracked();
+        let tx = rect.center_x() / screen.width * 2.0 - 1.0;
+        let ty = 1.0 - rect.center_y() / screen.height * 2.0;
+        let sx = rect.width / screen.width;
+        let sy = rect.height / screen.height;
 
         Matrix3x2::from_scale_translate(sx, sy, tx, ty)
     }

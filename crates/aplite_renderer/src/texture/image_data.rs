@@ -19,22 +19,19 @@ pub fn image_reader<P: AsRef<Path>>(path: P) -> ImageData {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImageData {
-    pub(crate) size: Size<u32>,
-    pub(crate) bytes: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+    pub bytes: Vec<u8>,
 }
 
 impl ImageData {
-    pub fn new(size: impl Into<Size<u32>>, data: &[u8]) -> Self {
-        Self { size: size.into(), bytes: data.to_vec() }
+    pub fn new((width, height): (u32, u32), data: &[u8]) -> Self {
+        Self { width, height, bytes: data.to_vec() }
     }
 
-    pub const fn size(&self) -> Size<u32> { self.size }
-
-    pub fn aspect_ratio(&self) -> Fraction<u32> { self.size.aspect_ratio() }
-
-    pub(crate) const fn width(&self) -> u32 { self.size.width() }
-
-    pub(crate) const fn height(&self) -> u32 { self.size.height() }
+    pub fn aspect_ratio(&self) -> Fraction {
+        Size::new(self.width as f32, self.height as f32).aspect_ratio()
+    }
 }
 
 impl std::ops::Deref for ImageData {
@@ -46,6 +43,6 @@ impl std::ops::Deref for ImageData {
 
 impl From<Rgba<u8>> for ImageData {
     fn from(rgba: Rgba<u8>) -> Self {
-        Self::new((1, 1), rgba.as_slice())
+        Self::new((1, 1), &rgba.as_slice())
     }
 }

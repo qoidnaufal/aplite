@@ -109,7 +109,7 @@ impl ViewStorage {
     pub(crate) fn get_render_components(
         &self,
         root_id: &ViewId,
-        screen: Size<f32>,
+        screen: Size,
     ) -> Vec<(RwSignal<Element>, Matrix3x2, Option<Box<dyn Fn() -> ImageData>>)> {
         self.get_all_members_of(root_id)
             .iter()
@@ -168,7 +168,7 @@ impl View {
         }
     }
 
-    pub(crate) fn window(size: Size<u32>) -> Self {
+    pub(crate) fn window(size: Size) -> Self {
         let window_state = WidgetState::window(size);
         Self {
             node: ViewNode::new(),
@@ -287,7 +287,7 @@ impl ViewNode {
         self
     }
 
-    pub fn with_corner_radius(self, val: CornerRadius<f32>) -> Self {
+    pub fn with_corner_radius(self, val: CornerRadius) -> Self {
         self.set_corner_radius(val);
         self
     }
@@ -313,7 +313,7 @@ impl ViewNode {
         self.0.update_untracked(|el| el.set_rotation(val.to_radians()));
     }
 
-    pub(crate) fn set_corner_radius(&self, val: CornerRadius<f32>) {
+    pub(crate) fn set_corner_radius(&self, val: CornerRadius) {
         self.0.update_untracked(|el| el.set_corner_radius(val));
     }
 }
@@ -444,7 +444,7 @@ pub trait Style: Widget + Sized {
 
     fn set_corners<F>(self, mut f: F) -> Self
     where
-        F: FnEl<CornerRadius<f32>> + 'static
+        F: FnEl<CornerRadius> + 'static
     {
         let node = self.node();
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
@@ -476,7 +476,7 @@ pub trait Style: Widget + Sized {
         self
     }
 
-    fn set_size(self, size: impl Into<Size<u32>>) -> Self {
+    fn set_size(self, size: impl Into<Size>) -> Self {
         self.widget_state()
             .rect
             .update_untracked(|rect| rect.set_size(size.into()));

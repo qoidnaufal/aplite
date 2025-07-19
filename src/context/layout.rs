@@ -1,5 +1,5 @@
 use aplite_reactive::*;
-use aplite_types::{Rect, Size, Vec2u};
+use aplite_types::{Rect, Size, Vec2f};
 
 use crate::widget_state::{AspectRatio, WidgetState};
 use crate::view::{ViewId, VIEW_STORAGE};
@@ -35,24 +35,24 @@ pub struct Alignment {
 
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Padding {
-    top: u32,
-    bottom: u32,
-    left: u32,
-    right: u32,
+    pub top: f32,
+    pub bottom: f32,
+    pub left: f32,
+    pub right: f32,
 }
 
 #[derive(Debug)]
 pub(crate) struct Rules {
-    rect: Rect<u32>,
+    rect: Rect,
     orientation: Orientation,
     alignment: Alignment,
     padding: Padding,
-    spacing: u32,
+    spacing: f32,
 }
 
 pub(crate) struct LayoutContext {
     entity: ViewId,
-    next_pos: Vec2u,
+    next_pos: Vec2f,
     rules: Rules,
 }
 
@@ -84,7 +84,7 @@ impl Orientation {
 }
 
 impl Padding {
-    pub const fn new(top: u32, bottom: u32, left: u32, right: u32) -> Self {
+    pub const fn new(top: f32, bottom: f32, left: f32, right: f32) -> Self {
         Self {
             top,
             bottom,
@@ -93,7 +93,7 @@ impl Padding {
         }
     }
 
-    pub const fn all(value: u32) -> Self {
+    pub const fn splat(value: f32) -> Self {
         Self {
             top: value,
             bottom: value,
@@ -102,27 +102,11 @@ impl Padding {
         }
     }
 
-    pub(crate) fn vertical(&self) -> u32 { self.top() + self.bottom() }
+    pub(crate) fn vertical(&self) -> f32 { self.top + self.bottom }
 
-    pub(crate) fn horizontal(&self) -> u32 { self.left() + self.right() }
+    pub(crate) fn horizontal(&self) -> f32 { self.left + self.right }
 
-    pub(crate) fn top(&self) -> u32 { self.top }
-
-    pub(crate) fn bottom(&self) -> u32 { self.bottom }
-
-    pub(crate) fn left(&self) -> u32 { self.left }
-
-    pub(crate) fn right(&self) -> u32 { self.right }
-
-    pub fn set_top(&mut self, value: u32) { self.top = value }
-
-    pub fn set_bottom(&mut self, value: u32) { self.bottom = value }
-
-    pub fn set_left(&mut self, value: u32) { self.left = value }
-
-    pub fn set_right(&mut self, value: u32) { self.right = value }
-
-    pub fn set_all(&mut self, value: u32) {
+    pub fn set_all(&mut self, value: f32) {
         self.top = value;
         self.bottom = value;
         self.left = value;
@@ -136,59 +120,59 @@ impl Rules {
             rect: state.rect.get_untracked(),
             orientation: state.orientation(),
             alignment: state.alignment(),
-            padding: state.padding(),
-            spacing: state.spacing(),
+            padding: state.padding,
+            spacing: state.spacing,
         }
     }
 
-    fn offset_x(&self) -> u32 {
-        let pl = self.padding.left();
-        let pr = self.padding.right();
+    fn offset_x(&self) -> f32 {
+        let pl = self.padding.left;
+        let pr = self.padding.right;
 
         match self.alignment.h_align {
-            AlignH::Left => self.rect.x() + pl,
+            AlignH::Left => self.rect.x + pl,
             AlignH::Center => {
-                self.rect.x() + self.rect.width() / 2 + pl - pr
+                self.rect.x + self.rect.width / 2. + pl - pr
             }
-            AlignH::Right => self.rect.r() - pr
+            AlignH::Right => self.rect.max_x() - pr
         }
     }
 
-    fn offset_y(&self) -> u32 {
-        let pt = self.padding.top();
-        let pb = self.padding.bottom();
+    fn offset_y(&self) -> f32 {
+        let pt = self.padding.top;
+        let pb = self.padding.bottom;
 
         match self.alignment.v_align {
-            AlignV::Top => self.rect.y() + pt,
+            AlignV::Top => self.rect.y + pt,
             AlignV::Middle => {
-                self.rect.y() + self.rect.height() / 2 + pt - pb
+                self.rect.y + self.rect.height / 2. + pt - pb
             }
-            AlignV::Bottom => self.rect.b() - pb,
+            AlignV::Bottom => self.rect.max_y() - pb,
         }
     }
 
-    fn start_pos(&self, child_total_size: u32, len: u32) -> Vec2u {
+    fn start_pos(&self, child_total_size: f32, len: f32) -> Vec2f {
         let offset_x = self.offset_x();
         let offset_y = self.offset_y();
-        let stretch_factor = self.spacing * (len - 1);
+        let stretch_factor = self.spacing * (len - 1.);
         let stretch = child_total_size + stretch_factor;
 
         match self.orientation {
             Orientation::Vertical => {
                 let y = match self.alignment.v_align {
                     AlignV::Top => offset_y,
-                    AlignV::Middle => offset_y - stretch / 2,
+                    AlignV::Middle => offset_y - stretch / 2.,
                     AlignV::Bottom => offset_y - stretch,
                 };
-                Vec2u::new(offset_x, y)
+                Vec2f::new(offset_x, y)
             },
             Orientation::Horizontal => {
                 let x = match self.alignment.h_align {
                     AlignH::Left => offset_x,
-                    AlignH::Center => offset_x - stretch / 2,
+                    AlignH::Center => offset_x - stretch / 2.,
                     AlignH::Right => offset_x - stretch,
                 };
-                Vec2u::new(x, offset_y)
+                Vec2f::new(x, offset_y)
             }
         }
     }
@@ -202,7 +186,7 @@ impl LayoutContext {
         });
         Self {
             entity,
-            next_pos: Vec2u::new(0, 0),
+            next_pos: Vec2f::new(0., 0.),
             rules,
         }
     }
@@ -231,13 +215,13 @@ impl LayoutContext {
                     let rect = VIEW_STORAGE.with(|s| s.get_widget_state(child).rect);
                     rect.read_untracked(|rect| {
                         match self.rules.orientation {
-                            Orientation::Vertical => rect.size().height(),
-                            Orientation::Horizontal => rect.size().width(),
+                            Orientation::Vertical => rect.size().height,
+                            Orientation::Horizontal => rect.size().width,
                         }
                     })
                 })
                 .sum(),
-            c.len() as u32
+            c.len() as f32
         )})
         .unwrap_or_default();
 
@@ -252,30 +236,30 @@ impl LayoutContext {
             Orientation::Vertical => {
                 rect.update_untracked(|rect| {
                     match self.rules.alignment.h_align {
-                        AlignH::Left | AlignH::Right => rect.set_x(self.next_pos.x()),
-                        AlignH::Center => rect.set_x(self.next_pos.x() - size.width() / 2),
+                        AlignH::Left | AlignH::Right => rect.x = self.next_pos.x,
+                        AlignH::Center => rect.x = self.next_pos.x - size.width / 2.,
                     }
-                    rect.set_y(self.next_pos.y());
-                    self.next_pos.add_y(self.rules.spacing + size.height());
+                    rect.y = self.next_pos.y;
+                    self.next_pos.y += self.rules.spacing + size.height;
                 });
             },
             Orientation::Horizontal => {
                 rect.update_untracked(|rect| {
-                    rect.set_x(self.next_pos.x());
+                    rect.x = self.next_pos.x;
                     match self.rules.alignment.v_align {
-                        AlignV::Top | AlignV::Bottom => rect.set_y(self.next_pos.y()),
-                        AlignV::Middle => rect.set_y(self.next_pos.y() - size.height() / 2),
+                        AlignV::Top | AlignV::Bottom => rect.y = self.next_pos.y,
+                        AlignV::Middle => rect.y = self.next_pos.y - size.height / 2.,
                     }
                 });
-                self.next_pos.add_x(self.rules.spacing + size.width());
+                self.next_pos.x += self.rules.spacing + size.width;
             },
         }
     }
 }
 
-pub(crate) fn calculate_size_recursive(id: &ViewId) -> Size<u32> {
+pub(crate) fn calculate_size_recursive(id: &ViewId) -> Size {
     let widget_state = VIEW_STORAGE.with(|s| s.get_widget_state(id));
-    let padding = widget_state.padding();
+    let padding = widget_state.padding;
     let mut size = widget_state.rect.read_untracked(|rect| rect.size());
 
     let maybe_children = VIEW_STORAGE.with(|s| s.tree.borrow().get_all_children(id));
@@ -284,23 +268,23 @@ pub(crate) fn calculate_size_recursive(id: &ViewId) -> Size<u32> {
             let child_size = calculate_size_recursive(child_id);
             match widget_state.orientation() {
                 Orientation::Vertical => {
-                    size.add_height(child_size.height());
-                    size.set_width(size.width().max(child_size.width() + padding.horizontal()));
+                    size.height += child_size.height;
+                    size.width = size.width.max(child_size.width + padding.horizontal());
                 }
                 Orientation::Horizontal => {
-                    size.set_height(size.height().max(child_size.height() + padding.vertical()));
-                    size.add_width(child_size.width());
+                    size.height = size.height.max(child_size.height + padding.vertical());
+                    size.width += child_size.width;
                 }
             }
         });
-        let child_len = children.len() as u32;
-        let stretch = widget_state.spacing() * (child_len - 1);
+        let child_len = children.len() as f32;
+        let stretch = widget_state.spacing * (child_len - 1.);
         match widget_state.orientation() {
             Orientation::Vertical => {
-                size.add_height(padding.vertical() + stretch);
+                size.height += padding.vertical() + stretch;
             },
             Orientation::Horizontal => {
-                size.add_width(padding.horizontal() + stretch);
+                size.width += padding.horizontal() + stretch;
             },
         }
     }
@@ -318,8 +302,8 @@ pub(crate) fn calculate_size_recursive(id: &ViewId) -> Size<u32> {
     }
 
     let final_size = size
-        .adjust_on_min_constraints(widget_state.min_width(), widget_state.min_height())
-        .adjust_on_max_constraints(widget_state.max_width(), widget_state.max_height());
+        .adjust_on_min_constraints(widget_state.min_width, widget_state.min_height)
+        .adjust_on_max_constraints(widget_state.max_width, widget_state.max_height);
 
     widget_state.rect.update_untracked(|state| state.set_size(final_size));
 

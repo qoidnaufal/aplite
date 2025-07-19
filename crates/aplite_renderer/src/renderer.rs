@@ -8,14 +8,14 @@ use crate::element::Element;
 use crate::screen::Screen;
 use crate::shader::render_shader;
 use crate::storage::Storage;
-use crate::gpu::Gpu;
 use crate::mesh::{Indices, MeshBuffer};
 use crate::util::Sampler;
 use crate::texture::{Atlas, AtlasId, ImageData};
 use crate::Vertices;
 
 pub struct Renderer {
-    gpu: Gpu,
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
     screen: Screen,
     storage: [Storage; 3],
     atlas: Atlas,
@@ -25,34 +25,33 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(window: Arc<Window>) -> Result<Self, RendererError> {
-        let gpu = Gpu::new(Arc::clone(&window))?;
-
-        let screen = Screen::new(&gpu.device, gpu.size().into(), window.scale_factor());
-        let atlas = Atlas::new(&gpu.device);
-        let sampler = Sampler::new(&gpu.device);
+    pub fn new(device: wgpu::Device, queue: wgpu::Queue, size: Size, scale_factor: f64) -> Self {
+        let screen = Screen::new(&device, size, scale_factor);
+        let atlas = Atlas::new(&device);
+        let sampler = Sampler::new(&device);
 
         let storage = [
-            Storage::new(&gpu.device),
-            Storage::new(&gpu.device),
-            Storage::new(&gpu.device),
+            Storage::new(&device),
+            Storage::new(&device),
+            Storage::new(&device),
         ];
 
         let mesh = [
-            MeshBuffer::new(&gpu.device),
-            MeshBuffer::new(&gpu.device),
-            MeshBuffer::new(&gpu.device),
+            MeshBuffer::new(&device),
+            MeshBuffer::new(&device),
+            MeshBuffer::new(&device),
         ];
 
-        Ok(Self {
-            gpu,
+        Self {
+            device,
+            queue,
             storage,
             sampler,
             atlas,
             mesh,
             screen,
             current: 0,
-        })
+        }
     }
 
     pub const fn scale_factor(&self) -> f64 {
@@ -64,45 +63,53 @@ impl Renderer {
     }
 
     /// Corresponds to [`winit::dpi::LogicalSize<u32>`]
-    /// This one will be updated when the window is resized
-    pub fn surface_size(&self) -> Size<u32> {
-        self.gpu.size()
-    }
-
-    /// Corresponds to [`winit::dpi::LogicalSize<u32>`]
     /// This one will not be updated when the window is resized.
     /// Important to determine the transform of an [`Element`].
-    pub fn screen_res(&self) -> Size<f32> {
+    pub fn screen_res(&self) -> Size {
         self.screen.screen_size()
     }
 
-    pub fn resize(&mut self, new_size: Size<u32>) {
-        if new_size.width() > 0 && new_size.height() > 0 {
-            self.gpu.reconfigure_size(new_size);
+    pub fn resize(&mut self, new_size: Size) {
+        let res = self.screen_res();
+        let ns = new_size;
+        let scale = res / ns;
+        let sx = scale.width;
+        let sy = scale.height;
 
-            let res = self.screen_res();
-            let ns = new_size.f32();
-            let scale = res / ns;
-            let sx = scale.width();
-            let sy = scale.height();
-
-            self.screen
-                .write(
-                    &self.gpu.device,
-                    &self.gpu.queue,
-                    Matrix3x2::IDENTITY
-                        .with_scale(sx, sy)
-                        .with_translate(sx - 1.0, 1.0 - sy),
-                    res
-                );
-        }
-
+        self.screen
+            .write(
+                &self.device,
+                &self.queue,
+                Matrix3x2::IDENTITY
+                    .with_scale(sx, sy)
+                    .with_translate(sx - 1.0, 1.0 - sy),
+                res
+            );
     }
 
-    pub fn render(&mut self, color: Rgba<u8>, window: Arc<Window>) -> Result<(), RendererError> {
-        let surface = self.gpu.get_surface_texture()?;
+    pub(crate) fn create_command_encoder(&self) -> wgpu::CommandEncoder {
+        let label = Some("render encoder");
+        self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label })
+    }
+
+    pub(crate) fn submit_encoder(&self, encoder: wgpu::CommandEncoder) -> wgpu::SubmissionIndex {
+        self.queue.submit([encoder.finish()])
+    }
+
+    pub(crate) fn poll_wait(&self, index: wgpu::SubmissionIndex) -> Result<(), RendererError> {
+        self.device.poll(wgpu::PollType::WaitForSubmissionIndex(index))?;
+        Ok(())
+    }
+
+    pub fn render(
+        &mut self,
+        color: Rgba<u8>,
+        window: Arc<Window>,
+        surface: wgpu::SurfaceTexture,
+        format: wgpu::TextureFormat,
+    ) -> Result<(), RendererError> {
         let view = &surface.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self.gpu.create_command_encoder();
+        let mut encoder = self.create_command_encoder();
 
         let desc = wgpu::RenderPassColorAttachment {
             view,
@@ -110,10 +117,10 @@ impl Renderer {
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Clear(
                     wgpu::Color {
-                        r: color.r() as _,
-                        g: color.g() as _,
-                        b: color.b() as _,
-                        a: color.a() as _,
+                        r: color.r as _,
+                        g: color.g as _,
+                        b: color.b as _,
+                        a: color.a as _,
                     }
                 ),
                 store: wgpu::StoreOp::Store,
@@ -121,29 +128,40 @@ impl Renderer {
             depth_slice: None,
         };
 
-        self.atlas.update(&self.gpu.device, &mut encoder);
-        self.encode(&mut encoder, desc);
+        self.atlas.update(&self.device, &mut encoder);
+        self.encode(&mut encoder, desc, format);
 
         window.pre_present_notify();
 
-        let submission_id = self.gpu.submit_encoder(encoder);
-        self.gpu.poll_wait(submission_id)?;
+        let submission_id = self.submit_encoder(encoder);
+        self.poll_wait(submission_id)?;
         surface.present();
 
         Ok(())
     }
 
-    fn encode(&self, encoder: &mut wgpu::CommandEncoder, desc: wgpu::RenderPassColorAttachment) {
+    fn encode(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        desc: wgpu::RenderPassColorAttachment,
+        format: wgpu::TextureFormat,
+    ) {
         if self.mesh[self.current].offset == 0 { return }
+
         let buffers = &[MeshBuffer::vertice_layout()];
         let bind_group_layouts = &[
-            &Screen::bind_group_layout(&self.gpu.device),
-            &Storage::bind_group_layout(&self.gpu.device),
-            &Atlas::bind_group_layout(&self.gpu.device),
-            &Sampler::bind_group_layout(&self.gpu.device),
+            &Screen::bind_group_layout(&self.device),
+            &Storage::bind_group_layout(&self.device),
+            &Atlas::bind_group_layout(&self.device),
+            &Sampler::bind_group_layout(&self.device),
         ];
 
-        let pipeline = Pipeline::render(&self.gpu, buffers, bind_group_layouts);
+        let pipeline = Pipeline::new_render_pipeline(
+            &self.device,
+            format,
+            buffers,
+            bind_group_layouts
+        );
 
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("render pass"),
@@ -188,16 +206,16 @@ impl Renderer {
 
         self.mesh[self.current]
             .indices
-            .write(&self.gpu.device, &self.gpu.queue, offset * 6, indices.as_slice());
+            .write(&self.device, &self.queue, offset * 6, indices.as_slice());
         self.mesh[self.current]
             .vertices
-            .write(&self.gpu.device, &self.gpu.queue, offset * 4, vertices.as_slice());
+            .write(&self.device, &self.queue, offset * 4, vertices.as_slice());
         self.storage[self.current]
             .elements
-            .write(&self.gpu.device, &self.gpu.queue, offset, &[element]);
+            .write(&self.device, &self.queue, offset, &[element]);
         self.storage[self.current]
             .transforms
-            .write(&self.gpu.device, &self.gpu.queue, offset, &[transform]);
+            .write(&self.device, &self.queue, offset, &[transform]);
 
         self.mesh[self.current].offset = offset + 1;
     }
@@ -221,8 +239,8 @@ impl Renderer {
                 vertices.extend_from_slice(&vert);
             });
 
-        self.mesh[self.current].write_data(&self.gpu.device, &self.gpu.queue, &indices, &vertices);
-        self.storage[self.current].write_data(&self.gpu.device, &self.gpu.queue, elements, transforms);
+        self.mesh[self.current].write_data(&self.device, &self.queue, &indices, &vertices);
+        self.storage[self.current].write_data(&self.device, &self.queue, elements, transforms);
     }
 
     pub fn render_image(&mut self, f: &dyn Fn() -> ImageData) -> Option<AtlasId> {
@@ -238,13 +256,12 @@ pub(crate) enum Pipeline {
 }
 
 impl Pipeline {
-    pub(crate) fn render(
-        gpu: &Gpu,
+    pub(crate) fn new_render_pipeline(
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
         buffers: &[wgpu::VertexBufferLayout<'_>],
         bind_group_layouts: &[&wgpu::BindGroupLayout],
     ) -> Self {
-        let device = &gpu.device;
-        let format = gpu.config.format;
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("shader"), source: wgpu::ShaderSource::Wgsl(render_shader())
         });
@@ -310,14 +327,6 @@ impl Pipeline {
 }
 
 pub struct Scene {
-    surface_size: Size<u32>,
+    surface_size: Size,
     triangles: Vec<Vertices>,
-}
-
-use aplite_types::Rect;
-
-impl Scene {
-    pub(crate) fn push(&mut self, bbox: Rect<u32>) {
-        if bbox.r() > self.surface_size.width() {}
-    }
 }

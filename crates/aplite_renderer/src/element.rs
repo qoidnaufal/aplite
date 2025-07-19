@@ -7,7 +7,7 @@ use crate::texture::AtlasId;
 pub struct Element {
     pub(crate) fill_color: Rgba<f32>,
     pub(crate) stroke_color: Rgba<f32>,
-    pub(crate) corners: CornerRadius<f32>,
+    pub(crate) corners: CornerRadius,
     pub(crate) shape: Shape,
     pub(crate) rotation: f32,
     pub(crate) stroke_width: f32,
@@ -29,7 +29,7 @@ impl Element {
         Self {
             fill_color: Rgba::new(1., 0., 0., 1.),
             stroke_color: Rgba::new(1., 1., 1., 1.),
-            corners: CornerRadius::new_all(25.),
+            corners: CornerRadius::splat(25.),
             shape: Shape::RoundedRect,
             rotation: 0.0,
             stroke_width: 0.0,
@@ -56,7 +56,7 @@ impl Element {
         self
     }
 
-    pub fn with_corner_radius(mut self, corner_radius: CornerRadius<f32>) -> Self {
+    pub fn with_corner_radius(mut self, corner_radius: CornerRadius) -> Self {
         self.corners = corner_radius;
         self
     }
@@ -102,7 +102,7 @@ impl Element {
         self.rotation = val;
     }
 
-    pub fn set_corner_radius(&mut self, val: CornerRadius<f32>) {
+    pub fn set_corner_radius(&mut self, val: CornerRadius) {
         self.corners = val;
     }
 

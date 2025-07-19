@@ -137,7 +137,7 @@ impl Context {
             VIEW_STORAGE.with(|s| {
                 let state = s.get_widget_state(hover_id);
                 let rect = state.rect;
-                let pos = rect.read_untracked(|rect| rect.pos().f32());
+                let pos = rect.read_untracked(|rect| rect.pos());
                 self.cursor.click.offset = self.cursor.click.pos - pos;
                 state.is_clicked.set(true);
             });

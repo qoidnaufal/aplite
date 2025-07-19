@@ -16,10 +16,10 @@ fn first_row() -> impl IntoView {
                 .set_hover_color(|_| Rgba::RED)
         )
         .state(|s| {
-            s.set_spacing(40);
-            s.set_padding(Padding::new(20, 20, 40, 40));
+            s.set_spacing(40.);
+            s.set_padding(Padding::new(20., 20., 40., 40.));
         })
-        .set_corners(|_| CornerRadius::new_all(10.))
+        .set_corners(|_| CornerRadius::splat(10.))
         .set_stroke_width(|_| 5)
         .set_color(|_| Rgba::DARK_GRAY)
         .set_stroke_color(|_| Rgba::LIGHT_GRAY)
@@ -36,7 +36,7 @@ fn button_stack(
             Button::new()
                 .set_hover_color(|_| Rgba::BLUE)
                 .set_stroke_width(|_| 5)
-                .set_corners(|_| CornerRadius::new_each(80., 80., 0., 0.))
+                .set_corners(|_| CornerRadius::new(80., 80., 0., 0.))
                 .set_click_color(|_| Rgba::DARK_GRAY)
                 .on_click(inc)
         )
@@ -46,7 +46,7 @@ fn button_stack(
                 .set_hover_color(|_| Rgba::LIGHT_GRAY)
                 .set_click_color(|_| Rgba::DARK_GREEN)
                 .set_stroke_width(|_| 5)
-                .set_corners(|_| CornerRadius::new_all(50.))
+                .set_corners(|_| CornerRadius::splat(50.))
                 .on_click(dec)
         )
         .child(
@@ -54,24 +54,24 @@ fn button_stack(
                 .set_color(|_| Rgba::BLUE)
                 .set_hover_color(move |_| Rgba::PURPLE)
                 .set_stroke_width(|_| 5)
-                .set_corners(|_| CornerRadius::new_each(0., 69., 0., 69.))
+                .set_corners(|_| CornerRadius::new(0., 69., 0., 69.))
         )
         .child(
             Button::new()
-                .set_corners(|_| CornerRadius::new_all(70.))
+                .set_corners(|_| CornerRadius::splat(70.))
                 .set_rotation(rotation)
                 .set_color(color)
         )
         .set_color(|_| Rgba::new(0, 0, 0, 30))
         .set_dragable(true)
         .state(|s| {
-            s.set_min_width(400);
+            s.set_min_width(400.);
             s.set_alignment(|align| {
                 align.set_h(AlignH::Center);
                 align.set_v(AlignV::Middle);
             });
-            s.set_padding(Padding::all(10));
-            s.set_spacing(5);
+            s.set_padding(Padding::splat(10.));
+            s.set_spacing(5.);
         })
 }
 
@@ -93,8 +93,8 @@ fn second_row(
         .set_color(|_| Rgba::LIGHT_GRAY)
         .set_dragable(true)
         .state(|s| {
-            s.set_padding(Padding::all(30));
-            s.set_spacing(5);
+            s.set_padding(Padding::splat(30.));
+            s.set_spacing(5.);
         })
 }
 
@@ -131,5 +131,9 @@ fn select_color(val: i32) -> Rgba<u8> {
 }
 
 fn main() -> ApliteResult {
-    Aplite::new(root).launch()
+    Aplite::new(root)
+        .set_window_attributes(|window| {
+            window.title = "Demo".into();
+        })
+        .launch()
 }

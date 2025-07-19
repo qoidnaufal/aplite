@@ -65,20 +65,20 @@ impl Vertices {
     #[inline(always)]
     pub const fn new() -> Self { Self::VERTICES }
 
-    pub fn with_uv(mut self, uv: Rect<f32>) -> Self {
+    pub fn with_uv(mut self, uv: Rect) -> Self {
         self.set_uv(uv);
         self
     }
 
-    pub fn set_uv(&mut self, uv: Rect<f32>) {
-        let l = uv.l();
-        let r = uv.r();
-        let t = uv.t();
-        let b = uv.b();
+    pub fn set_uv(&mut self, uv: Rect) {
+        let l = uv.x;
+        let r = uv.max_x();
+        let t = uv.y;
+        let b = uv.max_y();
 
         self.iter_mut().for_each(|v| {
-            if v.uv.x() == 0.0 { v.uv.set_x(l) } else { v.uv.set_x(r) }
-            if v.uv.y() == 0.0 { v.uv.set_y(t) } else { v.uv.set_y(b) }
+            if v.uv.x == 0.0 { v.uv.x = l } else { v.uv.x = r }
+            if v.uv.y == 0.0 { v.uv.y = t } else { v.uv.y = b }
         });
     }
 

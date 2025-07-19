@@ -5,23 +5,23 @@ use super::buffer::Buffer;
 pub(crate) struct Screen {
     pub(crate) transform: Buffer<Matrix3x2>,
     // FIXME: not needed
-    pub(crate) size: Buffer<Size<f32>>,
+    pub(crate) size: Buffer<Size>,
     pub(crate) bind_group: wgpu::BindGroup,
 
     // FIXME: not needed
-    screen_resolution: Size<f32>,
+    screen_resolution: Size,
     pub(crate) scale_factor: f64,
 }
 
 impl Screen {
     pub(crate) fn new(
         device: &wgpu::Device,
-        screen_resolution: Size<f32>,
+        screen_resolution: Size,
         scale_factor: f64,
     ) -> Self {
         let uniform = wgpu::BufferUsages::UNIFORM;
         let transform = Buffer::<Matrix3x2>::new(device, 1, uniform, "screen transform");
-        let size = Buffer::<Size<f32>>::new(device, 1, uniform, "screen scaler");
+        let size = Buffer::<Size>::new(device, 1, uniform, "screen scaler");
         let bind_group = Self::bind_group(device, &[
             transform.bind_group_entry(0),
             size.bind_group_entry(1)
@@ -36,14 +36,14 @@ impl Screen {
         }
     }
 
-    pub(crate) fn screen_size(&self) -> Size<f32> { self.screen_resolution }
+    pub(crate) fn screen_size(&self) -> Size { self.screen_resolution }
 
     pub(crate) fn write(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         matrix: Matrix3x2,
-        screen: Size<f32>,
+        screen: Size,
     ) {
         self.transform.write(device, queue, 0, &[matrix]);
         self.size.write(device, queue, 0, &[screen]);
@@ -59,7 +59,7 @@ impl Screen {
             label: Some("screen bind group layout"),
             entries: &[
                 Buffer::<Matrix3x2>::bind_group_layout_entry(wgpu::BufferBindingType::Uniform, 0),
-                Buffer::<Size<f32>>::bind_group_layout_entry(wgpu::BufferBindingType::Uniform, 1),
+                Buffer::<Size>::bind_group_layout_entry(wgpu::BufferBindingType::Uniform, 1),
             ],
         })
     }
