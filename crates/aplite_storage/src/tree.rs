@@ -27,14 +27,14 @@ where
 /// ```
 #[macro_export]
 macro_rules! entity {
-    {$vis:vis $name:ident;} => {
+    { $vis:vis $name:ident } => {
         #[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
         $vis struct $name(u64);
 
         impl Entity for $name {
             fn new() -> $name {
-                static COUNTER: AtomicU64 = AtomicU64::new(0);
-                Self(COUNTER.fetch_add(1, Ordering::Relaxed))
+                static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                Self(COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
             }
 
             fn index(&self) -> usize {
@@ -57,13 +57,18 @@ macro_rules! entity {
         }
     };
 
-    {$vis:vis $name:ident; $($vis2:vis $name2:ident);+;} => {
-        use Entity;
-        use std::sync::atomic::AtomicU64;
-        use std::sync::atomic::Ordering;
+    { $vis:vis $name:ident, } => {
+        entity! { $vis $name }
+    };
 
-        entity! { $($vis2 $name2);+; }
-        entity! { $vis $name; }
+    { $vis:vis $name:ident, $($vis2:vis $name2:ident),* } => {
+        entity! { $vis $name }
+        entity! { $($vis2 $name2),* }
+    };
+
+    { $vis:vis $name:ident, $($vis2:vis $name2:ident),*, } => {
+        entity! { $vis $name }
+        entity! { $($vis2 $name2),* }
     };
 }
 
@@ -465,19 +470,13 @@ impl<E: Entity> std::fmt::Debug for Tree<E> {
                     }
                 },
                 None => {
-                    let ancestors = tree.get_all_roots();
-                    ancestors
+                    let roots = tree.get_all_roots();
+                    roots
                         .iter()
-                        .enumerate()
-                        .for_each(|(i, ancestor)| {
-                            let frame = if i + 1 == ancestors.len() {
-                                "└─"
-                            } else {
-                                "├─"
-                            };
-                            s.push_str(format!("{frame} {ancestor:?} > Root\n").as_str());
-                            if tree.get_first_child(*ancestor).is_some() {
-                                recursive_print(tree, Some(*ancestor), s);
+                        .for_each(|root| {
+                            s.push_str(format!(">> {root:?} : Root\n").as_str());
+                            if tree.get_first_child(*root).is_some() {
+                                recursive_print(tree, Some(*root), s);
                             }
                         });
                 },
@@ -495,8 +494,9 @@ mod tree_test {
     use super::*;
 
     entity! {
-        Id;
-        AnotherId;
+        Id,
+        AnotherId,
+        Abc
     }
 
     fn setup_tree() -> Tree<Id> {

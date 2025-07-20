@@ -14,7 +14,7 @@ pub use element::{Element, Shape};
 pub use texture::ImageData;
 pub use mesh::Vertices;
 pub use texture::image_reader;
-pub use gpu::{GpuDevice, SurfaceHandle};
+pub use gpu::{GpuDevice, GpuSurface};
 
 #[derive(Debug)]
 pub enum RendererError {

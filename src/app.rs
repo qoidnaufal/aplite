@@ -9,7 +9,7 @@ use winit::application::ApplicationHandler;
 
 use aplite_reactive::{Effect, Update, With};
 use aplite_types::{Size, Rgba};
-use aplite_renderer::{SurfaceHandle, GpuDevice, Renderer, RendererError};
+use aplite_renderer::{GpuDevice, GpuSurface, Renderer, RendererError};
 use aplite_future::block_on;
 
 use crate::prelude::ApliteResult;
@@ -19,11 +19,29 @@ use crate::view::{IntoView, View, ViewId, VIEW_STORAGE};
 
 pub(crate) const DEFAULT_SCREEN_SIZE: LogicalSize<u32> = LogicalSize::new(800, 600);
 
+pub(crate) struct WindowHandle {
+    pub(crate) window: Arc<Window>,
+    pub(crate) surface: wgpu::Surface<'static>,
+    pub(crate) config: wgpu::SurfaceConfiguration,
+    pub(crate) root_id: ViewId,
+}
+
+impl WindowHandle {
+    pub(crate) fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
+        self.config.width = width;
+        self.config.height = height;
+        self.configure(device);
+    }
+
+    pub(crate) fn configure(&self, device: &wgpu::Device) {
+        self.surface.configure(device, &self.config);
+    }
+}
+
 pub struct Aplite {
     cx: Context,
     renderer: Option<Renderer>,
-    window: HashMap<WindowId, SurfaceHandle>,
-    root_view_id: HashMap<WindowId, ViewId>,
+    window: HashMap<WindowId, WindowHandle>,
     pending_views: Vec<Box<dyn FnOnce(WindowId) -> Box<dyn IntoView>>>,
     window_attributes_fn: Option<fn(&mut WindowAttributes)>,
 
@@ -44,7 +62,6 @@ impl Aplite {
             renderer: None,
             cx: Context::new(),
             window: HashMap::with_capacity(4),
-            root_view_id: HashMap::with_capacity(4),
             window_attributes_fn: None,
             pending_views: Vec::with_capacity(4),
 
@@ -90,12 +107,11 @@ impl Aplite {
             .inner_size()
             .to_logical(window.scale_factor());
 
-        let view_id = VIEW_STORAGE.with(|s| {
+        let root_id = VIEW_STORAGE.with(|s| {
             let root = s.create_entity();
             let root_view = View::window(Size::new(size.width, size.height));
 
             s.storage.borrow_mut().insert(root, root_view);
-            self.root_view_id.insert(window_id, root);
 
             if let Some(view_fn) = self.pending_views.pop() {
                 let view = view_fn(window_id);
@@ -110,24 +126,31 @@ impl Aplite {
             root
         });
 
-        let surface_handle = block_on(async {SurfaceHandle::new(Arc::clone(&window)).await})?;
+        let gpu_surface = block_on(async {GpuSurface::new(Arc::clone(&window)).await})?;
+
+        let window_handle = WindowHandle {
+            window: Arc::clone(&window),
+            surface: gpu_surface.surface,
+            config: gpu_surface.config,
+            root_id,
+        };
 
         if let Some(renderer) = self.renderer.as_ref() {
-            surface_handle.configure(&renderer.device);
+            window_handle.configure(&renderer.device);
         } else {
-            let gpu = block_on(async { GpuDevice::new(&surface_handle.adapter).await})?;
+            let gpu_device = block_on(async { GpuDevice::new(&gpu_surface.adapter).await})?;
             let renderer = Renderer::new(
-                gpu.device,
-                gpu.queue,
+                gpu_device.device,
+                gpu_device.queue,
                 Size::new(size.width as f32, size.height as f32),
                 window.scale_factor()
             );
-            surface_handle.configure(&renderer.device);
+            window_handle.configure(&renderer.device);
             self.renderer = Some(renderer);
         }
 
-        self.window.insert(window_id, surface_handle);
-        self.track_window(view_id, window);
+        self.window.insert(window_id, window_handle);
+        self.track_window(root_id, window);
 
         Ok(())
     }
@@ -163,9 +186,7 @@ impl Aplite {
             //     }
             // });
             // crate::context::layout::LayoutContext::new(root_id).calculate();
-            window_handle.config.width = logical.width;
-            window_handle.config.height = logical.height;
-            window_handle.surface.configure(&renderer.device, &window_handle.config);
+            window_handle.resize(&renderer.device, logical.width, logical.height);
             renderer.resize(Size::new(logical.width as f32, logical.height as f32));
         }
     }
@@ -178,9 +199,9 @@ impl Aplite {
 
     fn handle_mouse_move(&mut self, window_id: &WindowId, pos: PhysicalPosition<f64>) {
         if let Some(renderer) = self.renderer.as_mut()
-        && let Some(root) = self.root_view_id.get(window_id) {
+        && let Some(WindowHandle { root_id, .. }) = self.window.get(window_id) {
             let logical_pos = pos.to_logical::<f32>(renderer.scale_factor());
-            self.cx.handle_mouse_move(root, (logical_pos.x, logical_pos.y));
+            self.cx.handle_mouse_move(root_id, (logical_pos.x, logical_pos.y));
         }
     }
 
@@ -198,14 +219,13 @@ impl Aplite {
     // WARN: not sure if retained mode works like this
     fn handle_redraw_request(&mut self, window_id: &WindowId, event_loop: &ActiveEventLoop) {
         if let Some(window_handle) = self.window.get(window_id)
-        && let Some(root_id) = self.root_view_id.get(window_id)
         && let Some(renderer) = self.renderer.as_mut()
         && let Ok(surface) = window_handle.surface.get_current_texture()
         {
             #[cfg(feature = "render_stats")] let start = std::time::Instant::now();
 
             renderer.begin();
-            self.cx.prepare_data(*root_id, renderer);
+            self.cx.prepare_data(window_handle.root_id, renderer);
             let format = window_handle.config.format;
             // TODO: this should be window.pre_present_notify(),
             // and the renderer.finish()

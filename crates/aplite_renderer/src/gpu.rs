@@ -18,14 +18,13 @@ impl GpuDevice {
     }
 }
 
-pub struct SurfaceHandle {
-    pub window: Arc<Window>,
+pub struct GpuSurface {
     pub surface: wgpu::Surface<'static>,
     pub adapter: wgpu::Adapter,
     pub config: wgpu::SurfaceConfiguration,
 }
 
-impl SurfaceHandle {
+impl GpuSurface {
     pub async fn new(window: Arc<Window>) -> Result<Self, RendererError> {
         let size = window.inner_size().to_logical(window.scale_factor());
 
@@ -61,21 +60,11 @@ impl SurfaceHandle {
             view_formats: vec![],
         };
 
-        Ok(Self { window, surface, adapter, config })
+        Ok(Self { surface, adapter, config })
     }
 
     pub async fn create_device_queue(&self) -> Result<GpuDevice, RendererError> {
         GpuDevice::new(&self.adapter).await
-    }
-
-    pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
-        self.config.width = width;
-        self.config.height = height;
-        self.configure(device);
-    }
-
-    pub fn configure(&self, device: &wgpu::Device) {
-        self.surface.configure(device, &self.config);
     }
 }
 

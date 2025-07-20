@@ -1,4 +1,3 @@
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::collections::HashMap;
 use std::cell::RefCell;
 use aplite_reactive::*;
@@ -18,9 +17,7 @@ pub use {
     stack::*,
 };
 
-entity! {
-    pub ViewId;
-}
+entity! { pub ViewId }
 
 // FIXME: this is kinda cheating, and not fun at all
 thread_local! {
@@ -99,7 +96,7 @@ impl ViewStorage {
 
     pub(crate) fn get_widget_state(&self, id: &ViewId) -> WidgetState {
         let storage = self.storage.borrow();
-        storage[id].widget_state()
+        storage[id].widget_state
     }
 
     pub(crate) fn get_all_members_of(&self, root_id: &ViewId) -> Vec<ViewId> {
@@ -529,3 +526,99 @@ pub trait Layout: Widget + Sized {
 }
 
 impl<T> Layout for T where T: Widget + Sized {}
+
+#[allow(unused)]
+mod alt_view {
+    use std::collections::HashMap;
+    use aplite_storage::{Tree, Entity, entity};
+
+    entity! { ViewIdAlt, }
+
+    struct ContextAlt {
+        tree: Tree<ViewIdAlt>,
+        comp1: HashMap<ViewIdAlt, Comp1>,
+        comp2: HashMap<ViewIdAlt, Comp2>,
+        comp3: HashMap<ViewIdAlt, Comp3>,
+    }
+
+    struct Comp1 {}
+    struct Comp2 {}
+    struct Comp3 {}
+
+    struct ButtonAlt {
+        id: ViewIdAlt,
+    }
+
+    impl ButtonAlt {
+        fn new(cx: &mut ContextAlt) -> Self {
+            let id = cx.tree.create_entity();
+            let comp1 = Comp1 {};
+            cx.comp1.insert(id, comp1);
+            Self { id, }
+        }
+    }
+
+    trait WidgetAlt: Sized {
+        fn id(&self) -> ViewIdAlt;
+
+        fn append_child(self, cx: &mut ContextAlt, child: impl IntoViewAlt) -> Self {
+            cx.tree.add_child(&self.id(), child.id());
+            self
+        }
+    }
+
+    impl WidgetAlt for ButtonAlt {
+        fn id(&self) -> ViewIdAlt {
+            self.id
+        }
+    }
+
+    struct ViewAlt {
+        id: ViewIdAlt,
+    }
+
+    trait IntoViewAlt: WidgetAlt {
+        fn into_view(self) -> ViewAlt {
+            ViewAlt { id: self.id() }
+        }
+    }
+
+    impl<T: WidgetAlt> IntoViewAlt for T {}
+
+    #[cfg(test)]
+    mod alt_test {
+        use super::*;
+
+        fn root(cx: &mut ContextAlt) -> impl IntoViewAlt {
+            let first = ButtonAlt::new(cx);
+            let parent = ButtonAlt::new(cx).append_child(cx, first);
+
+            branch(cx, parent)
+        }
+
+        fn branch(cx: &mut ContextAlt, parent: impl IntoViewAlt) -> impl IntoViewAlt {
+            // if let Some(first_child) = cx.tree.get_first_child(&parent.id()).copied() {
+            //     let second = ButtonAlt::new(cx);
+            //     cx.tree.add_child(&first_child, second.id());
+            // }
+            let second = ButtonAlt::new(cx);
+            parent.append_child(cx, second)
+        }
+
+        #[test]
+        fn alt() {
+            let mut cx = ContextAlt {
+                tree: Tree::new(),
+                comp1: HashMap::new(),
+                comp2: HashMap::new(),
+                comp3: HashMap::new(),
+            };
+
+            let root = root(&mut cx).into_view();
+            let child = *cx.tree.get_first_child(&root.id).unwrap();
+
+            eprintln!("{:?}", cx.tree);
+            assert_eq!(child, ViewIdAlt(0));
+        }
+    }
+}
