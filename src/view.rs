@@ -530,15 +530,23 @@ impl<T> Layout for T where T: Widget + Sized {}
 #[cfg(test)]
 mod alt_view {
     use std::collections::HashMap;
+    use std::rc::Rc;
+    use std::cell::RefCell;
+
     use aplite_storage::{Tree, Entity, entity};
+    use aplite_reactive::*;
+    use aplite_types::*;
 
     entity! { ViewIdAlt, }
 
+    #[derive(Default)]
     struct ContextAlt {
         tree: Tree<ViewIdAlt>,
         comp1: HashMap<ViewIdAlt, Comp1>,
         comp2: HashMap<ViewIdAlt, Comp2>,
         comp3: HashMap<ViewIdAlt, Comp3>,
+        // WARN: this one uses Rc<RefCell<T>> hell, find another way
+        color: HashMap<ViewIdAlt, Rc<RefCell<Rgba<u8>>>>
     }
 
     struct Comp1 {}
@@ -555,10 +563,12 @@ mod alt_view {
             let comp1 = Comp1 {};
             let comp2 = Comp2 {};
             let comp3 = Comp3 {};
+            let color = Rc::new(RefCell::new(Rgba::RED));
             cx.comp1.insert(id, comp1);
             cx.comp2.insert(id, comp2);
             cx.comp3.insert(id, comp3);
-            Self { id, }
+            cx.color.insert(id, color);
+            Self { id }
         }
     }
 
@@ -567,6 +577,31 @@ mod alt_view {
 
         fn append_child(self, cx: &mut ContextAlt, child: impl IntoViewAlt) -> Self {
             cx.tree.add_child(&self.id(), child.id());
+            self
+        }
+
+        fn comp1(self, cx: &mut ContextAlt, f: impl Fn(&mut Comp1)) -> Self {
+            if let Some(comp1) = cx.comp1.get_mut(&self.id()) {
+                f(comp1);
+            }
+            self
+        }
+
+        fn set_color(
+            self,
+            cx: &mut ContextAlt,
+            mut color_fn: impl FnMut(Option<Rgba<u8>>) -> Rgba<u8> + 'static
+        ) -> Self {
+            if let Some(color) = cx.color.get(&self.id()) {
+                let weak = Rc::downgrade(color);
+                Effect::new(move |prev| {
+                    let new_color = color_fn(prev);
+                    if let Some(strong) = weak.upgrade() {
+                        *strong.borrow_mut() = new_color;
+                    }
+                    new_color
+                });
+            }
             self
         }
     }
@@ -589,36 +624,51 @@ mod alt_view {
 
     impl<T: WidgetTraitAlt> IntoViewAlt for T {}
 
-    fn root(cx: &mut ContextAlt) -> impl IntoViewAlt {
+    fn root(
+        cx: &mut ContextAlt,
+        color_fn: impl FnMut(Option<Rgba<u8>>) -> Rgba<u8> + 'static,
+        set_counter: WriteSignal<i32>,
+    ) -> impl IntoViewAlt {
         let first = WidgetAlt::new(cx);
-        let parent = WidgetAlt::new(cx).append_child(cx, first);
+        let parent = WidgetAlt::new(cx)
+            .set_color(cx, color_fn)
+            .comp1(cx, |_| {})
+            .append_child(cx, first);
 
-        branch(cx, parent)
+        branch(cx, parent, set_counter)
     }
 
     // FIXME: for now this feels like a work-around instead of the correct implementation
-    fn branch(cx: &mut ContextAlt, parent: impl IntoViewAlt) -> impl IntoViewAlt {
-        // if let Some(first_child) = cx.tree.get_first_child(&parent.id()).copied() {
-        //     let second = ButtonAlt::new(cx);
-        //     cx.tree.add_child(&first_child, second.id());
-        // }
+    fn branch(cx: &mut ContextAlt, parent: impl IntoViewAlt, set_counter: WriteSignal<i32>) -> impl IntoViewAlt {
+        set_counter.set(3);
         let second = WidgetAlt::new(cx);
         parent.append_child(cx, second)
     }
 
     #[test]
     fn alt() {
-        let mut cx = ContextAlt {
-            tree: Tree::new(),
-            comp1: HashMap::new(),
-            comp2: HashMap::new(),
-            comp3: HashMap::new(),
+        let (counter, set_counter) = Signal::create(0i32);
+        let color_fn = move |_| if counter.get() == 3 {
+            rgba_u8(255, 255, 255, 255)
+        } else {
+            rgba_u8(0, 0, 0, 0)
         };
 
-        let root = root(&mut cx).into_view();
+        let mut cx = ContextAlt::default();
+
+        let root = root(&mut cx, color_fn, set_counter).into_view();
         let child = cx.tree.get_last_child(&root.id);
 
         eprintln!("{:?}", cx.tree);
         assert_eq!(child, Some(&ViewIdAlt(2, 0)));
+
+        let color = cx.color.get(&root.id);
+        eprintln!("{color:?}");
+        assert!(color.is_some());
+        assert_eq!(*color.unwrap().borrow(), rgba_u8(255, 255, 255, 255));
+
+        set_counter.set(69);
+        eprintln!("{color:?}");
+        assert_eq!(*color.unwrap().borrow(), rgba_u8(0, 0, 0, 0));
     }
 }
