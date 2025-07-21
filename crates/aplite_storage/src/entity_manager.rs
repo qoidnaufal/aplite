@@ -51,15 +51,13 @@ macro_rules! entity {
 
         impl std::fmt::Debug for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                let name = stringify!($name);
-                write!(f, "{}({})", name, self.0)
+                write!(f, "{}({})", stringify!($name), self.0)
             }
         }
 
         impl std::fmt::Display for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                let name = stringify!($name);
-                write!(f, "{}({})", name, self.0)
+                write!(f, "{}({})", stringify!($name), self.0)
             }
         }
     };
@@ -80,39 +78,39 @@ macro_rules! entity {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub(crate) enum Status<E: Entity> {
-    Occupied(E),
+pub(crate) enum Content<T> {
+    Occupied(T),
     // contains index of next free slot
     Vacant(u64),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub(crate) struct Slot<E: Entity> {
+pub(crate) struct Slot<T> {
     pub(crate) version: u32,
-    status: Status<E>,
+    content: Content<T>,
 }
 
-impl<E: Entity> Slot<E> {
+impl<T> Slot<T> {
     #[inline(always)]
     pub(crate) fn vacant(pref_free_slot: u64) -> Self {
         Self {
-            status: Status::Vacant(pref_free_slot),
+            content: Content::Vacant(pref_free_slot),
             version: 0,
         }
     }
 
     #[inline(always)]
-    pub(crate) fn occupied(e: E) -> Self {
+    pub(crate) fn occupied(val: T) -> Self {
         Self {
-            status: Status::Occupied(e),
+            content: Content::Occupied(val),
             version: 0,
         }
     }
 
-    pub(crate) fn get_stored_entity(&self) -> Option<&E> {
-        match &self.status {
-            Status::Occupied(entity) => Some(entity),
-            Status::Vacant(_) => None,
+    pub(crate) fn get_content(&self) -> Option<&T> {
+        match &self.content {
+            Content::Occupied(val) => Some(val),
+            Content::Vacant(_) => None,
         }
     }
 }
@@ -167,14 +165,14 @@ impl<E: Entity> EntityManager<E> {
         match self.stored.get_mut(self.next as usize) {
             // first time or after removal
             Some(slot) => {
-                let next = match slot.status {
-                    Status::Vacant(idx) => idx,
-                    Status::Occupied(_) => self.next,
+                let next = match slot.content {
+                    Content::Vacant(idx) => idx,
+                    Content::Occupied(_) => self.next,
                 };
 
                 let entity = E::new(self.next, slot.version);
 
-                slot.status = Status::Occupied(entity);
+                slot.content = Content::Occupied(entity);
                 self.count += 1;
                 self.next = next;
 
@@ -191,27 +189,39 @@ impl<E: Entity> EntityManager<E> {
         }
     }
 
-    pub fn destroy(&mut self, entity: &E) {
+    pub fn destroy(&mut self, entity: E) {
         if let Some(slot) = self.stored.get_mut(entity.index())
         && slot.version == entity.version()
         {
-            slot.status = Status::Vacant(self.next);
+            slot.content = Content::Vacant(self.next);
             slot.version += 1;
             self.next = entity.index() as u64;
             self.count -= 1;
         }
     }
 
+    #[inline(always)]
     pub fn contains(&self, entity: &E) -> bool {
         self.stored
             .get(entity.index())
             .is_some_and(|slot| slot.version == entity.version())
     }
 
+    #[inline(always)]
     pub fn len(&self) -> usize { self.count as usize }
 
+    #[inline(always)]
     pub fn is_empty(&self) -> bool { self.count == 0 }
 
+    #[inline(always)]
+    pub fn get_entities(&self) -> Vec<&E> {
+        self.stored
+            .iter()
+            .filter_map(|slot| slot.get_content())
+            .collect::<Vec<_>>()
+    }
+
+    #[inline(always)]
     pub fn iter(&self) -> EntityIterator<'_, E> {
         self.into_iter()
     }
@@ -220,7 +230,7 @@ impl<E: Entity> EntityManager<E> {
 impl<E: Entity> std::fmt::Debug for EntityManager<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_list()
-            .entries(self.iter())
+            .entries(self.get_entities().iter())
             .finish()
     }
 }
@@ -256,7 +266,7 @@ mod entity_test {
         let mut removed = 0;
         for i in 0..created_ids.len() {
             if i > 0 && i % 3 == 0 {
-                let to_remove = created_ids.get(i-1).unwrap();
+                let to_remove = *created_ids.get(i-1).unwrap();
                 manager.destroy(to_remove);
                 removed += 1;
             }

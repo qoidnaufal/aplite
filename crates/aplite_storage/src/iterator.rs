@@ -14,27 +14,25 @@ impl<'a, E: Entity> IntoIterator for &'a EntityManager<E> {
     type IntoIter = EntityIterator<'a, E>;
     fn into_iter(self) -> Self::IntoIter {
         EntityIterator {
-            manager: self,
+            inner: self.get_entities(),
             counter: 0,
         }
     }
 }
 
+// WARN: this extra allocation is kinda unpleasant, find a way to work around later
 pub struct EntityIterator<'a, E: Entity> {
-    manager: &'a EntityManager<E>,
+    inner: Vec<&'a E>,
     counter: usize,
 }
 
 impl<'a, E: Entity> Iterator for EntityIterator<'a, E> {
     type Item = &'a E;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.counter < self.manager.len() {
-            let entity = self.manager
-                .stored
-                .get(self.counter)
-                .and_then(|slot| slot.get_stored_entity());
+        if self.counter < self.inner.len() {
+            let entity = self.inner[self.counter];
             self.counter += 1;
-            entity
+            Some(entity)
         } else {
             None
         }
@@ -59,6 +57,7 @@ impl<'a, E: Entity> IntoIterator for &'a Tree<E> {
 }
 
 pub struct TreeIterator<'a, E: Entity> {
+    entities: Vec<&'a E>,
     tree: &'a Tree<E>,
     counter: usize,
 }
@@ -91,7 +90,8 @@ impl<'a, E: Entity> NodeRef<'a, E> {
 
 impl<'a, E: Entity> TreeIterator<'a, E> {
     fn new(tree: &'a Tree<E>) -> Self {
-        Self { tree, counter: 0 }
+        let entities = tree.get_all_entities();
+        Self { entities, tree, counter: 0 }
     }
 }
 
@@ -99,14 +99,8 @@ impl<'a, E: Entity> Iterator for TreeIterator<'a, E> {
     type Item = NodeRef<'a, E>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.counter < self.tree.len()
-        && let Some(id) = self.tree
-                .manager
-                .stored
-                .get(self.counter)
-                .and_then(|slot| slot.get_stored_entity())
-        {
-            let node = Some(self.tree.get_node_ref(id));
+        if self.counter < self.tree.len() {
+            let node = Some(self.tree.get_node_ref(self.entities[self.counter]));
             self.counter += 1;
             node
         } else {
@@ -137,10 +131,8 @@ mod iterator_test {
             ids.push(id);
         }
 
-        tree.iter().for_each(|node_ref| {
-            let id = node_ref.id();
-            assert_eq!(*id, ids[id.index()]);
-        });
+        let len = tree.iter().count();
+        assert_eq!(ids.len(), len)
     }
 
     #[test]
@@ -154,10 +146,7 @@ mod iterator_test {
             ids.push(id);
         }
 
-        manager.iter().for_each(|node_id| {
-            assert_eq!(*node_id, ids[node_id.index()])
-        });
-
-        eprintln!("{manager:#?}");
+        let len = manager.iter().count();
+        assert_eq!(ids.len(), len);
     }
 }

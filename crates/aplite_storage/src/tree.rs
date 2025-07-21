@@ -67,10 +67,12 @@ impl<E: Entity> Tree<E> {
         self.add_sibling_with_parent(parent, entity, sibling);
     }
 
+    #[inline(always)]
     fn set_parent(&mut self, entity: &E, parent: Option<E>) {
         self.parent[entity.index()] = parent;
     }
 
+    #[inline(always)]
     fn add_first_child(&mut self, entity: &E, child: E) {
         self.set_parent(&child, Some(*entity));
         self.first_child[entity.index()] = Some(child);
@@ -82,6 +84,7 @@ impl<E: Entity> Tree<E> {
         }
     }
 
+    #[inline(always)]
     fn add_sibling_with_parent(
         &mut self,
         parent: Option<E>,
@@ -94,6 +97,30 @@ impl<E: Entity> Tree<E> {
             current = sibling;
         }
         self.next_sibling[current.index()] = Some(next_sibling);
+    }
+
+    pub fn remove(&mut self, entity: E) -> Vec<E> {
+        let mut to_remove = vec![entity];
+        let mut current = entity;
+
+        while let Some(children) = self.get_all_children(&current) {
+            children.iter().for_each(|child| current = *child);
+            to_remove.extend_from_slice(&children);
+        }
+
+        // shifting
+        if let Some(prev) = self.get_prev_sibling(&entity).copied() {
+            self.next_sibling[prev.index()] = self.get_next_sibling(&entity).copied();
+        } else if let Some(parent) = self.get_parent(&entity).copied() {
+            self.first_child[parent.index()] = self.get_next_sibling(&entity).copied();
+        }
+        
+        to_remove.iter().for_each(|entity| self.manager.destroy(*entity));
+        to_remove
+    }
+
+    pub fn get_all_entities(&self) -> Vec<&E> {
+        self.manager.get_entities()
     }
 
     /// get all the entities which has no parent
@@ -233,56 +260,6 @@ impl<E: Entity> Tree<E> {
     pub fn iter(&self) -> TreeIterator<'_, E> { self.into_iter() }
 }
 
-// pub struct TreeIteratorMut<'a, E: Entity> {
-//     tree: &'a mut Tree<E>,
-//     counter: usize,
-// }
-
-// impl<'a, E: Entity> TreeIteratorMut<'a, E> {
-//     fn new(tree: &'a mut Tree<E>) -> Self {
-//         Self { tree, counter: 0 }
-//     }
-// }
-
-// impl<'a, E: Entity> Iterator for TreeIteratorMut<'a, E> {
-//     type Item = NodeMut<'a, E>;
-//     fn next(&mut self) -> Option<Self::Item> {
-//         if self.counter < self.tree.len() {
-//             let node = self.tree.get_node_mut(self.counter);
-//             self.counter += 1;
-//             Some(node)
-//         } else {
-//             None
-//         }
-//     }
-// }
-
-// pub struct NodeMut<'a, E: Entity> {
-//     id: &'a mut E,
-//     parent: Option<&'a mut E>,
-//     first_child: Option<&'a mut E>,
-//     next_sibling: Option<&'a mut E>,
-// }
-
-// impl<'a, E: Entity> NodeMut<'a, E> {
-//     fn new(tree: &'a mut Tree<E>, idx: usize) -> Self {
-//         Self {
-//             id: &mut tree.entities[idx],
-//             parent: tree.parent[idx].as_mut(),
-//             first_child: tree.first_child[idx].as_mut(),
-//             next_sibling: tree.next_sibling[idx].as_mut(),
-//         }
-//     }
-// }
-
-// impl<'a, E: Entity> IntoIterator for &'a mut Tree<E> {
-//     type Item = NodeMut<'a, E>;
-//     type IntoIter = TreeIteratorMut<'a, E>;
-//     fn into_iter(self) -> Self::IntoIter {
-//         TreeIteratorMut::new(self)
-//     }
-// }
-
 impl<E: Entity> std::fmt::Debug for Tree<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         fn get_frame<'a, E: Entity>(tree: &'a Tree<E>, entity: &'a E) -> &'a str {
@@ -374,7 +351,8 @@ mod tree_test {
     #[test]
     fn tree_test() {
         let tree = setup_tree();
-        eprintln!("{:?}", tree);
+        eprintln!("{tree:?}");
+        eprintln!("{:?}", tree.manager);
 
         let ancestor = tree.get_root(&TestId(9, 0));
         let parent = tree.get_parent(&TestId(6, 0));
@@ -386,5 +364,37 @@ mod tree_test {
         assert_eq!(parent, Some(&TestId(5, 0)));
         assert_eq!(four_is_mem_of_two, nine_is_mem_of_two);
         assert_eq!(next_sibling, Some(&TestId(7, 0)));
+    }
+
+    #[test]
+    fn remove_first_child() {
+        let mut tree = setup_tree();
+
+        let first_child = tree.get_first_child(&TestId(2, 0)).copied().unwrap();
+        let next_sibling = tree.get_next_sibling(&first_child).copied();
+        assert_eq!(first_child, TestId(3, 0));
+
+        let removed = tree.remove(TestId(3, 0));
+
+        let first_child_after_removal = tree.get_first_child(&TestId(2, 0)).copied();
+        assert_eq!(first_child_after_removal, next_sibling);
+
+        eprintln!("{tree:?}");
+        eprintln!("remaining {} > {:#?}", tree.manager.len(), tree.manager);
+        eprintln!("removed > {removed:?}");
+    }
+
+    #[test]
+    fn remove_middle_child() {
+        let mut tree = setup_tree();
+
+        let sibling_before_removal = tree.get_next_sibling(&TestId(4, 0)).copied();
+        let removed = tree.remove(TestId(4, 0));
+        let sibling_after_removal = tree.get_next_sibling(&TestId(3, 0)).copied();
+        assert_eq!(sibling_before_removal, sibling_after_removal);
+
+        eprintln!("{tree:?}");
+        eprintln!("remaining {} > {:#?}", tree.manager.len(), tree.manager);
+        eprintln!("removed > {removed:?}");
     }
 }
