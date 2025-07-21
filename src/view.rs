@@ -527,7 +527,7 @@ pub trait Layout: Widget + Sized {
 
 impl<T> Layout for T where T: Widget + Sized {}
 
-#[allow(unused)]
+#[cfg(test)]
 mod alt_view {
     use std::collections::HashMap;
     use aplite_storage::{Tree, Entity, entity};
@@ -545,20 +545,24 @@ mod alt_view {
     struct Comp2 {}
     struct Comp3 {}
 
-    struct ButtonAlt {
+    struct WidgetAlt {
         id: ViewIdAlt,
     }
 
-    impl ButtonAlt {
+    impl WidgetAlt {
         fn new(cx: &mut ContextAlt) -> Self {
             let id = cx.tree.create_entity();
             let comp1 = Comp1 {};
+            let comp2 = Comp2 {};
+            let comp3 = Comp3 {};
             cx.comp1.insert(id, comp1);
+            cx.comp2.insert(id, comp2);
+            cx.comp3.insert(id, comp3);
             Self { id, }
         }
     }
 
-    trait WidgetAlt: Sized {
+    trait WidgetTraitAlt: Sized {
         fn id(&self) -> ViewIdAlt;
 
         fn append_child(self, cx: &mut ContextAlt, child: impl IntoViewAlt) -> Self {
@@ -567,7 +571,7 @@ mod alt_view {
         }
     }
 
-    impl WidgetAlt for ButtonAlt {
+    impl WidgetTraitAlt for WidgetAlt {
         fn id(&self) -> ViewIdAlt {
             self.id
         }
@@ -577,48 +581,44 @@ mod alt_view {
         id: ViewIdAlt,
     }
 
-    trait IntoViewAlt: WidgetAlt {
+    trait IntoViewAlt: WidgetTraitAlt {
         fn into_view(self) -> ViewAlt {
             ViewAlt { id: self.id() }
         }
     }
 
-    impl<T: WidgetAlt> IntoViewAlt for T {}
+    impl<T: WidgetTraitAlt> IntoViewAlt for T {}
 
-    #[cfg(test)]
-    mod alt_test {
-        use super::*;
+    fn root(cx: &mut ContextAlt) -> impl IntoViewAlt {
+        let first = WidgetAlt::new(cx);
+        let parent = WidgetAlt::new(cx).append_child(cx, first);
 
-        fn root(cx: &mut ContextAlt) -> impl IntoViewAlt {
-            let first = ButtonAlt::new(cx);
-            let parent = ButtonAlt::new(cx).append_child(cx, first);
+        branch(cx, parent)
+    }
 
-            branch(cx, parent)
-        }
+    // FIXME: for now this feels like a work-around instead of the correct implementation
+    fn branch(cx: &mut ContextAlt, parent: impl IntoViewAlt) -> impl IntoViewAlt {
+        // if let Some(first_child) = cx.tree.get_first_child(&parent.id()).copied() {
+        //     let second = ButtonAlt::new(cx);
+        //     cx.tree.add_child(&first_child, second.id());
+        // }
+        let second = WidgetAlt::new(cx);
+        parent.append_child(cx, second)
+    }
 
-        fn branch(cx: &mut ContextAlt, parent: impl IntoViewAlt) -> impl IntoViewAlt {
-            // if let Some(first_child) = cx.tree.get_first_child(&parent.id()).copied() {
-            //     let second = ButtonAlt::new(cx);
-            //     cx.tree.add_child(&first_child, second.id());
-            // }
-            let second = ButtonAlt::new(cx);
-            parent.append_child(cx, second)
-        }
+    #[test]
+    fn alt() {
+        let mut cx = ContextAlt {
+            tree: Tree::new(),
+            comp1: HashMap::new(),
+            comp2: HashMap::new(),
+            comp3: HashMap::new(),
+        };
 
-        #[test]
-        fn alt() {
-            let mut cx = ContextAlt {
-                tree: Tree::new(),
-                comp1: HashMap::new(),
-                comp2: HashMap::new(),
-                comp3: HashMap::new(),
-            };
+        let root = root(&mut cx).into_view();
+        let child = cx.tree.get_last_child(&root.id);
 
-            let root = root(&mut cx).into_view();
-            let child = *cx.tree.get_first_child(&root.id).unwrap();
-
-            eprintln!("{:?}", cx.tree);
-            assert_eq!(child, ViewIdAlt(0));
-        }
+        eprintln!("{:?}", cx.tree);
+        assert_eq!(child, Some(&ViewIdAlt(2, 0)));
     }
 }

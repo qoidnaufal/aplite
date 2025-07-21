@@ -1,91 +1,20 @@
-/// A trait that needs to be implemented for any type to be stored in the [`Tree`]
-pub trait Entity
-where
-    Self : std::fmt::Debug + Copy + PartialEq + PartialOrd
-{
-    /// If you created this manually, you also need to manually [`insert()`](Tree::insert) it
-    /// to the [`Tree`]. The [`Tree`] provides a hassle free [`create_entity()`](Tree::create_entity) method
-    /// to create an [`Entity`] and automatically insert it.
-    fn new() -> Self;
-
-    /// The index where this [`Entity`] is being stored inside the [`Tree`]
-    fn index(&self) -> usize;
-}
-
-/// A macro to confeniently implement [`Entity`] trait to be stored in the [`Tree`].
-/// You just need to specify the name.
-/// # Example
-/// ```ignore
-/// entity! {
-///     SuperUniqueIdName;
-///     AnotherId;
-/// }
-///
-/// let mut tree: Tree<SuperUniqueIdName> = Tree::new();
-/// let super_unique_id_name: SuperUniqueIdName = tree.create_entity();
-/// let another_id = AnotherId::new();
-/// ```
-#[macro_export]
-macro_rules! entity {
-    { $vis:vis $name:ident } => {
-        #[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-        $vis struct $name(u64);
-
-        impl Entity for $name {
-            fn new() -> $name {
-                static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-                Self(COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
-            }
-
-            fn index(&self) -> usize {
-                self.0 as usize
-            }
-        }
-
-        impl std::fmt::Debug for $name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                let name = stringify!($name);
-                write!(f, "{}({})", name, self.0)
-            }
-        }
-
-        impl std::fmt::Display for $name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                let name = stringify!($name);
-                write!(f, "{}({})", name, self.0)
-            }
-        }
-    };
-
-    { $vis:vis $name:ident, } => {
-        entity! { $vis $name }
-    };
-
-    { $vis:vis $name:ident, $($vis2:vis $name2:ident),* } => {
-        entity! { $vis $name }
-        entity! { $($vis2 $name2),* }
-    };
-
-    { $vis:vis $name:ident, $($vis2:vis $name2:ident),*, } => {
-        entity! { $vis $name }
-        entity! { $($vis2 $name2),* }
-    };
-}
+use crate::entity_manager::{Entity, EntityManager};
+use crate::iterator::{TreeIterator, NodeRef};
 
 /// Array based data structure, where the related information
 /// is allocated parallel to the main [`Entity`]. This should enable
 /// fast and efficient indexing when accessing the data
 pub struct Tree<E: Entity> {
-    entities: Vec<E>,
-    parent: Vec<Option<E>>,
-    first_child: Vec<Option<E>>,
-    next_sibling: Vec<Option<E>>,
+    pub(crate) manager: EntityManager<E>,
+    pub(crate) parent: Vec<Option<E>>,
+    pub(crate) first_child: Vec<Option<E>>,
+    pub(crate) next_sibling: Vec<Option<E>>,
 }
 
 impl<E: Entity> Default for Tree<E> {
     fn default() -> Self {
         Self {
-            entities: Vec::new(),
+            manager: EntityManager::new(),
             parent: Vec::new(),
             first_child: Vec::new(),
             next_sibling: Vec::new(),
@@ -103,7 +32,7 @@ impl<E: Entity> Tree<E> {
     /// Create a new [`Tree`] with the specified capacity
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            entities: Vec::with_capacity(capacity),
+            manager: EntityManager::with_capacity(capacity),
             parent: Vec::with_capacity(capacity),
             first_child: Vec::with_capacity(capacity),
             next_sibling: Vec::with_capacity(capacity),
@@ -114,18 +43,11 @@ impl<E: Entity> Tree<E> {
     /// Doesn't calculate the location of the created entity.
     /// You can later add children, next siblings, or set the parent to this entity
     pub fn create_entity(&mut self) -> E {
-        let entity = E::new();
-        self.insert(entity);
-        entity
-    }
-
-    /// Insert an entity to the the tree, doesn't calculate the entity's location
-    /// You can later add children, next siblings, or set the parent to this entity
-    pub fn insert(&mut self, entity: E) {
-        self.entities.push(entity);
+        let entity = self.manager.create_entity();
         self.first_child.push(None);
         self.next_sibling.push(None);
         self.parent.push(None);
+        entity
     }
 
     /// Adding an entity to be the child of a parent.
@@ -176,9 +98,9 @@ impl<E: Entity> Tree<E> {
 
     /// get all the entities which has no parent
     pub fn get_all_roots(&self) -> Vec<&E> {
-        self.entities
+        self.manager
             .iter()
-            .filter(|e| self.get_parent(e).is_none())
+            .filter(|e| self.get_parent(*e).is_none())
             .collect()
 
     }
@@ -301,78 +223,14 @@ impl<E: Entity> Tree<E> {
     }
 
     pub fn len(&self) -> usize {
-        self.entities.len()
+        self.manager.len()
     }
 
-    pub fn get_node_ref(&self, index: usize) -> NodeRef<'_, E> {
-        NodeRef::new(self, index)
+    pub fn get_node_ref<'a>(&'a self, entity: &'a E) -> NodeRef<'a, E> {
+        NodeRef::new(self, entity)
     }
 
     pub fn iter(&self) -> TreeIterator<'_, E> { self.into_iter() }
-}
-
-pub struct NodeRef<'a, E: Entity> {
-    id: &'a E,
-    parent: Option<&'a E>,
-    first_child: Option<&'a E>,
-    next_sibling: Option<&'a E>,
-}
-
-impl<'a, E: Entity> NodeRef<'a, E> {
-    fn new(tree: &'a Tree<E>, idx: usize) -> Self {
-        Self {
-            id: &tree.entities[idx],
-            parent: tree.parent[idx].as_ref(),
-            first_child: tree.first_child[idx].as_ref(),
-            next_sibling: tree.next_sibling[idx].as_ref(),
-        }
-    }
-
-    pub fn id(&self) -> &'a E { self.id }
-
-    pub fn parent(&self) -> Option<&'a E> { self.parent }
-
-    pub fn first_child(&self) -> Option<&'a E> { self.first_child }
-
-    pub fn next_sibling(&self) -> Option<&'a E> { self.next_sibling }
-}
-
-pub struct TreeIterator<'a, E: Entity> {
-    tree: &'a Tree<E>,
-    counter: usize,
-}
-
-impl<'a, E: Entity> TreeIterator<'a, E> {
-    fn new(tree: &'a Tree<E>) -> Self {
-        Self { tree, counter: 0 }
-    }
-}
-
-impl<'a, E: Entity> Iterator for TreeIterator<'a, E> {
-    type Item = NodeRef<'a, E>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.counter < self.tree.len() {
-            let node = Some(self.tree.get_node_ref(self.counter));
-            self.counter += 1;
-            node
-        } else {
-            None
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.counter, Some(self.tree.len()))
-    }
-}
-
-impl<'a, E: Entity> IntoIterator for &'a Tree<E> {
-    type Item = NodeRef<'a, E>;
-    type IntoIter = TreeIterator<'a, E>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        TreeIterator::new(self)
-    }
 }
 
 // pub struct TreeIteratorMut<'a, E: Entity> {
@@ -492,15 +350,12 @@ impl<E: Entity> std::fmt::Debug for Tree<E> {
 #[cfg(test)]
 mod tree_test {
     use super::*;
+    use crate::entity;
 
-    entity! {
-        Id,
-        AnotherId,
-        Abc
-    }
+    entity! { TestId }
 
-    fn setup_tree() -> Tree<Id> {
-        let mut tree: Tree<Id> = Tree::with_capacity(10);
+    fn setup_tree() -> Tree<TestId> {
+        let mut tree: Tree<TestId> = Tree::with_capacity(10);
         let mut parent = None;
         for i in 0..11 {
             let id = tree.create_entity();
@@ -508,7 +363,7 @@ mod tree_test {
                 tree.add_child(parent, id);
             }
             if i > 0 && i % 3 == 0 {
-                parent = tree.get_first_child(&Id(1)).map(|e| *e);
+                parent = tree.get_first_child(&TestId(1, 0)).map(|e| *e);
             } else {
                 parent = Some(id);
             }
@@ -521,24 +376,15 @@ mod tree_test {
         let tree = setup_tree();
         eprintln!("{:?}", tree);
 
-        let ancestor = tree.get_root(&Id(9));
-        let parent = tree.get_parent(&Id(6));
-        let four_is_mem_of_two = tree.is_member_of(&Id(4), &Id(2));
-        let nine_is_mem_of_two = tree.is_member_of(&Id(9), &Id(2));
-        let next_sibling = tree.get_next_sibling(&Id(4));
+        let ancestor = tree.get_root(&TestId(9, 0));
+        let parent = tree.get_parent(&TestId(6, 0));
+        let four_is_mem_of_two = tree.is_member_of(&TestId(4, 0), &TestId(2, 0));
+        let nine_is_mem_of_two = tree.is_member_of(&TestId(9, 0), &TestId(2, 0));
+        let next_sibling = tree.get_next_sibling(&TestId(4, 0));
 
-        assert_eq!(ancestor, Some(&Id(0)));
-        assert_eq!(parent, Some(&Id(5)));
+        assert_eq!(ancestor, Some(&TestId(0, 0)));
+        assert_eq!(parent, Some(&TestId(5, 0)));
         assert_eq!(four_is_mem_of_two, nine_is_mem_of_two);
-        assert_eq!(next_sibling, Some(&Id(7)));
-    }
-
-    #[test]
-    fn macro_test() {
-        let a = AnotherId::new();
-        assert_eq!(a.index(), 0);
-
-        let b = AnotherId::new();
-        assert!(a.index() < b.index());
+        assert_eq!(next_sibling, Some(&TestId(7, 0)));
     }
 }
