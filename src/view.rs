@@ -1,9 +1,10 @@
-use std::collections::HashMap;
-use std::cell::RefCell;
+use std::cell::{RefCell, Ref, RefMut};
+use std::rc::{Rc, Weak};
+
 use aplite_reactive::*;
 use aplite_types::{Matrix3x2, Rgba, Size, CornerRadius};
 use aplite_renderer::{Element, ImageData, Shape};
-use aplite_storage::{entity, Entity, Tree};
+use aplite_storage::{entity, Entity, Tree, Map};
 
 use crate::widget_state::WidgetState;
 
@@ -26,8 +27,8 @@ thread_local! {
 
 pub(crate) struct ViewStorage {
     pub(crate) tree: RefCell<Tree<ViewId>>,
-    pub(crate) storage: RefCell<HashMap<ViewId, View>>,
-    pub(crate) image_fn: RefCell<HashMap<ViewId, Box<dyn Fn() -> ImageData>>>,
+    pub(crate) storage: RefCell<Map<ViewId, View>>,
+    pub(crate) image_fn: RefCell<Map<ViewId, Box<dyn Fn() -> ImageData>>>,
     pub(crate) hoverable: RefCell<Vec<ViewId>>,
     pub(crate) dirty: RwSignal<Option<ViewId>>,
 }
@@ -36,8 +37,8 @@ impl ViewStorage {
     fn new() -> Self {
         Self {
             tree: RefCell::new(Tree::with_capacity(1024)),
-            storage: RefCell::new(HashMap::new()),
-            image_fn: RefCell::new(HashMap::new()),
+            storage: RefCell::new(Map::new()),
+            image_fn: RefCell::new(Map::new()),
             hoverable: RefCell::new(Vec::new()),
             dirty: RwSignal::new(None),
         }
@@ -107,7 +108,7 @@ impl ViewStorage {
         &self,
         root_id: &ViewId,
         screen: Size,
-    ) -> Vec<(RwSignal<Element>, Matrix3x2, Option<Box<dyn Fn() -> ImageData>>)> {
+    ) -> Vec<(ViewNode, Matrix3x2, Option<Box<dyn Fn() -> ImageData>>)> {
         self.get_all_members_of(root_id)
             .iter()
             .enumerate()
@@ -116,9 +117,9 @@ impl ViewStorage {
                     .borrow()
                     .get(view_id)
                     .map(|view| {
-                        view.node.0.update(|elem| elem.set_transform_id(idx as _));
+                        view.node.0.borrow_mut().set_transform_id(idx as _);
                         let image = self.image_fn.borrow_mut().remove(view_id);
-                        let element = view.node.0;
+                        let element = view.node.clone();
                         let transform = view.widget_state.get_transform(screen);
                         (element, transform, image)
                     })
@@ -246,72 +247,64 @@ impl Widget for CircleWidget {
     }
 
     fn node(&self) -> ViewNode {
-        self.node
+        self.node.clone()
     }
 }
 
 /// A wrapper over [`Element`]
-#[derive(Clone, Copy)]
-pub struct ViewNode(RwSignal<Element>);
+pub struct ViewNode(Rc<RefCell<Element>>);
+
+impl Clone for ViewNode {
+    fn clone(&self) -> Self {
+        Self(Rc::clone(&self.0))
+    }
+}
 
 impl ViewNode {
     pub fn new() -> Self {
-        Self(RwSignal::new(Element::new()))
+        Self(Rc::new(RefCell::new(Element::new())))
     }
 
     pub fn with_fill_color(self, color: Rgba<u8>) -> Self {
-        self.set_fill_color(color);
+        self.0.borrow_mut().set_fill_color(color);
         self
     }
 
     pub fn with_stroke_color(self, color: Rgba<u8>) -> Self {
-        self.set_stroke_color(color);
+        self.0.borrow_mut().set_stroke_color(color);
         self
     }
 
     pub fn with_stroke_width(self, val: u32) -> Self {
-        self.set_stroke_width(val);
+        self.0.borrow_mut().set_stroke_width(val);
         self
     }
 
     pub fn with_shape(self, shape: Shape) -> Self {
-        self.set_shape(shape);
+        self.0.borrow_mut().set_shape(shape);
         self
     }
 
     pub fn with_rotation(self, val: f32) -> Self {
-        self.set_rotation(val);
+        self.0.borrow_mut().set_rotation(val);
         self
     }
 
     pub fn with_corner_radius(self, val: CornerRadius) -> Self {
-        self.set_corner_radius(val);
+        self.0.borrow_mut().set_corner_radius(val);
         self
     }
 
-    pub(crate) fn set_fill_color(&self, color: Rgba<u8>) {
-        self.0.update_untracked(|el| el.set_fill_color(color));
+    pub(crate) fn weak_ref(&self) -> Weak<RefCell<Element>> {
+        Rc::downgrade(&self.0)
     }
 
-    pub(crate) fn set_stroke_color(&self, color: Rgba<u8>) {
-        self.0.update_untracked(|el| el.set_stroke_color(color));
+    pub(crate) fn borrow(&self) -> Ref<'_, Element> {
+        self.0.borrow()
     }
 
-    pub(crate) fn set_stroke_width(&self, val: u32) {
-        self.0.update_untracked(|el| el.set_stroke_width(val));
-    }
-
-    pub(crate) fn set_shape(&self, shape: Shape) {
-        self.0.update_untracked(|el| el.set_shape(shape));
-    }
-
-    /// value must be in degree
-    pub(crate) fn set_rotation(&self, val: f32) {
-        self.0.update_untracked(|el| el.set_rotation(val.to_radians()));
-    }
-
-    pub(crate) fn set_corner_radius(&self, val: CornerRadius) {
-        self.0.update_untracked(|el| el.set_corner_radius(val));
+    pub(crate) fn borrow_mut(&self) -> RefMut<'_, Element> {
+        self.0.borrow_mut()
     }
 }
 
@@ -326,14 +319,16 @@ pub trait Style: Widget + Sized {
     where
         F: FnEl<Rgba<u8>> + 'static,
     {
-        let node = self.node();
+        let node = self.node().weak_ref();
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
         let root_id = self.widget_state().root_id;
 
         Effect::new(move |prev| {
             let color = f(prev);
-            node.set_fill_color(color);
-            dirty.set(root_id.get_untracked());
+            if let Some(node) = node.upgrade() {
+                node.borrow_mut().set_fill_color(color);
+                dirty.set(root_id.get_untracked());
+            }
             color
         });
         self
@@ -343,14 +338,16 @@ pub trait Style: Widget + Sized {
     where
         F: FnEl<Rgba<u8>> + 'static
     {
-        let node = self.node();
+        let node = self.node().weak_ref();
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
         let root_id = self.widget_state().root_id;
 
         Effect::new(move |prev| {
             let color = f(prev);
-            node.set_stroke_color(color);
-            dirty.set(root_id.get_untracked());
+            if let Some(node) = node.upgrade() {
+                node.borrow_mut().set_stroke_color(color);
+                dirty.set(root_id.get_untracked());
+            }
             color
         });
         self
@@ -363,22 +360,29 @@ pub trait Style: Widget + Sized {
         self.widget_state().hoverable.set_untracked(true);
 
         let node = self.node();
-        let init_color = node.0.read_untracked(|elem| elem.fill_color());
+        let init_color = node.0.borrow().fill_color();
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
         let is_hovered = self.widget_state().is_hovered;
         let is_clicked = self.widget_state().is_clicked;
         let root_id = self.widget_state().root_id;
 
+        let weak_node = node.weak_ref();
+
         Effect::new(move |prev| {
             let color = f(prev);
             if is_hovered.get() {
                 if !is_clicked.get() {
-                    node.set_fill_color(color);
+                    if let Some(node) = weak_node.upgrade() {
+                        node.borrow_mut().set_fill_color(color);
+                        dirty.set(root_id.get_untracked());
+                    }
                 }
             } else {
-                node.set_fill_color(init_color);
+                if let Some(node) = weak_node.upgrade() {
+                    node.borrow_mut().set_fill_color(init_color);
+                    dirty.set(root_id.get_untracked());
+                }
             }
-            dirty.set(root_id.get_untracked());
             color
         });
         self
@@ -389,7 +393,8 @@ pub trait Style: Widget + Sized {
         F: FnEl<Rgba<u8>> + 'static,
     {
         self.widget_state().hoverable.set_untracked(true);
-        let node = self.node();
+
+        let node = self.node().weak_ref();
         let is_clicked = self.widget_state().is_clicked;
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
         let root_id = self.widget_state().root_id;
@@ -397,9 +402,11 @@ pub trait Style: Widget + Sized {
         Effect::new(move |prev| {
             let color = f(prev);
             if is_clicked.get() {
-                node.set_fill_color(color);
+                if let Some(node) = node.upgrade() {
+                    node.borrow_mut().set_fill_color(color);
+                    dirty.set(root_id.get_untracked());
+                }
             }
-            dirty.set(root_id.get_untracked());
             color
         });
         self
@@ -409,14 +416,16 @@ pub trait Style: Widget + Sized {
     where
         F: FnEl<u32> + 'static
     {
-        let node = self.node();
+        let node = self.node().weak_ref();
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
         let root_id = self.widget_state().root_id;
 
         Effect::new(move |prev| {
             let val = f(prev);
-            node.set_stroke_width(val);
-            dirty.set(root_id.get_untracked());
+            if let Some(node) = node.upgrade() {
+                node.borrow_mut().set_stroke_width(val);
+                dirty.set(root_id.get_untracked());
+            }
             val
         });
         self
@@ -426,14 +435,16 @@ pub trait Style: Widget + Sized {
     where
         F: FnEl<f32> + 'static
     {
-        let node = self.node();
+        let node = self.node().weak_ref();
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
         let root_id = self.widget_state().root_id;
 
         Effect::new(move |prev| {
             let val = f(prev);
-            node.set_rotation(val);
-            dirty.set(root_id.get_untracked());
+            if let Some(node) = node.upgrade() {
+                node.borrow_mut().set_rotation(val.to_radians());
+                dirty.set(root_id.get_untracked());
+            }
             val
         });
         self
@@ -443,14 +454,16 @@ pub trait Style: Widget + Sized {
     where
         F: FnEl<CornerRadius> + 'static
     {
-        let node = self.node();
+        let node = self.node().weak_ref();
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
         let root_id = self.widget_state().root_id;
 
         Effect::new(move |prev| {
             let val = f(prev);
-            node.set_corner_radius(val);
-            dirty.set(root_id.get_untracked());
+            if let Some(node) = node.upgrade() {
+                node.borrow_mut().set_corner_radius(val);
+                dirty.set(root_id.get_untracked());
+            }
             val
         });
         self
@@ -460,14 +473,16 @@ pub trait Style: Widget + Sized {
     where
         F: FnEl<Shape> + 'static
     {
-        let node = self.node();
+        let node = self.node().weak_ref();
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
         let root_id = self.widget_state().root_id;
 
         Effect::new(move |prev| {
             let shape = f(prev);
-            node.set_shape(shape);
-            dirty.set(root_id.get_untracked());
+            if let Some(node) = node.upgrade() {
+                node.borrow_mut().set_shape(shape);
+                dirty.set(root_id.get_untracked());
+            }
             shape
         });
         self
@@ -529,11 +544,11 @@ impl<T> Layout for T where T: Widget + Sized {}
 
 #[cfg(test)]
 mod alt_view {
-    use std::collections::HashMap;
     use std::rc::Rc;
-    use std::cell::RefCell;
+    // use std::rc::Weak;
+    use std::cell::{RefCell, Ref, RefMut};
 
-    use aplite_storage::{Tree, Entity, entity};
+    use aplite_storage::{Tree, Entity, Map, entity};
     use aplite_reactive::*;
     use aplite_types::*;
 
@@ -542,31 +557,46 @@ mod alt_view {
     #[derive(Default)]
     struct ContextAlt {
         tree: Tree<ViewIdAlt>,
-        comp1: HashMap<ViewIdAlt, Comp1>,
-        comp2: HashMap<ViewIdAlt, Comp2>,
-        comp3: HashMap<ViewIdAlt, Comp3>,
         // WARN: this one uses Rc<RefCell<T>> hell, find another way
-        color: HashMap<ViewIdAlt, Rc<RefCell<Rgba<u8>>>>
+        color: Map<ViewIdAlt, Component<Rgba<u8>>>,
     }
 
-    struct Comp1 {}
-    struct Comp2 {}
-    struct Comp3 {}
+    struct Component<T>(Rc<RefCell<T>>);
 
+    impl<T> Component<T> {
+        fn new(value: T) -> Self {
+            Self(Rc::new(RefCell::new(value)))
+        }
+
+        fn inner_ref(&self) -> Ref<'_, T> {
+            self.0.borrow()
+        }
+
+        #[allow(unused)]
+        fn inner_mut(&self) -> RefMut<'_, T> {
+            self.0.borrow_mut()
+        }
+    }
+
+    impl<T: std::fmt::Debug> std::fmt::Debug for Component<T> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_tuple("Color")
+                .field(&*self.inner_ref())
+                .finish()
+        }
+    }
+
+    #[derive(Debug)]
     struct WidgetAlt {
         id: ViewIdAlt,
+        // color_id: ColorId,
+        // rect_id: RectId,
     }
 
     impl WidgetAlt {
         fn new(cx: &mut ContextAlt) -> Self {
             let id = cx.tree.create_entity();
-            let comp1 = Comp1 {};
-            let comp2 = Comp2 {};
-            let comp3 = Comp3 {};
-            let color = Rc::new(RefCell::new(Rgba::RED));
-            cx.comp1.insert(id, comp1);
-            cx.comp2.insert(id, comp2);
-            cx.comp3.insert(id, comp3);
+            let color = Component::new(Rgba::RED);
             cx.color.insert(id, color);
             Self { id }
         }
@@ -580,20 +610,13 @@ mod alt_view {
             self
         }
 
-        fn comp1(self, cx: &mut ContextAlt, f: impl Fn(&mut Comp1)) -> Self {
-            if let Some(comp1) = cx.comp1.get_mut(&self.id()) {
-                f(comp1);
-            }
-            self
-        }
-
         fn set_color(
             self,
             cx: &mut ContextAlt,
             mut color_fn: impl FnMut(Option<Rgba<u8>>) -> Rgba<u8> + 'static
         ) -> Self {
             if let Some(color) = cx.color.get(&self.id()) {
-                let weak = Rc::downgrade(color);
+                let weak = Rc::downgrade(&color.0);
                 Effect::new(move |prev| {
                     let new_color = color_fn(prev);
                     if let Some(strong) = weak.upgrade() {
@@ -607,22 +630,27 @@ mod alt_view {
     }
 
     impl WidgetTraitAlt for WidgetAlt {
-        fn id(&self) -> ViewIdAlt {
-            self.id
-        }
+        fn id(&self) -> ViewIdAlt { self.id }
     }
 
+    trait Render: std::fmt::Debug + 'static {}
+
+    impl Render for WidgetAlt {}
+
+    #[derive(Debug)]
     struct ViewAlt {
         id: ViewIdAlt,
     }
 
-    trait IntoViewAlt: WidgetTraitAlt {
+    // WARN: passing &mut Context on every widget function
+    // makes this trait becomes useless
+    trait IntoViewAlt: WidgetTraitAlt + Render {
         fn into_view(self) -> ViewAlt {
             ViewAlt { id: self.id() }
         }
     }
 
-    impl<T: WidgetTraitAlt> IntoViewAlt for T {}
+    impl<T: WidgetTraitAlt + Render> IntoViewAlt for T {}
 
     fn root(
         cx: &mut ContextAlt,
@@ -632,14 +660,17 @@ mod alt_view {
         let first = WidgetAlt::new(cx);
         let parent = WidgetAlt::new(cx)
             .set_color(cx, color_fn)
-            .comp1(cx, |_| {})
             .append_child(cx, first);
 
         branch(cx, parent, set_counter)
     }
 
-    // FIXME: for now this feels like a work-around instead of the correct implementation
-    fn branch(cx: &mut ContextAlt, parent: impl IntoViewAlt, set_counter: WriteSignal<i32>) -> impl IntoViewAlt {
+    // FIXME: for now this feels like a work-around instead of the ideal implementation
+    fn branch(
+        cx: &mut ContextAlt,
+        parent: impl IntoViewAlt,
+        set_counter: WriteSignal<i32>
+    ) -> impl IntoViewAlt {
         set_counter.set(3);
         let second = WidgetAlt::new(cx);
         parent.append_child(cx, second)
@@ -665,10 +696,10 @@ mod alt_view {
         let color = cx.color.get(&root.id);
         eprintln!("{color:?}");
         assert!(color.is_some());
-        assert_eq!(*color.unwrap().borrow(), rgba_u8(255, 255, 255, 255));
+        assert_eq!(*color.unwrap().inner_ref(), rgba_u8(255, 255, 255, 255));
 
         set_counter.set(69);
         eprintln!("{color:?}");
-        assert_eq!(*color.unwrap().borrow(), rgba_u8(0, 0, 0, 0));
+        assert_eq!(*color.unwrap().inner_ref(), rgba_u8(0, 0, 0, 0));
     }
 }

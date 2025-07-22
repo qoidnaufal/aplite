@@ -1,8 +1,9 @@
 use std::any::Any;
-use std::collections::HashMap;
 use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicU64;
+
+use aplite_storage::Map;
 
 use crate::effect::{Effect, EffectInner};
 use crate::signal::Signal;
@@ -21,7 +22,7 @@ thread_local! {
 #########################################################
 */
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ReactiveId(u64);
 
 impl ReactiveId {
@@ -31,13 +32,25 @@ impl ReactiveId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+impl std::hash::Hash for ReactiveId {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write_u64(self.0);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct EffectId(u64);
 
 impl EffectId {
     pub(crate) fn new() -> Self {
         static EFFECT_ID: AtomicU64 = AtomicU64::new(0);
         Self(EFFECT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+    }
+}
+
+impl std::hash::Hash for EffectId {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write_u64(self.0);
     }
 }
 
@@ -49,8 +62,8 @@ impl EffectId {
 #########################################################
 */
 
-type SignalStorage = HashMap<ReactiveId, Signal>;
-type Subscribers = HashMap<EffectId, AnySubscriber>;
+type SignalStorage = Map<ReactiveId, Signal>;
+type Subscribers = Map<EffectId, AnySubscriber>;
 
 pub(crate) struct ReactiveGraph {
     pub(crate) signals: RefCell<SignalStorage>,

@@ -32,7 +32,7 @@ where
 #[macro_export]
 macro_rules! entity {
     { $vis:vis $name:ident } => {
-        #[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
         $vis struct $name(u64, u32);
 
         impl Entity for $name {
@@ -60,6 +60,12 @@ macro_rules! entity {
                 write!(f, "{}({})", stringify!($name), self.0)
             }
         }
+
+        impl std::hash::Hash for $name {
+            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                state.write_u64(self.0);
+            }
+        }
     };
 
     { $vis:vis $name:ident, } => {
@@ -76,6 +82,20 @@ macro_rules! entity {
         entity! { $($vis2 $name2),* }
     };
 }
+
+#[derive(Debug)]
+pub enum Error {
+    ReachedMaxId,
+    InternalCollision,
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::error::Error for Error {}
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub(crate) enum Content<T> {
@@ -159,25 +179,22 @@ impl<E: Entity> EntityManager<E> {
     }
 
     #[inline(always)]
-    pub fn try_create_entity(&mut self) -> Result<E, ()> {
-        if self.count + 1 == u64::MAX { return Err(()) }
+    pub fn try_create_entity(&mut self) -> Result<E, Error> {
+        if self.count + 1 == u64::MAX { return Err(Error::ReachedMaxId) }
 
         match self.stored.get_mut(self.next as usize) {
             // first time or after removal
-            Some(slot) => {
-                let next = match slot.content {
-                    Content::Vacant(idx) => idx,
-                    Content::Occupied(_) => self.next,
-                };
+            Some(slot) => match slot.content {
+                Content::Occupied(_) => return Err(Error::InternalCollision),
+                Content::Vacant(idx) => {
+                    let entity = E::new(self.next, slot.version);
+                    self.next = idx;
+                    self.count += 1;
+                    slot.content = Content::Occupied(entity);
 
-                let entity = E::new(self.next, slot.version);
-
-                slot.content = Content::Occupied(entity);
-                self.count += 1;
-                self.next = next;
-
-                Ok(entity)
-            },
+                    Ok(entity)
+                },
+            }
             None => {
                 let entity = Entity::new(self.next, 0);
                 self.stored.push(Slot::occupied(entity));

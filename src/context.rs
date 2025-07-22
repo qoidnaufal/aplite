@@ -176,9 +176,9 @@ impl Context {
                 .for_each(|(offset, (elem, mat, img))| {
                     let info = img.as_ref().and_then(|image_fn| renderer.render_image(image_fn));
                     if let Some(id) = info {
-                        elem.update_untracked(|elem| elem.set_atlas_id(id));
+                        elem.borrow_mut().set_atlas_id(id);
                     };
-                    renderer.submit_data(elem.get_untracked(), *mat, offset as _);
+                    renderer.submit_data(*elem.borrow(), *mat, offset as _);
                 });
         });
         // TODO: renderer.encode_scene(scene);
