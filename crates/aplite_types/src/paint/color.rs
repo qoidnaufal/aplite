@@ -131,18 +131,38 @@ fn parse_hex(hex: &str) -> (u8, u8, u8, u8) {
     assert!(hex.get(..1).unwrap() == "#", "input doesn't start with #");
     assert!(hex.get(1..).is_some_and(|s| s.len() == 8), "invalid input length, expected 8");
 
-    let split = hex
-        .chars()
-        .skip(1)
-        .flat_map(|c| {
-            c.to_digit(16).map(|num| num as u8)
-        })
-        .collect::<Vec<_>>();
+    let mut buf = [0; 8];
 
-    let r = split[0] * 16 + split[1];
-    let g = split[2] * 16 + split[3];
-    let b = split[4] * 16 + split[5];
-    let a = split[6] * 16 + split[7];
+    hex.chars()
+        .skip(1)
+        .enumerate()
+        .for_each(|(i, c)| {
+            match c.to_digit(16) {
+                Some(num) => buf[i] = num as u8,
+                None => panic!("invalid char {}", c),
+            }
+        });
+
+    let r = buf[0] * 16 + buf[1];
+    let g = buf[2] * 16 + buf[3];
+    let b = buf[4] * 16 + buf[5];
+    let a = buf[6] * 16 + buf[7];
 
     (r, g, b, a)
 }
+
+// struct ParseError(String);
+
+// impl std::fmt::Display for ParseError {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "Error on parsing hex string: {}", self.0)
+//     }
+// }
+
+// impl std::fmt::Debug for ParseError {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "Error on parsing hex string: {}", self.0)
+//     }
+// }
+
+// impl std::error::Error for ParseError {}

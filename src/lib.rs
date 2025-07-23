@@ -8,7 +8,6 @@ pub mod prelude {
     use crate::error::ApliteError;
 
     pub use aplite_reactive::*;
-    pub use aplite_renderer::image_reader;
     pub use aplite_renderer::Shape;
     pub use aplite_types::{Rgba, rgba_u8, rgba_f32, rgba_hex, CornerRadius};
 
@@ -40,6 +39,7 @@ pub mod prelude {
         v_stack,
         button,
         image,
+        image_reader,
     };
 
     pub type ApliteResult = Result<(), ApliteError>;

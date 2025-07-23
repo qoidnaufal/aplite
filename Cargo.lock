@@ -98,6 +98,7 @@ dependencies = [
  "aplite_stats",
  "aplite_storage",
  "aplite_types",
+ "image",
  "wgpu",
  "winit",
 ]
@@ -118,7 +119,6 @@ name = "aplite_renderer"
 version = "0.1.0"
 dependencies = [
  "aplite_types",
- "image",
  "wgpu",
  "winit",
 ]

@@ -10,12 +10,3 @@ repository.workspace = true
 aplite_types.workspace = true
 winit.workspace = true
 wgpu.workspace = true
-
-[dependencies.image]
-version = "0.25.6"
-default-features = false
-features = ["rayon", "jpeg", "png"]
-optional = true
-
-[features]
-image = ["dep:image"]

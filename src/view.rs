@@ -2,9 +2,10 @@ use std::cell::{RefCell, Ref, RefMut};
 use std::rc::{Rc, Weak};
 
 use aplite_reactive::*;
-use aplite_types::{Matrix3x2, Rgba, Size, CornerRadius};
-use aplite_renderer::{Element, ImageData, Shape};
-use aplite_storage::{entity, Entity, Tree, Map};
+use aplite_types::{Size, CornerRadius};
+use aplite_types::{Rgba, Paint};
+use aplite_renderer::{Element, Shape, Renderer};
+use aplite_storage::{entity, Entity, Tree, Map, Storage};
 
 use crate::widget_state::WidgetState;
 
@@ -18,7 +19,7 @@ pub use {
     stack::*,
 };
 
-entity! { pub ViewId }
+entity! { pub ViewId, pub PaintId }
 
 // FIXME: this is kinda cheating, and not fun at all
 thread_local! {
@@ -28,7 +29,7 @@ thread_local! {
 pub(crate) struct ViewStorage {
     pub(crate) tree: RefCell<Tree<ViewId>>,
     pub(crate) storage: RefCell<Map<ViewId, View>>,
-    pub(crate) image_fn: RefCell<Map<ViewId, Box<dyn Fn() -> ImageData>>>,
+    pub(crate) paint: RefCell<Storage<PaintId, Paint>>,
     pub(crate) hoverable: RefCell<Vec<ViewId>>,
     pub(crate) dirty: RwSignal<Option<ViewId>>,
 }
@@ -38,7 +39,7 @@ impl ViewStorage {
         Self {
             tree: RefCell::new(Tree::with_capacity(1024)),
             storage: RefCell::new(Map::new()),
-            image_fn: RefCell::new(Map::new()),
+            paint: RefCell::new(Storage::new()),
             hoverable: RefCell::new(Vec::new()),
             dirty: RwSignal::new(None),
         }
@@ -46,6 +47,10 @@ impl ViewStorage {
 
     pub(crate) fn create_entity(&self) -> ViewId {
         self.tree.borrow_mut().create_entity()
+    }
+
+    pub(crate) fn add_paint(&self, paint: Paint) -> PaintId {
+        self.paint.borrow_mut().insert_no_duplicate(paint)
     }
 
     // FIXME: there's logic error when appending on a fn() -> impl IntoView
@@ -100,6 +105,7 @@ impl ViewStorage {
         storage[id].widget_state
     }
 
+    #[inline(always)]
     pub(crate) fn get_all_members_of(&self, root_id: &ViewId) -> Vec<ViewId> {
         self.tree.borrow().get_all_members_of(root_id)
     }
@@ -107,24 +113,32 @@ impl ViewStorage {
     pub(crate) fn get_render_components(
         &self,
         root_id: &ViewId,
-        screen: Size,
-    ) -> Vec<(ViewNode, Matrix3x2, Option<Box<dyn Fn() -> ImageData>>)> {
+        renderer: &mut Renderer,
+    ) {
         self.get_all_members_of(root_id)
             .iter()
             .enumerate()
-            .filter_map(|(idx, view_id)| {
-                self.storage
+            .for_each(|(idx, view_id)| {
+                if let Some(view) = self.storage
                     .borrow()
-                    .get(view_id)
-                    .map(|view| {
+                    .get(view_id) {
                         view.node.0.borrow_mut().set_transform_id(idx as _);
-                        let image = self.image_fn.borrow_mut().remove(view_id);
+
+                        let paint_storage = self.paint.borrow();
+                        let paint_ref = paint_storage
+                            .get(&view.paint_id)
+                            .map(|paint| paint.as_paint_ref())
+                            .unwrap();
+
                         let element = view.node.clone();
-                        let transform = view.widget_state.get_transform(screen);
-                        (element, transform, image)
-                    })
+                        let transform = view.widget_state.get_transform(renderer.screen_res());
+
+                        if let Some(atlas_id) = renderer.paint(paint_ref) {
+                            element.borrow_mut().set_atlas_id(atlas_id);
+                        }
+                        renderer.submit_data(*element.borrow(), transform);
+                    }
             })
-            .collect()
     }
 }
 
@@ -150,12 +164,18 @@ impl Widget for Box<dyn IntoView> {
     fn node(&self) -> ViewNode {
         self.as_ref().node()
     }
+
+    fn paint_id(&self) -> PaintId {
+        self.as_ref().paint_id()
+    }
 }
 
 /// wrapper over [`Widget`] trait to be stored inside [`ViewStorage`]
 pub struct View {
+    // FIXME: this shouldn't be needed here
     node: ViewNode,
     widget_state: WidgetState,
+    paint_id: PaintId,
 }
 
 impl View {
@@ -163,14 +183,20 @@ impl View {
         Self {
             node: widget.node(),
             widget_state: *widget.widget_state(),
+            paint_id: widget.paint_id(),
         }
     }
 
     pub(crate) fn window(size: Size) -> Self {
         let window_state = WidgetState::window(size);
+        let paint_id = VIEW_STORAGE.with(|s| s.paint
+            .borrow_mut()
+            .insert(Paint::Color(Rgba::TRANSPARENT))
+        );
         Self {
             node: ViewNode::new(),
             widget_state: window_state,
+            paint_id,
         }
     }
 
@@ -195,28 +221,39 @@ pub trait Widget {
     fn id(&self) -> ViewId;
     fn widget_state(&self) -> &WidgetState;
     fn node(&self) -> ViewNode;
+    fn paint_id(&self) -> PaintId;
 }
 
 pub struct CircleWidget {
     id: ViewId,
     node: ViewNode,
     state: WidgetState,
+    paint_id: PaintId,
 }
 
 impl CircleWidget {
     pub fn new() -> Self {
         let id = VIEW_STORAGE.with(|s| s.create_entity());
+
         let node = ViewNode::new()
             .with_shape(Shape::Circle)
             .with_stroke_width(5);
+
         let state = WidgetState::new()
             .with_name("Circle")
             .with_size((100, 100));
+
+        let paint_id = VIEW_STORAGE
+            .with(|s| s.paint
+                .borrow_mut()
+                .insert(Paint::Color(Rgba::RED))
+            );
 
         Self {
             id,
             node,
             state,
+            paint_id,
         }
     }
     
@@ -247,6 +284,10 @@ impl Widget for CircleWidget {
 
     fn node(&self) -> ViewNode {
         self.node.clone()
+    }
+
+    fn paint_id(&self) -> PaintId {
+        self.paint_id
     }
 }
 

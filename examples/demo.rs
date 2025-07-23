@@ -106,7 +106,7 @@ fn root() -> impl IntoView {
     let rotation = move |_| counter.with(|val| *val as f32 * 3.0);
     let color = move |_| select_color(counter.get());
 
-    Effect::new(move |_| eprintln!("{}", counter.get()));
+    Effect::new(move |_| eprint!("{}        \r", counter.get()));
 
     let circle = CircleWidget::new()
         .set_color(|_| Rgba::new(169, 72, 43, 255))

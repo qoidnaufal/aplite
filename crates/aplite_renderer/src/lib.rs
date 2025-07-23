@@ -1,8 +1,8 @@
+mod atlas;
 mod gpu;
 mod buffer;
 mod shader;
 mod util;
-mod texture;
 mod element;
 mod storage;
 mod screen;
@@ -11,9 +11,7 @@ mod mesh;
 
 pub use renderer::Renderer;
 pub use element::{Element, Shape};
-pub use texture::ImageData;
 pub use mesh::Vertices;
-pub use texture::image_reader;
 pub use gpu::{GpuDevice, GpuSurface};
 
 #[derive(Debug)]

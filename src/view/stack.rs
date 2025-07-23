@@ -1,10 +1,10 @@
-use aplite_types::Rgba;
+use aplite_types::{Rgba, Paint};
 use aplite_renderer::Shape;
 
 use crate::context::layout::Orientation;
 use crate::widget_state::WidgetState;
 
-use super::{ViewNode, ViewId, Widget, VIEW_STORAGE};
+use super::{ViewNode, ViewId, PaintId, Widget, VIEW_STORAGE};
 
 pub fn v_stack<F>() -> VStack {
     VStack::new()
@@ -12,13 +12,18 @@ pub fn v_stack<F>() -> VStack {
 
 pub struct VStack {
     id: ViewId,
+    paint_id: PaintId,
     node: ViewNode,
     state: WidgetState,
 }
 
 impl VStack {
     pub fn new() -> Self {
-        let id = VIEW_STORAGE.with(|s| s.create_entity());
+        let (id, paint_id) = VIEW_STORAGE.with(|s| {
+            let id = s.create_entity();
+            let paint_id = s.add_paint(Paint::from_color(Rgba::TRANSPARENT));
+            (id, paint_id)
+        });
 
         let node = ViewNode::new()
             .with_fill_color(Rgba::TRANSPARENT)
@@ -30,6 +35,7 @@ impl VStack {
 
         Self {
             id,
+            paint_id,
             node,
             state,
         }
@@ -44,6 +50,10 @@ impl VStack {
 impl Widget for VStack {
     fn id(&self) -> ViewId {
         self.id
+    }
+
+    fn paint_id(&self) -> PaintId {
+        self.paint_id
     }
 
     fn widget_state(&self) -> &WidgetState {
@@ -61,13 +71,18 @@ pub fn h_stack<F>() -> HStack {
 
 pub struct HStack {
     id: ViewId,
+    paint_id: PaintId,
     node: ViewNode,
     state: WidgetState,
 }
 
 impl HStack {
     pub fn new() -> Self {
-        let id = VIEW_STORAGE.with(|s| s.create_entity());
+        let (id, paint_id) = VIEW_STORAGE.with(|s| {
+            let id = s.create_entity();
+            let paint_id = s.add_paint(Paint::Color(Rgba::TRANSPARENT));
+            (id, paint_id)
+        });
 
         let node = ViewNode::new()
             .with_fill_color(Rgba::TRANSPARENT)
@@ -80,6 +95,7 @@ impl HStack {
 
         Self {
             id,
+            paint_id,
             node,
             state,
         }
@@ -94,6 +110,10 @@ impl HStack {
 impl Widget for HStack {
     fn id(&self) -> ViewId {
         self.id
+    }
+
+    fn paint_id(&self) -> PaintId {
+        self.paint_id
     }
 
     fn widget_state(&self) -> &WidgetState {

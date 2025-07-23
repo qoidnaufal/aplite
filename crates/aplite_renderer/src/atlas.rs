@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 
 use wgpu::util::DeviceExt;
-use aplite_types::{Rect, Size};
-
-use super::ImageData;
+use aplite_types::{Rect, Size, ImageData, ImageRef};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AtlasId(i32);
@@ -14,13 +12,13 @@ impl AtlasId {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct Atlas {
     used: Rect,
     texture: wgpu::Texture,
     pub(crate) bind_group: wgpu::BindGroup,
 
     pending_data: HashMap<AtlasId, ImageData>,
+    processed: HashMap<ImageRef, AtlasId>,
     position: HashMap<AtlasId, Rect>,
     uvs: HashMap<AtlasId, Rect>,
     count: i32,
@@ -77,6 +75,7 @@ impl Atlas {
             texture,
             bind_group,
             pending_data: HashMap::new(),
+            processed: HashMap::new(),
             position: HashMap::new(),
             uvs: HashMap::new(),
             count: 0,
@@ -84,6 +83,9 @@ impl Atlas {
     }
 
     pub(crate) fn append(&mut self, data: ImageData) -> Option<AtlasId> {
+        if let Some(id) = self.processed.get(&data.weak_ref()) {
+            return Some(*id)
+        }
         let width = data.width as f32;
         let height = data.height as f32;
 
@@ -180,6 +182,8 @@ impl Atlas {
                         depth_or_array_layers: 1,
                     }
                 );
+
+                self.processed.insert(data.weak_ref(), *id);
             }
 
             self.pending_data.clear();

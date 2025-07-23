@@ -1,16 +1,16 @@
 use std::sync::Arc;
 use winit::window::Window;
-use aplite_types::{Matrix3x2, Rgba, Size};
+use aplite_types::{Matrix3x2, Rgba, Size, ImageData, PaintRef};
 
 use super::RendererError;
 
+use crate::atlas::{Atlas, AtlasId};
 use crate::element::Element;
 use crate::screen::Screen;
 use crate::shader::render_shader;
 use crate::storage::Storage;
 use crate::mesh::{Indices, MeshBuffer};
 use crate::util::Sampler;
-use crate::texture::{Atlas, AtlasId, ImageData};
 use crate::Vertices;
 
 pub struct Renderer {
@@ -187,6 +187,7 @@ impl Renderer {
 impl Renderer {
     pub fn begin(&mut self) {
         self.current = (self.current + 1) % 3;
+        self.mesh[self.current].offset = 0;
     }
 
     // pub fn finish(&mut self) {
@@ -196,8 +197,8 @@ impl Renderer {
         &mut self,
         element: Element,
         transform: Matrix3x2,
-        offset: u64,
     ) {
+        let offset = self.mesh[self.current].offset;
         let indices = Indices::new().with_offset(offset as _, true);
         let vertices = self.atlas
             .get_uv(&element.atlas_id)
@@ -220,38 +221,24 @@ impl Renderer {
         self.mesh[self.current].offset = offset + 1;
     }
 
-    pub fn submit_data_batched(
-        &mut self,
-        elements: &[Element],
-        transforms: &[Matrix3x2],
-    ) {
-        let mut indices = vec![];
-        let mut vertices = vec![];
-        (0..elements.len())
-            .for_each(|i| {
-                let atlas_id = elements[i].atlas_id();
-                let idx = Indices::new().with_offset(i as _, true);
-                let vert = self.atlas
-                    .get_uv(&atlas_id)
-                    .map(|uv| Vertices::new().with_uv(*uv).with_id(i as _))
-                    .unwrap_or(Vertices::new().with_id(i as _));
-                indices.extend_from_slice(idx.as_slice());
-                vertices.extend_from_slice(&vert);
-            });
-
-        self.mesh[self.current].write_data(&self.device, &self.queue, &indices, &vertices);
-        self.storage[self.current].write_data(&self.device, &self.queue, elements, transforms);
-    }
-
     pub fn render_image(&mut self, f: &dyn Fn() -> ImageData) -> Option<AtlasId> {
         let image = f();
         self.atlas.append(image)
     }
+
+    pub fn paint(&mut self, paint: PaintRef<'_>) -> Option<AtlasId> {
+        match paint {
+            PaintRef::Color(_rgba) => None,
+            PaintRef::Image(image_ref) => image_ref
+                .upgrade()
+                .and_then(|image| self.atlas.append(image)),
+        }
+    }
 }
 
-#[allow(unused)]
 pub(crate) enum Pipeline {
     Render(wgpu::RenderPipeline),
+    #[allow(unused)]
     Compute(wgpu::ComputePipeline),
 }
 
@@ -324,9 +311,4 @@ impl Pipeline {
             Pipeline::Compute(_) => panic!("expected render pipeline, get a compute instead"),
         }
     }
-}
-
-pub struct Scene {
-    surface_size: Size,
-    triangles: Vec<Vertices>,
 }

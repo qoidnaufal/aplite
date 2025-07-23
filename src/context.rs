@@ -168,19 +168,7 @@ impl Context {
     pub(crate) fn prepare_data(&self, root_id: ViewId, renderer: &mut Renderer) {
         VIEW_STORAGE.with(|storage| {
             // TODO: let scene = renderer.new_scene();
-            let screen = renderer.screen_res();
-
-            storage
-                .get_render_components(&root_id, screen)
-                .iter()
-                .enumerate()
-                .for_each(|(offset, (elem, mat, img))| {
-                    let info = img.as_ref().and_then(|image_fn| renderer.render_image(image_fn));
-                    if let Some(id) = info {
-                        elem.borrow_mut().set_atlas_id(id);
-                    };
-                    renderer.submit_data(*elem.borrow(), *mat, offset as _);
-                });
+            storage.get_render_components(&root_id, renderer)
         });
         // TODO: renderer.encode_scene(scene);
     }

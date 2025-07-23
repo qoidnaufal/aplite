@@ -1,17 +1,19 @@
-mod color;
 mod fraction;
 mod matrix;
 mod size;
-mod num_traits;
 mod vector;
 mod corner_radius;
 mod shapes;
+mod paint;
 
-pub use num_traits::*;
 pub use corner_radius::CornerRadius;
 pub use size::{gcd, Size};
 pub use matrix::Matrix3x2;
 pub use fraction::Fraction;
-pub use color::{Rgba, rgba_u8, rgba_f32, rgba_hex};
-pub use shapes::{Rect, Circle, RoundedRect};
 pub use vector::{Vec2f, Vec2u};
+
+pub use shapes::{Rect, Circle, RoundedRect};
+
+pub use paint::color::{Rgba, rgba_u8, rgba_f32, rgba_hex};
+pub use paint::image::{ImageData, ImageRef};
+pub use paint::{Paint, PaintRef};

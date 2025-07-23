@@ -1,6 +1,6 @@
 use aplite_types::{CornerRadius, Rgba};
 
-use crate::texture::AtlasId;
+use crate::atlas::AtlasId;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]

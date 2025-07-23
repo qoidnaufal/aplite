@@ -1,21 +1,26 @@
 use aplite_reactive::*;
 use aplite_renderer::Shape;
-use aplite_types::Rgba;
+use aplite_types::{Rgba, Paint};
 
 use crate::widget_state::WidgetState;
-use super::{ViewNode, ViewId, Widget, VIEW_STORAGE};
+use super::{ViewNode, ViewId, PaintId, Widget, VIEW_STORAGE};
 
 pub fn button() -> Button { Button::new() }
 
 pub struct Button {
     id: ViewId,
+    paint_id: PaintId,
     node: ViewNode,
     state: WidgetState,
 }
 
 impl Button {
     pub fn new() -> Self {
-        let id = VIEW_STORAGE.with(|s| s.create_entity());
+        let (id, paint_id) = VIEW_STORAGE.with(|s| {
+            let id = s.create_entity();
+            let paint_id = s.add_paint(Paint::Color(Rgba::RED));
+            (id, paint_id)
+        });
 
         let node = ViewNode::new()
             .with_fill_color(Rgba::RED)
@@ -27,6 +32,7 @@ impl Button {
 
         Self {
             id,
+            paint_id,
             node,
             state,
         }
@@ -51,6 +57,10 @@ impl Button {
 impl Widget for Button {
     fn id(&self) -> ViewId {
         self.id
+    }
+
+    fn paint_id(&self) -> PaintId {
+        self.paint_id
     }
 
     fn widget_state(&self) -> &WidgetState {

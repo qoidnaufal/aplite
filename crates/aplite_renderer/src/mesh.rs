@@ -136,17 +136,17 @@ impl MeshBuffer {
         }
     }
 
-    pub(crate) fn write_data(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        indices: &[u32],
-        vertices: &[Vertex],
-    ) {
-        self.offset = indices.len() as u64 / 6;
-        self.indices.write(device, queue, 0, indices);
-        self.vertices.write(device, queue, 0, vertices);
-    }
+    // pub(crate) fn write_data(
+    //     &mut self,
+    //     device: &wgpu::Device,
+    //     queue: &wgpu::Queue,
+    //     indices: &[u32],
+    //     vertices: &[Vertex],
+    // ) {
+    //     self.offset = indices.len() as u64 / 6;
+    //     self.indices.write(device, queue, 0, indices);
+    //     self.vertices.write(device, queue, 0, vertices);
+    // }
 
     pub(crate) fn indices_slice(&self) -> wgpu::BufferSlice {
         self.indices.slice(0..self.offset * 6)

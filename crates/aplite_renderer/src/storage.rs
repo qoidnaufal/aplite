@@ -27,26 +27,26 @@ impl Storage {
         }
     }
 
-    pub(crate) fn write_data(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        elements: &[Element],
-        transforms: &[Matrix3x2],
-    ) -> bool {
-        let mut realloc = false;
-        realloc |= self.elements.write(device, queue, 0, elements);
-        realloc |= self.transforms.write(device, queue, 0, transforms);
+    // pub(crate) fn write_data(
+    //     &mut self,
+    //     device: &wgpu::Device,
+    //     queue: &wgpu::Queue,
+    //     elements: &[Element],
+    //     transforms: &[Matrix3x2],
+    // ) -> bool {
+    //     let mut realloc = false;
+    //     realloc |= self.elements.write(device, queue, 0, elements);
+    //     realloc |= self.transforms.write(device, queue, 0, transforms);
 
-        if realloc {
-            self.bind_group = Self::bind_group(device, &[
-                self.elements.bind_group_entry(0),
-                self.transforms.bind_group_entry(1),
-            ]);
-        }
+    //     if realloc {
+    //         self.bind_group = Self::bind_group(device, &[
+    //             self.elements.bind_group_entry(0),
+    //             self.transforms.bind_group_entry(1),
+    //         ]);
+    //     }
 
-        realloc
-    }
+    //     realloc
+    // }
 
     // pub(crate) fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> bool {
     //     let mut realloc = false;
@@ -84,12 +84,4 @@ impl Storage {
             entries,
         })
     }
-
-    // pub(crate) fn update_element<F: Fn(&mut Element)>(&mut self, index: usize, f: F) {
-    //     f(&mut self.element_data[index])
-    // }
-
-    // pub(crate) fn update_transform<F: Fn(&mut Matrix3x2)>(&mut self, index: usize, f: F) {
-    //     f(&mut self.transform_data[index])
-    // }
 }
