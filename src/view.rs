@@ -225,7 +225,6 @@ impl CircleWidget {
         Effect::new(move |_| {
             if trigger.get() {
                 f();
-                trigger.set_untracked(false);
             }
         });
         self
@@ -313,6 +312,12 @@ pub trait FnEl<T>: FnMut(Option<T>) -> T {}
 
 impl<F, T> FnEl<T> for F where F: FnMut(Option<T>) -> T {}
 
+/// this is just a wrapper over `FnMut() -> T`
+pub trait FnAction<T>: FnMut() -> T {}
+
+impl<F, T> FnAction<T> for F where F: FnMut() -> T {}
+
+// FIXME: there are too many effects here, maybe shouldn't
 /// trait to modify the rendered element
 pub trait Style: Widget + Sized {
     fn set_color<F>(self, mut f: F) -> Self
@@ -355,7 +360,7 @@ pub trait Style: Widget + Sized {
 
     fn set_hover_color<F>(self, mut f: F) -> Self
     where
-        F: FnEl<Rgba<u8>> + 'static
+        F: FnAction<Rgba<u8>> + 'static
     {
         self.widget_state().hoverable.set_untracked(true);
 
@@ -368,10 +373,10 @@ pub trait Style: Widget + Sized {
 
         let weak_node = node.weak_ref();
 
-        Effect::new(move |prev| {
-            let color = f(prev);
+        Effect::new(move |_| {
             if is_hovered.get() {
                 if !is_clicked.get() {
+                    let color = f();
                     if let Some(node) = weak_node.upgrade() {
                         node.borrow_mut().set_fill_color(color);
                         dirty.set(root_id.get_untracked());
@@ -383,14 +388,13 @@ pub trait Style: Widget + Sized {
                     dirty.set(root_id.get_untracked());
                 }
             }
-            color
         });
         self
     }
 
     fn set_click_color<F>(self, mut f: F) -> Self
     where
-        F: FnEl<Rgba<u8>> + 'static,
+        F: FnAction<Rgba<u8>> + 'static,
     {
         self.widget_state().hoverable.set_untracked(true);
 
@@ -399,15 +403,14 @@ pub trait Style: Widget + Sized {
         let dirty = VIEW_STORAGE.with(|s| s.dirty);
         let root_id = self.widget_state().root_id;
 
-        Effect::new(move |prev| {
-            let color = f(prev);
+        Effect::new(move |_| {
             if is_clicked.get() {
+                let color = f();
                 if let Some(node) = node.upgrade() {
                     node.borrow_mut().set_fill_color(color);
                     dirty.set(root_id.get_untracked());
                 }
             }
-            color
         });
         self
     }
@@ -548,20 +551,32 @@ mod alt_view {
     // use std::rc::Weak;
     use std::cell::{RefCell, Ref, RefMut};
 
-    use aplite_storage::{Tree, Entity, Map, entity};
+    use aplite_storage::{Tree, Entity, Map, Storage, entity};
     use aplite_reactive::*;
     use aplite_types::*;
 
-    entity! { ViewIdAlt, }
+    entity! { ViewIdAlt, ColorId }
+
+    #[derive(Debug)]
+    // contains all the id of the commponents
+    struct ViewAlt {
+        color_id: Option<ColorId>,
+    }
 
     #[derive(Default)]
     struct ContextAlt {
         tree: Tree<ViewIdAlt>,
-        // WARN: this one uses Rc<RefCell<T>> hell, find another way
-        color: Map<ViewIdAlt, Component<Rgba<u8>>>,
+        view: Map<ViewIdAlt, ViewAlt>,
+        color: Storage<ColorId, Component<Rgba<u8>>>,
     }
 
     struct Component<T>(Rc<RefCell<T>>);
+
+    #[derive(Debug, Clone, Copy)]
+    struct WidgetAlt {
+        id: ViewIdAlt,
+        color_id: Option<ColorId>,
+    }
 
     impl<T> Component<T> {
         fn new(value: T) -> Self {
@@ -586,28 +601,32 @@ mod alt_view {
         }
     }
 
-    #[derive(Debug)]
-    struct WidgetAlt {
-        id: ViewIdAlt,
-        // color_id: ColorId,
-        // rect_id: RectId,
-    }
-
     impl WidgetAlt {
         fn new(cx: &mut ContextAlt) -> Self {
             let id = cx.tree.create_entity();
-            let color = Component::new(Rgba::RED);
-            cx.color.insert(id, color);
-            Self { id }
+            let color_id = cx.color.insert(Component::new(Rgba::RED));
+            let this = Self { id, color_id: Some(color_id) };
+            cx.view.insert(id, this.into_view());
+
+            this
         }
     }
 
     trait WidgetTraitAlt: Sized {
         fn id(&self) -> ViewIdAlt;
 
-        fn append_child(self, cx: &mut ContextAlt, child: impl IntoViewAlt) -> Self {
+        fn child(self, cx: &mut ContextAlt, child: impl IntoViewAlt) -> Self {
             cx.tree.add_child(&self.id(), child.id());
             self
+        }
+
+        fn child_fn<F, IV>(self, cx: &mut ContextAlt, child_fn: F) -> Self
+        where
+            F: FnOnce(&mut ContextAlt) -> IV,
+            IV: IntoViewAlt,
+        {
+            let child = child_fn(cx);
+            self.child(cx, child)
         }
 
         fn set_color(
@@ -615,7 +634,8 @@ mod alt_view {
             cx: &mut ContextAlt,
             mut color_fn: impl FnMut(Option<Rgba<u8>>) -> Rgba<u8> + 'static
         ) -> Self {
-            if let Some(color) = cx.color.get(&self.id()) {
+            if let Some(view) = cx.view.get(&self.id())
+            && let Some(color) = cx.color.unsafe_get(&view.color_id.unwrap()) {
                 let weak = Rc::downgrade(&color.0);
                 Effect::new(move |prev| {
                     let new_color = color_fn(prev);
@@ -637,69 +657,61 @@ mod alt_view {
 
     impl Render for WidgetAlt {}
 
-    #[derive(Debug)]
-    struct ViewAlt {
-        id: ViewIdAlt,
-    }
-
     // WARN: passing &mut Context on every widget function
     // makes this trait becomes useless
     trait IntoViewAlt: WidgetTraitAlt + Render {
+        fn into_view(self) -> ViewAlt;
+    }
+
+    impl IntoViewAlt for WidgetAlt {
         fn into_view(self) -> ViewAlt {
-            ViewAlt { id: self.id() }
+            ViewAlt { color_id: self.color_id }
         }
     }
 
-    impl<T: WidgetTraitAlt + Render> IntoViewAlt for T {}
-
-    fn root(
+    fn view(
         cx: &mut ContextAlt,
         color_fn: impl FnMut(Option<Rgba<u8>>) -> Rgba<u8> + 'static,
         set_counter: WriteSignal<i32>,
     ) -> impl IntoViewAlt {
-        let first = WidgetAlt::new(cx);
+        let first_child = WidgetAlt::new(cx);
         let parent = WidgetAlt::new(cx)
             .set_color(cx, color_fn)
-            .append_child(cx, first);
+            .child(cx, first_child);
 
-        branch(cx, parent, set_counter)
+        set_counter.set(3);
+
+        parent.child_fn(cx, second_child)
     }
 
-    // FIXME: for now this feels like a work-around instead of the ideal implementation
-    fn branch(
-        cx: &mut ContextAlt,
-        parent: impl IntoViewAlt,
-        set_counter: WriteSignal<i32>
-    ) -> impl IntoViewAlt {
-        set_counter.set(3);
-        let second = WidgetAlt::new(cx);
-        parent.append_child(cx, second)
+    fn second_child(cx: &mut ContextAlt) -> impl IntoViewAlt + use<> {
+        WidgetAlt::new(cx)
     }
 
     #[test]
     fn alt() {
         let (counter, set_counter) = Signal::create(0i32);
         let color_fn = move |_| if counter.get() == 3 {
-            rgba_u8(255, 255, 255, 255)
+            rgba_hex("#ffffffff")
         } else {
             rgba_u8(0, 0, 0, 0)
         };
 
         let mut cx = ContextAlt::default();
+        let root = cx.tree.create_entity();
 
-        let root = root(&mut cx, color_fn, set_counter).into_view();
-        let child = cx.tree.get_last_child(&root.id);
+        let view = view(&mut cx, color_fn, set_counter);
+        cx.tree.add_child(&root, view.id());
+        let child = cx.tree.get_last_child(&root);
 
         eprintln!("{:?}", cx.tree);
-        assert_eq!(child, Some(&ViewIdAlt(2, 0)));
+        assert_eq!(child, Some(&view.id()));
 
-        let color = cx.color.get(&root.id);
-        eprintln!("{color:?}");
+        let color = cx.color.get(&view.into_view().color_id.unwrap());
         assert!(color.is_some());
         assert_eq!(*color.unwrap().inner_ref(), rgba_u8(255, 255, 255, 255));
 
         set_counter.set(69);
-        eprintln!("{color:?}");
         assert_eq!(*color.unwrap().inner_ref(), rgba_u8(0, 0, 0, 0));
     }
 }

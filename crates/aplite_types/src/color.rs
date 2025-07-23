@@ -1,10 +1,17 @@
+#[inline(always)]
  pub const fn rgba_u8(r: u8, g: u8, b: u8, a: u8) -> Rgba<u8> {
     Rgba::new(r, g, b, a)
 }
 
 /// value must be between 0.0 and 1.0
+#[inline(always)]
 pub const fn rgba_f32(r: f32, g: f32, b: f32, a: f32) -> Rgba<f32> {
     Rgba::new(r, g, b, a)
+}
+
+#[inline(always)]
+pub fn rgba_hex(hex: &str) -> Rgba<u8> {
+    Rgba::from_hex(hex)
 }
 
 #[repr(C, align(16))]
@@ -17,6 +24,7 @@ pub struct Rgba<T> {
 }
 
 impl<T: Clone + Copy> Rgba<T> {
+    #[inline(always)]
     pub const fn new(r: T, g: T, b: T, a: T) -> Self {
         Self { r, g, b, a }
     }
@@ -39,31 +47,12 @@ impl Rgba<u8> {
     pub const LIGHT_GRAY: Self = Rgba::new(69, 69, 69, 255);
     pub const DARK_GRAY: Self = Self::new(30, 30, 30, 255);
     pub const DARK_GREEN: Self = Self::new(10, 30, 15, 255);
-}
 
-// taken straight up from kludgine
-
-impl From<Rgba<u8>> for u32 {
-    fn from(rgba: Rgba<u8>) -> Self {
-        rgba.into_u32()
+    pub fn from_hex(hex: &str) -> Self {
+        let (r, g, b, a) = parse_hex(hex);
+        Self { r, g, b, a }
     }
-}
 
-impl From<u32> for Rgba<u8> {
-    fn from(num: u32) -> Self {
-        Self::from_u32(num)
-    }
-}
-
-// type conversion
-
-impl Rgba<f32> {
-    pub fn u8(self) -> Rgba<u8> {
-        self.into()
-    }
-}
-
-impl Rgba<u8> {
     #[inline(always)]
     pub const fn from_u32(val: u32) -> Self {
         let r = (val >> 24) as u8;
@@ -83,6 +72,24 @@ impl Rgba<u8> {
 
     pub fn f32(self) -> Rgba<f32> {
         self.into()
+    }
+}
+
+impl Rgba<f32> {
+    pub fn u8(self) -> Rgba<u8> {
+        self.into()
+    }
+}
+
+impl From<Rgba<u8>> for u32 {
+    fn from(rgba: Rgba<u8>) -> Self {
+        rgba.into_u32()
+    }
+}
+
+impl From<u32> for Rgba<u8> {
+    fn from(num: u32) -> Self {
+        Self::from_u32(num)
     }
 }
 
@@ -118,3 +125,24 @@ impl<T: PartialEq> PartialEq for Rgba<T> {
 }
 
 impl Eq for Rgba<u8> {}
+
+#[inline(always)]
+fn parse_hex(hex: &str) -> (u8, u8, u8, u8) {
+    assert!(hex.get(..1).unwrap() == "#", "input doesn't start with #");
+    assert!(hex.get(1..).is_some_and(|s| s.len() == 8), "invalid input length, expected 8");
+
+    let split = hex
+        .chars()
+        .skip(1)
+        .flat_map(|c| {
+            c.to_digit(16).map(|num| num as u8)
+        })
+        .collect::<Vec<_>>();
+
+    let r = split[0] * 16 + split[1];
+    let g = split[2] * 16 + split[3];
+    let b = split[4] * 16 + split[5];
+    let a = split[6] * 16 + split[7];
+
+    (r, g, b, a)
+}

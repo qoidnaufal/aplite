@@ -1,4 +1,5 @@
-use crate::entity_manager::{Entity, EntityManager};
+use crate::manager::EntityManager;
+use crate::entity::Entity;
 use crate::iterator::{TreeIterator, NodeRef};
 
 /// Array based data structure, where the related information
@@ -115,7 +116,12 @@ impl<E: Entity> Tree<E> {
             self.first_child[parent.index()] = self.get_next_sibling(&entity).copied();
         }
         
-        to_remove.iter().for_each(|entity| self.manager.destroy(*entity));
+        to_remove
+            .iter()
+            .for_each(|entity| {
+                self.manager.destroy(*entity);
+                self.parent[entity.index()] = None;
+            });
         to_remove
     }
 
@@ -288,11 +294,13 @@ impl<E: Entity> std::fmt::Debug for Tree<E> {
 
                             let mut connector_indent = 0;
                             for yes in ancestor_sibling {
+                                let mut reducer = 0;
                                 if yes {
                                     s.push_str(format!("{:connector_indent$}│", "").as_str());
-                                    connector_indent -= len + 1;
+                                    connector_indent = 0;
+                                    reducer = 1;
                                 }
-                                connector_indent += len;
+                                connector_indent += len - reducer;
                             }
 
                             let modifier = if loc > 0 { 1 } else { 0 };
@@ -374,14 +382,14 @@ mod tree_test {
         let next_sibling = tree.get_next_sibling(&first_child).copied();
         assert_eq!(first_child, TestId(3, 0));
 
-        let removed = tree.remove(TestId(3, 0));
+        let _removed = tree.remove(TestId(3, 0));
 
         let first_child_after_removal = tree.get_first_child(&TestId(2, 0)).copied();
         assert_eq!(first_child_after_removal, next_sibling);
 
-        eprintln!("{tree:?}");
-        eprintln!("remaining {} > {:#?}", tree.manager.len(), tree.manager);
-        eprintln!("removed > {removed:?}");
+        // eprintln!("{tree:?}");
+        // eprintln!("remaining {} > {:#?}", tree.manager.len(), tree.manager);
+        // eprintln!("removed > {removed:?}");
     }
 
     #[test]
@@ -389,12 +397,25 @@ mod tree_test {
         let mut tree = setup_tree();
 
         let sibling_before_removal = tree.get_next_sibling(&TestId(4, 0)).copied();
-        let removed = tree.remove(TestId(4, 0));
+        let _removed = tree.remove(TestId(4, 0));
         let sibling_after_removal = tree.get_next_sibling(&TestId(3, 0)).copied();
         assert_eq!(sibling_before_removal, sibling_after_removal);
 
+        // eprintln!("{tree:?}");
+        // eprintln!("remaining {} > {:#?}", tree.manager.len(), tree.manager);
+        // eprintln!("removed > {removed:?}");
+    }
+
+    #[test]
+    fn insert_after_remove() {
+        let mut tree = setup_tree();
+
+        let _ = tree.remove(TestId(4, 0));
+        let reuse = tree.create_entity();
+
+        tree.add_child(&TestId(7, 0), reuse);
+        assert_eq!(&TestId(7, 0), tree.get_parent(&reuse).unwrap());
+
         eprintln!("{tree:?}");
-        eprintln!("remaining {} > {:#?}", tree.manager.len(), tree.manager);
-        eprintln!("removed > {removed:?}");
     }
 }

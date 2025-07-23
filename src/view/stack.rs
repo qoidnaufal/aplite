@@ -21,7 +21,7 @@ impl VStack {
         let id = VIEW_STORAGE.with(|s| s.create_entity());
 
         let node = ViewNode::new()
-            .with_fill_color(Rgba::DARK_GRAY)
+            .with_fill_color(Rgba::TRANSPARENT)
             .with_shape(Shape::Rect);
 
         let state = WidgetState::new()
@@ -70,7 +70,7 @@ impl HStack {
         let id = VIEW_STORAGE.with(|s| s.create_entity());
 
         let node = ViewNode::new()
-            .with_fill_color(Rgba::DARK_GRAY)
+            .with_fill_color(Rgba::TRANSPARENT)
             .with_shape(Shape::Rect);
 
         let state = WidgetState::new()

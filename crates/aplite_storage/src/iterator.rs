@@ -1,4 +1,5 @@
-use crate::entity_manager::{Entity, EntityManager};
+use crate::manager::EntityManager;
+use crate::entity::Entity;
 use crate::tree::Tree;
 
 /*
@@ -116,8 +117,8 @@ impl<'a, E: Entity> Iterator for TreeIterator<'a, E> {
 #[cfg(test)]
 mod iterator_test {
     use crate::tree::Tree;
-    use crate::EntityManager;
-    use crate::entity_manager::Entity;
+    use crate::manager::EntityManager;
+    use crate::entity::Entity;
     use crate::entity;
 
     #[test]

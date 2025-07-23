@@ -1,7 +1,7 @@
 use aplite_reactive::*;
 use aplite_types::{Matrix3x2, Rect, Size, Vec2f};
 
-use crate::context::layout::{Alignment, Orientation, Padding};
+use crate::context::layout::{Alignment, AlignV, Orientation, Padding};
 use crate::context::cursor::Cursor;
 use crate::view::ViewId;
 
@@ -69,6 +69,7 @@ impl WidgetState {
 
         Self::new()
             .with_name("Root")
+            .with_alignment(|alignment| alignment.set_v(AlignV::Top))
             .with_size((w, h))
             .with_position((x, y))
     }

@@ -37,7 +37,6 @@ impl Button {
         Effect::new(move |_| {
             if trigger.get() {
                 f();
-                trigger.set_untracked(false);
             }
         });
         self

@@ -1,141 +1,8 @@
 use crate::iterator::EntityIterator;
+use crate::entity::Entity;
+use crate::slot::*;
+use crate::Error;
 
-/// A trait that needs to be implemented for any type to be stored in the [`Tree`]
-pub trait Entity
-where
-    Self : std::fmt::Debug + Copy + PartialEq + PartialOrd
-{
-    /// If you created this manually, you also need to manually [`insert()`](crate::tree::Tree::insert) it to the [`Tree`](crate::tree::Tree).
-    /// The [`Tree`](crate::tree::Tree) provides a hassle free [`create_entity()`](Tree::create_entity) method
-    /// to create an [`Entity`] and automatically insert it.
-    fn new(index: u64, version: u32) -> Self;
-
-    /// The index where this [`Entity`] is being stored inside the [`Tree`]
-    fn index(&self) -> usize;
-
-    fn version(&self) -> u32;
-}
-
-/// A macro to confeniently implement [`Entity`] trait to be stored in the [`Tree`].
-/// You just need to specify the name.
-/// # Example
-/// ```ignore
-/// entity! {
-///     SuperUniqueIdName;
-///     AnotherId;
-/// }
-///
-/// let mut tree: Tree<SuperUniqueIdName> = Tree::new();
-/// let super_unique_id_name: SuperUniqueIdName = tree.create_entity();
-/// let another_id = AnotherId::new();
-/// ```
-#[macro_export]
-macro_rules! entity {
-    { $vis:vis $name:ident } => {
-        #[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-        $vis struct $name(u64, u32);
-
-        impl Entity for $name {
-            fn new(index: u64, version: u32) -> Self {
-                Self(index, version)
-            }
-
-            fn index(&self) -> usize {
-                self.0 as usize
-            }
-
-            fn version(&self) -> u32 {
-                self.1
-            }
-        }
-
-        impl std::fmt::Debug for $name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{}({})", stringify!($name), self.0)
-            }
-        }
-
-        impl std::fmt::Display for $name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{}({})", stringify!($name), self.0)
-            }
-        }
-
-        impl std::hash::Hash for $name {
-            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-                state.write_u64(self.0);
-            }
-        }
-    };
-
-    { $vis:vis $name:ident, } => {
-        entity! { $vis $name }
-    };
-
-    { $vis:vis $name:ident, $($vis2:vis $name2:ident),* } => {
-        entity! { $vis $name }
-        entity! { $($vis2 $name2),* }
-    };
-
-    { $vis:vis $name:ident, $($vis2:vis $name2:ident),*, } => {
-        entity! { $vis $name }
-        entity! { $($vis2 $name2),* }
-    };
-}
-
-#[derive(Debug)]
-pub enum Error {
-    ReachedMaxId,
-    InternalCollision,
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-
-impl std::error::Error for Error {}
-
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub(crate) enum Content<T> {
-    Occupied(T),
-    // contains index of next free slot
-    Vacant(u64),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub(crate) struct Slot<T> {
-    pub(crate) version: u32,
-    content: Content<T>,
-}
-
-impl<T> Slot<T> {
-    #[inline(always)]
-    pub(crate) fn vacant(pref_free_slot: u64) -> Self {
-        Self {
-            content: Content::Vacant(pref_free_slot),
-            version: 0,
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) fn occupied(val: T) -> Self {
-        Self {
-            content: Content::Occupied(val),
-            version: 0,
-        }
-    }
-
-    pub(crate) fn get_content(&self) -> Option<&T> {
-        match &self.content {
-            Content::Occupied(val) => Some(val),
-            Content::Vacant(_) => None,
-        }
-    }
-}
-
-#[derive(Clone)]
 pub struct EntityManager<E: Entity> {
     pub(crate) stored: Vec<Slot<E>>,
     next: u64,
@@ -164,11 +31,13 @@ impl<E: Entity> EntityManager<E> {
 
     #[inline(always)]
     fn new_with_capacity(capacity: usize) -> Self {
-        let mut inner = Vec::with_capacity(capacity + 1);
-        let slot = Slot::vacant(1);
-        inner.push(slot);
+        let mut stored = Vec::with_capacity(capacity + 1);
+        stored.push(Slot {
+            version: 0,
+            content: Content::Vacant(1),
+        });
         Self {
-            stored: inner,
+            stored,
             next: 0,
             count: 0,
         }
@@ -197,7 +66,10 @@ impl<E: Entity> EntityManager<E> {
             }
             None => {
                 let entity = Entity::new(self.next, 0);
-                self.stored.push(Slot::occupied(entity));
+                self.stored.push(Slot {
+                    version: 0,
+                    content: Content::Occupied(entity),
+                });
                 self.count += 1;
                 self.next += 1;
 
@@ -255,6 +127,7 @@ impl<E: Entity> std::fmt::Debug for EntityManager<E> {
 #[cfg(test)]
 mod entity_test {
     use super::*;
+    use crate::entity;
 
     entity! { DummyId }
 
@@ -321,3 +194,33 @@ mod entity_test {
         assert_eq!(id_two.version(), id_three.version());
     }
 }
+
+// mod alt {
+//     use super::{Slot, Content};
+//     use crate::Entity;
+//     use crate::Error;
+
+//     struct Manager<E: Entity> {
+//         reusable: Vec<E>,
+//         next: u64,
+//     }
+
+//     impl<E: Entity> Manager<E> {
+//         fn try_create_entity(&mut self) -> Result<E, Error> {
+//             match self.reusable.pop() {
+//                 Some(e) => Ok(e),
+//                 None => {
+//                     if self.next + 1 == u64::MAX { return Err(Error::ReachedMaxId) }
+//                     let e = E::new(self.next, 0);
+//                     self.next += 1;
+//                     Ok(e)
+//                 },
+//             }
+//         }
+
+//         fn destroy(&mut self, entity: E) {
+//             let reuse = E::new(entity.index() as u64, entity.version() + 1);
+//             self.reusable.push(reuse);
+//         }
+//     }
+// }

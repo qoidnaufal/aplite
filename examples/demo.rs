@@ -13,7 +13,7 @@ fn first_row() -> impl IntoView {
         .child(
             CircleWidget::new()
                 .set_color(|_| Rgba::PURPLE)
-                .set_hover_color(|_| Rgba::RED)
+                .set_hover_color(|| Rgba::RED)
         )
         .state(|s| {
             s.set_spacing(40.);
@@ -21,8 +21,8 @@ fn first_row() -> impl IntoView {
         })
         .set_corners(|_| CornerRadius::splat(10.))
         .set_stroke_width(|_| 5)
-        .set_color(|_| Rgba::DARK_GRAY)
-        .set_stroke_color(|_| Rgba::LIGHT_GRAY)
+        .set_color(|_| Rgba::LIGHT_GRAY)
+        .set_stroke_color(|_| Rgba::DARK_GRAY)
 }
 
 fn button_stack(
@@ -34,17 +34,17 @@ fn button_stack(
     VStack::new()
         .child(
             Button::new()
-                .set_hover_color(|_| Rgba::BLUE)
+                .set_hover_color(|| Rgba::BLUE)
                 .set_stroke_width(|_| 5)
                 .set_corners(|_| CornerRadius::new(80., 80., 0., 0.))
-                .set_click_color(|_| Rgba::DARK_GRAY)
+                .set_click_color(|| Rgba::DARK_GRAY)
                 .on_click(inc)
         )
         .child(
             Button::new()
                 .set_color(|_| Rgba::GREEN)
-                .set_hover_color(|_| Rgba::LIGHT_GRAY)
-                .set_click_color(|_| Rgba::DARK_GREEN)
+                .set_hover_color(|| Rgba::LIGHT_GRAY)
+                .set_click_color(|| Rgba::DARK_GREEN)
                 .set_stroke_width(|_| 5)
                 .set_corners(|_| CornerRadius::splat(50.))
                 .on_click(dec)
@@ -52,7 +52,7 @@ fn button_stack(
         .child(
             Button::new()
                 .set_color(|_| Rgba::BLUE)
-                .set_hover_color(move |_| Rgba::PURPLE)
+                .set_hover_color(|| Rgba::PURPLE)
                 .set_stroke_width(|_| 5)
                 .set_corners(|_| CornerRadius::new(0., 69., 0., 69.))
         )
@@ -85,9 +85,9 @@ fn second_row(
         .child(button_stack(inc, dec, rotation, color))
         .child(
             CircleWidget::new()
-                .set_color(|_| Rgba::BLACK)
-                .set_hover_color(|_| Rgba::GREEN)
-                .set_stroke_color(|_| Rgba::RED)
+                .set_color(|_| rgba_hex("#104bcdbf"))
+                .set_hover_color(|| Rgba::GREEN)
+                .set_stroke_color(|_| 200.into())
                 .set_stroke_width(|_| 3)
         )
         .set_color(|_| Rgba::LIGHT_GRAY)
@@ -110,7 +110,7 @@ fn root() -> impl IntoView {
 
     let circle = CircleWidget::new()
         .set_color(|_| Rgba::new(169, 72, 43, 255))
-        .set_hover_color(|_| Rgba::BLACK)
+        .set_hover_color(|| Rgba::new(169, 72, 43, 200))
         .set_stroke_color(|_| Rgba::WHITE)
         .set_stroke_width(|_| 5)
         .set_dragable(true);
@@ -121,13 +121,13 @@ fn root() -> impl IntoView {
 }
 
 fn select_color(val: i32) -> Rgba<u8> {
-    if val % 3 == 0 {
-        Rgba::RED
-    } else if val % 2 == 0 {
-        Rgba::GREEN
-    } else {
-        Rgba::BLUE
-    }
+    let val = val as u8;
+    rgba_u8(
+        val % 255,
+        (val * 3) % 255,
+        (val * 10) % 255,
+        (255 - (val * 7) % 255).max(137)
+    )
 }
 
 fn main() -> ApliteResult {

@@ -166,12 +166,13 @@ impl Context {
 
 impl Context {
     pub(crate) fn prepare_data(&self, root_id: ViewId, renderer: &mut Renderer) {
-        VIEW_STORAGE.with(|s| {
+        VIEW_STORAGE.with(|storage| {
             // TODO: let scene = renderer.new_scene();
             let screen = renderer.screen_res();
-            let components = s.get_render_components(&root_id, screen);
 
-            components.iter()
+            storage
+                .get_render_components(&root_id, screen)
+                .iter()
                 .enumerate()
                 .for_each(|(offset, (elem, mat, img))| {
                     let info = img.as_ref().and_then(|image_fn| renderer.render_image(image_fn));
