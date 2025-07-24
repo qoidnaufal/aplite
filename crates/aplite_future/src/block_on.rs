@@ -1,25 +1,25 @@
 use std::future::Future;
 
-enum State {
+pub(crate) enum State {
     Empty,
     Waiting,
     Notified,
 }
 
-struct Signal {
+pub(crate) struct Signal {
     state: std::sync::Mutex<State>,
     cond: std::sync::Condvar,
 }
 
 impl Signal {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             state: std::sync::Mutex::new(State::Empty),
             cond: std::sync::Condvar::new()
         }
     }
 
-    fn wait(&self) {
+    pub(crate) fn wait(&self) {
         let mut state = self.state.lock().unwrap();
         match *state {
             State::Notified => *state = State::Empty,
@@ -33,7 +33,7 @@ impl Signal {
         }
     }
 
-    fn notify(&self) {
+    pub(crate) fn notify(&self) {
         let mut state = self.state.lock().unwrap();
         match *state {
             State::Notified => {},
@@ -48,7 +48,7 @@ impl Signal {
 
 impl std::task::Wake for Signal {
     fn wake(self: std::sync::Arc<Self>) {
-        self.notify();
+        // (&self).wake_by_ref();
     }
 
     fn wake_by_ref(self: &std::sync::Arc<Self>) {

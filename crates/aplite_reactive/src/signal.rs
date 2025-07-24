@@ -27,9 +27,13 @@ impl<T: 'static> Signal<T> {
         )
     }
 
-    pub fn read_only(&self) -> SignalRead<T> { SignalRead::new(self.id) }
+    pub fn read_only(&self) -> SignalRead<T> {
+        SignalRead::new(self.id)
+    }
 
-    pub fn write_only(&self) -> SignalWrite<T> { SignalWrite::new(self.id) }
+    pub fn write_only(&self) -> SignalWrite<T> {
+        SignalWrite::new(self.id)
+    }
 }
 
 impl<T: 'static> Reactive for Signal<T> {

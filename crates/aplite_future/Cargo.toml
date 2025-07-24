@@ -7,3 +7,4 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+aplite_storage = { path = "../aplite_storage" }

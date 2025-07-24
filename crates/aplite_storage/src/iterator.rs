@@ -128,9 +128,9 @@ impl<'a, E: Entity> Iterator for TreeIterator<'a, E> {
 #########################################################
 */
 
-impl<'a, E, T> IntoIterator for &'a Storage<E, T>
+impl<'a, E, T: 'a> IntoIterator for &'a Storage<E, T>
 where
-    E: Entity
+    E: Entity,
 {
     type Item = (E, &'a T);
     type IntoIter = StorageIterator<'a, E, T>;
@@ -143,7 +143,7 @@ where
     }
 }
 
-pub struct StorageIterator<'a, E: Entity, T> {
+pub struct StorageIterator<'a, E: Entity, T: 'a> {
     inner: &'a Storage<E, T>,
     counter: usize,
 }
