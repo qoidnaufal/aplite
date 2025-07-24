@@ -115,41 +115,68 @@ impl BuildHasher for U64Hasher {
 #[cfg(test)]
 mod hash_test {
     use super::*;
-    use std::hash::Hash;
+    use crate::storage::Storage;
+    use crate::entity;
+    use crate::Entity;
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-    struct Id(u64, u32);
-
-    impl Hash for Id {
-        fn hash<H: Hasher>(&self, state: &mut H) {
-            state.write_u64(self.0);
-        }
-    }
-
-    #[derive(Debug)]
-    struct State {
-        storage: Map<Id, String>,
-    }
-
-    impl State {
-        fn new() -> Self {
-            Self {
-                storage: Map::new()
-            }
-        }
-    }
+    entity! { TestId }
 
     #[test]
-    fn map() {
-        let mut state = State::new();
-        for i in 0..10 {
-            let id = Id(i as u64, i as u32 * 2);
-            state.storage.insert(id, i.to_string());
+    fn time_benchmark() {
+        const REPEAT: usize = 1000000;
+        let mut map = Map::new();
+        let now = std::time::Instant::now();
+        for i in 0..REPEAT {
+            map.insert(TestId(i as u64, 0), i);
         }
+        let time_map = now.elapsed();
 
-        let id_zero = state.storage.get(&Id(0, 0));
-        assert!(id_zero.is_some());
+        let mut hashmap = std::collections::HashMap::new();
+        let now = std::time::Instant::now();
+        for i in 0..REPEAT {
+            hashmap.insert(TestId(i as u64, 0), i);
+        }
+        let time_std = now.elapsed();
 
-        eprintln!("{state:?}")
+        let mut storage = Storage::<TestId, usize>::new();
+        let now = std::time::Instant::now();
+        for i in 0..REPEAT {
+            let _ = storage.insert(i);
+        }
+        let time_storage = now.elapsed();
+
+        eprintln!("INSERT: map: {time_map:?} | std: {time_std:?} | storage: {time_storage:?}");
+
+        let now = std::time::Instant::now();
+        for i in 0..REPEAT {
+            let _ = map.get(&TestId(i as _, 0));
+        }
+        let time_get_map = now.elapsed();
+
+        let now = std::time::Instant::now();
+        for i in 0..REPEAT {
+            let _ = hashmap.get(&TestId(i as _, 0));
+        }
+        let time_get_std = now.elapsed();
+
+        let now = std::time::Instant::now();
+        for i in 0..REPEAT {
+            let _ = storage.get(&TestId(i as _, 0));
+        }
+        let time_get_storage = now.elapsed();
+
+        let now = std::time::Instant::now();
+        for i in 0..REPEAT {
+            let _ = storage.unsafe_get(&TestId(i as _, 0));
+        }
+        let time_unsafe_get_storage = now.elapsed();
+
+        eprintln!(
+            "GET: map: {:?} | std: {:?} | storage: {:?} | unsafe: {:?}",
+            time_get_map,
+            time_get_std,
+            time_get_storage,
+            time_unsafe_get_storage,
+        );
     }
 }

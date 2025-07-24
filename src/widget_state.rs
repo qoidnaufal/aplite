@@ -15,8 +15,8 @@ pub enum AspectRatio {
 #[derive(Debug, Clone, Copy)]
 pub struct WidgetState {
     pub(crate) name: &'static str,
-    pub(crate) root_id: RwSignal<Option<ViewId>>,
-    pub(crate) rect: RwSignal<Rect>,
+    pub(crate) root_id: Signal<Option<ViewId>>,
+    pub(crate) rect: Signal<Rect>,
     pub(crate) min_width: Option<f32>,
     pub(crate) min_height: Option<f32>,
     pub(crate) max_width: Option<f32>,
@@ -25,21 +25,21 @@ pub struct WidgetState {
     pub(crate) orientation: Orientation,
     pub(crate) padding: Padding,
     pub(crate) spacing: f32,
-    pub(crate) z_index: RwSignal<u32>,
+    pub(crate) z_index: Signal<u32>,
     pub(crate) image_aspect_ratio: AspectRatio,
-    pub(crate) dragable: RwSignal<bool>,
-    pub(crate) hoverable: RwSignal<bool>,
-    pub(crate) is_hovered: RwSignal<bool>,
-    pub(crate) is_clicked: RwSignal<bool>,
-    pub(crate) trigger_callback: RwSignal<bool>,
+    pub(crate) dragable: Signal<bool>,
+    pub(crate) hoverable: Signal<bool>,
+    pub(crate) is_hovered: Signal<bool>,
+    pub(crate) is_clicked: Signal<bool>,
+    pub(crate) trigger_callback: Signal<bool>,
 }
 
 impl Default for WidgetState {
     fn default() -> Self {
         Self {
             name: "",
-            root_id: RwSignal::new(None),
-            rect: RwSignal::new(Rect::new(0., 0., 0., 0.)),
+            root_id: Signal::new(None),
+            rect: Signal::new(Rect::new(0., 0., 0., 0.)),
             min_width: Some(1.),
             min_height: Some(1.),
             max_width: None,
@@ -47,14 +47,14 @@ impl Default for WidgetState {
             alignment: Alignment::new(),
             orientation: Orientation::Vertical,
             spacing: 0.,
-            z_index: RwSignal::new(0),
+            z_index: Signal::new(0),
             padding: Padding::default(),
             image_aspect_ratio: AspectRatio::Undefined,
-            dragable: RwSignal::new(false),
-            hoverable: RwSignal::new(false),
-            is_hovered: RwSignal::new(false),
-            is_clicked: RwSignal::new(false),
-            trigger_callback: RwSignal::new(false),
+            dragable: Signal::new(false),
+            hoverable: Signal::new(false),
+            is_hovered: Signal::new(false),
+            is_clicked: Signal::new(false),
+            trigger_callback: Signal::new(false),
         }
     }
 }

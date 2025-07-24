@@ -26,7 +26,7 @@ impl ReactiveScope {
 
     pub fn create_rw_signal<T: Any + 'static>(&self, value: T) -> RwSignal<T> {
         let id = ReactiveId::new();
-        let signal = Signal::store_value(value);
+        let signal = Signal::new(value);
         signal.add_subscriber(self.owner);
         self.signals.borrow_mut().insert(id, signal);
         RwSignal { id, phantom: PhantomData }

@@ -43,9 +43,9 @@ pub trait Read: Reactive {
     /// read value without tracking the signal
     fn read_untracked<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
         GRAPH.with(|graph| {
-            let storage = graph.signals.borrow();
-            let signal = storage.get(self.id()).unwrap();
-            let v = signal.value_ref::<RefCell<Self::Value>>()
+            let storage = graph.storage.borrow();
+            let value = storage.get(self.id()).unwrap();
+            let v = value.downcast_ref::<RefCell<Self::Value>>()
                 .unwrap();
             f(&v.borrow())
         })
@@ -58,10 +58,10 @@ pub trait Write: Reactive {
     /// updating the value without notifying it's subscribers
     fn write_untracked(&self, f: impl FnOnce(&mut Self::Value)) {
         GRAPH.with(|graph| {
-            let storage = graph.signals.borrow();
-            if let Some(signal) = storage.get(self.id()) {
-                let v = signal
-                    .value_ref::<RefCell<Self::Value>>()
+            let storage = graph.storage.borrow();
+            if let Some(value) = storage.get(self.id()) {
+                let v = value
+                    .downcast_ref::<RefCell<Self::Value>>()
                     .unwrap();
                 f(&mut v.borrow_mut());
             }
@@ -155,14 +155,14 @@ pub trait Dispose: Reactive {
     fn dispose(&self) {
         GRAPH.with(|graph| {
             graph.untrack(self.id());
-            graph.signals.borrow_mut().remove(self.id());
+            graph.storage.borrow_mut().remove(self.id());
         })
     }
 
     /// check if a signal has been disposed or not
     fn is_disposed(&self) -> bool {
         GRAPH.with(|graph| {
-            graph.signals.borrow().get(self.id()).is_some()
+            graph.storage.borrow().get(self.id()).is_some()
         })
     }
 }

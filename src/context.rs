@@ -36,7 +36,7 @@ impl Context {
 // ########################################################
 
 impl Context {
-    pub(crate) fn dirty(&self) -> RwSignal<Option<ViewId>> {
+    pub(crate) fn dirty(&self) -> Signal<Option<ViewId>> {
         VIEW_STORAGE.with(|s| s.dirty)
     }
 

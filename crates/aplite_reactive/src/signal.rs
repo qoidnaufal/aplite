@@ -1,55 +1,69 @@
-use std::any::Any;
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::marker::PhantomData;
 
-use crate::read_signal::ReadSignal;
-use crate::graph::GRAPH;
-use crate::write_signal::WriteSignal;
-use crate::Effect;
+use super::reactive_traits::*;
+use crate::signal_read::SignalRead;
+use crate::graph::{ReactiveId, GRAPH};
+use crate::signal_write::SignalWrite;
 
-type ReactiveValue = Rc<dyn Any>;
-
-pub struct Signal {
-    value: ReactiveValue,
-    subscribers: RefCell<Vec<Effect>>,
+#[derive(Clone, Copy)]
+pub struct Signal<T> {
+    pub(crate) id: ReactiveId,
+    pub(crate) phantom: PhantomData<T>
 }
 
-impl Signal {
-    pub fn create<T: 'static>(value: T) -> (ReadSignal<T>, WriteSignal<T>) {
-        GRAPH.with(|graph| graph.create_rw_signal(value)).split()
+impl<T: 'static> Signal<T> {
+    pub fn new(value: T) -> Self {
+        GRAPH.with(|rt| rt.create_signal(value))
     }
 
-    pub fn read_only<T: 'static>(value: T) -> ReadSignal<T> {
-        GRAPH.with(|graph| graph.create_rw_signal(value)).read_only()
+    pub fn split(value: T) -> (SignalRead<T>, SignalWrite<T>) {
+        GRAPH.with(|rt| rt.split_signal(value))
     }
 
-    pub fn write_only<T: 'static>(value: T) -> WriteSignal<T> {
-        GRAPH.with(|graph| graph.create_rw_signal(value)).write_only()
+    pub fn into_split(self) -> (SignalRead<T>, SignalWrite<T>) {
+        (
+            SignalRead { id: self.id, phantom: PhantomData },
+            SignalWrite { id: self.id, phantom: PhantomData }
+        )
     }
 
-    pub(crate) fn new<T: Any + 'static>(value: T) -> Self {
-        Self {
-            value: Rc::new(RefCell::new(value)),
-            subscribers: Default::default(),
-        }
-    }
+    pub fn read_only(&self) -> SignalRead<T> { SignalRead::new(self.id) }
 
-    pub(crate) fn add_subscriber(&self, subscriber: Effect) {
-        let mut subscribers = self.subscribers.borrow_mut();
-        if !subscribers.contains(&subscriber) {
-            subscribers.push(subscriber);
-        }
-    }
+    pub fn write_only(&self) -> SignalWrite<T> { SignalWrite::new(self.id) }
+}
 
-    pub(crate) fn get_subscribers(&self) -> Vec<Effect>  {
-        self.subscribers.borrow().clone()
-    }
+impl<T: 'static> Reactive for Signal<T> {
+    fn id(&self) -> &ReactiveId { &self.id }
+}
 
-    pub(crate) fn clear_subscribers(&self) {
-        self.subscribers.borrow_mut().clear();
-    }
+impl<T: 'static> Track for Signal<T> {}
 
-    pub(crate) fn value_ref<T: 'static>(&self) -> Option<&T> {
-        self.value.downcast_ref::<T>()
+impl<T: 'static> Read for Signal<T> {
+    type Value = T;
+}
+
+impl<T: 'static> Notify for Signal<T> {}
+
+impl<T: 'static> Write for Signal<T> {
+    type Value = T;
+}
+
+impl<T, R: Reactive> PartialEq<R> for Signal<T> {
+    fn eq(&self, other: &R) -> bool {
+        self.id.eq(other.id())
+    }
+}
+
+impl<T, R: Reactive> PartialOrd<R> for Signal<T> {
+    fn partial_cmp(&self, other: &R) -> Option<std::cmp::Ordering> {
+        self.id.partial_cmp(other.id())
+    }
+}
+
+impl<T: 'static> std::fmt::Debug for Signal<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Signal")
+            .field("id", self.id())
+            .finish()
     }
 }

@@ -1,6 +1,8 @@
 use crate::manager::EntityManager;
 use crate::entity::Entity;
 use crate::tree::Tree;
+use crate::slot::Content;
+use crate::storage::Storage;
 
 /*
 #########################################################
@@ -15,7 +17,7 @@ impl<'a, E: Entity> IntoIterator for &'a EntityManager<E> {
     type IntoIter = EntityIterator<'a, E>;
     fn into_iter(self) -> Self::IntoIter {
         EntityIterator {
-            inner: self.get_entities(),
+            inner: self,
             counter: 0,
         }
     }
@@ -23,20 +25,22 @@ impl<'a, E: Entity> IntoIterator for &'a EntityManager<E> {
 
 // WARN: this extra allocation is kinda unpleasant, find a way to work around later
 pub struct EntityIterator<'a, E: Entity> {
-    inner: Vec<&'a E>,
+    inner: &'a EntityManager<E>,
     counter: usize,
 }
 
 impl<'a, E: Entity> Iterator for EntityIterator<'a, E> {
     type Item = &'a E;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.counter < self.inner.len() {
-            let entity = self.inner[self.counter];
-            self.counter += 1;
-            Some(entity)
-        } else {
-            None
-        }
+        self.inner
+            .stored
+            .iter()
+            .filter(|slot| matches!(slot.content, Content::Occupied(_)))
+            .nth(self.counter)
+            .map(|slot| {
+                self.counter += 1;
+                slot.get_content().unwrap()
+            })
     }
 }
 
@@ -58,7 +62,6 @@ impl<'a, E: Entity> IntoIterator for &'a Tree<E> {
 }
 
 pub struct TreeIterator<'a, E: Entity> {
-    entities: Vec<&'a E>,
     tree: &'a Tree<E>,
     counter: usize,
 }
@@ -91,8 +94,7 @@ impl<'a, E: Entity> NodeRef<'a, E> {
 
 impl<'a, E: Entity> TreeIterator<'a, E> {
     fn new(tree: &'a Tree<E>) -> Self {
-        let entities = tree.get_all_entities();
-        Self { entities, tree, counter: 0 }
+        Self { tree, counter: 0 }
     }
 }
 
@@ -100,17 +102,68 @@ impl<'a, E: Entity> Iterator for TreeIterator<'a, E> {
     type Item = NodeRef<'a, E>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.counter < self.tree.len() {
-            let node = Some(self.tree.get_node_ref(self.entities[self.counter]));
-            self.counter += 1;
-            node
-        } else {
-            None
-        }
+        self.tree
+            .manager
+            .stored
+            .iter()
+            .filter(|slot| matches!(slot.content, Content::Occupied(_)))
+            .nth(self.counter)
+            .map(|slot| {
+                self.counter += 1;
+                let entity = slot.get_content().unwrap();
+                self.tree.get_node_ref(entity)
+            })
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         (self.counter, Some(self.tree.len()))
+    }
+}
+
+/*
+#########################################################
+#                                                       #
+#                        STORAGE                        #
+#                                                       #
+#########################################################
+*/
+
+impl<'a, E, T> IntoIterator for &'a Storage<E, T>
+where
+    E: Entity
+{
+    type Item = (E, &'a T);
+    type IntoIter = StorageIterator<'a, E, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        StorageIterator {
+            inner: self,
+            counter: 0,
+        }
+    }
+}
+
+pub struct StorageIterator<'a, E: Entity, T> {
+    inner: &'a Storage<E, T>,
+    counter: usize,
+}
+
+impl<'a, E, T> Iterator for StorageIterator<'a, E, T>
+where
+    E: Entity,
+{
+    type Item = (E, &'a T);
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner
+            .inner
+            .iter()
+            .enumerate()
+            .filter(|(_, slot)| matches!(slot.content, Content::Occupied(_)))
+            .nth(self.counter)
+            .map(|(i, slot)| {
+                self.counter += 1;
+                (E::new(i as u64, slot.version), slot.get_content().unwrap())
+            })
     }
 }
 
@@ -119,13 +172,14 @@ mod iterator_test {
     use crate::tree::Tree;
     use crate::manager::EntityManager;
     use crate::entity::Entity;
+    use crate::storage::Storage;
     use crate::entity;
+
+    entity! { TestId }
 
     #[test]
     fn tree_iterator() {
-        entity! { NodeId }
-
-        let mut tree = Tree::<NodeId>::new();
+        let mut tree = Tree::<TestId>::new();
         let mut ids = vec![];
         for _ in 0..10 {
             let id = tree.create_entity();
@@ -138,9 +192,7 @@ mod iterator_test {
 
     #[test]
     fn entity_iterator() {
-        entity! { NodeId }
-
-        let mut manager = EntityManager::<NodeId>::new();
+        let mut manager = EntityManager::<TestId>::new();
         let mut ids = vec![];
         for _ in 0..10 {
             let id = manager.create_entity();
@@ -149,5 +201,25 @@ mod iterator_test {
 
         let len = manager.iter().count();
         assert_eq!(ids.len(), len);
+    }
+
+    #[test]
+    fn storage_iterator() {
+        let mut storage = Storage::<TestId, usize>::with_capacity(10);
+        let mut created_ids = vec![];
+
+        for i in 0..10 {
+            let id = storage.insert(i);
+            created_ids.push(id);
+        }
+
+        assert_eq!(storage.len(), created_ids.len());
+
+        for i in 0..3 {
+            storage.remove(&created_ids[i * 3]);
+        }
+
+        let remaining = storage.iter().count();
+        assert_eq!(remaining, storage.len());
     }
 }

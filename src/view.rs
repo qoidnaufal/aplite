@@ -31,7 +31,7 @@ pub(crate) struct ViewStorage {
     pub(crate) storage: RefCell<Map<ViewId, View>>,
     pub(crate) paint: RefCell<Storage<PaintId, Paint>>,
     pub(crate) hoverable: RefCell<Vec<ViewId>>,
-    pub(crate) dirty: RwSignal<Option<ViewId>>,
+    pub(crate) dirty: Signal<Option<ViewId>>,
 }
 
 impl ViewStorage {
@@ -41,7 +41,7 @@ impl ViewStorage {
             storage: RefCell::new(Map::new()),
             paint: RefCell::new(Storage::new()),
             hoverable: RefCell::new(Vec::new()),
-            dirty: RwSignal::new(None),
+            dirty: Signal::new(None),
         }
     }
 
@@ -713,7 +713,7 @@ mod alt_view {
     fn view(
         cx: &mut ContextAlt,
         color_fn: impl FnMut(Option<Rgba<u8>>) -> Rgba<u8> + 'static,
-        set_counter: WriteSignal<i32>,
+        set_counter: SignalWrite<i32>,
     ) -> impl IntoViewAlt {
         let first_child = WidgetAlt::new(cx);
         let parent = WidgetAlt::new(cx)
@@ -731,7 +731,7 @@ mod alt_view {
 
     #[test]
     fn alt() {
-        let (counter, set_counter) = Signal::create(0i32);
+        let (counter, set_counter) = Signal::split(0i32);
         let color_fn = move |_| if counter.get() == 3 {
             rgba_hex("#ffffffff")
         } else {

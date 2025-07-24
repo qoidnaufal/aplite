@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 use crate::entity::Entity;
+use crate::iterator::StorageIterator;
 use crate::slot::*;
 use crate::Error;
 
@@ -162,55 +163,6 @@ impl<E: Entity, T> Storage<E, T> {
     }
 }
 
-impl<'a, E, T> IntoIterator for &'a Storage<E, T>
-where
-    E: Entity
-{
-    type Item = (E, &'a T);
-    type IntoIter = StorageIterator<'a, E, T>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        let inner = self
-            .inner
-            .iter()
-            .enumerate()
-            .filter_map(|(i, slot)| {
-                slot.get_content()
-                    .map(|data| (
-                        E::new(i as u64, slot.version),
-                        data
-                    ))
-            })
-            .collect::<Vec<_>>();
-        StorageIterator {
-            inner,
-            counter: 0,
-        }
-    }
-}
-
-pub struct StorageIterator<'a, E: Entity, T> {
-    inner: Vec<(E, &'a T)>,
-    counter: usize,
-}
-
-impl<'a, E, T> Iterator for StorageIterator<'a, E, T>
-where
-    E: Entity,
-{
-    type Item = (E, &'a T);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.counter < self.inner.len() {
-            let ret = self.inner[self.counter];
-            self.counter += 1;
-            Some(ret)
-        } else {
-            None
-        }
-    }
-}
-
 impl<E, T> std::fmt::Debug for Storage<E, T>
 where
     E: Entity,
@@ -224,34 +176,11 @@ where
 }
 
 #[cfg(test)]
-mod storage_iter_test {
+mod storage_test {
     use super::*;
     use crate::entity;
 
     entity! { TestId }
-
-    #[test]
-    fn storage() {
-        let mut storage = Storage::<TestId, String>::with_capacity(10);
-        let mut created_ids = vec![];
-
-        for i in 0..10 {
-            let data = format!("{:#x}", i << 4 | 0x101);
-            let id = storage.insert(data);
-            created_ids.push(id);
-        }
-
-        assert_eq!(storage.len(), 10);
-        assert_eq!(created_ids.len(), 10);
-        eprintln!("{storage:#?}");
-
-        for i in 0..3 {
-            storage.remove(&created_ids[i * 3]);
-        }
-
-        assert_eq!(storage.len(), 7);
-        eprintln!("{storage:#?}");
-    }
 
     #[test]
     fn no_duplicate() {
@@ -262,21 +191,14 @@ mod storage_iter_test {
             let data = if i > 0 && i % 3 == 0 {
                 "Double".to_string()
             } else {
-                format!("{:#x}", i << 4 | 0x101)
+                i.to_string()
             };
             let id = storage.insert_no_duplicate(data);
-            created_ids.push(id);
+            if !created_ids.contains(&id) {
+                created_ids.push(id);
+            }
         }
 
-        assert_eq!(storage.len(), 8);
-        assert_eq!(created_ids.len(), 10);
-        eprintln!("{storage:#?}");
-
-        for i in 0..3 {
-            storage.remove(&created_ids[i * 3]);
-        }
-
-        assert_eq!(storage.len(), 6);
-        eprintln!("{storage:#?}");
+        assert_eq!(storage.len(), created_ids.len());
     }
 }

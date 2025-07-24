@@ -19,8 +19,8 @@ fn get_shape(val: u32) -> Shape {
 }
 
 fn simple() -> impl IntoView {
-    let (counter, set_counter) = Signal::create(0u32);
-    let (rotate, set_rotate) = Signal::create(0.0);
+    let (counter, set_counter) = Signal::split(0u32);
+    let (rotate, set_rotate) = Signal::split(0.0);
 
     let color = move |_| get_color(counter.get());
     let shape = move |_| get_shape(counter.get());

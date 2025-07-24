@@ -1,18 +1,17 @@
 mod reactive_traits;
 mod graph;
-mod signal;
+mod stored_value;
 mod effect;
-mod rw_signal;
-mod read_signal;
+mod signal;
+mod signal_read;
 mod subscriber;
 // mod scope;
-mod write_signal;
+mod signal_write;
 
-pub use signal::*;
 pub use effect::*;
-pub use rw_signal::*;
-pub use read_signal::*;
-pub use write_signal::*;
+pub use signal::*;
+pub use signal_read::*;
+pub use signal_write::*;
 pub use reactive_traits::{
     Dispose,
     Read,

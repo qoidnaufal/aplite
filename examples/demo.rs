@@ -99,7 +99,7 @@ fn second_row(
 }
 
 fn root() -> impl IntoView {
-    let (counter, set_counter) = Signal::create(0i32);
+    let (counter, set_counter) = Signal::split(0i32);
 
     let inc = move || set_counter.update(|num| *num += 1);
     let dec = move || set_counter.update(|num| *num -= 1);

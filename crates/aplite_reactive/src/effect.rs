@@ -8,7 +8,7 @@ use crate::subscriber::Subscriber;
 /// to synchronize reactive node with non reactive API, but so far I don't think I encounter any error.
 /// # Example
 /// ```ignore
-/// let (counter, set_counter) = Signal::create(0i32);
+/// let (counter, set_counter) = Signal::split(0i32);
 
 /// Effect::new(move |_| eprintln!("{}", counter.get()));
 ///
