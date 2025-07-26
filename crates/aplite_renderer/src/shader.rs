@@ -178,8 +178,8 @@ fn fs_main(in: FragmentPayload) -> @location(0) vec4<f32> {
 }
 ";
 
-pub const COMPUTE_SDF: &str = r"
-@compute @workgroup_size(16, 16)
-fn compute(@builtin(global_invocation_id) id: vec3u) {
-}
-";
+// pub const COMPUTE_SDF: &str = r"
+// @compute @workgroup_size(16, 16)
+// fn compute(@builtin(global_invocation_id) id: vec3u) {
+// }
+// ";

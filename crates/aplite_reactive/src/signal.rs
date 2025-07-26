@@ -17,7 +17,7 @@ impl<T: 'static> Signal<T> {
     }
 
     pub fn split(value: T) -> (SignalRead<T>, SignalWrite<T>) {
-        GRAPH.with(|rt| rt.split_signal(value))
+        GRAPH.with(|rt| rt.create_signal(value)).into_split()
     }
 
     pub fn into_split(self) -> (SignalRead<T>, SignalWrite<T>) {

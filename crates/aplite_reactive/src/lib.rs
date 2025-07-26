@@ -5,9 +5,9 @@ mod effect;
 mod signal;
 mod signal_read;
 mod subscriber;
-// mod scope;
 mod signal_write;
-mod channel;
+// mod scope;
+// mod channel;
 
 pub use effect::*;
 pub use signal::*;

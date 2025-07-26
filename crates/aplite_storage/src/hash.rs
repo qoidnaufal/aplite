@@ -1,8 +1,13 @@
 use std::hash::{Hasher, BuildHasher};
 use std::collections::HashMap;
-use std::collections::hash_map::{Iter, IntoIter};
+use std::collections::hash_map::{
+    Iter,
+    IterMut,
+    IntoIter,
+    Drain,
+};
 
-pub struct Map<K, V>(HashMap<K, V, U64Hasher>);
+pub struct Map<K, V>(pub(crate) HashMap<K, V, U64Hasher>);
 
 impl<K, V> Map<K, V> {
     pub fn new() -> Self {
@@ -21,12 +26,24 @@ impl<K, V> Map<K, V> {
         self.0.into_iter()
     }
 
+    pub fn iter_mut(&mut self) -> IterMut<'_, K, V> {
+        self.0.iter_mut()
+    }
+
+    pub fn drain(&mut self) -> Drain<'_, K, V> {
+        self.0.drain()
+    }
+
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    pub fn clear(&mut self) {
+        self.0.clear()
     }
 }
 
@@ -42,12 +59,22 @@ where
         self.0.get(k)
     }
 
+    pub fn get_mut(&mut self, k: &K) -> Option<&mut V> {
+        self.0.get_mut(k)
+    }
+
     pub fn remove(&mut self, k: &K) -> Option<V> {
         self.0.remove(k)
     }
 
     pub fn contains_key(&self, k: &K) -> bool {
         self.0.contains_key(k)
+    }
+}
+
+impl<K: Clone, V: Clone> Clone for Map<K, V> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
     }
 }
 
@@ -67,15 +94,6 @@ where
     }
 }
 
-// impl<K, V> std::ops::IndexMut<&K> for Map<K, V>
-// where
-//     K: std::hash::Hash + Eq
-// {
-//     fn index_mut(&mut self, index: &K) -> &mut Self::Output {
-//         &mut self.0[index]
-//     }
-// }
-
 impl<K, V> std::fmt::Debug for Map<K, V>
 where
     K: std::fmt::Debug,
@@ -88,6 +106,7 @@ where
     }
 }
 
+#[derive(Clone)]
 pub struct U64Hasher(u64);
 
 impl Hasher for U64Hasher {
@@ -115,7 +134,7 @@ impl BuildHasher for U64Hasher {
 #[cfg(test)]
 mod hash_test {
     use super::*;
-    use crate::storage::Storage;
+    use crate::index_map::IndexMap;
     use crate::entity;
     use crate::Entity;
 
@@ -138,14 +157,14 @@ mod hash_test {
         }
         let time_std = now.elapsed();
 
-        let mut storage = Storage::<TestId, usize>::new();
+        let mut indexmap = IndexMap::<TestId, usize>::new();
         let now = std::time::Instant::now();
         for i in 0..REPEAT {
-            let _ = storage.insert(i);
+            let _ = indexmap.insert(i);
         }
-        let time_storage = now.elapsed();
+        let time_index = now.elapsed();
 
-        eprintln!("INSERT: map: {time_map:?} | std: {time_std:?} | storage: {time_storage:?}");
+        eprintln!("INSERT: map: {time_map:?} | std: {time_std:?} | index_map: {time_index:?}");
 
         let now = std::time::Instant::now();
         for i in 0..REPEAT {
@@ -161,22 +180,15 @@ mod hash_test {
 
         let now = std::time::Instant::now();
         for i in 0..REPEAT {
-            let _ = storage.get(&TestId(i as _, 0));
+            let _ = indexmap.get(&TestId(i as _, 0));
         }
-        let time_get_storage = now.elapsed();
-
-        let now = std::time::Instant::now();
-        for i in 0..REPEAT {
-            let _ = storage.unsafe_get(&TestId(i as _, 0));
-        }
-        let time_unsafe_get_storage = now.elapsed();
+        let time_get_indexmap = now.elapsed();
 
         eprintln!(
-            "GET: map: {:?} | std: {:?} | storage: {:?} | unsafe: {:?}",
+            "GET: map: {:?} | std: {:?} | index_map: {:?}",
             time_get_map,
             time_get_std,
-            time_get_storage,
-            time_unsafe_get_storage,
+            time_get_indexmap,
         );
     }
 }

@@ -3,63 +3,21 @@ use std::cell::RefCell;
 use std::marker::PhantomData;
 // use std::sync::atomic::AtomicU64;
 
-use aplite_storage::{Storage, Entity, entity};
+use aplite_storage::{IndexMap, Entity, entity};
 
 use crate::effect::{Effect, EffectInner};
 use crate::stored_value::StoredValue;
 use crate::subscriber::{AnySubscriber, ToAnySubscriber};
 use crate::signal::Signal;
-use crate::signal_read::SignalRead;
-use crate::signal_write::SignalWrite;
 
 thread_local! {
     pub(crate) static GRAPH: ReactiveGraph = ReactiveGraph::new();
 }
 
-/*
-#########################################################
-#                                                       #
-#                          Id                           #
-#                                                       #
-#########################################################
-*/
-
 entity! {
     pub ReactiveId,
     pub EffectId,
 }
-
-// #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-// pub struct ReactiveId(u64);
-
-// impl ReactiveId {
-//     pub(crate) fn new() -> Self {
-//         static REACTIVE_ID: AtomicU64 = AtomicU64::new(0);
-//         Self(REACTIVE_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
-//     }
-// }
-
-// impl std::hash::Hash for ReactiveId {
-//     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-//         state.write_u64(self.0);
-//     }
-// }
-
-// #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-// pub(crate) struct EffectId(u64);
-
-// impl EffectId {
-//     pub(crate) fn new() -> Self {
-//         static EFFECT_ID: AtomicU64 = AtomicU64::new(0);
-//         Self(EFFECT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
-//     }
-// }
-
-// impl std::hash::Hash for EffectId {
-//     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-//         state.write_u64(self.0);
-//     }
-// }
 
 /*
 #########################################################
@@ -69,11 +27,11 @@ entity! {
 #########################################################
 */
 
-type SignalStorage = Storage<ReactiveId, StoredValue>;
-type Subscribers = Storage<EffectId, AnySubscriber>;
+type ValueStorage = IndexMap<ReactiveId, StoredValue>;
+type Subscribers = IndexMap<EffectId, AnySubscriber>;
 
 pub(crate) struct ReactiveGraph {
-    pub(crate) storage: RefCell<SignalStorage>,
+    pub(crate) storage: RefCell<ValueStorage>,
     pub(crate) current: RefCell<Option<Effect>>,
     pub(crate) subscribers: RefCell<Subscribers>,
 }
@@ -87,16 +45,16 @@ impl ReactiveGraph {
         }
     }
 
+    #[inline(always)]
     pub(crate) fn create_signal<T: Any + 'static>(&self, value: T) -> Signal<T> {
-        // let id = ReactiveId::new();
-        let id = self.storage.borrow_mut().insert(StoredValue::new(value));
-        Signal { id, phantom: PhantomData }
-    }
+        let id = self.storage
+            .borrow_mut()
+            .insert(StoredValue::new(value));
 
-    pub(crate) fn split_signal<T: Any + 'static>(&self, value: T) -> (SignalRead<T>, SignalWrite<T>) {
-        // let id = ReactiveId::new();
-        let id = self.storage.borrow_mut().insert(StoredValue::new(value));
-        (SignalRead { id, phantom: PhantomData }, SignalWrite { id, phantom: PhantomData })
+        Signal {
+            id,
+            phantom: PhantomData,
+        }
     }
 
     pub(crate) fn create_effect<F, R>(&self, f: F) -> Effect
@@ -142,6 +100,7 @@ impl ReactiveGraph {
         }
     }
 
+    #[inline(always)]
     fn get_subscribers(&self, id: &ReactiveId) -> Option<Vec<Effect>> {
         self.storage
             .borrow()
@@ -149,6 +108,7 @@ impl ReactiveGraph {
             .map(|s| s.get_subscribers())
     }
 
+    #[inline(always)]
     fn run_effect(&self, effect: Effect) {
         let pref_effect = self.current.borrow_mut().replace(effect);
 

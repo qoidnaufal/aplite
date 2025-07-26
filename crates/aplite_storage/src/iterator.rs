@@ -2,7 +2,8 @@ use crate::manager::EntityManager;
 use crate::entity::Entity;
 use crate::tree::Tree;
 use crate::slot::Content;
-use crate::storage::Storage;
+use crate::index_map::IndexMap;
+use crate::hash::Map;
 
 /*
 #########################################################
@@ -128,7 +129,7 @@ impl<'a, E: Entity> Iterator for TreeIterator<'a, E> {
 #########################################################
 */
 
-impl<'a, E, T: 'a> IntoIterator for &'a Storage<E, T>
+impl<'a, E, T: 'a> IntoIterator for &'a IndexMap<E, T>
 where
     E: Entity,
 {
@@ -144,7 +145,7 @@ where
 }
 
 pub struct StorageIterator<'a, E: Entity, T: 'a> {
-    inner: &'a Storage<E, T>,
+    inner: &'a IndexMap<E, T>,
     counter: usize,
 }
 
@@ -167,12 +168,29 @@ where
     }
 }
 
+/*
+#########################################################
+#                                                       #
+#                          MAP                          #
+#                                                       #
+#########################################################
+*/
+
+impl<'a, K, V> IntoIterator for &'a Map<K, V> {
+    type Item = (&'a K, &'a V);
+    type IntoIter = std::collections::hash_map::Iter<'a, K, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
 #[cfg(test)]
 mod iterator_test {
     use crate::tree::Tree;
     use crate::manager::EntityManager;
     use crate::entity::Entity;
-    use crate::storage::Storage;
+    use crate::index_map::IndexMap;
     use crate::entity;
 
     entity! { TestId }
@@ -205,7 +223,7 @@ mod iterator_test {
 
     #[test]
     fn storage_iterator() {
-        let mut storage = Storage::<TestId, usize>::with_capacity(10);
+        let mut storage = IndexMap::<TestId, usize>::with_capacity(10);
         let mut created_ids = vec![];
 
         for i in 0..10 {

@@ -1,12 +1,18 @@
 pub(crate) mod color;
-pub(crate) mod image;
+pub(crate) mod image_data;
 
 use color::Rgba;
-use image::{ImageData, ImageRef};
+use image_data::{ImageData, ImageRef};
 
 pub enum Paint {
     Color(Rgba<u8>),
     Image(ImageData),
+    // TODO: Gradient,
+}
+
+pub enum PaintRef<'a> {
+    Color(&'a Rgba<u8>),
+    Image(ImageRef),
 }
 
 impl Paint {
@@ -43,9 +49,4 @@ impl PartialEq for Paint {
             _ => false
         }
     }
-}
-
-pub enum PaintRef<'a> {
-    Color(&'a Rgba<u8>),
-    Image(ImageRef),
 }

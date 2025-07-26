@@ -3,19 +3,21 @@ mod manager;
 mod iterator;
 mod entity;
 mod hash;
-mod storage;
+mod index_map;
 mod slot;
 
 pub use tree::*;
 pub use manager::EntityManager;
 pub use entity::Entity;
 pub use hash::Map;
-pub use storage::Storage;
+pub use index_map::IndexMap;
 
 #[derive(Debug)]
 pub enum Error {
     ReachedMaxId,
     InternalCollision,
+    InvalidId,
+    InvalidSlot,
 }
 
 impl std::fmt::Display for Error {

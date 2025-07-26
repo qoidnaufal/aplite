@@ -1,10 +1,10 @@
 use std::sync::Arc;
 use winit::window::Window;
-use aplite_types::{Matrix3x2, Rgba, Size, ImageData, PaintRef};
+use aplite_types::{Matrix3x2, Rgba, Size, PaintRef};
 
 use super::RendererError;
 
-use crate::atlas::{Atlas, AtlasId};
+use crate::atlas::Atlas;
 use crate::element::Element;
 use crate::screen::Screen;
 use crate::shader::render_shader;
@@ -193,17 +193,30 @@ impl Renderer {
     // pub fn finish(&mut self) {
     // }
 
-    pub fn submit_data(
+    pub fn paint(
         &mut self,
-        element: Element,
+        mut element: Element,
         transform: Matrix3x2,
+        paint: PaintRef<'_>,
     ) {
+        use aplite_storage::Entity;
+
+        let atlas_id = match paint {
+            PaintRef::Color(_rgba) => None,
+            PaintRef::Image(image_ref) => image_ref
+                .upgrade()
+                .and_then(|image| self.atlas.append(image)),
+        };
+
         let offset = self.mesh[self.current].offset;
         let indices = Indices::new().with_offset(offset as _, true);
-        let vertices = self.atlas
-            .get_uv(&element.atlas_id)
-            .map(|uv| Vertices::new().with_uv(*uv).with_id(offset as _))
-            .unwrap_or(Vertices::new().with_id(offset as _));
+        let vertices = atlas_id.and_then(|id| {
+            element.set_atlas_id(id.index() as i32);
+            self.atlas
+                .get_uv(&id)
+                .map(|uv| Vertices::new().with_uv(uv).with_id(offset as _))
+        })
+        .unwrap_or(Vertices::new().with_id(offset as _));
 
         self.mesh[self.current]
             .indices
@@ -218,27 +231,14 @@ impl Renderer {
             .transforms
             .write(&self.device, &self.queue, offset, &[transform]);
 
-        self.mesh[self.current].offset = offset + 1;
-    }
-
-    pub fn render_image(&mut self, f: &dyn Fn() -> ImageData) -> Option<AtlasId> {
-        let image = f();
-        self.atlas.append(image)
-    }
-
-    pub fn paint(&mut self, paint: PaintRef<'_>) -> Option<AtlasId> {
-        match paint {
-            PaintRef::Color(_rgba) => None,
-            PaintRef::Image(image_ref) => image_ref
-                .upgrade()
-                .and_then(|image| self.atlas.append(image)),
-        }
+        self.mesh[self.current].offset += 1;
     }
 }
 
 pub(crate) enum Pipeline {
     Render(wgpu::RenderPipeline),
     #[allow(unused)]
+    // TODO: this is deep & complex topic, but nevertheless an interesting one to study
     Compute(wgpu::ComputePipeline),
 }
 

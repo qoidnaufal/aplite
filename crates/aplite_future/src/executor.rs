@@ -5,8 +5,6 @@ use std::task::Wake;
 
 use crate::runtime::CURRENT_RUNTIME;
 
-// use aplite_storage::{Storage, entity, Entity};
-
 pub(crate) type PinnedFuture = Pin<Box<dyn Future<Output = ()>>>;
 
 pub(crate) struct Task {
@@ -30,9 +28,8 @@ impl Executor {
     pub fn spawn_local(future: impl Future<Output = ()> + 'static + Send) {
         CURRENT_RUNTIME.with(|cell| {
             if let Some(spawner) = cell.get() {
-                let future = Box::pin(future);
                 let task = Arc::new(Task {
-                    future: RwLock::new(Some(future)),
+                    future: RwLock::new(Some(Box::pin(future))),
                     sender: spawner.clone(),
                 });
                 let _ = spawner.send(task);

@@ -150,19 +150,3 @@ fn parse_hex(hex: &str) -> (u8, u8, u8, u8) {
 
     (r, g, b, a)
 }
-
-// struct ParseError(String);
-
-// impl std::fmt::Display for ParseError {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "Error on parsing hex string: {}", self.0)
-//     }
-// }
-
-// impl std::fmt::Debug for ParseError {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "Error on parsing hex string: {}", self.0)
-//     }
-// }
-
-// impl std::error::Error for ParseError {}

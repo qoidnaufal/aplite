@@ -26,10 +26,10 @@ members = [
 winit.workspace = true
 wgpu.workspace = true
 aplite_types.workspace = true
+aplite_storage.workspace = true
 aplite_stats = { path = "crates/aplite_stats", default-features = false, optional = true }
 aplite_reactive = { path = "crates/aplite_reactive" }
 aplite_renderer = { path = "crates/aplite_renderer" }
-aplite_storage = { path = "crates/aplite_storage" }
 aplite_future = { path = "crates/aplite_future" }
 
 [dependencies.image]
@@ -39,6 +39,7 @@ features = ["rayon", "jpeg", "png"]
 optional = true
 
 [workspace.dependencies]
+aplite_storage = { path = "crates/aplite_storage" }
 aplite_types = { path = "crates/aplite_types" }
 wgpu = "26.0.1"
 winit = "0.30.11"

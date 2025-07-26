@@ -4,20 +4,20 @@ use crate::iterator::StorageIterator;
 use crate::slot::*;
 use crate::Error;
 
-pub struct Storage<E: Entity, T> {
+pub struct IndexMap<E: Entity, T> {
     pub(crate) inner: Vec<Slot<T>>,
     next: u64,
     count: u64,
     marker: PhantomData<E>
 }
 
-impl<E: Entity, T> Default for Storage<E, T> {
+impl<E: Entity, T> Default for IndexMap<E, T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<E: Entity, T: PartialEq> Storage<E, T> {
+impl<E: Entity, T: PartialEq> IndexMap<E, T> {
     pub fn insert_no_duplicate(&mut self, data: T) -> E {
         self.try_insert_no_duplicate(data).unwrap()
     }
@@ -38,7 +38,7 @@ impl<E: Entity, T: PartialEq> Storage<E, T> {
     }
 }
 
-impl<E: Entity, T> Storage<E, T> {
+impl<E: Entity, T> IndexMap<E, T> {
     pub fn new() -> Self {
         Self::new_with_capacity(0)
     }
@@ -47,6 +47,8 @@ impl<E: Entity, T> Storage<E, T> {
         Self::new_with_capacity(capacity)
     }
 
+    /// This would ensure best performance on [`insert`](Self::insert),
+    /// but kinda wasteful if you don't really use all the capacity.
     pub fn with_max_capacity() -> Self {
         let capacity = u64::MAX - 1;
         Self::new_with_capacity(capacity as usize)
@@ -67,6 +69,8 @@ impl<E: Entity, T> Storage<E, T> {
         }
     }
 
+    /// Panic if the generated [`Entity`] has reached [`u64::MAX`], or there's an internal error.
+    /// Use [`try_insert`](IndexMap::try_insert) if you want to handle the error manually
     pub fn insert(&mut self, data: T) -> E {
         self.try_insert(data).unwrap()
     }
@@ -102,24 +106,46 @@ impl<E: Entity, T> Storage<E, T> {
         }
     }
 
+    /// Panic if the id is invalid, or there's an internal error.
+    /// Use [`try_replace`](IndexMap::try_replace()) if you want to handle the error manually
+    pub fn replace(&mut self, entity: &E, data: T) -> T {
+        self.try_replace(entity, data).unwrap()
+    }
+
+    #[inline(always)]
+    pub fn try_replace(&mut self, entity: &E, data: T) -> Result<T, Error> {
+        match self.inner.get_mut(entity.index()) {
+            Some(slot) if entity.version() == slot.version => {
+                slot.get_content_mut()
+                    .ok_or(Error::InvalidSlot)
+                    .map(|prev| std::mem::replace(prev, data))
+            },
+            _ => Err(Error::InvalidId),
+        }
+    }
+
     pub fn get(&self, entity: &E) -> Option<&T> {
         self.inner
             .get(entity.index())
-            .and_then(|slot| slot.get_content())
+            .and_then(|slot| {
+                if slot.version == entity.version() {
+                    slot.get_content()
+                } else {
+                    None
+                }
+            })
     }
 
     pub fn get_mut(&mut self, entity: &E) -> Option<&mut T> {
         self.inner
             .get_mut(entity.index())
-            .and_then(|slot| slot.get_content_mut())
-    }
-
-    pub fn unsafe_get(&self, entity: &E) -> Option<&T> {
-        self.inner[entity.index()].get_content()
-    }
-
-    pub fn unsafe_get_mut(&mut self, entity: &E) -> Option<&mut T> {
-        self.inner[entity.index()].get_content_mut()
+            .and_then(|slot| {
+                if slot.version == entity.version() {
+                    slot.get_content_mut()
+                } else {
+                    None
+                }
+            })
     }
 
     #[inline(always)]
@@ -163,7 +189,7 @@ impl<E: Entity, T> Storage<E, T> {
     }
 }
 
-impl<E, T> std::fmt::Debug for Storage<E, T>
+impl<E, T> std::fmt::Debug for IndexMap<E, T>
 where
     E: Entity,
     T: std::fmt::Debug
@@ -172,6 +198,36 @@ where
         f.debug_list()
             .entries(self.iter())
             .finish()
+    }
+}
+
+impl<E, T> std::ops::Index<&E> for IndexMap<E, T>
+where
+    E: Entity,
+{
+    type Output = T;
+    fn index(&self, index: &E) -> &Self::Output {
+        self.get(index).unwrap()
+    }
+}
+
+impl<E, T> std::ops::IndexMut<&E> for IndexMap<E, T>
+where
+    E: Entity
+{
+    fn index_mut(&mut self, index: &E) -> &mut Self::Output {
+        self.get_mut(index).unwrap()
+    }
+}
+
+impl<E: Entity, T: Clone> Clone for IndexMap<E, T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            next: self.next,
+            count: self.count,
+            marker: PhantomData,
+        }
     }
 }
 
@@ -184,7 +240,7 @@ mod storage_test {
 
     #[test]
     fn no_duplicate() {
-        let mut storage = Storage::<TestId, String>::with_capacity(10);
+        let mut storage = IndexMap::<TestId, String>::with_capacity(10);
         let mut created_ids = vec![];
 
         for i in 0..10 {

@@ -1,7 +1,5 @@
 use aplite_types::{CornerRadius, Rgba};
 
-use crate::atlas::AtlasId;
-
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Element {
@@ -11,7 +9,7 @@ pub struct Element {
     pub(crate) shape: Shape,
     pub(crate) rotation: f32,
     pub(crate) stroke_width: f32,
-    pub(crate) atlas_id: AtlasId,
+    pub(crate) atlas_id: i32,
     pub(crate) transform_id: u32,
 }
 
@@ -33,12 +31,12 @@ impl Element {
             shape: Shape::RoundedRect,
             rotation: 0.0,
             stroke_width: 0.0,
-            atlas_id: AtlasId::new(-1),
+            atlas_id: -1,
             transform_id: 0,
         }
     }
 
-    pub(crate) fn atlas_id(&self) -> AtlasId {
+    pub fn atlas_id(&self) -> i32 {
         self.atlas_id
     }
 
@@ -114,7 +112,7 @@ impl Element {
         self.transform_id = val;
     }
 
-    pub fn set_atlas_id(&mut self, id: AtlasId) {
+    pub fn set_atlas_id(&mut self, id: i32) {
         self.atlas_id = id;
     }
 

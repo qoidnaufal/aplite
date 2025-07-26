@@ -126,7 +126,9 @@ impl Aplite {
             root
         });
 
-        let gpu_surface = block_on(async {GpuSurface::new(Arc::clone(&window)).await})?;
+        let gpu_surface = block_on(async {
+            GpuSurface::new(Arc::clone(&window)).await
+        })?;
 
         let window_handle = WindowHandle {
             window: Arc::clone(&window),

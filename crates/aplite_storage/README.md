@@ -16,6 +16,6 @@ Non hashing HashMap, just feed the index of the `Entity (u64)` directly.
 Inspired by how [`slotmap`](https://github.com/orlp/slotmap) works, but using enum instead of union.
 
 ## Performance
-On 1000000 repeated insert & get:
-- INSERT: `map`: 19.487625ms | `std hashmap`: 102.835ms | `storage`: 9.076708ms
-- GET: `map`: 2.628375ms | `std hashmap`: 45.996208ms | `storage`: 0ns | `storage unsafe`: 0ns
+On 1000000 iteration of insert & get:
+- INSERT: `map`: 19.530042ms | `std`: 104.050333ms | `index_map`: 9.42825ms
+- GET: `map`: 3.712916ms | `std`: 47.293583ms | `index_map`: 0ns

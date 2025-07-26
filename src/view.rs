@@ -5,7 +5,7 @@ use aplite_reactive::*;
 use aplite_types::{Size, CornerRadius};
 use aplite_types::{Rgba, Paint};
 use aplite_renderer::{Element, Shape, Renderer};
-use aplite_storage::{entity, Entity, Tree, Map, Storage};
+use aplite_storage::{entity, Entity, Tree, Map, IndexMap};
 
 use crate::widget_state::WidgetState;
 
@@ -29,7 +29,7 @@ thread_local! {
 pub(crate) struct ViewStorage {
     pub(crate) tree: RefCell<Tree<ViewId>>,
     pub(crate) storage: RefCell<Map<ViewId, View>>,
-    pub(crate) paint: RefCell<Storage<PaintId, Paint>>,
+    pub(crate) paint: RefCell<IndexMap<PaintId, Paint>>,
     pub(crate) hoverable: RefCell<Vec<ViewId>>,
     pub(crate) dirty: Signal<Option<ViewId>>,
 }
@@ -39,7 +39,7 @@ impl ViewStorage {
         Self {
             tree: RefCell::new(Tree::with_capacity(1024)),
             storage: RefCell::new(Map::new()),
-            paint: RefCell::new(Storage::new()),
+            paint: RefCell::new(IndexMap::new()),
             hoverable: RefCell::new(Vec::new()),
             dirty: Signal::new(None),
         }
@@ -133,10 +133,7 @@ impl ViewStorage {
                         let element = view.node.clone();
                         let transform = view.widget_state.get_transform(renderer.screen_res());
 
-                        if let Some(atlas_id) = renderer.paint(paint_ref) {
-                            element.borrow_mut().set_atlas_id(atlas_id);
-                        }
-                        renderer.submit_data(*element.borrow(), transform);
+                        renderer.paint(*element.borrow(), transform, paint_ref);
                     }
             })
     }
@@ -343,6 +340,7 @@ impl ViewNode {
         self.0.borrow()
     }
 
+    #[allow(unused)]
     pub(crate) fn borrow_mut(&self) -> RefMut<'_, Element> {
         self.0.borrow_mut()
     }
@@ -585,174 +583,3 @@ pub trait Layout: Widget + Sized {
 }
 
 impl<T> Layout for T where T: Widget + Sized {}
-
-#[cfg(test)]
-mod alt_view {
-    use std::rc::Rc;
-    // use std::rc::Weak;
-    use std::cell::{RefCell, Ref, RefMut};
-
-    use aplite_storage::{Tree, Entity, Map, Storage, entity};
-    use aplite_reactive::*;
-    use aplite_types::*;
-
-    entity! { ViewIdAlt, ColorId }
-
-    #[derive(Debug)]
-    // contains all the id of the commponents
-    struct ViewAlt {
-        color_id: Option<ColorId>,
-    }
-
-    #[derive(Default)]
-    struct ContextAlt {
-        tree: Tree<ViewIdAlt>,
-        view: Map<ViewIdAlt, ViewAlt>,
-        color: Storage<ColorId, Component<Rgba<u8>>>,
-    }
-
-    struct Component<T>(Rc<RefCell<T>>);
-
-    #[derive(Debug, Clone, Copy)]
-    struct WidgetAlt {
-        id: ViewIdAlt,
-        color_id: Option<ColorId>,
-    }
-
-    impl<T> Component<T> {
-        fn new(value: T) -> Self {
-            Self(Rc::new(RefCell::new(value)))
-        }
-
-        fn inner_ref(&self) -> Ref<'_, T> {
-            self.0.borrow()
-        }
-
-        #[allow(unused)]
-        fn inner_mut(&self) -> RefMut<'_, T> {
-            self.0.borrow_mut()
-        }
-    }
-
-    impl<T: std::fmt::Debug> std::fmt::Debug for Component<T> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_tuple("Color")
-                .field(&*self.inner_ref())
-                .finish()
-        }
-    }
-
-    impl WidgetAlt {
-        fn new(cx: &mut ContextAlt) -> Self {
-            let id = cx.tree.create_entity();
-            let color_id = cx.color.insert(Component::new(Rgba::RED));
-            let this = Self { id, color_id: Some(color_id) };
-            cx.view.insert(id, this.into_view());
-
-            this
-        }
-    }
-
-    trait WidgetTraitAlt: Sized {
-        fn id(&self) -> ViewIdAlt;
-
-        fn child(self, cx: &mut ContextAlt, child: impl IntoViewAlt) -> Self {
-            cx.tree.add_child(&self.id(), child.id());
-            self
-        }
-
-        fn child_fn<F, IV>(self, cx: &mut ContextAlt, child_fn: F) -> Self
-        where
-            F: FnOnce(&mut ContextAlt) -> IV,
-            IV: IntoViewAlt,
-        {
-            let child = child_fn(cx);
-            self.child(cx, child)
-        }
-
-        fn set_color(
-            self,
-            cx: &mut ContextAlt,
-            mut color_fn: impl FnMut(Option<Rgba<u8>>) -> Rgba<u8> + 'static
-        ) -> Self {
-            if let Some(view) = cx.view.get(&self.id())
-            && let Some(color) = cx.color.unsafe_get(&view.color_id.unwrap()) {
-                let weak = Rc::downgrade(&color.0);
-                Effect::new(move |prev| {
-                    let new_color = color_fn(prev);
-                    if let Some(strong) = weak.upgrade() {
-                        *strong.borrow_mut() = new_color;
-                    }
-                    new_color
-                });
-            }
-            self
-        }
-    }
-
-    impl WidgetTraitAlt for WidgetAlt {
-        fn id(&self) -> ViewIdAlt { self.id }
-    }
-
-    trait Render: std::fmt::Debug + 'static {}
-
-    impl Render for WidgetAlt {}
-
-    // WARN: passing &mut Context on every widget function
-    // makes this trait becomes useless
-    trait IntoViewAlt: WidgetTraitAlt + Render {
-        fn into_view(self) -> ViewAlt;
-    }
-
-    impl IntoViewAlt for WidgetAlt {
-        fn into_view(self) -> ViewAlt {
-            ViewAlt { color_id: self.color_id }
-        }
-    }
-
-    fn view(
-        cx: &mut ContextAlt,
-        color_fn: impl FnMut(Option<Rgba<u8>>) -> Rgba<u8> + 'static,
-        set_counter: SignalWrite<i32>,
-    ) -> impl IntoViewAlt {
-        let first_child = WidgetAlt::new(cx);
-        let parent = WidgetAlt::new(cx)
-            .set_color(cx, color_fn)
-            .child(cx, first_child);
-
-        set_counter.set(3);
-
-        parent.child_fn(cx, second_child)
-    }
-
-    fn second_child(cx: &mut ContextAlt) -> impl IntoViewAlt + use<> {
-        WidgetAlt::new(cx)
-    }
-
-    #[test]
-    fn alt() {
-        let (counter, set_counter) = Signal::split(0i32);
-        let color_fn = move |_| if counter.get() == 3 {
-            rgba_hex("#ffffffff")
-        } else {
-            rgba_u8(0, 0, 0, 0)
-        };
-
-        let mut cx = ContextAlt::default();
-        let root = cx.tree.create_entity();
-
-        let view = view(&mut cx, color_fn, set_counter);
-        cx.tree.add_child(&root, view.id());
-        let child = cx.tree.get_last_child(&root);
-
-        eprintln!("{:?}", cx.tree);
-        assert_eq!(child, Some(&view.id()));
-
-        let color = cx.color.get(&view.into_view().color_id.unwrap());
-        assert!(color.is_some());
-        assert_eq!(*color.unwrap().inner_ref(), rgba_u8(255, 255, 255, 255));
-
-        set_counter.set(69);
-        assert_eq!(*color.unwrap().inner_ref(), rgba_u8(0, 0, 0, 0));
-    }
-}
