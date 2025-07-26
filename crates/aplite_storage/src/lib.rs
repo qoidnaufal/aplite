@@ -1,5 +1,4 @@
 mod tree;
-mod manager;
 mod iterator;
 mod entity;
 mod hash;
@@ -7,7 +6,6 @@ mod index_map;
 mod slot;
 
 pub use tree::*;
-pub use manager::EntityManager;
 pub use entity::Entity;
 pub use hash::Map;
 pub use index_map::IndexMap;

@@ -1,49 +1,8 @@
-use crate::manager::EntityManager;
 use crate::entity::Entity;
 use crate::tree::Tree;
 use crate::slot::Content;
 use crate::index_map::IndexMap;
 use crate::hash::Map;
-
-/*
-#########################################################
-#                                                       #
-#                     ENTITY MANAGER                    #
-#                                                       #
-#########################################################
-*/
-
-impl<'a, E: Entity> IntoIterator for &'a EntityManager<E> {
-    type Item = &'a E;
-    type IntoIter = EntityIterator<'a, E>;
-    fn into_iter(self) -> Self::IntoIter {
-        EntityIterator {
-            inner: self,
-            counter: 0,
-        }
-    }
-}
-
-// WARN: this extra allocation is kinda unpleasant, find a way to work around later
-pub struct EntityIterator<'a, E: Entity> {
-    inner: &'a EntityManager<E>,
-    counter: usize,
-}
-
-impl<'a, E: Entity> Iterator for EntityIterator<'a, E> {
-    type Item = &'a E;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner
-            .stored
-            .iter()
-            .filter(|slot| matches!(slot.content, Content::Occupied(_)))
-            .nth(self.counter)
-            .map(|slot| {
-                self.counter += 1;
-                slot.get_content().unwrap()
-            })
-    }
-}
 
 /*
 #########################################################
@@ -63,7 +22,7 @@ impl<'a, E: Entity, T> IntoIterator for &'a Tree<E, T> {
 }
 
 pub struct TreeIterator<'a, E: Entity, T> {
-    inner: StorageIterator<'a, E, T>,
+    inner: IndexMapIterator<'a, E, T>,
     tree: &'a Tree<E, T>
 }
 
@@ -118,7 +77,7 @@ impl<'a, E: Entity, T> Iterator for TreeIterator<'a, E, T> {
 /*
 #########################################################
 #                                                       #
-#                        STORAGE                        #
+#                       INDEX MAP                       #
 #                                                       #
 #########################################################
 */
@@ -128,22 +87,22 @@ where
     E: Entity,
 {
     type Item = (E, &'a T);
-    type IntoIter = StorageIterator<'a, E, T>;
+    type IntoIter = IndexMapIterator<'a, E, T>;
 
     fn into_iter(self) -> Self::IntoIter {
-        StorageIterator {
+        IndexMapIterator {
             inner: self,
             counter: 0,
         }
     }
 }
 
-pub struct StorageIterator<'a, E: Entity, T: 'a> {
+pub struct IndexMapIterator<'a, E: Entity, T: 'a> {
     inner: &'a IndexMap<E, T>,
     counter: usize,
 }
 
-impl<'a, E, T> Iterator for StorageIterator<'a, E, T>
+impl<'a, E, T> Iterator for IndexMapIterator<'a, E, T>
 where
     E: Entity,
 {
@@ -182,7 +141,6 @@ impl<'a, K, V> IntoIterator for &'a Map<K, V> {
 #[cfg(test)]
 mod iterator_test {
     use crate::tree::Tree;
-    use crate::manager::EntityManager;
     use crate::entity::Entity;
     use crate::index_map::IndexMap;
     use crate::entity;
@@ -190,7 +148,7 @@ mod iterator_test {
     entity! { TestId }
 
     #[test]
-    fn tree_iterator() {
+    fn tree() {
         let mut tree = Tree::<TestId, ()>::new();
         let mut ids = vec![];
         for _ in 0..10 {
@@ -203,20 +161,7 @@ mod iterator_test {
     }
 
     #[test]
-    fn entity_iterator() {
-        let mut manager = EntityManager::<TestId>::new();
-        let mut ids = vec![];
-        for _ in 0..10 {
-            let id = manager.create_entity();
-            ids.push(id);
-        }
-
-        let len = manager.iter().count();
-        assert_eq!(ids.len(), len);
-    }
-
-    #[test]
-    fn storage_iterator() {
+    fn indexmap() {
         let mut storage = IndexMap::<TestId, usize>::with_capacity(10);
         let mut created_ids = vec![];
 

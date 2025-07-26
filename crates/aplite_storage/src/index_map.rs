@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 use crate::entity::Entity;
-use crate::iterator::StorageIterator;
+use crate::iterator::IndexMapIterator;
 use crate::slot::*;
 use crate::Error;
 
@@ -176,7 +176,7 @@ impl<E: Entity, T> IndexMap<E, T> {
 
     pub fn is_empty(&self) -> bool { self.count == 0 }
 
-    pub fn iter(&self) -> StorageIterator<'_, E, T> { self.into_iter() }
+    pub fn iter(&self) -> IndexMapIterator<'_, E, T> { self.into_iter() }
 
     pub fn clear(&mut self) {
         self.inner.clear();
