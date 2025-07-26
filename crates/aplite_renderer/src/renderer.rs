@@ -27,7 +27,7 @@ pub struct Renderer {
 impl Renderer {
     pub fn new(device: wgpu::Device, queue: wgpu::Queue, size: Size, scale_factor: f64) -> Self {
         let screen = Screen::new(&device, size, scale_factor);
-        let atlas = Atlas::new(&device);
+        let atlas = Atlas::new(&device, Size::new(2000., 2000.));
         let sampler = Sampler::new(&device);
 
         let storage = [

@@ -16,6 +16,7 @@ use crate::prelude::ApliteResult;
 use crate::context::Context;
 use crate::error::ApliteError;
 use crate::view::{IntoView, View, ViewId, VIEW_STORAGE};
+use crate::widget_state::WidgetState;
 
 pub(crate) const DEFAULT_SCREEN_SIZE: LogicalSize<u32> = LogicalSize::new(800, 600);
 
@@ -108,14 +109,20 @@ impl Aplite {
             .to_logical(window.scale_factor());
 
         let root_id = VIEW_STORAGE.with(|s| {
-            let root = s.create_entity();
-            let root_view = View::window(Size::new(size.width, size.height));
+            let window_state = WidgetState::window(Size::new(size.width, size.height));
+            let root = s.insert(window_state);
+            let root_view = View::window();
 
             s.storage.borrow_mut().insert(root, root_view);
 
             if let Some(view_fn) = self.pending_views.pop() {
                 let view = view_fn(window_id);
-                view.widget_state().z_index.update(|z_index| *z_index += 1);
+                s.tree
+                    .borrow()
+                    .get_data(&view.id())
+                    .unwrap()
+                    .z_index
+                    .update(|z_index| *z_index += 1);
                 s.append_child(&root, view);
 
                 self.cx.layout_the_whole_window(&root);

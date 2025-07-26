@@ -17,14 +17,12 @@ pub(crate) struct Atlas {
 }
 
 impl Atlas {
-    const SIZE: Size = Size::new(2000., 2000.);
-
-    pub(crate) fn new(device: &wgpu::Device) -> Self {
+    pub(crate) fn new(device: &wgpu::Device, size: Size) -> Self {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("texture atlas"),
             size: wgpu::Extent3d {
-                width: Self::SIZE.width as u32,
-                height: Self::SIZE.height as u32,
+                width: size.width as u32,
+                height: size.height as u32,
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -41,7 +39,7 @@ impl Atlas {
         let bind_group = Self::bind_group(device, &view);
 
         Self {
-            allocator: AtlasAllocator::new(Size::new(2000., 2000.)),
+            allocator: AtlasAllocator::new(size),
             texture,
             bind_group,
             pending_data: Map::new(),
@@ -50,7 +48,7 @@ impl Atlas {
     }
 
     pub(crate) fn append(&mut self, data: ImageData) -> Option<AtlasId> {
-        if let Some(id) = self.processed.get(&data.weak_ref()) {
+        if let Some(id) = self.processed.get(&data.downgrade()) {
             return Some(*id)
         }
         let size = Size::new(data.width as f32, data.height as f32);
@@ -68,10 +66,10 @@ impl Atlas {
         self.allocator
             .get_pos(id)
             .map(|rect| {
-                let min_x = rect.x / Self::SIZE.width;
-                let min_y = rect.y / Self::SIZE.width;
-                let max_x = rect.width / Self::SIZE.width;
-                let max_y = rect.height / Self::SIZE.width;
+                let min_x = rect.x / self.allocator.rect.width;
+                let min_y = rect.y / self.allocator.rect.width;
+                let max_x = rect.width / self.allocator.rect.width;
+                let max_y = rect.height / self.allocator.rect.width;
 
                 Rect::new(
                     min_x, min_y,
@@ -133,7 +131,7 @@ impl Atlas {
                     }
                 );
 
-                self.processed.insert(data.weak_ref(), *id);
+                self.processed.insert(data.downgrade(), *id);
             }
 
             self.pending_data.clear();
@@ -174,7 +172,6 @@ impl Atlas {
 
 struct AtlasAllocator {
     rect: Rect,
-    available: f32,
     last_parent: Option<AtlasId>,
     allocated: IndexMap<AtlasId, Rect>,
 
@@ -188,7 +185,6 @@ impl AtlasAllocator {
     fn new(size: Size) -> Self {
         Self {
             rect: Rect::from_size(size),
-            available: size.area(),
             last_parent: None,
             allocated: IndexMap::new(),
             parent: Vec::new(),
@@ -197,21 +193,16 @@ impl AtlasAllocator {
         }
     }
 
-    fn get_pos(&self, id: &AtlasId) -> Option<&Rect> {
-        self.allocated.get(id)
-    }
-
     fn alloc(&mut self, size: Size) -> Option<AtlasId> {
-        if size.area() > self.available { return None };
+        if size.area() > self.calculate_available_area() { return None };
 
-        self.available -= size.area();
         self.next_sibling.push(None);
         self.first_child.push(None);
         self.parent.push(None);
 
         match self.last_parent {
             Some(last_parent) => {
-                if let Some((parent, pos)) = self.find(size) {
+                if let Some((parent, pos)) = self.scan(size) {
                     let id = self.allocated.insert(Rect::from_point_size(pos, size));
 
                     self.parent[id.index()] = Some(parent);
@@ -245,9 +236,8 @@ impl AtlasAllocator {
         }
     }
 
-    fn find(&self, size: Size) -> Option<(AtlasId, Vec2f)> {
-        let parents = self.get_parents();
-        parents
+    fn scan(&self, size: Size) -> Option<(AtlasId, Vec2f)> {
+        self.get_parents()
             .iter()
             .find_map(|(id, rect)| self.identify_children(id, *rect, size))
     }
@@ -264,49 +254,35 @@ impl AtlasAllocator {
                     .iter()
                     .find_map(|child_id| {
                         match self.get_last_child(child_id) {
-                            Some(last) => {
-                                let last_rect = self.allocated.get(last).unwrap();
-                                if last_rect.max_y() + size.height <= rect.max_y()
-                                && size.width <= last_rect.width
-                                {
-                                    Some((
-                                        *child_id,
-                                        Vec2f::new(last_rect.x, last_rect.max_y())
-                                    ))
-                                } else {
-                                    // try find next sibling
-                                    None
-                                }
-                            },
-                            None => {
-                                let child_rect = self.allocated.get(child_id).unwrap();
-                                if child_rect.max_y() + size.height <= rect.max_y()
-                                && size.width <= child_rect.width
-                                {
-                                    Some((
-                                        *child_id,
-                                        Vec2f::new(child_rect.x, child_rect.max_y())
-                                    ))
-                                } else {
-                                    // try to find next sibling
-                                    None
-                                }
-                            },
+                            Some(last) => self.check_pos_for(last, child_id, size),
+                            None => self.check_pos_for(child_id, child_id, size),
                         }
                         .or(self.indentify_next_sibling(child_id, parent, size))
                     })
             },
-            None => {
-                if rect.max_x() + size.width <= self.rect.width {
-                    Some((
-                        *parent,
-                        Vec2f::new(rect.max_x(), rect.y)
-                    ))
-                } else {
-                    None
-                }
-            },
+            None => (rect.max_x() + size.width <= self.rect.width)
+                .then_some((
+                    *parent,
+                    Vec2f::new(rect.max_x(), rect.y)
+                )),
         }
+    }
+
+    #[inline(always)]
+    fn check_pos_for(
+        &self,
+        id: &AtlasId,
+        parent: &AtlasId,
+        size: Size,
+    ) -> Option<(AtlasId, Vec2f)> {
+        let rect = self.allocated.get(id).unwrap();
+        let cond1 = rect.max_y() + size.height <= rect.max_y();
+        let cond2 = size.width <= rect.width;
+
+        (cond1 && cond2).then_some((
+            *parent,
+            Vec2f::new(rect.x, rect.max_y())
+        ))
     }
 
     #[inline(always)]
@@ -316,14 +292,20 @@ impl AtlasAllocator {
         parent: &AtlasId,
         size: Size,
     ) -> Option<(AtlasId, Vec2f)> {
-        let prev_rect = self.allocated.get(prev).unwrap();
-        if prev_rect.max_x() + size.width > self.rect.width { return None }
-        self.get_next_sibling(prev).is_none().then_some({
-            let prev_rect = self.allocated.get(prev).unwrap();
-            let pos = Vec2f::new(prev_rect.max_x(), prev_rect.y);
-            (*parent, pos)
-        })
+        let rect = self.allocated.get(prev).unwrap();
+        let cond1 = rect.max_x() + size.width <= self.rect.width;
+        let cond2 = self.get_next_sibling(prev).is_none();
+
+        (cond1 && cond2).then_some((
+            *parent,
+            Vec2f::new(rect.max_x(), rect.y)
+        ))
     }
+
+    // #[inline(always)]
+    // pub fn get_parent(&self, id: &AtlasId) -> Option<&AtlasId> {
+    //     self.parent[id.index()].as_ref()
+    // }
 
     #[inline(always)]
     fn get_first_child(&self, parent: &AtlasId) -> Option<&AtlasId> {
@@ -334,6 +316,21 @@ impl AtlasAllocator {
     fn get_next_sibling(&self, id: &AtlasId) -> Option<&AtlasId> {
         self.next_sibling[id.index()].as_ref()
     }
+
+    // fn get_prev_sibling(&self, id: &AtlasId) -> Option<&AtlasId> {
+    //     if let Some(parent) = self.get_parent(id) {
+    //         let mut first = self.get_first_child(parent).unwrap();
+    //         while let Some(next) = self.get_next_sibling(first) {
+    //             if next == id {
+    //                 return Some(first);
+    //             }
+    //             first = next;
+    //         }
+    //         None
+    //     } else {
+    //         None
+    //     }
+    // }
 
     #[inline(always)]
     fn get_last_child(&self, id: &AtlasId) -> Option<&AtlasId> {
@@ -372,6 +369,31 @@ impl AtlasAllocator {
             }
             children
         })
+    }
+
+    fn get_pos(&self, id: &AtlasId) -> Option<&Rect> {
+        self.allocated.get(id)
+    }
+
+    // fn remove(&mut self, id: AtlasId) -> Option<Rect> {
+    //     // shifting
+    //     if let Some(prev) = self.get_prev_sibling(&id).copied() {
+    //         self.next_sibling[prev.index()] = self.get_next_sibling(&id).copied();
+    //     } else if let Some(parent) = self.get_parent(&id).copied() {
+    //         self.first_child[parent.index()] = self.get_next_sibling(&id).copied();
+    //     }
+        
+    //     self.allocated.remove(&id)
+    // }
+
+    #[inline(always)]
+    fn calculate_available_area(&self) -> f32 {
+        let allocated = self.allocated
+            .iter()
+            .fold(0.0,|sum, (_, rect)| {
+                sum + rect.area()
+            });
+        self.rect.area() - allocated
     }
 }
 

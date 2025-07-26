@@ -27,7 +27,7 @@ impl Paint {
     pub fn as_paint_ref(&self) -> PaintRef<'_> {
         match self {
             Paint::Color(rgba) => PaintRef::Color(rgba),
-            Paint::Image(image_data) => PaintRef::Image(image_data.weak_ref()),
+            Paint::Image(image_data) => PaintRef::Image(image_data.downgrade()),
         }
     }
 }

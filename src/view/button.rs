@@ -11,13 +11,15 @@ pub struct Button {
     id: ViewId,
     paint_id: PaintId,
     node: ViewNode,
-    state: WidgetState,
 }
 
 impl Button {
     pub fn new() -> Self {
         let (id, paint_id) = VIEW_STORAGE.with(|s| {
-            let id = s.create_entity();
+            let state = WidgetState::new()
+                .with_name("Button")
+                .with_size((80, 30));
+            let id = s.insert(state);
             let paint_id = s.add_paint(Paint::Color(Rgba::RED));
             (id, paint_id)
         });
@@ -26,20 +28,21 @@ impl Button {
             .with_fill_color(Rgba::RED)
             .with_shape(Shape::RoundedRect);
 
-        let state = WidgetState::new()
-            .with_name("Button")
-            .with_size((80, 30));
-
         Self {
             id,
             paint_id,
             node,
-            state,
         }
     }
     
     pub fn on_click<F: Fn() + 'static>(self, f: F) -> Self {
-        let trigger = self.state.trigger_callback;
+        let trigger = VIEW_STORAGE.with(|s| {
+            s.tree
+                .borrow()
+                .get_data(&self.id)
+                .unwrap()
+                .trigger_callback
+        });
         Effect::new(move |_| {
             if trigger.get() {
                 f();
@@ -48,8 +51,12 @@ impl Button {
         self
     }
 
-    pub fn state(mut self, f: impl Fn(&mut WidgetState)) -> Self {
-        f(&mut self.state);
+    pub fn state(self, f: impl Fn(&mut WidgetState)) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            let state = tree.get_data_mut(&self.id).unwrap();
+            f(state);
+        });
         self
     }
 }
@@ -61,10 +68,6 @@ impl Widget for Button {
 
     fn paint_id(&self) -> PaintId {
         self.paint_id
-    }
-
-    fn widget_state(&self) -> &WidgetState {
-        &self.state
     }
 
     fn node(&self) -> ViewNode {

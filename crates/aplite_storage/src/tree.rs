@@ -1,21 +1,22 @@
-use crate::manager::EntityManager;
 use crate::entity::Entity;
 use crate::iterator::{TreeIterator, NodeRef};
+use crate::index_map::IndexMap;
+// use crate::manager::EntityManager;
 
 /// Array based data structure, where the related information
 /// is allocated parallel to the main [`Entity`]. This should enable
 /// fast and efficient indexing when accessing the data
-pub struct Tree<E: Entity> {
-    pub(crate) manager: EntityManager<E>,
+pub struct Tree<E: Entity, T> {
+    pub(crate) data: IndexMap<E, T>,
     pub(crate) parent: Vec<Option<E>>,
     pub(crate) first_child: Vec<Option<E>>,
     pub(crate) next_sibling: Vec<Option<E>>,
 }
 
-impl<E: Entity> Default for Tree<E> {
+impl<E: Entity, T> Default for Tree<E, T> {
     fn default() -> Self {
         Self {
-            manager: EntityManager::new(),
+            data: IndexMap::new(),
             parent: Vec::new(),
             first_child: Vec::new(),
             next_sibling: Vec::new(),
@@ -23,7 +24,7 @@ impl<E: Entity> Default for Tree<E> {
     }
 }
 
-impl<E: Entity> Tree<E> {
+impl<E: Entity, T> Tree<E, T> {
     /// This will create a default [`Tree`] without preallocating an initial capacity.
     /// If you want to specify the initial capacity, use [`Tree::with_capacity()`]
     pub fn new() -> Self {
@@ -33,7 +34,7 @@ impl<E: Entity> Tree<E> {
     /// Create a new [`Tree`] with the specified capacity
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            manager: EntityManager::with_capacity(capacity),
+            data: IndexMap::with_capacity(capacity),
             parent: Vec::with_capacity(capacity),
             first_child: Vec::with_capacity(capacity),
             next_sibling: Vec::with_capacity(capacity),
@@ -43,12 +44,20 @@ impl<E: Entity> Tree<E> {
     /// This method will create a new [`Entity`](Entity), and immediately insert it into the tree.
     /// Doesn't calculate the location of the created entity.
     /// You can later add children, next siblings, or set the parent to this entity
-    pub fn create_entity(&mut self) -> E {
-        let entity = self.manager.create_entity();
+    pub fn insert(&mut self, data: T) -> E {
+        let entity = self.data.insert(data);
         self.first_child.push(None);
         self.next_sibling.push(None);
         self.parent.push(None);
         entity
+    }
+
+    pub fn get_data(&self, entity: &E) -> Option<&T> {
+        self.data.get(entity)
+    }
+
+    pub fn get_data_mut(&mut self, entity: &E) -> Option<&mut T> {
+        self.data.get_mut(entity)
     }
 
     /// Adding an entity to be the child of a parent.
@@ -119,21 +128,28 @@ impl<E: Entity> Tree<E> {
         to_remove
             .iter()
             .for_each(|entity| {
-                self.manager.destroy(*entity);
+                self.data.remove(entity);
                 self.parent[entity.index()] = None;
             });
         to_remove
     }
 
-    pub fn get_all_entities(&self) -> Vec<&E> {
-        self.manager.get_entities()
+    pub fn get_all_entities(&self) -> Vec<E> {
+        self.data
+            .iter()
+            .map(|(entity, _)| entity)
+            .collect()
     }
 
     /// get all the entities which has no parent
-    pub fn get_all_roots(&self) -> Vec<&E> {
-        self.manager
+    pub fn get_all_roots(&self) -> Vec<E> {
+        self.data
             .iter()
-            .filter(|e| self.get_parent(*e).is_none())
+            .filter_map(|(e, _)| {
+                self.get_parent(&e)
+                    .is_none()
+                    .then_some(e)
+            })
             .collect()
 
     }
@@ -256,26 +272,29 @@ impl<E: Entity> Tree<E> {
     }
 
     pub fn len(&self) -> usize {
-        self.manager.len()
+        self.data.len()
     }
 
-    pub fn get_node_ref<'a>(&'a self, entity: &'a E) -> NodeRef<'a, E> {
-        NodeRef::new(self, entity)
+    pub fn get_node_ref<'a>(&'a self, entity: &'a E) -> Option<NodeRef<'a, E, T>> {
+        self.get_data(entity)
+            .map(|data| {
+                NodeRef::new(self, *entity, data)
+            })
     }
 
-    pub fn iter(&self) -> TreeIterator<'_, E> { self.into_iter() }
+    pub fn iter(&self) -> TreeIterator<'_, E, T> { self.into_iter() }
 }
 
-impl<E: Entity> std::fmt::Debug for Tree<E> {
+impl<E: Entity, T> std::fmt::Debug for Tree<E, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fn get_frame<'a, E: Entity>(tree: &'a Tree<E>, entity: &'a E) -> &'a str {
+        fn get_frame<'a, E: Entity, T>(tree: &'a Tree<E, T>, entity: &'a E) -> &'a str {
             match tree.get_next_sibling(entity) {
                 Some(_) => "├─",
                 None => "└─",
             }
         }
 
-        fn recursive_print<E: Entity>(tree: &Tree<E>, start: Option<&E>, s: &mut String) {
+        fn recursive_print<E: Entity, T>(tree: &Tree<E, T>, start: Option<&E>, s: &mut String) {
             match start {
                 Some(parent) => {
                     if let Some(children) = tree.get_all_children(parent) {
@@ -318,8 +337,8 @@ impl<E: Entity> std::fmt::Debug for Tree<E> {
                         .iter()
                         .for_each(|root| {
                             s.push_str(format!(">> {root:?} : Root\n").as_str());
-                            if tree.get_first_child(*root).is_some() {
-                                recursive_print(tree, Some(*root), s);
+                            if tree.get_first_child(root).is_some() {
+                                recursive_print(tree, Some(root), s);
                             }
                         });
                 },
@@ -339,11 +358,11 @@ mod tree_test {
 
     entity! { TestId }
 
-    fn setup_tree() -> Tree<TestId> {
-        let mut tree: Tree<TestId> = Tree::with_capacity(10);
+    fn setup_tree() -> Tree<TestId, ()> {
+        let mut tree: Tree<TestId, ()> = Tree::with_capacity(10);
         let mut parent = None;
         for i in 0..11 {
-            let id = tree.create_entity();
+            let id = tree.insert(());
             if let Some(parent) = parent.as_ref() {
                 tree.add_child(parent, id);
             }
@@ -360,7 +379,7 @@ mod tree_test {
     fn tree_test() {
         let tree = setup_tree();
         eprintln!("{tree:?}");
-        eprintln!("{:?}", tree.manager);
+        eprintln!("{:?}", tree.data);
 
         let ancestor = tree.get_root(&TestId(9, 0));
         let parent = tree.get_parent(&TestId(6, 0));
@@ -411,7 +430,7 @@ mod tree_test {
         let mut tree = setup_tree();
 
         let _ = tree.remove(TestId(4, 0));
-        let reuse = tree.create_entity();
+        let reuse = tree.insert(());
 
         tree.add_child(&TestId(7, 0), reuse);
         assert_eq!(&TestId(7, 0), tree.get_parent(&reuse).unwrap());

@@ -12,7 +12,7 @@ impl ImageData {
         Self { width, height, bytes: Arc::new(data.to_vec()) }
     }
 
-    pub fn weak_ref(&self) -> ImageRef {
+    pub fn downgrade(&self) -> ImageRef {
         ImageRef {
             width: self.width,
             height: self.height,
@@ -62,8 +62,7 @@ impl PartialEq for ImageData {
 
 impl PartialEq<ImageRef> for ImageData {
     fn eq(&self, other: &ImageRef) -> bool {
-        other
-            .bytes
+        other.bytes
             .upgrade()
             .is_some_and(|bytes| {
                 Arc::ptr_eq(&bytes, &self.bytes)
@@ -81,8 +80,7 @@ pub struct ImageRef {
 
 impl ImageRef {
     pub fn upgrade(&self) -> Option<ImageData> {
-        self
-            .bytes
+        self.bytes
             .upgrade()
             .map(|bytes| {
                 ImageData {

@@ -53,71 +53,65 @@ impl<'a, E: Entity> Iterator for EntityIterator<'a, E> {
 #########################################################
 */
 
-impl<'a, E: Entity> IntoIterator for &'a Tree<E> {
-    type Item = NodeRef<'a, E>;
-    type IntoIter = TreeIterator<'a, E>;
+impl<'a, E: Entity, T> IntoIterator for &'a Tree<E, T> {
+    type Item = NodeRef<'a, E, T>;
+    type IntoIter = TreeIterator<'a, E, T>;
 
     fn into_iter(self) -> Self::IntoIter {
         TreeIterator::new(self)
     }
 }
 
-pub struct TreeIterator<'a, E: Entity> {
-    tree: &'a Tree<E>,
-    counter: usize,
+pub struct TreeIterator<'a, E: Entity, T> {
+    inner: StorageIterator<'a, E, T>,
+    tree: &'a Tree<E, T>
 }
 
-pub struct NodeRef<'a, E: Entity> {
-    id: &'a E,
+pub struct NodeRef<'a, E: Entity, T> {
+    id: E,
     parent: Option<&'a E>,
     first_child: Option<&'a E>,
     next_sibling: Option<&'a E>,
+    data: &'a T,
 }
 
-impl<'a, E: Entity> NodeRef<'a, E> {
-    pub(crate) fn new(tree: &'a Tree<E>, entity: &'a E) -> Self {
+impl<'a, E: Entity, T> NodeRef<'a, E, T> {
+    pub(crate) fn new(tree: &'a Tree<E, T>, entity: E, data: &'a T) -> Self {
         Self {
             id: entity,
             parent: tree.parent[entity.index()].as_ref(),
             first_child: tree.first_child[entity.index()].as_ref(),
             next_sibling: tree.next_sibling[entity.index()].as_ref(),
+            data,
         }
     }
 
-    pub fn id(&self) -> &'a E { self.id }
+    pub fn id(&self) -> E { self.id }
 
     pub fn parent(&self) -> Option<&'a E> { self.parent }
 
     pub fn first_child(&self) -> Option<&'a E> { self.first_child }
 
     pub fn next_sibling(&self) -> Option<&'a E> { self.next_sibling }
+
+    pub fn data(&self) -> &'a T { self.data }
 }
 
-impl<'a, E: Entity> TreeIterator<'a, E> {
-    fn new(tree: &'a Tree<E>) -> Self {
-        Self { tree, counter: 0 }
+impl<'a, E: Entity, T> TreeIterator<'a, E, T> {
+    fn new(tree: &'a Tree<E, T>) -> Self {
+        Self { inner: tree.data.iter(), tree }
     }
 }
 
-impl<'a, E: Entity> Iterator for TreeIterator<'a, E> {
-    type Item = NodeRef<'a, E>;
+impl<'a, E: Entity, T> Iterator for TreeIterator<'a, E, T> {
+    type Item = NodeRef<'a, E, T>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.tree
-            .manager
-            .stored
-            .iter()
-            .filter(|slot| matches!(slot.content, Content::Occupied(_)))
-            .nth(self.counter)
-            .map(|slot| {
-                self.counter += 1;
-                let entity = slot.get_content().unwrap();
-                self.tree.get_node_ref(entity)
+        self.inner
+            .next()
+            .map(|(entity, data)| {
+                NodeRef::new(self.tree, entity, data)
             })
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.counter, Some(self.tree.len()))
     }
 }
 
@@ -197,10 +191,10 @@ mod iterator_test {
 
     #[test]
     fn tree_iterator() {
-        let mut tree = Tree::<TestId>::new();
+        let mut tree = Tree::<TestId, ()>::new();
         let mut ids = vec![];
         for _ in 0..10 {
-            let id = tree.create_entity();
+            let id = tree.insert(());
             ids.push(id);
         }
 

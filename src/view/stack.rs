@@ -14,13 +14,15 @@ pub struct VStack {
     id: ViewId,
     paint_id: PaintId,
     node: ViewNode,
-    state: WidgetState,
 }
 
 impl VStack {
     pub fn new() -> Self {
         let (id, paint_id) = VIEW_STORAGE.with(|s| {
-            let id = s.create_entity();
+            let state = WidgetState::new()
+                .with_name("VStack")
+                .with_size((1, 1));
+            let id = s.insert(state);
             let paint_id = s.add_paint(Paint::from_color(Rgba::TRANSPARENT));
             (id, paint_id)
         });
@@ -29,20 +31,19 @@ impl VStack {
             .with_fill_color(Rgba::TRANSPARENT)
             .with_shape(Shape::Rect);
 
-        let state = WidgetState::new()
-            .with_name("VStack")
-            .with_size((1, 1));
-
         Self {
             id,
             paint_id,
             node,
-            state,
         }
     }
 
-    pub fn state(mut self, f: impl Fn(&mut WidgetState)) -> Self {
-        f(&mut self.state);
+    pub fn state(self, f: impl Fn(&mut WidgetState)) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            let state = tree.get_data_mut(&self.id).unwrap();
+            f(state);
+        });
         self
     }
 }
@@ -54,10 +55,6 @@ impl Widget for VStack {
 
     fn paint_id(&self) -> PaintId {
         self.paint_id
-    }
-
-    fn widget_state(&self) -> &WidgetState {
-        &self.state
     }
 
     fn node(&self) -> ViewNode {
@@ -73,13 +70,16 @@ pub struct HStack {
     id: ViewId,
     paint_id: PaintId,
     node: ViewNode,
-    state: WidgetState,
 }
 
 impl HStack {
     pub fn new() -> Self {
         let (id, paint_id) = VIEW_STORAGE.with(|s| {
-            let id = s.create_entity();
+            let state = WidgetState::new()
+                .with_orientation(Orientation::Horizontal)
+                .with_name("HStack")
+                .with_size((1, 1));
+            let id = s.insert(state);
             let paint_id = s.add_paint(Paint::Color(Rgba::TRANSPARENT));
             (id, paint_id)
         });
@@ -88,21 +88,19 @@ impl HStack {
             .with_fill_color(Rgba::TRANSPARENT)
             .with_shape(Shape::Rect);
 
-        let state = WidgetState::new()
-            .with_orientation(Orientation::Horizontal)
-            .with_name("HStack")
-            .with_size((1, 1));
-
         Self {
             id,
             paint_id,
             node,
-            state,
         }
     }
 
-    pub fn state(mut self, f: impl Fn(&mut WidgetState)) -> Self {
-        f(&mut self.state);
+    pub fn state(self, f: impl Fn(&mut WidgetState)) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            let state = tree.get_data_mut(&self.id).unwrap();
+            f(state);
+        });
         self
     }
 }
@@ -114,10 +112,6 @@ impl Widget for HStack {
 
     fn paint_id(&self) -> PaintId {
         self.paint_id
-    }
-
-    fn widget_state(&self) -> &WidgetState {
-        &self.state
     }
 
     fn node(&self) -> ViewNode {

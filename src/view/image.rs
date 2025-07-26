@@ -34,33 +34,35 @@ pub struct Image {
     id: ViewId,
     paint_id: PaintId,
     node: ViewNode,
-    state: WidgetState,
 }
 
 impl Image {
     pub fn new<F: Fn() -> ImageData + 'static>(f: F) -> Self {
         let (id, paint_id) = VIEW_STORAGE.with(|s| {
-            let id = s.create_entity();
+            let state = WidgetState::new()
+                .with_name("Image")
+                .with_size((100, 100));
+            let id = s.insert(state);
             let paint = Paint::from_image(f());
             let paint_id = s.add_paint(paint);
             (id, paint_id)
         });
         let node = ViewNode::new()
             .with_shape(Shape::Rect);
-        let state = WidgetState::new()
-            .with_name("Image")
-            .with_size((100, 100));
 
         Self {
             id,
-            state,
             node,
             paint_id,
         }
     }
 
-    pub fn state(mut self, f: impl Fn(&mut WidgetState)) -> Self {
-        f(&mut self.state);
+    pub fn state(self, f: impl Fn(&mut WidgetState)) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            let state = tree.get_data_mut(&self.id).unwrap();
+            f(state);
+        });
         self
     }
 }
@@ -72,10 +74,6 @@ impl Widget for Image {
 
     fn paint_id(&self) -> PaintId {
         self.paint_id
-    }
-
-    fn widget_state(&self) -> &WidgetState {
-        &self.state
     }
 
     fn node(&self) -> ViewNode {

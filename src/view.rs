@@ -27,7 +27,7 @@ thread_local! {
 }
 
 pub(crate) struct ViewStorage {
-    pub(crate) tree: RefCell<Tree<ViewId>>,
+    pub(crate) tree: RefCell<Tree<ViewId, WidgetState>>,
     pub(crate) storage: RefCell<Map<ViewId, View>>,
     pub(crate) paint: RefCell<IndexMap<PaintId, Paint>>,
     pub(crate) hoverable: RefCell<Vec<ViewId>>,
@@ -45,8 +45,8 @@ impl ViewStorage {
         }
     }
 
-    pub(crate) fn create_entity(&self) -> ViewId {
-        self.tree.borrow_mut().create_entity()
+    pub(crate) fn insert(&self, data: WidgetState) -> ViewId {
+        self.tree.borrow_mut().insert(data)
     }
 
     pub(crate) fn add_paint(&self, paint: Paint) -> PaintId {
@@ -56,7 +56,8 @@ impl ViewStorage {
     // FIXME: there's logic error when appending on a fn() -> impl IntoView
     pub(crate) fn append_child(&self, id: &ViewId, child: impl IntoView) {
         let child_id = child.id();
-        let state = child.widget_state();
+        let tree = self.tree.borrow();
+        let state = tree.get_data(&child_id).unwrap();
         let child_root = state.root_id;
 
         if state.hoverable.get_untracked() || state.dragable.get_untracked() {
@@ -65,6 +66,8 @@ impl ViewStorage {
                 hoverable.push(child_id);
             }
         }
+
+        drop(tree);
 
         self.tree.borrow_mut().add_child(id, child_id);
         self.storage.borrow_mut().insert(child_id, child.into_view());
@@ -79,7 +82,8 @@ impl ViewStorage {
 
     pub(crate) fn add_sibling(&self, id: &ViewId, sibling: impl IntoView) {
         let sibling_id = sibling.id();
-        let state = sibling.widget_state();
+        let tree = self.tree.borrow();
+        let state = tree.get_data(&sibling_id).unwrap();
         let sibling_root = state.root_id;
 
         if state.hoverable.get_untracked() || state.dragable.get_untracked() {
@@ -88,6 +92,8 @@ impl ViewStorage {
                 hoverable.push(sibling_id);
             }
         }
+
+        drop(tree);
 
         self.tree.borrow_mut().add_sibling(id, sibling_id);
         self.storage.borrow_mut().insert(sibling_id, sibling.into_view());
@@ -98,11 +104,6 @@ impl ViewStorage {
             .copied()
             .unwrap_or(*id);
         sibling_root.set(Some(root));
-    }
-
-    pub(crate) fn get_widget_state(&self, id: &ViewId) -> WidgetState {
-        let storage = self.storage.borrow();
-        storage[id].widget_state
     }
 
     #[inline(always)]
@@ -131,7 +132,11 @@ impl ViewStorage {
                             .unwrap();
 
                         let element = view.node.clone();
-                        let transform = view.widget_state.get_transform(renderer.screen_res());
+                        let transform = self.tree
+                            .borrow()
+                            .get_data(view_id)
+                            .unwrap()
+                            .get_transform(renderer.screen_res());
 
                         renderer.paint(*element.borrow(), transform, paint_ref);
                     }
@@ -154,10 +159,6 @@ impl Widget for Box<dyn IntoView> {
         self.as_ref().id()
     }
 
-    fn widget_state(&self) -> &WidgetState {
-        self.as_ref().widget_state()
-    }
-
     fn node(&self) -> ViewNode {
         self.as_ref().node()
     }
@@ -171,7 +172,6 @@ impl Widget for Box<dyn IntoView> {
 pub struct View {
     // FIXME: this shouldn't be needed here
     node: ViewNode,
-    widget_state: WidgetState,
     paint_id: PaintId,
 }
 
@@ -179,44 +179,25 @@ impl View {
     fn new(widget: impl IntoView + 'static) -> Self {
         Self {
             node: widget.node(),
-            widget_state: *widget.widget_state(),
             paint_id: widget.paint_id(),
         }
     }
 
-    pub(crate) fn window(size: Size) -> Self {
-        let window_state = WidgetState::window(size);
+    pub(crate) fn window() -> Self {
         let paint_id = VIEW_STORAGE.with(|s| s.paint
             .borrow_mut()
             .insert(Paint::Color(Rgba::TRANSPARENT))
         );
         Self {
             node: ViewNode::new(),
-            widget_state: window_state,
             paint_id,
         }
-    }
-
-    pub(crate) fn widget_state(&self) -> WidgetState {
-        self.widget_state
-    }
-}
-
-impl std::fmt::Debug for View {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let state = self.widget_state();
-        let name = state.name;
-
-        f.debug_struct("View")
-            .field("name", &name)
-            .finish()
     }
 }
 
 /// main building block to create a renderable component
 pub trait Widget {
     fn id(&self) -> ViewId;
-    fn widget_state(&self) -> &WidgetState;
     fn node(&self) -> ViewNode;
     fn paint_id(&self) -> PaintId;
 }
@@ -224,21 +205,20 @@ pub trait Widget {
 pub struct CircleWidget {
     id: ViewId,
     node: ViewNode,
-    state: WidgetState,
     paint_id: PaintId,
 }
 
 impl CircleWidget {
     pub fn new() -> Self {
-        let id = VIEW_STORAGE.with(|s| s.create_entity());
+        let state = WidgetState::new()
+            .with_name("Circle")
+            .with_size((100, 100));
+
+        let id = VIEW_STORAGE.with(|s| s.insert(state));
 
         let node = ViewNode::new()
             .with_shape(Shape::Circle)
             .with_stroke_width(5);
-
-        let state = WidgetState::new()
-            .with_name("Circle")
-            .with_size((100, 100));
 
         let paint_id = VIEW_STORAGE
             .with(|s| s.paint
@@ -249,13 +229,18 @@ impl CircleWidget {
         Self {
             id,
             node,
-            state,
             paint_id,
         }
     }
     
     pub fn on_click<F: Fn() + 'static>(self, f: F) -> Self {
-        let trigger = self.state.trigger_callback;
+        let trigger = VIEW_STORAGE.with(|s| {
+            s.tree
+                .borrow()
+                .get_data(&self.id)
+                .unwrap()
+                .trigger_callback
+        });
         Effect::new(move |_| {
             if trigger.get() {
                 f();
@@ -264,8 +249,12 @@ impl CircleWidget {
         self
     }
 
-    pub fn state(mut self, f: impl Fn(&mut WidgetState)) -> Self {
-        f(&mut self.state);
+    pub fn state(self, f: impl Fn(&mut WidgetState)) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut cell = s.tree.borrow_mut();
+            let state = cell.get_data_mut(&self.id).unwrap();
+            f(state);
+        });
         self
     }
 }
@@ -273,10 +262,6 @@ impl CircleWidget {
 impl Widget for CircleWidget {
     fn id(&self) -> ViewId {
         self.id
-    }
-
-    fn widget_state(&self) -> &WidgetState {
-        &self.state
     }
 
     fn node(&self) -> ViewNode {
@@ -364,8 +349,14 @@ pub trait Style: Widget + Sized {
         F: FnEl<Rgba<u8>> + 'static,
     {
         let node = self.node().weak_ref();
-        let dirty = VIEW_STORAGE.with(|s| s.dirty);
-        let root_id = self.widget_state().root_id;
+        let (root_id, dirty) = VIEW_STORAGE.with(|s| (
+            s.tree
+                .borrow()
+                .get_data(&self.id())
+                .unwrap()
+                .root_id,
+            s.dirty
+        ));
 
         Effect::new(move |prev| {
             let color = f(prev);
@@ -383,8 +374,14 @@ pub trait Style: Widget + Sized {
         F: FnEl<Rgba<u8>> + 'static
     {
         let node = self.node().weak_ref();
-        let dirty = VIEW_STORAGE.with(|s| s.dirty);
-        let root_id = self.widget_state().root_id;
+        let (root_id, dirty) = VIEW_STORAGE.with(|s| (
+            s.tree
+                .borrow()
+                .get_data(&self.id())
+                .unwrap()
+                .root_id,
+            s.dirty
+        ));
 
         Effect::new(move |prev| {
             let color = f(prev);
@@ -401,14 +398,19 @@ pub trait Style: Widget + Sized {
     where
         F: FnAction<Rgba<u8>> + 'static
     {
-        self.widget_state().hoverable.set_untracked(true);
-
         let node = self.node();
         let init_color = node.0.borrow().fill_color();
-        let dirty = VIEW_STORAGE.with(|s| s.dirty);
-        let is_hovered = self.widget_state().is_hovered;
-        let is_clicked = self.widget_state().is_clicked;
-        let root_id = self.widget_state().root_id;
+        let (dirty, is_hovered, is_clicked, root_id) = VIEW_STORAGE.with(|s| {
+            let tree = s.tree.borrow();
+            let state = tree.get_data(&self.id()).unwrap();
+            state.hoverable.set_untracked(true);
+            (
+                s.dirty,
+                state.is_hovered,
+                state.is_clicked,
+                state.root_id,
+            )
+        });
 
         let weak_node = node.weak_ref();
 
@@ -435,12 +437,17 @@ pub trait Style: Widget + Sized {
     where
         F: FnAction<Rgba<u8>> + 'static,
     {
-        self.widget_state().hoverable.set_untracked(true);
-
         let node = self.node().weak_ref();
-        let is_clicked = self.widget_state().is_clicked;
-        let dirty = VIEW_STORAGE.with(|s| s.dirty);
-        let root_id = self.widget_state().root_id;
+        let (dirty, is_clicked, root_id) = VIEW_STORAGE.with(|s| {
+            let tree = s.tree.borrow();
+            let state = tree.get_data(&self.id()).unwrap();
+            state.hoverable.set_untracked(true);
+            (
+                s.dirty,
+                state.is_clicked,
+                state.root_id,
+            )
+        });
 
         Effect::new(move |_| {
             if is_clicked.get() {
@@ -459,8 +466,14 @@ pub trait Style: Widget + Sized {
         F: FnEl<u32> + 'static
     {
         let node = self.node().weak_ref();
-        let dirty = VIEW_STORAGE.with(|s| s.dirty);
-        let root_id = self.widget_state().root_id;
+        let (root_id, dirty) = VIEW_STORAGE.with(|s| (
+            s.tree
+                .borrow()
+                .get_data(&self.id())
+                .unwrap()
+                .root_id,
+            s.dirty
+        ));
 
         Effect::new(move |prev| {
             let val = f(prev);
@@ -478,8 +491,14 @@ pub trait Style: Widget + Sized {
         F: FnEl<f32> + 'static
     {
         let node = self.node().weak_ref();
-        let dirty = VIEW_STORAGE.with(|s| s.dirty);
-        let root_id = self.widget_state().root_id;
+        let (root_id, dirty) = VIEW_STORAGE.with(|s| (
+            s.tree
+                .borrow()
+                .get_data(&self.id())
+                .unwrap()
+                .root_id,
+            s.dirty
+        ));
 
         Effect::new(move |prev| {
             let val = f(prev);
@@ -497,8 +516,14 @@ pub trait Style: Widget + Sized {
         F: FnEl<CornerRadius> + 'static
     {
         let node = self.node().weak_ref();
-        let dirty = VIEW_STORAGE.with(|s| s.dirty);
-        let root_id = self.widget_state().root_id;
+        let (root_id, dirty) = VIEW_STORAGE.with(|s| (
+            s.tree
+                .borrow()
+                .get_data(&self.id())
+                .unwrap()
+                .root_id,
+            s.dirty
+        ));
 
         Effect::new(move |prev| {
             let val = f(prev);
@@ -516,8 +541,14 @@ pub trait Style: Widget + Sized {
         F: FnEl<Shape> + 'static
     {
         let node = self.node().weak_ref();
-        let dirty = VIEW_STORAGE.with(|s| s.dirty);
-        let root_id = self.widget_state().root_id;
+        let (root_id, dirty) = VIEW_STORAGE.with(|s| (
+            s.tree
+                .borrow()
+                .get_data(&self.id())
+                .unwrap()
+                .root_id,
+            s.dirty
+        ));
 
         Effect::new(move |prev| {
             let shape = f(prev);
@@ -531,16 +562,26 @@ pub trait Style: Widget + Sized {
     }
 
     fn set_size(self, size: impl Into<Size>) -> Self {
-        self.widget_state()
-            .rect
-            .update_untracked(|rect| rect.set_size(size.into()));
+        VIEW_STORAGE.with(|s| {
+            s.tree
+                .borrow()
+                .get_data(&self.id())
+                .unwrap()
+                .rect
+                .update_untracked(|rect| rect.set_size(size.into()))
+        });
         self
     }
 
     fn set_dragable(self, value: bool) -> Self {
-        self.widget_state()
-            .dragable
-            .update_untracked(|val| *val = value);
+        VIEW_STORAGE.with(|s| {
+            s.tree
+                .borrow()
+                .get_data(&self.id())
+                .unwrap()
+                .dragable
+                .set_untracked(value)
+        });
         self
     }
 }
@@ -550,14 +591,21 @@ impl<T> Style for T where T: Widget + Sized {}
 // TODO: is immediately calculate the size here a good idea?
 pub trait Layout: Widget + Sized {
     fn child(self, child: impl IntoView) -> Self {
-        let self_z_index = self.widget_state().z_index;
-        let child_z_index = child.widget_state().z_index;
+        let (self_z, self_root, child_z, child_root) = VIEW_STORAGE.with(|s| {
+            let tree = s.tree.borrow();
+            let self_state = tree.get_data(&self.id()).unwrap();
+            let child_state = tree.get_data(&child.id()).unwrap();
 
-        let self_root = self.widget_state().root_id;
-        let child_root = child.widget_state().root_id;
+            (
+                self_state.z_index,
+                self_state.root_id,
+                child_state.z_index,
+                child_state.root_id,
+            )
+        });
 
         Effect::new(move |_| {
-            child_z_index.set(self_z_index.get() + 1);
+            child_z.set(self_z.get() + 1);
             child_root.set(self_root.get());
         });
 
@@ -566,14 +614,21 @@ pub trait Layout: Widget + Sized {
     }
 
     fn and(self, sibling: impl IntoView) -> Self {
-        let self_z_index = self.widget_state().z_index;
-        let sibling_z_index = sibling.widget_state().z_index;
+        let (self_z, self_root, sibling_z, sibling_root) = VIEW_STORAGE.with(|s| {
+            let tree = s.tree.borrow();
+            let self_state = tree.get_data(&self.id()).unwrap();
+            let sibling_state = tree.get_data(&sibling.id()).unwrap();
 
-        let self_root = self.widget_state().root_id;
-        let sibling_root = sibling.widget_state().root_id;
+            (
+                self_state.z_index,
+                self_state.root_id,
+                sibling_state.z_index,
+                sibling_state.root_id,
+            )
+        });
 
         Effect::new(move |_| {
-            sibling_z_index.set(self_z_index.get());
+            sibling_z.set(self_z.get());
             sibling_root.set(self_root.get());
         });
 
