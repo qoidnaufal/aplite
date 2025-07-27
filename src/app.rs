@@ -71,6 +71,7 @@ impl Aplite {
         }
     }
 
+    // FIXME: figure out how to integrate async runtime here
     pub fn launch(mut self) -> ApliteResult {
         let event_loop = EventLoop::new()?;
         event_loop.run_app(&mut self)?;

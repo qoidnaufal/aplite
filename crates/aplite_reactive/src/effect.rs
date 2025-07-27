@@ -68,3 +68,5 @@ impl<R> Subscriber for RefCell<EffectInner<R>> {
         inner.run();
     }
 }
+
+struct Notifier {}

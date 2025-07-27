@@ -39,16 +39,19 @@ impl<E: Entity, T: PartialEq> IndexMap<E, T> {
 }
 
 impl<E: Entity, T> IndexMap<E, T> {
+    #[inline(always)]
     pub fn new() -> Self {
         Self::new_with_capacity(0)
     }
 
+    #[inline(always)]
     pub fn with_capacity(capacity: usize) -> Self {
         Self::new_with_capacity(capacity)
     }
 
     /// This would ensure best performance on [`insert`](Self::insert),
     /// but kinda wasteful if you don't really use all the capacity.
+    #[inline(always)]
     pub fn with_max_capacity() -> Self {
         let capacity = u64::MAX - 1;
         Self::new_with_capacity(capacity as usize)
@@ -71,6 +74,7 @@ impl<E: Entity, T> IndexMap<E, T> {
 
     /// Panic if the generated [`Entity`] has reached [`u64::MAX`], or there's an internal error.
     /// Use [`try_insert`](IndexMap::try_insert) if you want to handle the error manually
+    #[inline(always)]
     pub fn insert(&mut self, data: T) -> E {
         self.try_insert(data).unwrap()
     }
@@ -108,8 +112,9 @@ impl<E: Entity, T> IndexMap<E, T> {
 
     /// Panic if the id is invalid, or there's an internal error.
     /// Use [`try_replace`](IndexMap::try_replace()) if you want to handle the error manually
-    pub fn replace(&mut self, entity: &E, data: T) -> T {
-        self.try_replace(entity, data).unwrap()
+    #[inline(always)]
+    pub fn replace(&mut self, entity: &E, data: T) -> Option<T> {
+        self.try_replace(entity, data).ok()
     }
 
     #[inline(always)]
@@ -124,6 +129,7 @@ impl<E: Entity, T> IndexMap<E, T> {
         }
     }
 
+    #[inline(always)]
     pub fn get(&self, entity: &E) -> Option<&T> {
         self.inner
             .get(entity.index())
@@ -136,6 +142,7 @@ impl<E: Entity, T> IndexMap<E, T> {
             })
     }
 
+    #[inline(always)]
     pub fn get_mut(&mut self, entity: &E) -> Option<&mut T> {
         self.inner
             .get_mut(entity.index())
@@ -166,18 +173,23 @@ impl<E: Entity, T> IndexMap<E, T> {
         }
     }
 
+    #[inline(always)]
     pub fn contains(&self, entity: &E) -> bool {
         self.inner
             .get(entity.index())
             .is_some_and(|slot| slot.version == entity.version())
     }
 
+    #[inline(always)]
     pub fn len(&self) -> usize { self.count as usize }
 
+    #[inline(always)]
     pub fn is_empty(&self) -> bool { self.count == 0 }
 
+    #[inline(always)]
     pub fn iter(&self) -> IndexMapIterator<'_, E, T> { self.into_iter() }
 
+    #[inline(always)]
     pub fn clear(&mut self) {
         self.inner.clear();
         self.inner.push(Slot {

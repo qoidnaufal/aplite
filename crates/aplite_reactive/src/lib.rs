@@ -7,7 +7,6 @@ mod signal_read;
 mod subscriber;
 mod signal_write;
 // mod scope;
-// mod channel;
 
 pub use effect::*;
 pub use signal::*;

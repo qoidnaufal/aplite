@@ -1,11 +1,10 @@
 use crate::entity::Entity;
 use crate::iterator::{TreeIterator, NodeRef};
 use crate::index_map::IndexMap;
-// use crate::manager::EntityManager;
 
-/// Array based data structure, where the related information
-/// is allocated parallel to the main [`Entity`]. This should enable
-/// fast and efficient indexing when accessing the data
+/// Array based data structure, where the related information is allocated parallel to the main [`Entity`].
+/// This should enable fast and efficient indexing when accessing the data.
+/// Internally the data is stored using [`IndexMap`].
 pub struct Tree<E: Entity, T> {
     pub(crate) data: IndexMap<E, T>,
     pub(crate) parent: Vec<Option<E>>,
@@ -52,12 +51,41 @@ impl<E: Entity, T> Tree<E, T> {
         entity
     }
 
+    pub fn replace(&mut self, entity: &E, data: T) -> Option<T> {
+        self.data.replace(entity, data)
+    }
+
     pub fn get_data(&self, entity: &E) -> Option<&T> {
         self.data.get(entity)
     }
 
     pub fn get_data_mut(&mut self, entity: &E) -> Option<&mut T> {
         self.data.get_mut(entity)
+    }
+
+    pub fn remove(&mut self, entity: E) -> Vec<E> {
+        let mut to_remove = vec![entity];
+        let mut current = entity;
+
+        while let Some(children) = self.get_all_children(&current) {
+            children.iter().for_each(|child| current = *child);
+            to_remove.extend_from_slice(&children);
+        }
+
+        // shifting
+        if let Some(prev) = self.get_prev_sibling(&entity).copied() {
+            self.next_sibling[prev.index()] = self.get_next_sibling(&entity).copied();
+        } else if let Some(parent) = self.get_parent(&entity).copied() {
+            self.first_child[parent.index()] = self.get_next_sibling(&entity).copied();
+        }
+        
+        to_remove
+            .iter()
+            .for_each(|entity| {
+                self.data.remove(entity);
+                self.parent[entity.index()] = None;
+            });
+        to_remove
     }
 
     /// Adding an entity to be the child of a parent.
@@ -107,31 +135,6 @@ impl<E: Entity, T> Tree<E, T> {
             current = sibling;
         }
         self.next_sibling[current.index()] = Some(next_sibling);
-    }
-
-    pub fn remove(&mut self, entity: E) -> Vec<E> {
-        let mut to_remove = vec![entity];
-        let mut current = entity;
-
-        while let Some(children) = self.get_all_children(&current) {
-            children.iter().for_each(|child| current = *child);
-            to_remove.extend_from_slice(&children);
-        }
-
-        // shifting
-        if let Some(prev) = self.get_prev_sibling(&entity).copied() {
-            self.next_sibling[prev.index()] = self.get_next_sibling(&entity).copied();
-        } else if let Some(parent) = self.get_parent(&entity).copied() {
-            self.first_child[parent.index()] = self.get_next_sibling(&entity).copied();
-        }
-        
-        to_remove
-            .iter()
-            .for_each(|entity| {
-                self.data.remove(entity);
-                self.parent[entity.index()] = None;
-            });
-        to_remove
     }
 
     pub fn get_all_entities(&self) -> Vec<E> {
@@ -275,11 +278,26 @@ impl<E: Entity, T> Tree<E, T> {
         self.data.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
     pub fn get_node_ref<'a>(&'a self, entity: &'a E) -> Option<NodeRef<'a, E, T>> {
         self.get_data(entity)
             .map(|data| {
                 NodeRef::new(self, *entity, data)
             })
+    }
+
+    pub fn contains(&self, entity: &E) -> bool {
+        self.data.contains(entity)
+    }
+
+    pub fn clear(&mut self) {
+        self.data.clear();
+        self.parent.clear();
+        self.first_child.clear();
+        self.next_sibling.clear();
     }
 
     pub fn iter(&self) -> TreeIterator<'_, E, T> { self.into_iter() }

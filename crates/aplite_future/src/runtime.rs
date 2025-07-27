@@ -2,7 +2,8 @@ use std::pin::Pin;
 use std::sync::{Arc, OnceLock, RwLock};
 use std::sync::mpsc::{Sender, Receiver, channel};
 use std::task::{Waker, Context};
-use crate::executor::Task;
+
+use crate::task::Task;
 
 thread_local! {
     pub(crate) static CURRENT_RUNTIME: OnceLock<Sender<Arc<Task>>> = OnceLock::new();
@@ -67,8 +68,8 @@ impl Sleep {
     }
 }
 
-pub async fn sleep(duration: std::time::Duration) {
-    Sleep::new(duration).await
+pub async fn sleep(secs: u64) {
+    Sleep::new(std::time::Duration::from_secs(secs)).await
 }
 
 impl std::future::Future for Sleep {
