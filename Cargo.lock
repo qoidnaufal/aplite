@@ -111,6 +111,7 @@ version = "0.1.0"
 name = "aplite_reactive"
 version = "0.1.0"
 dependencies = [
+ "aplite_future",
  "aplite_storage",
 ]
 

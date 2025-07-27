@@ -13,7 +13,7 @@ impl Executor {
                     future: RwLock::new(Some(Box::pin(future))),
                     sender: spawner.clone(),
                 });
-                let _ = spawner.send(task);
+                spawner.send(task);
             }
         });
     }

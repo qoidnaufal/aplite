@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 pub(crate) trait Subscriber {
-    fn invoke(&self);
+    fn notify(&self);
 }
 
 pub(crate) struct AnySubscriber(Rc<dyn Subscriber>);
@@ -13,8 +13,8 @@ impl Clone for AnySubscriber {
 }
 
 impl AnySubscriber {
-    pub(crate) fn run(&self) {
-        self.0.invoke();
+    pub(crate) fn notify(&self) {
+        self.0.notify();
     }
 }
 

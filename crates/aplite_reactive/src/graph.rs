@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 // use std::sync::atomic::AtomicU64;
 
 use aplite_storage::{IndexMap, Entity, entity};
+use aplite_future::Sender;
 
 use crate::effect::{Effect, EffectInner};
 use crate::stored_value::StoredValue;
@@ -57,17 +58,13 @@ impl ReactiveGraph {
         }
     }
 
-    pub(crate) fn create_effect<F, R>(&self, f: F) -> Effect
-    where
-        F: FnMut(Option<R>) -> R + 'static,
-        R: 'static,
-    {
+    pub(crate) fn create_effect(&self, inner: EffectInner) -> Effect {
         // let id = EffectId::new();
-        let subscriber = RefCell::new(EffectInner::new(f));
+        let subscriber = RefCell::new(inner);
         let id = self.subscribers
             .borrow_mut()
             .insert(subscriber.to_any_subscriber());
-        let effect = Effect::with_id(id);
+        let effect = Effect { id };
         self.run_effect(effect);
         effect
     }
@@ -113,12 +110,12 @@ impl ReactiveGraph {
         let pref_effect = self.current.borrow_mut().replace(effect);
 
         let subscribers = self.subscribers.borrow();
-        let subscriber = subscribers.get(effect.id()).cloned();
+        let subscriber = subscribers.get(&effect.id()).cloned();
 
         drop(subscribers);
 
-        if let Some(subscriber) = subscriber {
-            subscriber.run()
+        if let Some(any_subscriber) = subscriber {
+            any_subscriber.notify()
         }
 
         *self.current.borrow_mut() = pref_effect;

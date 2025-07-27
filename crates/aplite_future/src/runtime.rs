@@ -1,26 +1,54 @@
 use std::pin::Pin;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, Weak, OnceLock, RwLock};
 use std::sync::mpsc::{Sender, Receiver, channel};
 use std::task::{Waker, Context};
 
 use crate::task::Task;
 
 thread_local! {
-    pub(crate) static CURRENT_RUNTIME: OnceLock<Sender<Arc<Task>>> = OnceLock::new();
+    pub(crate) static CURRENT_RUNTIME: OnceLock<WeakSender> = OnceLock::new();
 }
 
+#[derive(Debug)]
+pub(crate) struct WeakSender(Weak<Sender<Arc<Task>>>);
+
+impl WeakSender {
+    pub(crate) fn new(tx: &ArcSender) -> Self {
+        Self(Arc::downgrade(tx))
+    }
+
+    pub(crate) fn upgrade(&self) -> Option<ArcSender> {
+        self.0.upgrade()
+    }
+
+    pub(crate) fn send(&self, task: Arc<Task>) {
+        if let Some(sender) = self.upgrade() {
+            let _ = sender.send(task);
+        }
+    }
+}
+
+impl Clone for WeakSender {
+    fn clone(&self) -> Self {
+        Self(Weak::clone(&self.0))
+    }
+}
+
+type ArcSender = Arc<Sender<Arc<Task>>>;
+
 pub struct Runtime {
-    // tx: Sender<Arc<Task>>,
+    _tx: ArcSender,
     rx: Receiver<Arc<Task>>,
 }
 
 impl Runtime {
     pub fn init_local() -> Self {
         let (tx, rx) = channel();
+        let tx = Arc::new(tx);
         CURRENT_RUNTIME.with(|cell| {
-            cell.set(tx).expect("There should be no other runtime");
+            cell.set(WeakSender::new(&tx)).expect("There should be no other runtime");
         });
-        Self { rx }
+        Self { _tx: tx, rx }
     }
 
     pub fn spawn_local(&self, future: impl Future<Output = ()> + 'static + Send) {
@@ -31,7 +59,9 @@ impl Runtime {
                     future: RwLock::new(Some(future)),
                     sender: spawner.clone(),
                 });
-                let _ = spawner.send(task);
+                if let Some(spawner) = spawner.upgrade() {
+                    let _ = spawner.send(task);
+                }
             }
         });
     }

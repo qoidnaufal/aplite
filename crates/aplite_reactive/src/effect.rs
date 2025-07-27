@@ -1,4 +1,12 @@
 use std::cell::RefCell;
+use std::sync::{Arc, RwLock};
+use aplite_future::{
+    channel,
+    Sender,
+    Receiver,
+    Executor,
+    StreamExt
+};
 
 use crate::graph::{EffectId, GRAPH};
 use crate::subscriber::Subscriber;
@@ -17,20 +25,30 @@ use crate::subscriber::Subscriber;
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Effect {
-    id: EffectId,
+    pub(crate) id: EffectId,
 }
 
 impl Effect {
-    pub fn new<F, R>(f: F) -> Self
+    pub fn new<F, R>(mut f: F) -> Self
     where
-        F: FnMut(Option<R>) -> R + 'static,
-        R: 'static,
+        F: FnMut(Option<&R>) -> R + Send + 'static,
+        R: 'static + Send + Sync,
     {
-        GRAPH.with(|rt| rt.create_effect(f))
-    }
+        let (tx, mut rx) = channel();
 
-    pub(crate) fn with_id(id: EffectId) -> Self {
-        Self { id }
+        Executor::spawn_local({
+            let value = Arc::new(RwLock::new(None::<R>));
+
+            async move {
+                while rx.next().await.is_some() {
+                    let prev = value.read().unwrap();
+                    let new_val = f(prev.as_ref());
+                    *value.write().unwrap() = Some(new_val);
+                }
+            }
+        });
+
+        GRAPH.with(|rt| rt.create_effect(EffectInner::new(tx)))
     }
 
     pub(crate) fn id(&self) -> &EffectId {
@@ -38,35 +56,29 @@ impl Effect {
     }
 }
 
-pub(crate) struct EffectInner<R> {
-    pub(crate) value: Option<R>,
-    pub(crate) f: Box<dyn FnMut(Option<R>) -> R>,
+pub(crate) struct EffectInner {
+    pub(crate) sender: Sender,
 }
 
-impl<R> EffectInner<R> {
-    pub(crate) fn new<F>(f: F) -> Self
-    where
-        F: FnMut(Option<R>) -> R + 'static,
-        R: 'static,
-    {
+impl EffectInner {
+    pub(crate) fn new(sender: Sender) -> Self {
         Self {
-            value: None,
-            f: Box::new(f),
+            sender,
         }
     }
 
-    pub(crate) fn run(&mut self) {
-        let old_val = self.value.take();
-        let new_val = (self.f)(old_val);
-        self.value = Some(new_val);
+    pub(crate) fn notify(&self) {
+        self.sender.notify();
     }
 }
 
-impl<R> Subscriber for RefCell<EffectInner<R>> {
-    fn invoke(&self) {
-        let mut inner = self.borrow_mut();
-        inner.run();
+impl Subscriber for RefCell<EffectInner> {
+    fn notify(&self) {
+        let inner = self.borrow();
+        inner.notify();
     }
 }
 
-struct Notifier {}
+struct InnerAlt {
+    tx: Sender,
+}
