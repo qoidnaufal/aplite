@@ -152,6 +152,7 @@ mod reactive_test {
         let name = Rc::new(RefCell::new(String::new()));
         let set_name = Rc::clone(&name);
 
+        // FIXME: change signal's underlying Rc<RefCell<T>> to Arc<RwLock<T>>
         Effect::new(move |_| {
             if use_last.get() {
                 *set_name.borrow_mut() = first.get().to_string() + " " + last.get();

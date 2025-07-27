@@ -65,13 +65,13 @@ mod channel_test {
             let (tx, mut rx) = channel();
 
             Executor::spawn_local(async move {
-                while rx.next().await.is_some() {
+                while rx.stream().await.is_some() {
                     eprintln!("notified")
                 }
             });
 
             for _ in 0..3 {
-                crate::runtime::sleep(1).await;
+                crate::task::sleep(1).await;
                 tx.notify();
             }
         });

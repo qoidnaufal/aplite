@@ -3,9 +3,8 @@ use std::sync::{Arc, RwLock};
 use aplite_future::{
     channel,
     Sender,
-    Receiver,
+    StreamExt,
     Executor,
-    StreamExt
 };
 
 use crate::graph::{EffectId, GRAPH};
@@ -31,20 +30,20 @@ pub struct Effect {
 impl Effect {
     pub fn new<F, R>(mut f: F) -> Self
     where
-        F: FnMut(Option<&R>) -> R + Send + 'static,
+        F: FnMut(Option<R>) -> R + Send + 'static,
         R: 'static + Send + Sync,
     {
         let (tx, mut rx) = channel();
+        let value = Arc::new(RwLock::new(None::<R>));
 
-        Executor::spawn_local({
-            let value = Arc::new(RwLock::new(None::<R>));
+        Executor::spawn_local(async move {
+            while rx.stream().await.is_some() {
+                let mut lock = value.write().unwrap();
+                let prev = lock.take();
 
-            async move {
-                while rx.next().await.is_some() {
-                    let prev = value.read().unwrap();
-                    let new_val = f(prev.as_ref());
-                    *value.write().unwrap() = Some(new_val);
-                }
+                let new_val = f(prev);
+
+                *lock = Some(new_val);
             }
         });
 

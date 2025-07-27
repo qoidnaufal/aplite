@@ -29,20 +29,21 @@ where
     }
 }
 
+/// A wrapper for impl [`Stream`] type, since [`Future`] trait can't be applied to T: Stream
 pub trait StreamExt: Stream {
-    fn next(&mut self) -> Next<'_, Self> {
-        Next { inner: self }
+    fn stream(&mut self) -> StreamWrapper<'_, Self> {
+        StreamWrapper { inner: self }
     }
 }
 
-pub struct Next<'a, T>
+pub struct StreamWrapper<'a, T>
 where
     T: ?Sized + Stream
 {
     inner: &'a mut T
 }
 
-impl<T> Future for Next<'_, T>
+impl<T> Future for StreamWrapper<'_, T>
 where
     T: ?Sized + Stream + Unpin,
 {

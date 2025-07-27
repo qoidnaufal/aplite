@@ -1,7 +1,6 @@
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
-// use std::sync::mpsc::Sender;
-use std::task::Wake;
+use std::task::{Wake, Context};
 
 use crate::runtime::WeakSender;
 
@@ -23,3 +22,36 @@ impl Wake for Task {
 
 unsafe impl Send for Task {}
 unsafe impl Sync for Task {}
+
+struct Sleep {
+    start: std::time::Instant,
+    duration: std::time::Duration,
+}
+
+impl Sleep {
+    #[inline(always)]
+    fn new(duration: std::time::Duration) -> Self {
+        Self {
+            start: std::time::Instant::now(),
+            duration,
+        }
+    }
+}
+
+pub async fn sleep(secs: u64) {
+    Sleep::new(std::time::Duration::from_secs(secs)).await
+}
+
+impl std::future::Future for Sleep {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> std::task::Poll<Self::Output> {
+        let now = self.start.elapsed();
+        if now.as_secs() >= self.duration.as_secs() {
+            return std::task::Poll::Ready(());
+        }
+
+        cx.waker().wake_by_ref();
+        std::task::Poll::Pending
+    }
+}
