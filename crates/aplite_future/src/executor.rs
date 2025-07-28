@@ -6,7 +6,7 @@ use crate::task::Task;
 pub struct Executor;
 
 impl Executor {
-    pub fn spawn_local(future: impl Future<Output = ()> + 'static + Send) {
+    pub fn spawn_local(future: impl Future<Output = ()> + 'static) {
         CURRENT_RUNTIME.with(|cell| {
             if let Some(spawner) = cell.get() {
                 let task = Arc::new(Task {

@@ -1,14 +1,11 @@
 use std::any::Any;
 use std::cell::RefCell;
 use std::marker::PhantomData;
-// use std::sync::atomic::AtomicU64;
 
 use aplite_storage::{IndexMap, Entity, entity};
-use aplite_future::Sender;
 
-use crate::effect::{Effect, EffectInner};
 use crate::stored_value::StoredValue;
-use crate::subscriber::{AnySubscriber, ToAnySubscriber};
+use crate::subscriber::{Subscriber, AnySubscriber};
 use crate::signal::Signal;
 
 thread_local! {
@@ -29,12 +26,12 @@ entity! {
 */
 
 type ValueStorage = IndexMap<ReactiveId, StoredValue>;
-type Subscribers = IndexMap<EffectId, AnySubscriber>;
+type SubscriberStorage = IndexMap<EffectId, AnySubscriber>;
 
 pub(crate) struct ReactiveGraph {
     pub(crate) storage: RefCell<ValueStorage>,
-    pub(crate) current: RefCell<Option<Effect>>,
-    pub(crate) subscribers: RefCell<Subscribers>,
+    pub(crate) current: RefCell<Option<EffectId>>,
+    pub(crate) subscribers: RefCell<SubscriberStorage>,
 }
 
 impl ReactiveGraph {
@@ -58,22 +55,12 @@ impl ReactiveGraph {
         }
     }
 
-    pub(crate) fn create_effect(&self, inner: EffectInner) -> Effect {
-        // let id = EffectId::new();
-        let subscriber = RefCell::new(inner);
-        let id = self.subscribers
-            .borrow_mut()
-            .insert(subscriber.to_any_subscriber());
-        let effect = Effect { id };
-        self.run_effect(effect);
-        effect
-    }
-
     pub(crate) fn track(&self, id: &ReactiveId) {
         if let Some(value) = self.storage.borrow().get(id) {
-            let current = *self.current.borrow();
-            if let Some(effect) = current {
-                value.add_subscriber(effect);
+            let current = self.current.borrow();
+            if let Some(subscriber) = current.as_ref() {
+                eprintln!("[TRACKING] {id:?} inside {subscriber:?}");
+                value.add_subscriber(*subscriber);
             }
         }
     }
@@ -90,44 +77,29 @@ impl ReactiveGraph {
             self.untrack(id);
             subscribers
                 .iter()
-                .for_each(|effect| {
+                .for_each(|subscriber_id| {
                     // and will re-add the necessary subscribers here
-                    self.run_effect(*effect);
+                    if let Some(subscriber) = self.subscribers.borrow().get(subscriber_id) {
+                        eprintln!("[NOTIFYING] {id:?} to {subscriber_id:?} : {subscriber:?}");
+                        subscriber.notify();
+                    }
                 });
         }
     }
 
     #[inline(always)]
-    fn get_subscribers(&self, id: &ReactiveId) -> Option<Vec<Effect>> {
+    fn get_subscribers(&self, id: &ReactiveId) -> Option<Vec<EffectId>> {
         self.storage
             .borrow()
             .get(id)
             .map(|s| s.get_subscribers())
     }
-
-    #[inline(always)]
-    fn run_effect(&self, effect: Effect) {
-        let pref_effect = self.current.borrow_mut().replace(effect);
-
-        let subscribers = self.subscribers.borrow();
-        let subscriber = subscribers.get(&effect.id()).cloned();
-
-        drop(subscribers);
-
-        if let Some(any_subscriber) = subscriber {
-            any_subscriber.notify()
-        }
-
-        *self.current.borrow_mut() = pref_effect;
-    }
 }
 
 #[cfg(test)]
 mod reactive_test {
-    use std::rc::Rc;
-    use std::cell::RefCell;
     use crate::Signal;
-    use crate::{reactive_traits::*, Effect};
+    use crate::reactive_traits::*;
 
     #[test]
     fn signal() {
@@ -144,47 +116,6 @@ mod reactive_test {
     }
 
     #[test]
-    fn effect() {
-        let (use_last, set_use_last) = Signal::split(false);
-        let (first, set_first) = Signal::split("Dario");
-        let (last, set_last) = Signal::split("");
-
-        let name = Rc::new(RefCell::new(String::new()));
-        let set_name = Rc::clone(&name);
-
-        // FIXME: change signal's underlying Rc<RefCell<T>> to Arc<RwLock<T>>
-        Effect::new(move |_| {
-            if use_last.get() {
-                *set_name.borrow_mut() = first.get().to_string() + " " + last.get();
-            } else {
-                *set_name.borrow_mut() = first.with(|n| n.to_string());
-            }
-        });
-
-        set_first.set("Mario");
-        set_last.set("Ballotelli");
-        assert_eq!("Mario", name.borrow().as_str());
-
-        set_use_last.set(true);
-        assert_eq!("Mario Ballotelli", name.borrow().as_str());
-
-        set_use_last.set(false);
-        assert_eq!("Mario", name.borrow().as_str());
-
-        set_last.set("Gomez");
-        assert_eq!("Mario", name.borrow().as_str());
-
-        set_last.set("Bros");
-        assert_eq!("Mario", name.borrow().as_str());
-
-        set_last.set("Kempes");
-        assert_eq!("Mario", name.borrow().as_str());
-
-        set_use_last.set(true);
-        assert_eq!("Mario Kempes", name.borrow().as_str());
-    }
-
-    #[test]
     fn derive() {
         let rw = Signal::new(0i32);
         let (counter, set_counter) = Signal::split(0i32);
@@ -192,45 +123,6 @@ mod reactive_test {
         set_counter.set(69);
         rw.update(|num| *num = counter.get());
         assert_eq!(rw.get(), 69);
-    }
-
-    #[test]
-    fn child_effect() {
-        let (check, set_check) = Signal::split(false);
-        let (outer_name, set_outer_name) = Signal::split("Steve");
-
-        let someone = Rc::new(RefCell::new(String::new()));
-        let outer_one = Rc::clone(&someone);
-
-        Effect::new(move |_| {
-            let (inner_name, set_inner_name) = Signal::split("");
-            let inner_one = Rc::clone(&outer_one);
-
-            Effect::new(move |_| {
-                if check.get() {
-                    inner_name.with(|n| *inner_one.borrow_mut() = n.to_string());
-                }
-            });
-
-            if check.get() {
-                set_inner_name.set("Oscar");
-            } else {
-                *outer_one.borrow_mut() = outer_name.get().to_string();
-            }
-        });
-
-        assert_eq!(someone.borrow().as_str(), "Steve");
-
-        set_check.set(true);
-        assert_eq!(someone.borrow().as_str(), "Oscar");
-
-        set_outer_name.set("Douglas");
-
-        set_check.set(false);
-        assert_eq!(someone.borrow().as_str(), "Douglas");
-
-        set_check.set(true);
-        assert_eq!(someone.borrow().as_str(), "Oscar");
     }
 
     #[test]

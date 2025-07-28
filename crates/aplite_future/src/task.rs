@@ -30,16 +30,16 @@ struct Sleep {
 
 impl Sleep {
     #[inline(always)]
-    fn new(duration: std::time::Duration) -> Self {
+    fn new(millis: u64) -> Self {
         Self {
             start: std::time::Instant::now(),
-            duration,
+            duration: std::time::Duration::from_millis(millis),
         }
     }
 }
 
-pub async fn sleep(secs: u64) {
-    Sleep::new(std::time::Duration::from_secs(secs)).await
+pub async fn sleep(millis: u64) {
+    Sleep::new(millis).await
 }
 
 impl std::future::Future for Sleep {

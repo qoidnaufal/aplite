@@ -2,11 +2,11 @@ use std::any::Any;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::Effect;
+use crate::graph::EffectId;
 
 pub(crate) struct StoredValue {
     pub(crate) value: Rc<dyn Any>,
-    pub(crate) subscribers: RefCell<Vec<Effect>>,
+    pub(crate) subscribers: RefCell<Vec<EffectId>>,
 }
 
 impl StoredValue {
@@ -17,7 +17,7 @@ impl StoredValue {
         }
     }
 
-    pub(crate) fn add_subscriber(&self, subscriber: Effect) {
+    pub(crate) fn add_subscriber(&self, subscriber: EffectId) {
         let mut subscribers = self.subscribers.borrow_mut();
         if !subscribers.contains(&subscriber) {
             subscribers.push(subscriber);
@@ -25,7 +25,7 @@ impl StoredValue {
     }
 
     #[inline(always)]
-    pub(crate) fn get_subscribers(&self) -> Vec<Effect>  {
+    pub(crate) fn get_subscribers(&self) -> Vec<EffectId>  {
         self.subscribers.borrow().clone()
     }
 

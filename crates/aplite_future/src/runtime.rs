@@ -51,7 +51,7 @@ impl Runtime {
         this
     }
 
-    pub fn spawn_local(&self, future: impl Future<Output = ()> + 'static + Send) {
+    pub fn spawn_local(&self, future: impl Future<Output = ()> + 'static) {
         let future = Box::pin(future);
         let task = Arc::new(Task {
             future: RwLock::new(Some(future)),
