@@ -4,8 +4,9 @@ mod stored_value;
 mod effect;
 mod signal;
 mod signal_read;
-mod subscriber;
 mod signal_write;
+mod subscriber;
+// mod source;
 // mod scope;
 
 pub use effect::*;
@@ -16,7 +17,6 @@ pub use reactive_traits::{
     Dispose,
     Read,
     Get,
-    Set,
-    With,
     Update,
+    Set,
 };

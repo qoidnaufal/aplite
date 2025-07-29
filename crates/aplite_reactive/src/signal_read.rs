@@ -41,6 +41,7 @@ impl<T: 'static> std::fmt::Debug for SignalRead<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Signal")
             .field("id", self.id())
+            .field("type", &std::any::type_name::<T>())
             .finish()
     }
 }

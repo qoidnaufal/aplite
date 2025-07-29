@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use super::reactive_traits::*;
+
 use crate::signal_read::SignalRead;
 use crate::graph::{ReactiveId, GRAPH};
 use crate::signal_write::SignalWrite;
@@ -67,7 +68,8 @@ impl<T, R: Reactive> PartialOrd<R> for Signal<T> {
 impl<T: 'static> std::fmt::Debug for Signal<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Signal")
-            .field("id", self.id())
+            .field("id", &self.id)
+            .field("type", &std::any::type_name::<T>())
             .finish()
     }
 }

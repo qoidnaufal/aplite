@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use aplite_storage::{IndexMap, Entity, entity};
 
 use crate::stored_value::StoredValue;
-use crate::subscriber::{Subscriber, AnySubscriber};
+use crate::subscriber::{Subscriber, AnySubscriber, WeakSubscriber};
 use crate::signal::Signal;
 
 thread_local! {
@@ -30,7 +30,7 @@ type SubscriberStorage = IndexMap<EffectId, AnySubscriber>;
 
 pub(crate) struct ReactiveGraph {
     pub(crate) storage: RefCell<ValueStorage>,
-    pub(crate) current: RefCell<Option<EffectId>>,
+    pub(crate) current: RefCell<Option<WeakSubscriber>>,
     pub(crate) subscribers: RefCell<SubscriberStorage>,
 }
 
@@ -56,43 +56,35 @@ impl ReactiveGraph {
     }
 
     pub(crate) fn track(&self, id: &ReactiveId) {
-        if let Some(value) = self.storage.borrow().get(id) {
-            let current = self.current.borrow();
-            if let Some(subscriber) = current.as_ref() {
-                eprintln!("[TRACKING] {id:?} inside {subscriber:?}");
-                value.add_subscriber(*subscriber);
-            }
+        let current = self.current.borrow();
+
+        if let Some(weak_subscriber) = current.as_ref()
+        && let Some(value) = self.storage.borrow_mut().get_mut(id) {
+            // eprintln!("[TRACKING] {id:?} inside {weak_subscriber:?}");
+            weak_subscriber.add_source(*id);
+            value.add_subscriber(weak_subscriber.clone());
         }
     }
 
     pub(crate) fn untrack(&self, id: &ReactiveId) {
-        if let Some(value) = self.storage.borrow().get(id) {
+        if let Some(value) = self.storage.borrow_mut().get_mut(id) {
+            // eprintln!("[UNTRACKD] {id:?}");
             value.clear_subscribers();
         }
     }
 
     pub(crate) fn notify_subscribers(&self, id: &ReactiveId) {
-        if let Some(subscribers) = self.get_subscribers(id) {
-            // clear the subscribers here
-            self.untrack(id);
-            subscribers
-                .iter()
-                .for_each(|subscriber_id| {
-                    // and will re-add the necessary subscribers here
-                    if let Some(subscriber) = self.subscribers.borrow().get(subscriber_id) {
-                        eprintln!("[NOTIFYING] {id:?} to {subscriber_id:?} : {subscriber:?}");
-                        subscriber.notify();
-                    }
-                });
+        if let Some(stored_value) = self.storage.borrow().get(id) {
+            // eprintln!("[NOTIFYING] {id:?} is notifying the subscribers");
+            stored_value.notify_subscribers();
         }
     }
 
-    #[inline(always)]
-    fn get_subscribers(&self, id: &ReactiveId) -> Option<Vec<EffectId>> {
-        self.storage
-            .borrow()
-            .get(id)
-            .map(|s| s.get_subscribers())
+    pub(crate) fn swap_current(
+        &self,
+        subscriber: Option<WeakSubscriber>,
+    ) -> Option<WeakSubscriber> {
+        self.current.replace(subscriber)
     }
 }
 
@@ -111,7 +103,7 @@ mod reactive_test {
         set_counter.set(-69);
         assert_eq!(counter.get(), -69);
 
-        let r = counter.with(|num| num.to_string());
+        let r = counter.read(|num| num.to_string());
         assert_eq!(r.parse(), Ok(-69));
     }
 

@@ -10,19 +10,25 @@ use crate::graph::{ReactiveId, GRAPH};
 #########################################################
 */
 
-#[doc(hidden)]
 pub trait Reactive {
     fn id(&self) -> &ReactiveId;
 }
 
-#[doc(hidden)]
 pub trait Track: Reactive {
     fn track(&self) {
         GRAPH.with(|graph| graph.track(self.id()))
     }
+
+    fn untrack(&self) {
+        GRAPH.with(|graph| {
+            let mut storage = graph.storage.borrow_mut();
+            if let Some(stored_value) = storage.get_mut(&self.id()) {
+                stored_value.clear_subscribers();
+            }
+        })
+    }
 }
 
-#[doc(hidden)]
 pub trait Notify: Reactive {
     fn notify(&self) {
         GRAPH.with(|graph| graph.notify_subscribers(self.id()))
@@ -37,10 +43,16 @@ pub trait Notify: Reactive {
 #########################################################
 */
 
-pub trait Read: Reactive {
+pub trait Read: Reactive + Track {
     type Value: 'static;
 
-    /// read value without tracking the signal
+    /// read and apply function to the value, and track the underying signal
+    fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
+        self.track();
+        self.read_untracked(f)
+    }
+
+    /// read value without tracking the signal, and apply a function to the value
     fn read_untracked<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
         GRAPH.with(|graph| {
             let storage = graph.storage.borrow();
@@ -79,7 +91,7 @@ pub trait Write: Reactive {
 
 pub trait Get
 where
-    Self: Track + Read,
+    Self: Read,
     <Self as Read>::Value: Clone,
 {
     /// track the signal & clone the value
@@ -94,16 +106,6 @@ where
 }
 
 impl<T> Get for T where T: Track + Read, T::Value: Clone, {}
-
-pub trait With: Track + Read {
-    /// track the signal & accessing the value without cloning it
-    fn with<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
-        self.track();
-        self.read_untracked(f)
-    }
-}
-
-impl<T> With for T where T: Track + Read {}
 
 /*
 #########################################################
@@ -149,12 +151,13 @@ impl<T: Notify + Write> Update for T {}
 #########################################################
 */
 
-pub trait Dispose: Reactive {
+pub trait Dispose: Reactive + Track {
     /// untrack this signal and then remove it from the reactive system
     /// be careful accessing the value of disposed signal will cause [`panic!()`](core::panic)
     fn dispose(&self) {
+        self.untrack();
         GRAPH.with(|graph| {
-            graph.untrack(self.id());
+            // graph.untrack(self.id());
             graph.storage.borrow_mut().remove(self.id());
         })
     }
@@ -167,4 +170,4 @@ pub trait Dispose: Reactive {
     }
 }
 
-impl<T: Reactive> Dispose for T {}
+impl<T: Reactive + Track> Dispose for T {}

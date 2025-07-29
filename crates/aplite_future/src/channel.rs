@@ -30,7 +30,7 @@ impl Channel {
 
 impl Sender {
     pub fn notify(&self) {
-        eprintln!(">> notifying");
+        #[cfg(test)] eprintln!(">> notifying");
         self.0.signal.store(true, Ordering::Relaxed);
         self.0.wake_by_ref();
     }
@@ -42,7 +42,7 @@ impl Inner {
         match inner.as_ref() {
             Some(old) if old.will_wake(new) => {},
             _ => *inner = {
-                eprintln!(">> storing waker");
+                // eprintln!(">> storing waker");
                 Some(new.clone())
             },
         }
@@ -57,7 +57,7 @@ impl Wake for Inner {
     fn wake_by_ref(self: &Arc<Self>) {
         let mut lock = self.waker.try_write().unwrap();
         if let Some(waker) = lock.take() {
-            eprintln!(">> waking up");
+            // eprintln!(">> waking up");
             waker.wake();
         }
     }
@@ -68,14 +68,14 @@ impl Stream for Receiver {
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         if let Some(inner) = self.0.upgrade() {
-            eprintln!(">> polled");
+            // eprintln!(">> polled");
             inner.set_waker(cx.waker());
 
             if inner.signal.swap(false, Ordering::Relaxed) {
-                eprintln!("\n   +++++ READYSOME +++++\n");
+                // eprintln!("\n   +++++ READYSOME +++++\n");
                 Poll::Ready(Some(()))
             } else {
-                eprintln!("\n   +++++  PENDING  +++++\n");
+                // eprintln!("\n   +++++  PENDING  +++++\n");
                 Poll::Pending
             }
         } else {

@@ -7,7 +7,7 @@ use winit::window::{Window, WindowAttributes, WindowId};
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::application::ApplicationHandler;
 
-use aplite_reactive::{Effect, Update, With};
+use aplite_reactive::{Effect, Update, Read};
 use aplite_types::{Size, Rgba};
 use aplite_renderer::{GpuDevice, GpuSurface, Renderer, RendererError};
 use aplite_future::block_on;
@@ -170,7 +170,7 @@ impl Aplite {
         let dirty = self.cx.dirty();
 
         Effect::new(move |_| {
-            dirty.with(|root_id| {
+            dirty.read(|root_id| {
                 if root_id.is_some_and(|id| id == view_id) {
                     window.request_redraw();
                 }
