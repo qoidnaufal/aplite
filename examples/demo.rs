@@ -38,7 +38,7 @@ fn button_stack(
                 .set_stroke_width(|_| 5)
                 .set_corners(|_| CornerRadius::new(80., 80., 0., 0.))
                 .set_click_color(|| Rgba::DARK_GRAY)
-                .on_click(inc)
+                .on(LeftClick, inc)
         )
         .child(
             Button::new()
@@ -47,7 +47,7 @@ fn button_stack(
                 .set_click_color(|| Rgba::DARK_GREEN)
                 .set_stroke_width(|_| 5)
                 .set_corners(|_| CornerRadius::splat(50.))
-                .on_click(dec)
+                .on(LeftClick, dec)
         )
         .child(
             Button::new()

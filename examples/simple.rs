@@ -37,12 +37,12 @@ fn simple() -> impl IntoView {
         .set_corners(|_| CornerRadius::splat(47.))
         .set_dragable(true)
         .set_size((200, 69))
-        .on_click(click_count);
+        .on(LeftClick, click_count);
 
     let circle = CircleWidget::new()
         .set_color(color)
         .set_shape(shape)
-        .on_click(click_rotate)
+        .on(LeftClick, click_rotate)
         .set_stroke_width(|_| 6)
         .set_dragable(true)
         .set_size((150, 150));

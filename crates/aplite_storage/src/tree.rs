@@ -55,11 +55,11 @@ impl<E: Entity, T> Tree<E, T> {
         self.data.replace(entity, data)
     }
 
-    pub fn get_data(&self, entity: &E) -> Option<&T> {
+    pub fn get(&self, entity: &E) -> Option<&T> {
         self.data.get(entity)
     }
 
-    pub fn get_data_mut(&mut self, entity: &E) -> Option<&mut T> {
+    pub fn get_mut(&mut self, entity: &E) -> Option<&mut T> {
         self.data.get_mut(entity)
     }
 
@@ -283,7 +283,7 @@ impl<E: Entity, T> Tree<E, T> {
     }
 
     pub fn get_node_ref<'a>(&'a self, entity: &'a E) -> Option<NodeRef<'a, E, T>> {
-        self.get_data(entity)
+        self.get(entity)
             .map(|data| {
                 NodeRef::new(self, *entity, data)
             })

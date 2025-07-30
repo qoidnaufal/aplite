@@ -1,6 +1,7 @@
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
-use std::task::{Wake, Context};
+use std::task::{Wake, Context, Poll};
+use std::future::Future;
 
 use crate::runtime::WeakSender;
 
@@ -23,17 +24,20 @@ impl Wake for Task {
 unsafe impl Send for Task {}
 unsafe impl Sync for Task {}
 
+use std::time::Instant;
+use std::time::Duration;
+
 struct Sleep {
-    start: std::time::Instant,
-    duration: std::time::Duration,
+    start: Instant,
+    duration: u64,
 }
 
 impl Sleep {
     #[inline(always)]
     fn new(millis: u64) -> Self {
         Self {
-            start: std::time::Instant::now(),
-            duration: std::time::Duration::from_millis(millis),
+            start: Instant::now(),
+            duration: millis,
         }
     }
 }
@@ -42,16 +46,16 @@ pub async fn sleep(millis: u64) {
     Sleep::new(millis).await
 }
 
-impl std::future::Future for Sleep {
+impl Future for Sleep {
     type Output = ();
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> std::task::Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let now = self.start.elapsed();
-        if now.as_secs() >= self.duration.as_secs() {
-            return std::task::Poll::Ready(());
+        if now.as_secs() >= Duration::from_millis(self.duration).as_secs() {
+            return Poll::Ready(());
         }
 
         cx.waker().wake_by_ref();
-        std::task::Poll::Pending
+        Poll::Pending
     }
 }

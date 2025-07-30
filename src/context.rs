@@ -6,6 +6,7 @@ use aplite_renderer::Renderer;
 use aplite_types::Vec2f;
 
 use crate::view::{VIEW_STORAGE, ViewId};
+use crate::widget::WidgetEvent;
 
 use cursor::{Cursor, MouseAction, MouseButton};
 use layout::{LayoutContext, calculate_size_recursive};
@@ -89,9 +90,9 @@ impl Context {
                     .iter()
                     .filter_map(|id| {
                         let tree = s.tree.borrow();
-                        let state = tree.get_data(id).unwrap();
+                        let state = tree.get(id).unwrap();
                         state.detect_hover(&self.cursor)
-                            .then_some((state.z_index.get_untracked(), *id))
+                            .then_some((state.z_index, *id))
                     }).max()
             });
 
@@ -114,13 +115,12 @@ impl Context {
                 let dragable = VIEW_STORAGE.with(|s| {
                     s.tree
                         .borrow()
-                        .get_data(&hover_id)
+                        .get(&hover_id)
                         .unwrap()
                         .dragable
-                        .get_untracked()
                 });
                 if self.cursor.is_dragging(&hover_id) && dragable {
-                    self.cursor.is_dragging.set_untracked(true);
+                    self.cursor.is_dragging = true;
                     self.handle_drag(&hover_id);
                 }
             }
@@ -130,9 +130,9 @@ impl Context {
     fn handle_drag(&mut self, hover_id: &ViewId) {
         let pos = self.cursor.hover.pos - self.cursor.click.offset;
         VIEW_STORAGE.with(|s| {
-            let tree = s.tree.borrow();
-            let state = tree.get_data(hover_id).unwrap();
-            state.rect.update_untracked(|rect| rect.set_pos(pos.into()));
+            let mut tree = s.tree.borrow_mut();
+            let state = tree.get_mut(hover_id).unwrap();
+            state.rect.set_pos(pos.into());
             LayoutContext::new(*hover_id).calculate();
             self.toggle_dirty(state.root_id.get());
         });
@@ -142,26 +142,26 @@ impl Context {
         self.cursor.set_click_state(action.into(), button.into());
         if let Some(hover_id) = self.cursor.hover.curr.as_ref() {
             VIEW_STORAGE.with(|s| {
-                let tree = s.tree.borrow();
-                let state = tree.get_data(hover_id).unwrap();
-                let pos = state.rect.read_untracked(|rect| rect.pos());
+                let mut tree = s.tree.borrow_mut();
+                let state = tree.get_mut(hover_id).unwrap();
+                let pos = state.rect.pos();
                 self.cursor.click.offset = self.cursor.click.pos - pos;
-                state.is_clicked.set(true);
+                state.event = Some(WidgetEvent::LeftClick);
             });
         }
         if self.cursor.state.action == MouseAction::Released {
             if let Some(hover_id) = self.cursor.hover.curr.as_ref() {
                 VIEW_STORAGE.with(|s| {
-                    let tree = s.tree.borrow();
-                    let state = tree.get_data(hover_id).unwrap();
-                    if !self.cursor.is_dragging.get_untracked() {
-                        state.trigger_callback.set(true);
+                    let mut tree = s.tree.borrow_mut();
+                    let state = tree.get_mut(hover_id).unwrap();
+                    if !self.cursor.is_dragging {
+                        // state.trigger_callback = true;
                     }
-                    state.is_clicked.set(false);
+                    state.event = None;
                 });
             }
 
-            self.cursor.is_dragging.set_untracked(false);
+            self.cursor.is_dragging = false;
         }
     }
 }

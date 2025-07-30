@@ -4,6 +4,7 @@ use aplite_types::{Matrix3x2, Rect, Size, Vec2f};
 use crate::context::layout::{Alignment, AlignV, Orientation, Padding};
 use crate::context::cursor::Cursor;
 use crate::view::ViewId;
+use crate::widget::WidgetEvent;
 
 #[derive(Debug, Clone, Copy)]
 pub enum AspectRatio {
@@ -12,11 +13,11 @@ pub enum AspectRatio {
     Undefined,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone)]
 pub struct WidgetState {
     pub(crate) name: &'static str,
     pub(crate) root_id: Signal<Option<ViewId>>,
-    pub(crate) rect: Signal<Rect>,
+    pub(crate) rect: Rect,
     pub(crate) min_width: Option<f32>,
     pub(crate) min_height: Option<f32>,
     pub(crate) max_width: Option<f32>,
@@ -25,13 +26,12 @@ pub struct WidgetState {
     pub(crate) orientation: Orientation,
     pub(crate) padding: Padding,
     pub(crate) spacing: f32,
-    pub(crate) z_index: Signal<u32>,
+    pub(crate) z_index: u32,
     pub(crate) image_aspect_ratio: AspectRatio,
-    pub(crate) dragable: Signal<bool>,
-    pub(crate) hoverable: Signal<bool>,
-    pub(crate) is_hovered: Signal<bool>,
-    pub(crate) is_clicked: Signal<bool>,
-    pub(crate) trigger_callback: Signal<bool>,
+    pub(crate) dragable: bool,
+    pub(crate) hoverable: bool,
+    pub(crate) event: Option<WidgetEvent>,
+    pub(crate) transform: Matrix3x2,
 }
 
 impl Default for WidgetState {
@@ -39,7 +39,7 @@ impl Default for WidgetState {
         Self {
             name: "",
             root_id: Signal::new(None),
-            rect: Signal::new(Rect::new(0., 0., 0., 0.)),
+            rect: Rect::default(),
             min_width: Some(1.),
             min_height: Some(1.),
             max_width: None,
@@ -47,14 +47,13 @@ impl Default for WidgetState {
             alignment: Alignment::new(),
             orientation: Orientation::Vertical,
             spacing: 0.,
-            z_index: Signal::new(0),
+            z_index: 0,
             padding: Padding::default(),
             image_aspect_ratio: AspectRatio::Undefined,
-            dragable: Signal::new(false),
-            hoverable: Signal::new(false),
-            is_hovered: Signal::new(false),
-            is_clicked: Signal::new(false),
-            trigger_callback: Signal::new(false),
+            dragable: false,
+            hoverable: false,
+            event: None,
+            transform: Matrix3x2::identity(),
         }
     }
 }
@@ -84,12 +83,8 @@ impl WidgetState {
 
     // FIXME: consider rotation & maybe some precision
     pub(crate) fn detect_hover(&self, cursor: &Cursor) -> bool {
-        let rect = self.rect.get_untracked();
-
-        let is_hovered = rect.contains(cursor.hover.pos)
-            && cursor.hover.z_index <= self.z_index.get_untracked();
-
-        self.is_hovered.set(is_hovered);
+        let is_hovered = self.rect.contains(cursor.hover.pos)
+            && cursor.hover.z_index <= self.z_index;
 
         is_hovered
     }
@@ -106,8 +101,8 @@ impl WidgetState {
         self
     }
 
-    pub(crate) fn with_position(self, pos: impl Into<Vec2f>) -> Self {
-        self.rect.update_untracked(|rect| rect.set_pos(pos.into()));
+    pub(crate) fn with_position(mut self, pos: impl Into<Vec2f>) -> Self {
+        self.rect.set_pos(pos.into());
         self
     }
 
@@ -172,11 +167,11 @@ impl WidgetState {
     }
 
     pub fn set_size(&mut self, size: impl Into<Size>) {
-        self.rect.update(|rect| rect.set_size(size.into()))
+        self.rect.set_size(size.into())
     }
 
     pub fn set_position(&mut self, pos: Vec2f) {
-        self.rect.update(|rect| rect.set_pos(pos));
+        self.rect.set_pos(pos);
     }
 
     pub fn set_min_width(&mut self, value: f32) {
@@ -217,7 +212,7 @@ impl WidgetState {
     pub(crate) fn image_aspect_ratio(&self) -> AspectRatio { self.image_aspect_ratio }
 
     pub(crate) fn get_transform(&self, screen: Size) -> Matrix3x2 {
-        let rect = self.rect.get_untracked();
+        let rect = self.rect;
         let tx = rect.center_x() / screen.width * 2.0 - 1.0;
         let ty = 1.0 - rect.center_y() / screen.height * 2.0;
         let sx = rect.width / screen.width;

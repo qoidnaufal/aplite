@@ -60,7 +60,7 @@ impl Image {
     pub fn state(self, f: impl Fn(&mut WidgetState)) -> Self {
         VIEW_STORAGE.with(|s| {
             let mut tree = s.tree.borrow_mut();
-            let state = tree.get_data_mut(&self.id).unwrap();
+            let state = tree.get_mut(&self.id).unwrap();
             f(state);
         });
         self

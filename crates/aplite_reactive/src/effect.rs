@@ -155,41 +155,41 @@ mod effect_test {
             });
 
             Executor::spawn_local(async move {
-                eprintln!("-- setting first name to Mario, SHOULD RERUN");
+                // eprintln!("-- setting first name to Mario, SHOULD RERUN");
                 set_first.set("Mario");
                 sleep(1000).await;
 
-                eprintln!("-- setting last name to Ballotelli");
+                // eprintln!("-- setting last name to Ballotelli");
                 set_last.set("Ballotelli");
                 sleep(1000).await;
                 assert_eq!("Mario", name.borrow().as_str());
 
-                eprintln!("\n-- set to use last name, SHOULD RERUN");
+                // eprintln!("\n-- set to use last name, SHOULD RERUN");
                 use_last.set(true);
                 sleep(1000).await;
                 assert_eq!("Mario Ballotelli", name.borrow().as_str());
 
-                eprintln!("-- set to use first only, SHOULD RERUN");
+                // eprintln!("-- set to use first only, SHOULD RERUN");
                 use_last.set(false);
                 sleep(1000).await;
                 assert_eq!("Mario", name.borrow().as_str());
 
-                eprintln!("-- setting last name to Gomez");
+                // eprintln!("-- setting last name to Gomez");
                 set_last.set("Gomez");
                 sleep(1000).await;
                 assert_eq!("Mario", name.borrow().as_str());
 
-                eprintln!("\n-- setting last name to Bros");
+                // eprintln!("\n-- setting last name to Bros");
                 set_last.set("Bros");
                 sleep(1000).await;
                 assert_eq!("Mario", name.borrow().as_str());
 
-                eprintln!("\n-- setting last name to Kempes");
+                // eprintln!("\n-- setting last name to Kempes");
                 set_last.set("Kempes");
                 sleep(1000).await;
                 assert_eq!("Mario", name.borrow().as_str());
 
-                eprintln!("\n-- set to use last name, SHOULD RERUN");
+                // eprintln!("\n-- set to use last name, SHOULD RERUN");
                 use_last.set(true);
                 sleep(1000).await;
                 assert_eq!("Mario Kempes", name.borrow().as_str());
@@ -225,7 +225,7 @@ mod effect_test {
     //             }
     //         });
 
-    //         sleep(1).await;
+    //         sleep(1000).await;
 
     //         assert_eq!(someone.borrow().as_str(), "Steve");
 

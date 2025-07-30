@@ -11,28 +11,6 @@ thread_local! {
 #[derive(Debug)]
 pub(crate) struct WeakSender(Weak<Sender<Arc<Task>>>);
 
-impl WeakSender {
-    pub(crate) fn new(tx: &ArcSender) -> Self {
-        Self(Arc::downgrade(tx))
-    }
-
-    pub(crate) fn upgrade(&self) -> Option<ArcSender> {
-        self.0.upgrade()
-    }
-
-    pub(crate) fn send(&self, task: Arc<Task>) {
-        if let Some(sender) = self.upgrade() {
-            let _ = sender.send(task);
-        }
-    }
-}
-
-impl Clone for WeakSender {
-    fn clone(&self) -> Self {
-        Self(Weak::clone(&self.0))
-    }
-}
-
 type ArcSender = Arc<Sender<Arc<Task>>>;
 
 pub struct Runtime {
@@ -74,5 +52,27 @@ impl Runtime {
                 }
             }
         };
+    }
+}
+
+impl WeakSender {
+    pub(crate) fn new(tx: &ArcSender) -> Self {
+        Self(Arc::downgrade(tx))
+    }
+
+    pub(crate) fn upgrade(&self) -> Option<ArcSender> {
+        self.0.upgrade()
+    }
+
+    pub(crate) fn send(&self, task: Arc<Task>) {
+        if let Some(sender) = self.upgrade() {
+            let _ = sender.send(task);
+        }
+    }
+}
+
+impl Clone for WeakSender {
+    fn clone(&self) -> Self {
+        Self(Weak::clone(&self.0))
     }
 }

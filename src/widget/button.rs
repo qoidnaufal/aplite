@@ -1,4 +1,3 @@
-use aplite_reactive::*;
 use aplite_renderer::Shape;
 use aplite_types::{Rgba, Paint};
 
@@ -34,27 +33,11 @@ impl Button {
             node,
         }
     }
-    
-    pub fn on_click<F: Fn() + 'static>(self, f: F) -> Self {
-        let trigger = VIEW_STORAGE.with(|s| {
-            s.tree
-                .borrow()
-                .get_data(&self.id)
-                .unwrap()
-                .trigger_callback
-        });
-        Effect::new(move |_| {
-            if trigger.get() {
-                f();
-            }
-        });
-        self
-    }
 
     pub fn state(self, f: impl Fn(&mut WidgetState)) -> Self {
         VIEW_STORAGE.with(|s| {
             let mut tree = s.tree.borrow_mut();
-            let state = tree.get_data_mut(&self.id).unwrap();
+            let state = tree.get_mut(&self.id).unwrap();
             f(state);
         });
         self

@@ -7,7 +7,7 @@ use winit::window::{Window, WindowAttributes, WindowId};
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::application::ApplicationHandler;
 
-use aplite_reactive::{Effect, Update, Read};
+use aplite_reactive::*;
 use aplite_types::{Size, Rgba};
 use aplite_renderer::{GpuDevice, GpuSurface, Renderer, RendererError};
 use aplite_future::block_on;
@@ -118,12 +118,12 @@ impl Aplite {
 
             if let Some(view_fn) = self.pending_views.pop() {
                 let view = view_fn(window_id);
-                s.tree
-                    .borrow()
-                    .get_data(&view.id())
-                    .unwrap()
-                    .z_index
-                    .update(|z_index| *z_index += 1);
+                // s.tree
+                //     .borrow()
+                //     .get_data(&view.id())
+                //     .unwrap()
+                //     .z_index
+                //     .update(|z_index| *z_index += 1);
                 s.append_child(&root, view);
 
                 self.cx.layout_the_whole_window(&root);

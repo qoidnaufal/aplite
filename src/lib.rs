@@ -1,8 +1,10 @@
 mod app;
 mod context;
 mod error;
-mod view;
 mod widget_state;
+mod view;
+mod widget;
+mod style;
 
 pub mod prelude {
     use crate::error::ApliteError;
@@ -14,6 +16,7 @@ pub mod prelude {
     pub use crate::app::Aplite;
     pub use crate::context::Context;
     pub use crate::widget_state::AspectRatio;
+    pub use crate::style::{Style, FnEl, FnAction};
     pub use crate::context::layout::{
         Alignment,
         Orientation,
@@ -21,28 +24,26 @@ pub mod prelude {
         AlignV,
         AlignH
     };
-    pub use crate::view::{
+    pub use crate::widget::{
         Widget,
-        IntoView,
-        View,
-        Style,
-        Layout,
-        ViewNode,
+        WidgetExt,
         CircleWidget,
         HStack,
         VStack,
         Button,
         Image,
-    };
-    pub use crate::view::{
         h_stack,
         v_stack,
         button,
         image,
         image_reader,
     };
+    pub use crate::view::{
+        IntoView,
+        View,
+        ViewNode,
+    };
+    pub use crate::widget::WidgetEvent::*;
 
     pub type ApliteResult = Result<(), ApliteError>;
-
-    pub use winit::window::Fullscreen;
 }
