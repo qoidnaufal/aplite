@@ -1,20 +1,20 @@
 use aplite_types::{Rect, Size, Vec2f};
 
-use crate::widget_state::{AspectRatio, WidgetState};
+use crate::state::{AspectRatio, WidgetState};
 use crate::view::{ViewId, VIEW_STORAGE};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlignH {
-    Left,
     #[default]
+    Left,
     Center,
     Right,
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlignV {
-    Top,
     #[default]
+    Top,
     Middle,
     Bottom,
 }
@@ -24,12 +24,6 @@ pub enum Orientation {
     #[default]
     Vertical,
     Horizontal,
-}
-
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Alignment {
-    pub(crate) h_align: AlignH,
-    pub(crate) v_align: AlignV,
 }
 
 #[derive(Default, Debug, Clone, Copy)]
@@ -44,7 +38,8 @@ pub struct Padding {
 pub(crate) struct Rules {
     rect: Rect,
     orientation: Orientation,
-    alignment: Alignment,
+    align_h: AlignH,
+    align_v: AlignV,
     padding: Padding,
     spacing: f32,
 }
@@ -53,23 +48,6 @@ pub(crate) struct LayoutContext {
     entity: ViewId,
     next_pos: Vec2f,
     rules: Rules,
-}
-
-impl Alignment {
-    pub const fn new() -> Self {
-        Self {
-            h_align: AlignH::Center,
-            v_align: AlignV::Middle,
-        }
-    }
-
-    pub fn set_h(&mut self, h_align: AlignH) {
-        self.h_align = h_align;
-    }
-
-    pub fn set_v(&mut self, v_align: AlignV) {
-        self.v_align = v_align;
-    }
 }
 
 impl Orientation {
@@ -117,8 +95,9 @@ impl Rules {
     pub(crate) fn new(state: &WidgetState) -> Self {
         Self {
             rect: state.rect,
-            orientation: state.orientation(),
-            alignment: state.alignment(),
+            orientation: state.orientation,
+            align_h: state.align_h,
+            align_v: state.align_v,
             padding: state.padding,
             spacing: state.spacing,
         }
@@ -128,7 +107,7 @@ impl Rules {
         let pl = self.padding.left;
         let pr = self.padding.right;
 
-        match self.alignment.h_align {
+        match self.align_h {
             AlignH::Left => self.rect.x + pl,
             AlignH::Center => {
                 self.rect.x + self.rect.width / 2. + pl - pr
@@ -141,7 +120,7 @@ impl Rules {
         let pt = self.padding.top;
         let pb = self.padding.bottom;
 
-        match self.alignment.v_align {
+        match self.align_v {
             AlignV::Top => self.rect.y + pt,
             AlignV::Middle => {
                 self.rect.y + self.rect.height / 2. + pt - pb
@@ -158,7 +137,7 @@ impl Rules {
 
         match self.orientation {
             Orientation::Vertical => {
-                let y = match self.alignment.v_align {
+                let y = match self.align_v {
                     AlignV::Top => offset_y,
                     AlignV::Middle => offset_y - stretch / 2.,
                     AlignV::Bottom => offset_y - stretch,
@@ -166,7 +145,7 @@ impl Rules {
                 Vec2f::new(offset_x, y)
             },
             Orientation::Horizontal => {
-                let x = match self.alignment.h_align {
+                let x = match self.align_h {
                     AlignH::Left => offset_x,
                     AlignH::Center => offset_x - stretch / 2.,
                     AlignH::Right => offset_x - stretch,
@@ -238,7 +217,7 @@ impl LayoutContext {
 
             match self.rules.orientation {
                 Orientation::Vertical => {
-                    match self.rules.alignment.h_align {
+                    match self.rules.align_h {
                         AlignH::Left | AlignH::Right => state.rect.x = self.next_pos.x,
                         AlignH::Center => state.rect.x = self.next_pos.x - size.width / 2.,
                     }
@@ -247,7 +226,7 @@ impl LayoutContext {
                 },
                 Orientation::Horizontal => {
                     state.rect.x = self.next_pos.x;
-                    match self.rules.alignment.v_align {
+                    match self.rules.align_v {
                         AlignV::Top | AlignV::Bottom => state.rect.y = self.next_pos.y,
                         AlignV::Middle => state.rect.y = self.next_pos.y - size.height / 2.,
                     }
@@ -298,7 +277,7 @@ pub(crate) fn calculate_size_recursive(id: &ViewId) -> Size {
         let tree = s.tree.borrow();
         let state = tree.get(id).unwrap();
 
-        if let AspectRatio::Defined(tuple) = state.image_aspect_ratio() {
+        if let AspectRatio::Defined(tuple) = state.image_aspect_ratio {
             match tree.get_parent(id) {
                 Some(parent) if tree
                     .get(parent)

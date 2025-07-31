@@ -2,14 +2,9 @@ use std::path::Path;
 
 use aplite_renderer::Shape;
 use aplite_types::ImageData;
-use aplite_types::Paint;
-
-use crate::widget_state::WidgetState;
 
 use super::ViewNode;
-use super::{ViewId, PaintId};
 use super::Widget;
-use super::VIEW_STORAGE;
 
 pub fn image<F: Fn() -> ImageData + 'static>(image_fn: F) -> Image {
     Image::new(image_fn)
@@ -31,51 +26,24 @@ pub fn image_reader<P: AsRef<Path>>(path: P) -> ImageData {
 }
 
 pub struct Image {
-    id: ViewId,
-    paint_id: PaintId,
     node: ViewNode,
 }
 
 impl Image {
-    pub fn new<F: Fn() -> ImageData + 'static>(f: F) -> Self {
-        let (id, paint_id) = VIEW_STORAGE.with(|s| {
-            let state = WidgetState::new()
-                .with_name("Image")
-                .with_size((100, 100));
-            let id = s.insert(state);
-            let paint = Paint::from_image(f());
-            let paint_id = s.add_paint(paint);
-            (id, paint_id)
-        });
+    pub fn new<F: Fn() -> ImageData + 'static>(image_fn: F) -> Self {
         let node = ViewNode::new()
+            .with_name("Image")
+            .with_size((100.0, 100.0))
+            .with_background_paint(image_fn())
             .with_shape(Shape::Rect);
 
         Self {
-            id,
             node,
-            paint_id,
         }
-    }
-
-    pub fn state(self, f: impl Fn(&mut WidgetState)) -> Self {
-        VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            let state = tree.get_mut(&self.id).unwrap();
-            f(state);
-        });
-        self
     }
 }
 
 impl Widget for Image {
-    fn id(&self) -> ViewId {
-        self.id
-    }
-
-    fn paint_id(&self) -> PaintId {
-        self.paint_id
-    }
-
     fn node(&self) -> ViewNode {
         self.node.clone()
     }

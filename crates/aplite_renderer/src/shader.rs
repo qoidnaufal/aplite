@@ -9,7 +9,6 @@ pub(crate) fn render<'a>() -> std::borrow::Cow<'a, str> {
 
 pub const VERTEX: &str = r"
 @group(0) @binding(0) var<uniform> screen_t: mat3x2f;
-@group(0) @binding(1) var<uniform> screen_s: vec2<f32>;
 
 struct Radius {
     top_left: f32,
@@ -28,12 +27,11 @@ fn scale_radius(r: Radius, ew: f32) -> Radius {
 }
 
 struct Element {
-    color: vec4<f32>,
-    stroke_color: vec4<f32>,
+    background: vec4<f32>,
+    border: vec4<f32>,
     radius: Radius,
     shape: u32,
-    rotate: f32,
-    stroke_width: f32,
+    border_width: f32,
     atlas_id: i32,
     transform_id: u32,
 }
@@ -44,21 +42,12 @@ struct Element {
 // scale -> rotate -> translate
 fn transform_point(element: Element, pos: vec2<f32>) -> vec2f {
     let t = transforms[element.transform_id];
-    let r = element.rotate;
 
     let e_mat = mat2x2<f32>(t[0], t[1]);
 
-    let sin = sin(r);
-    let cos = cos(r);
-    
-    let r_mat = mat2x2<f32>(
-        cos, -sin,
-        sin,  cos,
-    );
-
     let s_mat = mat2x2<f32>(screen_t[0], screen_t[1]);
 
-    return s_mat * (r_mat * e_mat * pos + t[2]) + screen_t[2];
+    return s_mat * (e_mat * pos + t[2]) + screen_t[2];
 }
 
 struct VertexInput {
@@ -114,24 +103,24 @@ fn sdSegment(p: vec2f, a: vec2f, b: vec2f) -> f32 {
     return length(pa - ba * h);
 }
 
-fn sdf(uv: vec2<f32>, element: Element, stroke_width: f32) -> f32 {
+fn sdf(uv: vec2<f32>, element: Element, border_width: f32) -> f32 {
     let transform = transforms[element.transform_id];
     let size = vec2f(transform[0].x, transform[1].y);
 
     switch element.shape {
         case 0u: {
             let p = uv * size.x;
-            let r = size.x - stroke_width;
+            let r = size.x - border_width;
             return sdCircle(p, r);
         }
         case 1u: {
             let p = uv * size;
-            let b = size - stroke_width;
+            let b = size - border_width;
             return sdRect(p, b);
         }
         case 2u: {
             let p = uv * size;
-            let b = size - stroke_width;
+            let b = size - border_width;
             let r = scale_radius(element.radius, size.x);
             return sdRoundedRect(p, b, r);
         }
@@ -140,28 +129,11 @@ fn sdf(uv: vec2<f32>, element: Element, stroke_width: f32) -> f32 {
 }
 ";
 
+// col = mix( col, vec3(1.0), 1.0-smoothstep(0.0,0.01,abs(d)) );
+
 pub const FRAGMENT: &str = r"
 @group(2) @binding(0) var t: texture_2d<f32>;
 @group(3) @binding(0) var s: sampler;
-
-struct Stroke {
-    width: f32,
-    color: vec4f,
-}
-
-fn get_stroke(element: Element) -> Stroke {
-    // let elem_t = transform[element.transform_id];
-    // let scale = elem_t[0].x;
-
-    var stroke: Stroke;
-    stroke.color = element.stroke_color;
-    stroke.width = element.stroke_width / screen_s.x;
-    if element.stroke_width == 0 {
-        stroke.color = element.color;
-        stroke.width = 5.0 / screen_s.x;
-    }
-    return stroke;
-}
 
 @fragment
 fn fs_main(in: FragmentPayload) -> @location(0) vec4<f32> {
@@ -169,12 +141,11 @@ fn fs_main(in: FragmentPayload) -> @location(0) vec4<f32> {
 
     if element.atlas_id > -1 { return textureSample(t, s, in.uv); }
 
-    let stroke = get_stroke(element);
-    let sdf = sdf(in.uv, element, stroke.width);
-    let blend = 1.0 - smoothstep(0.0, stroke.width, abs(sdf));
+    let sdf = sdf(in.uv, element, element.border_width);
+    let blend = 1.0 - smoothstep(0.0, element.border_width, abs(sdf));
 
-    let color = select(vec4f(0.0), element.color, sdf < 0.0);
-    return mix(color, stroke.color, blend);
+    let color = select(vec4f(0.0), element.background, sdf < 0.0);
+    return mix(color, element.border, blend);
 }
 ";
 

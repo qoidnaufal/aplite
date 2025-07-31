@@ -66,10 +66,8 @@ fn button_stack(
         .set_dragable(true)
         .state(|s| {
             s.set_min_width(400.);
-            s.set_alignment(|align| {
-                align.set_h(AlignH::Center);
-                align.set_v(AlignV::Middle);
-            });
+            s.set_align_h(AlignH::Center);
+            s.set_align_v(AlignV::Middle);
             s.set_padding(Padding::splat(10.));
             s.set_spacing(5.);
         })

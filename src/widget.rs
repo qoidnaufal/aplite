@@ -2,13 +2,11 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use aplite_renderer::Shape;
-use aplite_types::{Paint, Rgba};
 use aplite_storage::Map;
 
-use crate::widget_state::WidgetState;
+use crate::state::WidgetState;
 use crate::view::{
     IntoView,
-    PaintId,
     ViewId,
     ViewNode,
     VIEW_STORAGE,
@@ -44,9 +42,11 @@ pub enum WidgetEvent {
 
 /// main building block to create a renderable component
 pub trait Widget {
-    fn id(&self) -> ViewId;
     fn node(&self) -> ViewNode;
-    fn paint_id(&self) -> PaintId;
+
+    fn id(&self) -> ViewId {
+        self.node().0
+    }
 }
 
 impl<T> WidgetExt for T where T: Widget + Sized {}
@@ -71,6 +71,19 @@ pub trait WidgetExt: Widget + Sized {
             let mut storage = cell.borrow_mut();
             let callbacks = storage.entry(self.id()).or_default();
             callbacks.insert(event, Box::new(f));
+        });
+        self
+    }
+
+    fn state<F>(self, mut state_fn: F) -> Self
+    where
+        F: FnMut(&mut WidgetState)
+    {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            if let Some(state) = tree.get_mut(&self.id()) {
+                state_fn(state);
+            }
         });
         self
     }
@@ -101,56 +114,25 @@ impl std::hash::Hash for WidgetEvent {
 }
 
 pub struct CircleWidget {
-    id: ViewId,
     node: ViewNode,
-    paint_id: PaintId,
 }
 
 impl CircleWidget {
     pub fn new() -> Self {
-        let state = WidgetState::new()
-            .with_name("Circle")
-            .with_size((100, 100));
-
-        let id = VIEW_STORAGE.with(|s| s.insert(state));
-
         let node = ViewNode::new()
+            .with_name("Circle")
+            .with_stroke_width(5)
             .with_shape(Shape::Circle)
-            .with_stroke_width(5);
-
-        let paint_id = VIEW_STORAGE
-            .with(|s| s.paint
-                .borrow_mut()
-                .insert(Paint::Color(Rgba::RED))
-            );
+            .with_size((100., 100.));
 
         Self {
-            id,
             node,
-            paint_id,
         }
-    }
-
-    pub fn state(self, f: impl Fn(&mut WidgetState)) -> Self {
-        VIEW_STORAGE.with(|s| {
-            let mut cell = s.tree.borrow_mut();
-            let state = cell.get_mut(&self.id).unwrap();
-            f(state);
-        });
-        self
     }
 }
 
 impl Widget for CircleWidget {
-    fn id(&self) -> ViewId {
-        self.id
-    }
-
     fn node(&self) -> ViewNode {
-        self.node.clone()
-    }
-
-    fn paint_id(&self) -> PaintId {
-        self.paint_id
+        self.node
     }
 }

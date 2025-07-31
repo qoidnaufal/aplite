@@ -24,14 +24,6 @@ pub trait Style: Widget + Sized {
         F: FnEl<Rgba<u8>> + 'static,
     {
         let _ = f;
-        VIEW_STORAGE.with(|s| {
-            let mut paint_storage = s.paint.borrow_mut();
-            let paint = paint_storage.get_mut(&self.paint_id()).unwrap();
-            match paint {
-                aplite_types::Paint::Color(_) => {},
-                aplite_types::Paint::Image(_) => {},
-            }
-        });
         self
     }
 

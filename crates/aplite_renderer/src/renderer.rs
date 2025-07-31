@@ -7,7 +7,7 @@ use super::RenderError;
 use super::InitiationError;
 
 use crate::atlas::Atlas;
-use crate::element::Element;
+use crate::element::{Element, Shape};
 use crate::screen::Screen;
 use crate::storage::StorageBuffers;
 use crate::mesh::{Indices, MeshBuffer, Vertices};
@@ -83,6 +83,7 @@ impl Renderer {
         let scale_factor = window.scale_factor();
         let logical: winit::dpi::LogicalSize<f32> = size.to_logical(scale_factor);
         let screen_size = Size::new(logical.width, logical.height);
+
         let screen = Screen::new(&device, screen_size, scale_factor);
         let atlas = Atlas::new(&device, Size::new(2000., 2000.));
         let sampler = Sampler::new(&device);
@@ -133,29 +134,22 @@ impl Renderer {
     }
 
     pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
-        let logical = new_size.to_logical(self.scale_factor());
-        self.config.width = logical.width;
-        self.config.height = logical.height;
+        self.config.width = new_size.width;
+        self.config.height = new_size.height;
         self.surface.configure(&self.device, &self.config);
 
+        let logical: winit::dpi::LogicalSize<f32> = new_size.to_logical(self.scale_factor());
         let res = self.screen_res();
-        let ns = Size::new(logical.width as f32, logical.height as f32);
+        let ns = Size::new(logical.width, logical.height);
         let scale = res / ns;
         let sx = scale.width;
         let sy = scale.height;
+        let matrix = Matrix3x2::from_scale_translate(sx, sy, sx - 1.0, 1.0 - sy);
 
-        self.screen
-            .write(
-                &self.device,
-                &self.queue,
-                Matrix3x2::IDENTITY
-                    .with_scale(sx, sy)
-                    .with_translate(sx - 1.0, 1.0 - sy),
-                res
-            );
+        self.screen.write(&self.device, &self.queue, matrix);
     }
 
-    pub fn new_scene(&mut self) -> Result<Scene<'_>, RenderError> {
+    pub fn begin(&mut self) -> Result<(), RenderError> {
         let label = Some("render encoder");
         let encoder = self
             .device
@@ -169,7 +163,12 @@ impl Renderer {
         self.current = (self.current + 1) % 3;
         self.mesh[self.current].offset = 0;
 
-        Ok(Scene {
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub fn new_scene(&mut self) -> Scene<'_> {
+        Scene {
             screen_res: self.screen_res(),
             device: &self.device,
             queue: &self.queue,
@@ -177,7 +176,7 @@ impl Renderer {
             mesh: &mut self.mesh[self.current],
             atlas: &mut self.atlas,
             clear_color: &mut self.clear_color,
-        })
+        }
     }
 
     pub fn encode(&mut self) {
@@ -206,9 +205,11 @@ impl Renderer {
         };
 
         let encoder = self.encoder.as_mut().unwrap();
+
         self.atlas.update(&self.device, encoder);
 
         let buffers = &[MeshBuffer::vertice_layout()];
+
         let bind_group_layouts = &[
             &Screen::bind_group_layout(&self.device),
             &StorageBuffers::bind_group_layout(&self.device),
@@ -242,11 +243,11 @@ impl Renderer {
         pass.draw_indexed(0..self.mesh[self.current].offset as u32 * 6, 0, 0..1);
     }
 
-    pub fn render(&mut self) {
+    pub fn finish(&mut self) {
         let surface = self.target_texture.take().unwrap();
         let encoder = self.encoder.take().unwrap();
         let id = self.queue.submit([encoder.finish()]);
-        self.device.poll(wgpu::PollType::WaitForSubmissionIndex(id)).unwrap();
+        let _ = self.device.poll(wgpu::PollType::WaitForSubmissionIndex(id));
         surface.present();
     }
 }
@@ -263,28 +264,51 @@ pub struct Scene<'a> {
 
 // FIXME: this feels immediate mode to me, idk
 impl Scene<'_> {
-    pub fn paint(
+    pub fn draw(
         &mut self,
-        mut element: Element,
         transform: Matrix3x2,
-        paint: PaintRef<'_>,
+        background: PaintRef<'_>,
+        border: PaintRef<'_>,
+        border_width: f32,
+        shape: Shape,
     ) {
         use aplite_storage::Entity;
 
-        let atlas_id = match paint {
-            PaintRef::Color(_rgba) => None,
+        let offset = self.mesh.offset;
+
+        let mut element = Element::new()
+            .with_shape(shape)
+            .with_transform_id(offset as _)
+            .with_border_width(border_width);
+
+        match border {
+            PaintRef::Color(rgba) => {
+                element.border = rgba.f32();
+            },
+            PaintRef::Image(_image_ref) => {},
+        }
+
+        let atlas_id = match background {
+            PaintRef::Color(rgba) => {
+                element.background = rgba.f32();
+                None
+            },
             PaintRef::Image(image_ref) => image_ref
                 .upgrade()
                 .and_then(|image| self.atlas.append(image)),
         };
 
-        let offset = self.mesh.offset;
         let indices = Indices::new().with_offset(offset as _, true);
+
         let vertices = atlas_id.and_then(|id| {
             element.set_atlas_id(id.index() as i32);
+
             self.atlas
                 .get_uv(&id)
-                .map(|uv| Vertices::new().with_uv(uv).with_id(offset as _))
+                .map(|uv| Vertices::new()
+                    .with_uv(uv)
+                    .with_id(offset as _)
+                )
         })
         .unwrap_or(Vertices::new().with_id(offset as _));
 

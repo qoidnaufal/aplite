@@ -4,8 +4,6 @@ use super::buffer::Buffer;
 
 pub(crate) struct Screen {
     pub(crate) transform: Buffer<Matrix3x2>,
-    // FIXME: not needed
-    pub(crate) size: Buffer<Size>,
     pub(crate) bind_group: wgpu::BindGroup,
 
     // FIXME: not needed
@@ -19,17 +17,14 @@ impl Screen {
         screen_resolution: Size,
         scale_factor: f64,
     ) -> Self {
-        let uniform = wgpu::BufferUsages::UNIFORM;
-        let transform = Buffer::<Matrix3x2>::new(device, 1, uniform, "screen transform");
-        let size = Buffer::<Size>::new(device, 1, uniform, "screen scaler");
+        let usage = wgpu::BufferUsages::UNIFORM;
+        let transform = Buffer::<Matrix3x2>::new(device, 1, usage, "screen transform");
         let bind_group = Self::bind_group(device, &[
             transform.bind_group_entry(0),
-            size.bind_group_entry(1)
         ]);
 
         Self {
             transform,
-            size,
             bind_group,
             screen_resolution,
             scale_factor,
@@ -43,23 +38,15 @@ impl Screen {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         matrix: Matrix3x2,
-        screen: Size,
     ) {
         self.transform.write(device, queue, 0, &[matrix]);
-        self.size.write(device, queue, 0, &[screen]);
     }
-
-    // pub(crate) fn update_transform<F: Fn(&mut Matrix3x2)>(&mut self, f: F) {
-    //     f(&mut self.screen_transform);
-    //     self.is_resized = true;
-    // }
 
     pub(crate) fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("screen bind group layout"),
             entries: &[
                 Buffer::<Matrix3x2>::bind_group_layout_entry(wgpu::BufferBindingType::Uniform, 0),
-                Buffer::<Size>::bind_group_layout_entry(wgpu::BufferBindingType::Uniform, 1),
             ],
         })
     }

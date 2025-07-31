@@ -16,7 +16,6 @@ use crate::prelude::ApliteResult;
 use crate::context::Context;
 use crate::error::ApliteError;
 use crate::view::{IntoView, View, ViewId, VIEW_STORAGE};
-use crate::widget_state::WidgetState;
 
 pub(crate) const DEFAULT_SCREEN_SIZE: LogicalSize<u32> = LogicalSize::new(800, 600);
 
@@ -29,7 +28,7 @@ pub struct Aplite {
     cx: Context,
     renderer: Option<Renderer>,
     window: HashMap<WindowId, WindowHandle>,
-    pending_views: Vec<Box<dyn FnOnce(WindowId) -> Box<dyn IntoView>>>,
+    pending_views: Option<Box<dyn FnOnce(WindowId) -> Box<dyn IntoView>>>,
     window_attributes_fn: Option<fn(&mut WindowAttributes)>,
 
     #[cfg(feature = "render_stats")]
@@ -40,7 +39,7 @@ pub struct Aplite {
 impl Aplite {
     pub fn new<IV: IntoView + 'static>(view_fn: impl FnOnce() -> IV + 'static) -> Self {
         let mut app = Self::new_empty();
-        app.pending_views.push(Box::new(|_| Box::new(view_fn())));
+        app.pending_views = Some(Box::new(|_| Box::new(view_fn())));
         app
     }
 
@@ -50,7 +49,7 @@ impl Aplite {
             cx: Context::new(),
             window: HashMap::with_capacity(4),
             window_attributes_fn: None,
-            pending_views: Vec::with_capacity(4),
+            pending_views: None,
 
             #[cfg(feature = "render_stats")]
             stats: aplite_stats::Stats::new(),
@@ -85,6 +84,7 @@ impl Aplite {
         let mut attributes = WindowAttributes::default()
             .with_inner_size(DEFAULT_SCREEN_SIZE)
             .with_title("Aplite Window");
+
         if let Some(window_fn) = self.window_attributes_fn.take() {
             window_fn(&mut attributes);
         }
@@ -96,22 +96,21 @@ impl Aplite {
             .to_logical(window.scale_factor());
 
         let root_id = VIEW_STORAGE.with(|s| {
-            let window_state = WidgetState::window(Size::new(size.width, size.height));
-            let root = s.insert(window_state);
-            let root_view = View::window();
+            let root_view = View::window(Size::new(size.width, size.height));
+            let root_id = root_view.node.id();
 
-            s.storage.borrow_mut().insert(root, root_view);
+            s.storage.borrow_mut().insert(root_id, root_view);
 
-            if let Some(view_fn) = self.pending_views.pop() {
+            if let Some(view_fn) = self.pending_views.take() {
                 let view = view_fn(window_id);
-                s.append_child(&root, view);
+                s.append_child(&root_id, view);
 
-                self.cx.layout_the_whole_window(&root);
+                self.cx.layout_the_whole_window(&root_id);
 
                 #[cfg(feature = "debug_tree")] eprintln!("{:?}", s.tree.borrow());
             }
 
-            root
+            root_id
         });
 
         let window_handle = WindowHandle {
@@ -123,22 +122,16 @@ impl Aplite {
 
         self.renderer = Some(renderer);
         self.window.insert(window_id, window_handle);
-        self.track_window(root_id, window);
+        self.track_window(window);
 
         Ok(())
     }
 
     /// Track the [`Window`] with the associated root [`ViewId`] for rendering
-    fn track_window(&mut self, view_id: ViewId, window: Arc<Window>) {
-        let dirty = self.cx.dirty();
+    fn track_window(&mut self, window: Arc<Window>) {
+        let dirty = Context::dirty();
 
-        Effect::new(move |_| {
-            dirty.read(|root_id| {
-                if root_id.is_some_and(|id| id == view_id) {
-                    window.request_redraw();
-                }
-            })
-        });
+        Effect::new(move |_| if dirty.get() { window.request_redraw() });
     }
 }
 
@@ -184,12 +177,12 @@ impl Aplite {
         {
             #[cfg(feature = "render_stats")] let start = std::time::Instant::now();
 
-            match renderer.new_scene() {
-                Ok(scene) => {
-                    self.cx.prepare_data(window_handle.root_id, scene);
+            match renderer.begin() {
+                Ok(()) => {
+                    self.cx.prepare_data(window_handle.root_id, renderer.new_scene());
                     renderer.encode();
                     window_handle.window.pre_present_notify();
-                    renderer.render();
+                    renderer.finish();
                 },
                 Err(err) => match err {
                     aplite_renderer::RenderError::ShouldResize => renderer

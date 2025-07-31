@@ -58,6 +58,12 @@ impl From<(f32, f32)> for Vec2f {
     }
 }
 
+impl From<Vec2u> for Vec2f {
+    fn from(value: Vec2u) -> Self {
+        value.to_vec2f()
+    }
+}
+
 impl std::ops::Add for Vec2f {
     type Output = Self;
     fn add(self, rhs: Self) -> Self::Output {

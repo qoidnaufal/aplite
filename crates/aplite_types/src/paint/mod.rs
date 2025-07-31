@@ -50,3 +50,15 @@ impl PartialEq for Paint {
         }
     }
 }
+
+impl From<Rgba<u8>> for Paint {
+    fn from(rgba: Rgba<u8>) -> Self {
+        Self::Color(rgba)
+    }
+}
+
+impl From<ImageData> for Paint {
+    fn from(img: ImageData) -> Self {
+        Self::Image(img)
+    }
+}

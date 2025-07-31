@@ -37,12 +37,12 @@ impl Context {
 // ########################################################
 
 impl Context {
-    pub(crate) fn dirty(&self) -> Signal<Option<ViewId>> {
+    pub(crate) fn dirty() -> Signal<bool> {
         VIEW_STORAGE.with(|s| s.dirty)
     }
 
-    pub(crate) fn toggle_dirty(&self, root_id: Option<ViewId>) {
-        VIEW_STORAGE.with(|s| s.dirty.set(root_id))
+    pub(crate) fn toggle_dirty() {
+        VIEW_STORAGE.with(|s| s.dirty.set(true))
     }
 
     // pub(crate) fn toggle_clean(&self) {
@@ -60,7 +60,7 @@ impl Context {
     pub(crate) fn layout_the_whole_window(&self, root_id: &ViewId) {
         calculate_size_recursive(root_id);
         LayoutContext::new(*root_id).calculate();
-        self.toggle_dirty(Some(*root_id));
+        Self::toggle_dirty();
     }
 }
 
@@ -134,7 +134,7 @@ impl Context {
             let state = tree.get_mut(hover_id).unwrap();
             state.rect.set_pos(pos.into());
             LayoutContext::new(*hover_id).calculate();
-            self.toggle_dirty(state.root_id.get());
+            Self::toggle_dirty();
         });
     }
 
@@ -177,28 +177,22 @@ impl Context {
         VIEW_STORAGE.with(|s| {
             s.get_all_members_of(&root_id)
                 .iter()
-                .enumerate()
-                .for_each(|(tx_id, view_id)| {
-                    if let Some(view) = s.storage
-                        .borrow()
-                        .get(view_id) {
-                            view.node.borrow_mut().set_transform_id(tx_id as _);
+                .for_each(|view_id| {
+                    let size = scene.size();
+                    let tree = s.tree.borrow();
+                    let state = tree.get(view_id).unwrap();
 
-                            let paint_storage = s.paint.borrow();
-                            let paint = paint_storage
-                                .get(&view.paint_id)
-                                .map(|paint| paint.as_paint_ref())
-                                .unwrap();
+                    let background = state.background.as_paint_ref();
+                    let border = state.border_color.as_paint_ref();
+                    let shape = state.shape;
+                    let transform = state.get_transform(size);
+                    let border_width = if state.border_width == 0.0 {
+                        5.0 / size.width
+                    } else {
+                        state.border_width / size.width
+                    };
 
-                            let element = view.node.clone();
-                            let transform = s.tree
-                                .borrow()
-                                .get(view_id)
-                                .unwrap()
-                                .get_transform(scene.size());
-
-                            scene.paint(*element.borrow(), transform, paint);
-                        }
+                    scene.draw(transform, background, border, border_width, shape);
                 })
         });
     }

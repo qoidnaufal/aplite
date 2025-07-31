@@ -1,16 +1,23 @@
-use std::cell::{RefCell, Ref, RefMut};
-use std::rc::{Rc, Weak};
+use std::cell::RefCell;
 
 use aplite_reactive::*;
-use aplite_types::CornerRadius;
-use aplite_types::{Rgba, Paint};
-use aplite_renderer::{Element, Shape};
-use aplite_storage::{entity, Entity, Tree, Map, IndexMap};
+use aplite_renderer::Shape;
+use aplite_storage::{entity, Entity, Tree, Map};
+use aplite_types::{
+    CornerRadius,
+    Paint,
+    Size,
+};
 
 use crate::widget::Widget;
-use crate::widget_state::WidgetState;
+use crate::state::WidgetState;
+use crate::context::layout::{
+    Orientation,
+    AlignH,
+    AlignV,
+};
 
-entity! { pub ViewId, pub PaintId }
+entity! { pub ViewId }
 
 // FIXME: this is kinda cheating, and not fun at all
 thread_local! {
@@ -20,10 +27,10 @@ thread_local! {
 pub(crate) struct ViewStorage {
     pub(crate) tree: RefCell<Tree<ViewId, WidgetState>>,
     pub(crate) storage: RefCell<Map<ViewId, View>>,
+
     // WARN: do you really need separate id for paint?
-    pub(crate) paint: RefCell<IndexMap<PaintId, Paint>>,
     pub(crate) hoverable: RefCell<Vec<ViewId>>,
-    pub(crate) dirty: Signal<Option<ViewId>>,
+    pub(crate) dirty: Signal<bool>,
 }
 
 impl ViewStorage {
@@ -31,9 +38,8 @@ impl ViewStorage {
         Self {
             tree: RefCell::new(Tree::with_capacity(1024)),
             storage: RefCell::new(Map::new()),
-            paint: RefCell::new(IndexMap::new()),
             hoverable: RefCell::new(Vec::new()),
-            dirty: Signal::new(None),
+            dirty: Signal::new(false),
         }
     }
 
@@ -41,47 +47,25 @@ impl ViewStorage {
         self.tree.borrow_mut().insert(data)
     }
 
-    pub(crate) fn add_paint(&self, paint: Paint) -> PaintId {
-        self.paint.borrow_mut().insert_no_duplicate(paint)
-    }
-
     // FIXME: there's logic error when appending on a fn() -> impl IntoView
     pub(crate) fn append_child(&self, id: &ViewId, child: impl IntoView) {
         let child_id = child.id();
         let tree = self.tree.borrow();
-        let state = tree.get(&child_id).unwrap();
-        let child_root = state.root_id;
 
         drop(tree);
 
         self.tree.borrow_mut().add_child(id, child_id);
         self.storage.borrow_mut().insert(child_id, child.into_view());
-
-        let root = self.tree
-            .borrow()
-            .get_root(id)
-            .copied()
-            .unwrap_or(*id);
-        child_root.set(Some(root));
     }
 
     pub(crate) fn add_sibling(&self, id: &ViewId, sibling: impl IntoView) {
         let sibling_id = sibling.id();
         let tree = self.tree.borrow();
-        let state = tree.get(&sibling_id).unwrap();
-        let sibling_root = state.root_id;
 
         drop(tree);
 
         self.tree.borrow_mut().add_sibling(id, sibling_id);
         self.storage.borrow_mut().insert(sibling_id, sibling.into_view());
-
-        let root = self.tree
-            .borrow()
-            .get_root(id)
-            .copied()
-            .unwrap_or(*id);
-        sibling_root.set(Some(root));
     }
 
     #[inline(always)]
@@ -94,7 +78,7 @@ pub trait IntoView: Widget {
     fn into_view(self) -> View;
 }
 
-impl<T: Widget + 'static> IntoView for T {
+impl<T: Widget> IntoView for T {
     fn into_view(self) -> View {
         View::new(self)
     }
@@ -108,94 +92,221 @@ impl Widget for Box<dyn IntoView> {
     fn node(&self) -> ViewNode {
         self.as_ref().node()
     }
-
-    fn paint_id(&self) -> PaintId {
-        self.as_ref().paint_id()
-    }
 }
 
 /// wrapper over [`Widget`] trait to be stored inside [`ViewStorage`]
 pub struct View {
-    // FIXME: this shouldn't be needed here
     pub(crate) node: ViewNode,
-    pub(crate) paint_id: PaintId,
 }
 
 impl View {
-    fn new(widget: impl IntoView + 'static) -> Self {
+    fn new(widget: impl IntoView) -> Self {
         Self {
             node: widget.node(),
-            paint_id: widget.paint_id(),
         }
     }
 
-    pub(crate) fn window() -> Self {
-        let paint_id = VIEW_STORAGE.with(|s| s.paint
-            .borrow_mut()
-            .insert(Paint::Color(Rgba::TRANSPARENT))
-        );
+    pub(crate) fn window(size: Size) -> Self {
         Self {
-            node: ViewNode::new(),
-            paint_id,
+            node: ViewNode::window(size),
         }
     }
 }
 
-// FIXME: shouldn't be needed
-/// A wrapper over [`Element`]
-pub struct ViewNode(pub(crate) Rc<RefCell<Element>>);
-
-impl Clone for ViewNode {
-    fn clone(&self) -> Self {
-        Self(Rc::clone(&self.0))
-    }
-}
+#[derive(Clone, Copy, Debug)]
+pub struct ViewNode(pub(crate) ViewId);
 
 impl ViewNode {
     pub fn new() -> Self {
-        Self(Rc::new(RefCell::new(Element::new())))
+        VIEW_STORAGE.with(|s| {
+            let state = WidgetState::new();
+            let id = s.insert(state);
+
+            Self(id)
+        })
     }
 
-    pub fn with_fill_color(self, color: Rgba<u8>) -> Self {
-        self.0.borrow_mut().set_fill_color(color);
+    pub(crate) fn window(size: Size) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let state = WidgetState::window(size);
+            let id = s.insert(state);
+
+            Self(id)
+        })
+    }
+
+    #[inline(always)]
+    pub fn id(&self) -> ViewId {
+        self.0
+    }
+
+    pub fn with_name(self, name: &'static str) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            if let Some(state) = tree.get_mut(&self.0) {
+                state.set_name(name);
+            }
+        });
         self
     }
 
-    pub fn with_stroke_color(self, color: Rgba<u8>) -> Self {
-        self.0.borrow_mut().set_stroke_color(color);
+    /// Types which implement [`Into<Size>`] are:
+    /// - (u32, u32)
+    /// - (f32, f32)
+    /// - [`Size`](aplite_types::Size)
+    pub fn with_size(self, size: impl Into<Size>) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            if let Some(state) = tree.get_mut(&self.0) {
+                state.set_size(size);
+            }
+        });
+        self
+    }
+
+    pub fn with_min_width(self, val: f32) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            if let Some(state) = tree.get_mut(&self.0) {
+                state.min_width = Some(val);
+            }
+        });
+        self
+    }
+
+    pub fn with_max_width(self, val: f32) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            if let Some(state) = tree.get_mut(&self.0) {
+                state.max_width = Some(val);
+            }
+        });
+        self
+    }
+
+    pub fn with_min_height(self, val: f32) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            if let Some(state) = tree.get_mut(&self.0) {
+                state.min_height = Some(val);
+            }
+        });
+        self
+    }
+
+    pub fn with_max_height(self, val: f32) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            if let Some(state) = tree.get_mut(&self.0) {
+                state.max_height = Some(val);
+            }
+        });
+        self
+    }
+
+    /// Types which implement [`Into<Paint>`] are:
+    /// - [`ImageData`](aplite_types::ImageData)
+    /// - [`Rgba`](aplite_types::Rgba)
+    pub fn with_background_paint(self, paint: impl Into<Paint>) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            if let Some(state) = tree.get_mut(&self.0) {
+                state.background = paint.into();
+            }
+        });
+        self
+    }
+
+    /// Types which implement [`Into<Paint>`] are:
+    /// - [`ImageData`](aplite_types::ImageData)
+    /// - [`Rgba`](aplite_types::Rgba)
+    pub fn with_border_paint(self, color: impl Into<Paint>) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            if let Some(state) = tree.get_mut(&self.0) {
+                state.border_color = color.into();
+            }
+        });
         self
     }
 
     pub fn with_stroke_width(self, val: u32) -> Self {
-        self.0.borrow_mut().set_stroke_width(val);
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            if let Some(state) = tree.get_mut(&self.0) {
+                state.border_width = val as _;
+            }
+        });
         self
     }
 
     pub fn with_shape(self, shape: Shape) -> Self {
-        self.0.borrow_mut().set_shape(shape);
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            if let Some(state) = tree.get_mut(&self.0) {
+                state.shape = shape;
+            }
+        });
         self
     }
 
-    pub fn with_rotation(self, val: f32) -> Self {
-        self.0.borrow_mut().set_rotation(val);
+    pub fn with_rotation_deg(self, deg: f32) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            if let Some(state) = tree.get_mut(&self.0) {
+                state.set_rotation_deg(deg);
+            }
+        });
+        self
+    }
+
+    pub fn with_rotation_rad(self, rad: f32) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            if let Some(state) = tree.get_mut(&self.0) {
+                state.set_rotation_rad(rad);
+            }
+        });
         self
     }
 
     pub fn with_corner_radius(self, val: CornerRadius) -> Self {
-        self.0.borrow_mut().set_corner_radius(val);
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            if let Some(state) = tree.get_mut(&self.0) {
+                state.set_corner_radius(val);
+            }
+        });
         self
     }
 
-    #[allow(unused)]
-    pub(crate) fn downgrade(&self) -> Weak<RefCell<Element>> {
-        Rc::downgrade(&self.0)
+    pub fn with_horizontal_align(self, align_h: AlignH) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            if let Some(state) = tree.get_mut(&self.0) {
+                state.align_h = align_h;
+            }
+        });
+        self
     }
 
-    pub(crate) fn borrow(&self) -> Ref<'_, Element> {
-        self.0.borrow()
+    pub fn with_vertical_align(self, align_v: AlignV) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            if let Some(state) = tree.get_mut(&self.0) {
+                state.align_v = align_v;
+            }
+        });
+        self
     }
 
-    pub(crate) fn borrow_mut(&self) -> RefMut<'_, Element> {
-        self.0.borrow_mut()
+    pub fn with_orientation(self, orientation: Orientation) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            if let Some(state) = tree.get_mut(&self.0) {
+                state.orientation = orientation;
+            }
+        });
+        self
     }
 }
