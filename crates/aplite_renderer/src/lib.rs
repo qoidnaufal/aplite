@@ -1,5 +1,4 @@
 mod atlas;
-mod gpu;
 mod buffer;
 mod shader;
 mod util;
@@ -9,16 +8,19 @@ mod screen;
 mod renderer;
 mod mesh;
 
-pub use renderer::Renderer;
+pub use renderer::{Renderer, Scene};
 pub use element::{Element, Shape};
 pub use mesh::Vertices;
-pub use gpu::{GpuDevice, GpuSurface};
 
 #[derive(Debug)]
-pub enum RendererError {
+pub enum InitiationError {
     CreateSurfaceError,
     RequestAdapterError,
     RequestDeviceError,
+}
+
+#[derive(Debug)]
+pub enum RenderError {
     TextureAcquiringFailed,
     ShouldResize,
     ShouldExit,
@@ -26,33 +28,40 @@ pub enum RendererError {
     PollError,
 }
 
-impl std::fmt::Display for RendererError {
+impl std::fmt::Display for RenderError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!{f, "self:?"}
+        write!{f, "{self:?}"}
     }
 }
 
-impl std::error::Error for RendererError {}
+impl std::fmt::Display for InitiationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
 
-impl From<wgpu::CreateSurfaceError> for RendererError {
+impl std::error::Error for RenderError {}
+impl std::error::Error for InitiationError {}
+
+impl From<wgpu::CreateSurfaceError> for InitiationError {
     fn from(_: wgpu::CreateSurfaceError) -> Self {
         Self::CreateSurfaceError
     }
 }
 
-impl From<wgpu::RequestAdapterError> for RendererError {
+impl From<wgpu::RequestAdapterError> for InitiationError {
     fn from(_: wgpu::RequestAdapterError) -> Self {
         Self::RequestAdapterError
     }
 }
 
-impl From<wgpu::RequestDeviceError> for RendererError {
+impl From<wgpu::RequestDeviceError> for InitiationError {
     fn from(_: wgpu::RequestDeviceError) -> Self {
         Self::RequestDeviceError
     }
 }
 
-impl From<wgpu::SurfaceError>  for RendererError {
+impl From<wgpu::SurfaceError> for RenderError {
     fn from(value: wgpu::SurfaceError) -> Self {
         match value {
             wgpu::SurfaceError::Timeout => Self::TimeOut,
@@ -63,7 +72,7 @@ impl From<wgpu::SurfaceError>  for RendererError {
     }
 }
 
-impl From<wgpu::PollError> for RendererError {
+impl From<wgpu::PollError> for RenderError {
     fn from(_: wgpu::PollError) -> Self {
         Self::PollError
     }

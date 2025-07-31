@@ -4,7 +4,7 @@ use std::rc::{Rc, Weak};
 use aplite_reactive::*;
 use aplite_types::CornerRadius;
 use aplite_types::{Rgba, Paint};
-use aplite_renderer::{Element, Shape, Renderer};
+use aplite_renderer::{Element, Shape};
 use aplite_storage::{entity, Entity, Tree, Map, IndexMap};
 
 use crate::widget::Widget;
@@ -88,38 +88,6 @@ impl ViewStorage {
     pub(crate) fn get_all_members_of(&self, root_id: &ViewId) -> Vec<ViewId> {
         self.tree.borrow().get_all_members_of(root_id)
     }
-
-    pub(crate) fn get_render_components(
-        &self,
-        root_id: &ViewId,
-        renderer: &mut Renderer,
-    ) {
-        self.get_all_members_of(root_id)
-            .iter()
-            .enumerate()
-            .for_each(|(idx, view_id)| {
-                if let Some(view) = self.storage
-                    .borrow()
-                    .get(view_id) {
-                        view.node.0.borrow_mut().set_transform_id(idx as _);
-
-                        let paint_storage = self.paint.borrow();
-                        let paint_ref = paint_storage
-                            .get(&view.paint_id)
-                            .map(|paint| paint.as_paint_ref())
-                            .unwrap();
-
-                        let element = view.node.clone();
-                        let transform = self.tree
-                            .borrow()
-                            .get(view_id)
-                            .unwrap()
-                            .get_transform(renderer.screen_res());
-
-                        renderer.paint(*element.borrow(), transform, paint_ref);
-                    }
-            })
-    }
 }
 
 pub trait IntoView: Widget {
@@ -149,8 +117,8 @@ impl Widget for Box<dyn IntoView> {
 /// wrapper over [`Widget`] trait to be stored inside [`ViewStorage`]
 pub struct View {
     // FIXME: this shouldn't be needed here
-    node: ViewNode,
-    paint_id: PaintId,
+    pub(crate) node: ViewNode,
+    pub(crate) paint_id: PaintId,
 }
 
 impl View {
@@ -218,6 +186,7 @@ impl ViewNode {
         self
     }
 
+    #[allow(unused)]
     pub(crate) fn downgrade(&self) -> Weak<RefCell<Element>> {
         Rc::downgrade(&self.0)
     }
@@ -226,7 +195,6 @@ impl ViewNode {
         self.0.borrow()
     }
 
-    #[allow(unused)]
     pub(crate) fn borrow_mut(&self) -> RefMut<'_, Element> {
         self.0.borrow_mut()
     }

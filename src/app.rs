@@ -8,8 +8,8 @@ use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::application::ApplicationHandler;
 
 use aplite_reactive::*;
-use aplite_types::{Size, Rgba};
-use aplite_renderer::{GpuDevice, GpuSurface, Renderer, RendererError};
+use aplite_types::Size;
+use aplite_renderer::Renderer;
 use aplite_future::block_on;
 
 use crate::prelude::ApliteResult;
@@ -22,21 +22,7 @@ pub(crate) const DEFAULT_SCREEN_SIZE: LogicalSize<u32> = LogicalSize::new(800, 6
 
 pub(crate) struct WindowHandle {
     pub(crate) window: Arc<Window>,
-    pub(crate) surface: wgpu::Surface<'static>,
-    pub(crate) config: wgpu::SurfaceConfiguration,
     pub(crate) root_id: ViewId,
-}
-
-impl WindowHandle {
-    pub(crate) fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
-        self.config.width = width;
-        self.config.height = height;
-        self.configure(device);
-    }
-
-    pub(crate) fn configure(&self, device: &wgpu::Device) {
-        self.surface.configure(device, &self.config);
-    }
 }
 
 pub struct Aplite {
@@ -118,12 +104,6 @@ impl Aplite {
 
             if let Some(view_fn) = self.pending_views.pop() {
                 let view = view_fn(window_id);
-                // s.tree
-                //     .borrow()
-                //     .get_data(&view.id())
-                //     .unwrap()
-                //     .z_index
-                //     .update(|z_index| *z_index += 1);
                 s.append_child(&root, view);
 
                 self.cx.layout_the_whole_window(&root);
@@ -134,31 +114,14 @@ impl Aplite {
             root
         });
 
-        let gpu_surface = block_on(async {
-            GpuSurface::new(Arc::clone(&window)).await
-        })?;
-
         let window_handle = WindowHandle {
             window: Arc::clone(&window),
-            surface: gpu_surface.surface,
-            config: gpu_surface.config,
             root_id,
         };
 
-        if let Some(renderer) = self.renderer.as_ref() {
-            window_handle.configure(&renderer.device);
-        } else {
-            let gpu_device = block_on(async { GpuDevice::new(&gpu_surface.adapter).await})?;
-            let renderer = Renderer::new(
-                gpu_device.device,
-                gpu_device.queue,
-                Size::new(size.width as f32, size.height as f32),
-                window.scale_factor()
-            );
-            window_handle.configure(&renderer.device);
-            self.renderer = Some(renderer);
-        }
+        let renderer = block_on(async { Renderer::new(Arc::clone(&window)).await })?;
 
+        self.renderer = Some(renderer);
         self.window.insert(window_id, window_handle);
         self.track_window(root_id, window);
 
@@ -181,23 +144,11 @@ impl Aplite {
 
 // window event
 impl Aplite {
-    fn handle_resize(&mut self, size: PhysicalSize<u32>, window_id: WindowId) {
+    fn handle_resize(&mut self, size: PhysicalSize<u32>) {
         if let Some(renderer) = self.renderer.as_mut()
-        && let Some(window_handle) = self.window.get_mut(&window_id)
         && size.width > 0 && size.height > 0
         {
-            let logical = size.to_logical::<u32>(renderer.scale_factor());
-            // let root_id = self.root_view_id[&window_id];
-            // VIEW_STORAGE.with(|s| {
-            //     if let Some(window_state) = s.storage.borrow().get(&root_id) {
-            //         window_state.widget_state().rect.update_untracked(|rect| {
-            //             rect.set_size(Size::new(logical.width, logical.height));
-            //         });
-            //     }
-            // });
-            // crate::context::layout::LayoutContext::new(root_id).calculate();
-            window_handle.resize(&renderer.device, logical.width, logical.height);
-            renderer.resize(Size::new(logical.width as f32, logical.height as f32));
+            renderer.resize(size);
         }
     }
 
@@ -230,27 +181,22 @@ impl Aplite {
     fn handle_redraw_request(&mut self, window_id: &WindowId, event_loop: &ActiveEventLoop) {
         if let Some(window_handle) = self.window.get(window_id)
         && let Some(renderer) = self.renderer.as_mut()
-        && let Ok(surface) = window_handle.surface.get_current_texture()
         {
             #[cfg(feature = "render_stats")] let start = std::time::Instant::now();
 
-            renderer.begin();
-            self.cx.prepare_data(window_handle.root_id, renderer);
-            let format = window_handle.config.format;
-            // TODO: this should be window.pre_present_notify(),
-            // and the renderer.finish()
-            if let Err(err) = renderer.render(
-                Rgba::TRANSPARENT,
-                Arc::clone(&window_handle.window),
-                surface,
-                format
-            ) {
-                let size = renderer.screen_res();
-                match err {
-                    RendererError::ShouldResize => renderer.resize(size),
-                    RendererError::ShouldExit => event_loop.exit(),
+            match renderer.new_scene() {
+                Ok(scene) => {
+                    self.cx.prepare_data(window_handle.root_id, scene);
+                    renderer.encode();
+                    window_handle.window.pre_present_notify();
+                    renderer.render();
+                },
+                Err(err) => match err {
+                    aplite_renderer::RenderError::ShouldResize => renderer
+                        .resize(window_handle.window.inner_size()),
+                    aplite_renderer::RenderError::ShouldExit => event_loop.exit(),
                     _ => {}
-                }
+                },
             }
 
             #[cfg(feature = "render_stats")] self.stats.inc(start.elapsed());
@@ -273,7 +219,7 @@ impl ApplicationHandler for Aplite {
         match event {
             WindowEvent::CloseRequested => self.handle_close_request(&window_id, event_loop),
             WindowEvent::RedrawRequested => self.handle_redraw_request(&window_id, event_loop),
-            WindowEvent::Resized(s) => self.handle_resize(s, window_id),
+            WindowEvent::Resized(size) => self.handle_resize(size),
             WindowEvent::MouseInput { state, button, .. } => self.handle_click(state, button),
             WindowEvent::CursorMoved { position, .. } => self.handle_mouse_move(&window_id, position),
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => self.set_scale_factor(scale_factor),

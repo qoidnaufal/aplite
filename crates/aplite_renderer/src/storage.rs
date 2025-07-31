@@ -3,13 +3,13 @@ use aplite_types::Matrix3x2;
 use super::element::Element;
 use super::buffer::Buffer;
 
-pub(crate) struct Storage {
+pub(crate) struct StorageBuffers {
     pub(crate) elements: Buffer<Element>,
     pub(crate) transforms: Buffer<Matrix3x2>,
     pub(crate) bind_group: wgpu::BindGroup,
 }
 
-impl Storage {
+impl StorageBuffers {
     pub(crate) fn new(device: &wgpu::Device) -> Self {
         let storage = wgpu::BufferUsages::STORAGE;
         let elements = Buffer::<Element>::new(device, 1024, storage, "element");

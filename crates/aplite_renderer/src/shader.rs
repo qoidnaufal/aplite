@@ -3,7 +3,7 @@ pub(crate) fn create_shader<'a>(input: &'a [&str]) -> std::borrow::Cow<'a, str> 
     shader.into()
 }
 
-pub(crate) fn render_shader<'a>() -> std::borrow::Cow<'a, str> {
+pub(crate) fn render<'a>() -> std::borrow::Cow<'a, str> {
     create_shader(&[VERTEX, SDF, FRAGMENT])
 }
 

@@ -2,7 +2,7 @@ pub(crate) mod cursor;
 pub mod layout;
 
 use aplite_reactive::*;
-use aplite_renderer::Renderer;
+use aplite_renderer::Scene;
 use aplite_types::Vec2f;
 
 use crate::view::{VIEW_STORAGE, ViewId};
@@ -173,11 +173,33 @@ impl Context {
 // #########################################################
 
 impl Context {
-    pub(crate) fn prepare_data(&self, root_id: ViewId, renderer: &mut Renderer) {
-        VIEW_STORAGE.with(|storage| {
-            // TODO: let scene = renderer.new_scene();
-            storage.get_render_components(&root_id, renderer)
+    pub(crate) fn prepare_data(&self, root_id: ViewId, mut scene: Scene<'_>) {
+        VIEW_STORAGE.with(|s| {
+            s.get_all_members_of(&root_id)
+                .iter()
+                .enumerate()
+                .for_each(|(tx_id, view_id)| {
+                    if let Some(view) = s.storage
+                        .borrow()
+                        .get(view_id) {
+                            view.node.borrow_mut().set_transform_id(tx_id as _);
+
+                            let paint_storage = s.paint.borrow();
+                            let paint = paint_storage
+                                .get(&view.paint_id)
+                                .map(|paint| paint.as_paint_ref())
+                                .unwrap();
+
+                            let element = view.node.clone();
+                            let transform = s.tree
+                                .borrow()
+                                .get(view_id)
+                                .unwrap()
+                                .get_transform(scene.size());
+
+                            scene.paint(*element.borrow(), transform, paint);
+                        }
+                })
         });
-        // TODO: renderer.encode_scene(scene);
     }
 }

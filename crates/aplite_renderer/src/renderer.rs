@@ -1,39 +1,96 @@
 use std::sync::Arc;
 use winit::window::Window;
+use winit::dpi::PhysicalSize;
 use aplite_types::{Matrix3x2, Rgba, Size, PaintRef};
 
-use super::RendererError;
+use super::RenderError;
+use super::InitiationError;
 
 use crate::atlas::Atlas;
 use crate::element::Element;
 use crate::screen::Screen;
-use crate::shader::render_shader;
-use crate::storage::Storage;
-use crate::mesh::{Indices, MeshBuffer};
+use crate::storage::StorageBuffers;
+use crate::mesh::{Indices, MeshBuffer, Vertices};
 use crate::util::Sampler;
-use crate::Vertices;
 
 pub struct Renderer {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
+
+    // FIXME: maybe separating these was good?
+    surface: wgpu::Surface<'static>,
+    config: wgpu::SurfaceConfiguration,
+
+    encoder: Option<wgpu::CommandEncoder>,
+    target_texture: Option<wgpu::SurfaceTexture>,
+
+    // FIXME: not needed?
     screen: Screen,
-    storage: [Storage; 3],
+
+    // FIXME: merge these two into Scene?
+    storage: [StorageBuffers; 3],
+    mesh: [MeshBuffer; 3],
+
     atlas: Atlas,
     sampler: Sampler,
-    mesh: [MeshBuffer; 3],
     current: usize,
+    clear_color: Rgba<f32>,
 }
 
 impl Renderer {
-    pub fn new(device: wgpu::Device, queue: wgpu::Queue, size: Size, scale_factor: f64) -> Self {
-        let screen = Screen::new(&device, size, scale_factor);
+    pub async fn new(window: Arc<Window>) -> Result<Self, InitiationError> {
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+            backends: backend(),
+            ..Default::default()
+        });
+
+        let surface = instance.create_surface(Arc::clone(&window))?;
+
+        let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions {
+            compatible_surface: Some(&surface),
+            ..Default::default()
+        }).await?;
+
+        let surface_capabilites = surface.get_capabilities(&adapter);
+
+        let format = surface_capabilites
+            .formats
+            .iter()
+            .find(|f| matches!(f, wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Rgba8UnormSrgb))
+            .copied()
+            .unwrap_or(surface_capabilites.formats[0]);
+
+        let size = window.inner_size();
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format,
+            width: size.width,
+            height: size.height,
+            present_mode: wgpu::PresentMode::Fifo,
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            desired_maximum_frame_latency: 2,
+            view_formats: vec![],
+        };
+
+        let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor {
+                required_features: wgpu::Features::empty(),
+                ..Default::default()
+            },
+        ).await?;
+
+        surface.configure(&device, &config);
+
+        let scale_factor = window.scale_factor();
+        let logical: winit::dpi::LogicalSize<f32> = size.to_logical(scale_factor);
+        let screen_size = Size::new(logical.width, logical.height);
+        let screen = Screen::new(&device, screen_size, scale_factor);
         let atlas = Atlas::new(&device, Size::new(2000., 2000.));
         let sampler = Sampler::new(&device);
 
         let storage = [
-            Storage::new(&device),
-            Storage::new(&device),
-            Storage::new(&device),
+            StorageBuffers::new(&device),
+            StorageBuffers::new(&device),
+            StorageBuffers::new(&device),
         ];
 
         let mesh = [
@@ -42,18 +99,24 @@ impl Renderer {
             MeshBuffer::new(&device),
         ];
 
-        Self {
+        Ok(Self {
             device,
             queue,
+            surface,
+            config,
+            encoder: None,
+            target_texture: None,
             storage,
             sampler,
             atlas,
             mesh,
             screen,
             current: 0,
-        }
+            clear_color: Rgba::new(0.0, 0.0, 0.0, 0.0),
+        })
     }
 
+    #[inline(always)]
     pub const fn scale_factor(&self) -> f64 {
         self.screen.scale_factor
     }
@@ -69,9 +132,14 @@ impl Renderer {
         self.screen.screen_size()
     }
 
-    pub fn resize(&mut self, new_size: Size) {
+    pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
+        let logical = new_size.to_logical(self.scale_factor());
+        self.config.width = logical.width;
+        self.config.height = logical.height;
+        self.surface.configure(&self.device, &self.config);
+
         let res = self.screen_res();
-        let ns = new_size;
+        let ns = Size::new(logical.width as f32, logical.height as f32);
         let scale = res / ns;
         let sx = scale.width;
         let sy = scale.height;
@@ -87,29 +155,38 @@ impl Renderer {
             );
     }
 
-    pub(crate) fn create_command_encoder(&self) -> wgpu::CommandEncoder {
+    pub fn new_scene(&mut self) -> Result<Scene<'_>, RenderError> {
         let label = Some("render encoder");
-        self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label })
+        let encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label });
+
+        let target_texture = self.surface.get_current_texture()?;
+
+        self.encoder = Some(encoder);
+        self.target_texture = Some(target_texture);
+
+        self.current = (self.current + 1) % 3;
+        self.mesh[self.current].offset = 0;
+
+        Ok(Scene {
+            screen_res: self.screen_res(),
+            device: &self.device,
+            queue: &self.queue,
+            storage: &mut self.storage[self.current],
+            mesh: &mut self.mesh[self.current],
+            atlas: &mut self.atlas,
+            clear_color: &mut self.clear_color,
+        })
     }
 
-    pub(crate) fn submit_encoder(&self, encoder: wgpu::CommandEncoder) -> wgpu::SubmissionIndex {
-        self.queue.submit([encoder.finish()])
-    }
+    pub fn encode(&mut self) {
+        if self.mesh[self.current].offset == 0 { return }
 
-    pub(crate) fn poll_wait(&self, index: wgpu::SubmissionIndex) -> Result<(), RendererError> {
-        self.device.poll(wgpu::PollType::WaitForSubmissionIndex(index))?;
-        Ok(())
-    }
-
-    pub fn render(
-        &mut self,
-        color: Rgba<u8>,
-        window: Arc<Window>,
-        surface: wgpu::SurfaceTexture,
-        format: wgpu::TextureFormat,
-    ) -> Result<(), RendererError> {
-        let view = &surface.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self.create_command_encoder();
+        let view = &self.target_texture
+            .as_ref()
+            .map(|tt| tt.texture.create_view(&wgpu::TextureViewDescriptor::default()))
+            .unwrap();
 
         let desc = wgpu::RenderPassColorAttachment {
             view,
@@ -117,10 +194,10 @@ impl Renderer {
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Clear(
                     wgpu::Color {
-                        r: color.r as _,
-                        g: color.g as _,
-                        b: color.b as _,
-                        a: color.a as _,
+                        r: self.clear_color.r as f64,
+                        g: self.clear_color.g as f64,
+                        b: self.clear_color.b as f64,
+                        a: self.clear_color.a as f64,
                     }
                 ),
                 store: wgpu::StoreOp::Store,
@@ -128,37 +205,20 @@ impl Renderer {
             depth_slice: None,
         };
 
-        self.atlas.update(&self.device, &mut encoder);
-        self.encode(&mut encoder, desc, format);
-
-        window.pre_present_notify();
-
-        let submission_id = self.submit_encoder(encoder);
-        self.poll_wait(submission_id)?;
-        surface.present();
-
-        Ok(())
-    }
-
-    fn encode(
-        &self,
-        encoder: &mut wgpu::CommandEncoder,
-        desc: wgpu::RenderPassColorAttachment,
-        format: wgpu::TextureFormat,
-    ) {
-        if self.mesh[self.current].offset == 0 { return }
+        let encoder = self.encoder.as_mut().unwrap();
+        self.atlas.update(&self.device, encoder);
 
         let buffers = &[MeshBuffer::vertice_layout()];
         let bind_group_layouts = &[
             &Screen::bind_group_layout(&self.device),
-            &Storage::bind_group_layout(&self.device),
+            &StorageBuffers::bind_group_layout(&self.device),
             &Atlas::bind_group_layout(&self.device),
             &Sampler::bind_group_layout(&self.device),
         ];
 
         let pipeline = Pipeline::new_render_pipeline(
             &self.device,
-            format,
+            self.config.format,
             buffers,
             bind_group_layouts
         );
@@ -181,18 +241,28 @@ impl Renderer {
 
         pass.draw_indexed(0..self.mesh[self.current].offset as u32 * 6, 0, 0..1);
     }
+
+    pub fn render(&mut self) {
+        let surface = self.target_texture.take().unwrap();
+        let encoder = self.encoder.take().unwrap();
+        let id = self.queue.submit([encoder.finish()]);
+        self.device.poll(wgpu::PollType::WaitForSubmissionIndex(id)).unwrap();
+        surface.present();
+    }
+}
+
+pub struct Scene<'a> {
+    device: &'a wgpu::Device,
+    queue: &'a wgpu::Queue,
+    storage: &'a mut StorageBuffers,
+    mesh: &'a mut MeshBuffer,
+    atlas: &'a mut Atlas,
+    screen_res: Size,
+    clear_color: &'a mut Rgba<f32>,
 }
 
 // FIXME: this feels immediate mode to me, idk
-impl Renderer {
-    pub fn begin(&mut self) {
-        self.current = (self.current + 1) % 3;
-        self.mesh[self.current].offset = 0;
-    }
-
-    // pub fn finish(&mut self) {
-    // }
-
+impl Scene<'_> {
     pub fn paint(
         &mut self,
         mut element: Element,
@@ -208,7 +278,7 @@ impl Renderer {
                 .and_then(|image| self.atlas.append(image)),
         };
 
-        let offset = self.mesh[self.current].offset;
+        let offset = self.mesh.offset;
         let indices = Indices::new().with_offset(offset as _, true);
         let vertices = atlas_id.and_then(|id| {
             element.set_atlas_id(id.index() as i32);
@@ -218,20 +288,28 @@ impl Renderer {
         })
         .unwrap_or(Vertices::new().with_id(offset as _));
 
-        self.mesh[self.current]
+        self.mesh
             .indices
-            .write(&self.device, &self.queue, offset * 6, indices.as_slice());
-        self.mesh[self.current]
+            .write(self.device, self.queue, offset * 6, indices.as_slice());
+        self.mesh
             .vertices
-            .write(&self.device, &self.queue, offset * 4, vertices.as_slice());
-        self.storage[self.current]
+            .write(self.device, self.queue, offset * 4, vertices.as_slice());
+        self.storage
             .elements
-            .write(&self.device, &self.queue, offset, &[element]);
-        self.storage[self.current]
+            .write(self.device, self.queue, offset, &[element]);
+        self.storage
             .transforms
-            .write(&self.device, &self.queue, offset, &[transform]);
+            .write(self.device, self.queue, offset, &[transform]);
 
-        self.mesh[self.current].offset += 1;
+        self.mesh.offset += 1;
+    }
+
+    pub fn size(&self) -> Size {
+        self.screen_res
+    }
+
+    pub fn set_clear_color(&mut self, color: Rgba<f32>) {
+        *self.clear_color = color;
     }
 }
 
@@ -250,7 +328,7 @@ impl Pipeline {
         bind_group_layouts: &[&wgpu::BindGroupLayout],
     ) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("shader"), source: wgpu::ShaderSource::Wgsl(render_shader())
+            label: Some("shader"), source: wgpu::ShaderSource::Wgsl(crate::shader::render())
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("pipeline layout"),
@@ -311,4 +389,13 @@ impl Pipeline {
             Pipeline::Compute(_) => panic!("expected render pipeline, get a compute instead"),
         }
     }
+}
+
+#[inline]
+const fn backend() -> wgpu::Backends {
+    #[cfg(all(unix, not(target_os = "macos")))]
+    return wgpu::Backends::GL;
+
+    #[cfg(target_os = "macos")]
+    return wgpu::Backends::METAL;
 }
