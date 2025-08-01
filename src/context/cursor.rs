@@ -57,7 +57,6 @@ pub struct MouseHover {
     pub pos: Vec2f,
     pub curr: Option<ViewId>,
     pub prev: Option<ViewId>,
-    pub z_index: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -76,7 +75,6 @@ impl Default for Cursor {
                 pos: Vec2f::default(),
                 curr: None,
                 prev: None,
-                z_index: 0,
             },
             state: MouseState {
                 action: MouseAction::Released,

@@ -31,8 +31,8 @@ fn simple() -> impl IntoView {
     Effect::new(move |_| counter.read(|val| eprint!("Counter: {val}    \r")));
 
     let button = Button::new()
-        .set_stroke_color(|_| Rgba::WHITE)
-        .set_stroke_width(|_| 6)
+        .set_border_color(|_| Rgba::WHITE)
+        .set_border_width(|_| 6)
         .set_rotation(move |_| rotate.get())
         .set_corners(|_| CornerRadius::splat(47.))
         .set_dragable(true)
@@ -40,10 +40,10 @@ fn simple() -> impl IntoView {
         .on(LeftClick, click_count);
 
     let circle = CircleWidget::new()
-        .set_color(color)
+        .set_background(color)
         .set_shape(shape)
         .on(LeftClick, click_rotate)
-        .set_stroke_width(|_| 6)
+        .set_border_width(|_| 6)
         .set_dragable(true)
         .set_size((150, 150));
 

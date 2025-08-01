@@ -29,7 +29,7 @@ thread_local! {
 
 type Callbacks = HashMap<ViewId, WidgetCallback>;
 
-struct WidgetCallback(Map<WidgetEvent, Box<dyn FnMut()>>);
+pub(crate) struct WidgetCallback(Map<WidgetEvent, Box<dyn FnMut()>>);
 
 #[repr(u64)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,7 +95,7 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn set_color<F>(self, f: F) -> Self
+    fn set_background<F>(self, f: F) -> Self
     where
         F: FnEl<Rgba<u8>> + 'static,
     {
@@ -103,7 +103,7 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn set_stroke_color<F>(self, f: F) -> Self
+    fn set_border_color<F>(self, f: F) -> Self
     where
         F: FnEl<Rgba<u8>> + 'static
     {
@@ -127,7 +127,7 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn set_stroke_width<F>(self, f: F) -> Self
+    fn set_border_width<F>(self, f: F) -> Self
     where
         F: FnEl<u32> + 'static
     {

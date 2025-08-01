@@ -60,7 +60,7 @@ impl ReactiveGraph {
 
         if let Some(weak_subscriber) = current.as_ref()
         && let Some(value) = self.storage.borrow_mut().get_mut(id) {
-            // eprintln!("[TRACKING] {id:?} inside {weak_subscriber:?}");
+            #[cfg(test)] eprintln!("[TRACKING] {id:?} inside {weak_subscriber:?}");
             weak_subscriber.add_source(*id);
             value.add_subscriber(weak_subscriber.clone());
         }
@@ -68,14 +68,14 @@ impl ReactiveGraph {
 
     pub(crate) fn untrack(&self, id: &ReactiveId) {
         if let Some(value) = self.storage.borrow_mut().get_mut(id) {
-            // eprintln!("[UNTRACKD] {id:?}");
+            #[cfg(test)] eprintln!("[UNTRACKD] {id:?}");
             value.clear_subscribers();
         }
     }
 
     pub(crate) fn notify_subscribers(&self, id: &ReactiveId) {
         if let Some(stored_value) = self.storage.borrow().get(id) {
-            // eprintln!("[NOTIFYING] {id:?} is notifying the subscribers");
+            #[cfg(test)] eprintln!("[NOTIFYING] {id:?} is notifying the subscribers");
             stored_value.notify_subscribers();
         }
     }

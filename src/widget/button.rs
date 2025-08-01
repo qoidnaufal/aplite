@@ -12,6 +12,7 @@ impl Button {
         let node = ViewNode::new()
             .with_name("Button")
             .with_shape(Shape::RoundedRect)
+            .set_hoverable()
             .with_size((80, 30));
 
         Self {

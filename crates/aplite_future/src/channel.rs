@@ -57,7 +57,7 @@ impl Wake for Inner {
     fn wake_by_ref(self: &Arc<Self>) {
         let mut lock = self.waker.try_write().unwrap();
         if let Some(waker) = lock.take() {
-            // eprintln!(">> waking up");
+            #[cfg(test)] eprintln!(">> waking up");
             waker.wake();
         }
     }
@@ -68,14 +68,14 @@ impl Stream for Receiver {
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         if let Some(inner) = self.0.upgrade() {
-            // eprintln!(">> polled");
+            eprintln!(">> polled");
             inner.set_waker(cx.waker());
 
             if inner.signal.swap(false, Ordering::Relaxed) {
-                // eprintln!("\n   +++++ READYSOME +++++\n");
+                #[cfg(test)] eprintln!("\n   +++++ READYSOME +++++\n");
                 Poll::Ready(Some(()))
             } else {
-                // eprintln!("\n   +++++  PENDING  +++++\n");
+                #[cfg(test)] eprintln!("\n   +++++  PENDING  +++++\n");
                 Poll::Pending
             }
         } else {

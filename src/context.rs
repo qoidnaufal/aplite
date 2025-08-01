@@ -6,7 +6,7 @@ use aplite_renderer::Scene;
 use aplite_types::Vec2f;
 
 use crate::view::{VIEW_STORAGE, ViewId};
-use crate::widget::WidgetEvent;
+use crate::widget::{CALLBACKS, WidgetEvent};
 
 use cursor::{Cursor, MouseAction, MouseButton};
 use layout::{LayoutContext, calculate_size_recursive};
@@ -14,12 +14,14 @@ use layout::{LayoutContext, calculate_size_recursive};
 // FIXME: use this as the main building block to build the widget
 pub struct Context {
     cursor: Cursor,
+    pending_event: Vec<ViewId>,
 }
 
 impl Default for Context {
     fn default() -> Self {
         Self {
             cursor: Cursor::new(),
+            pending_event: Vec::with_capacity(16),
         }
     }
 }
@@ -88,22 +90,20 @@ impl Context {
                 s.hoverable
                     .borrow()
                     .iter()
-                    .filter_map(|id| {
+                    .find(|&id| {
                         let tree = s.tree.borrow();
-                        let state = tree.get(id).unwrap();
+                        let state = tree.get(&id).unwrap();
                         state.detect_hover(&self.cursor)
-                            .then_some((state.z_index, *id))
-                    }).max()
+                    })
+                    .copied()
             });
 
             match hovered {
-                Some((z_index, id)) => {
+                Some(id) => {
                     self.cursor.hover.prev = self.cursor.hover.curr.replace(id);
-                    self.cursor.hover.z_index = z_index;
                 },
                 None => {
                     self.cursor.hover.prev = self.cursor.hover.curr.take();
-                    self.cursor.hover.z_index = 0;
                 },
             }
         }
@@ -148,15 +148,26 @@ impl Context {
                 self.cursor.click.offset = self.cursor.click.pos - pos;
                 state.event = Some(WidgetEvent::LeftClick);
             });
+            self.pending_event.push(*hover_id);
         }
         if self.cursor.state.action == MouseAction::Released {
+            self.pending_event
+                .drain(..)
+                .for_each(|id| {
+                    CALLBACKS.with(|cb| {
+                        if let Some(callbacks) = cb.borrow_mut().get_mut(&id)
+                        && let MouseButton::Left = self.cursor.state.button
+                        && let Some(callback) = callbacks.get_mut(&WidgetEvent::LeftClick)
+                        {
+                            callback();
+                        }
+                    })
+                });
+
             if let Some(hover_id) = self.cursor.hover.curr.as_ref() {
                 VIEW_STORAGE.with(|s| {
                     let mut tree = s.tree.borrow_mut();
                     let state = tree.get_mut(hover_id).unwrap();
-                    if !self.cursor.is_dragging {
-                        // state.trigger_callback = true;
-                    }
                     state.event = None;
                 });
             }

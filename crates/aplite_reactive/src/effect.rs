@@ -46,7 +46,7 @@ impl Effect {
             let value = Rc::new(RefCell::new(None::<R>));
 
             while rx.recv().await.is_some() {
-                // eprintln!("[NOTIFIED] {id:?} is running the function");
+                #[cfg(test)] eprintln!("[NOTIFIED] {id:?} is running the function");
                 weak_subscriber.clear_source();
 
                 let prev_scope = GRAPH.with(|graph| graph.swap_current(Some(weak_subscriber.clone())));

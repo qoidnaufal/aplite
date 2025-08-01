@@ -309,4 +309,15 @@ impl ViewNode {
         });
         self
     }
+
+    pub fn set_hoverable(self) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            if let Some(state) = tree.get_mut(&self.0) {
+                state.hoverable = true;
+            }
+            s.hoverable.borrow_mut().push(self.0);
+        });
+        self
+    }
 }

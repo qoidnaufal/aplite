@@ -98,10 +98,7 @@ impl WidgetState {
 
     // FIXME: consider rotation & maybe some precision
     pub(crate) fn detect_hover(&self, cursor: &Cursor) -> bool {
-        let is_hovered = self.rect.contains(cursor.hover.pos)
-            && cursor.hover.z_index <= self.z_index;
-
-        is_hovered
+        self.rect.contains(cursor.hover.pos)
     }
 
     pub(crate) fn get_transform(&self, screen: Size) -> Matrix3x2 {
