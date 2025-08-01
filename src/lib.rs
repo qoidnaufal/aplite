@@ -4,7 +4,6 @@ mod error;
 mod state;
 mod view;
 mod widget;
-mod style;
 
 pub mod prelude {
     use crate::error::ApliteError;
@@ -16,7 +15,6 @@ pub mod prelude {
     pub use crate::app::Aplite;
     pub use crate::context::Context;
     pub use crate::state::AspectRatio;
-    pub use crate::style::{Style, FnEl, FnAction};
     pub use crate::context::layout::{
         Orientation,
         Padding,

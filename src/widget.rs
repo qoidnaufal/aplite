@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 use aplite_renderer::Shape;
 use aplite_storage::Map;
+use aplite_types::{Rgba, CornerRadius, Size};
 
 use crate::state::WidgetState;
 use crate::view::{
@@ -40,6 +41,12 @@ pub enum WidgetEvent {
     Input,
 }
 
+impl Default for WidgetCallback {
+    fn default() -> Self {
+        Self(Map::with_capacity(5))
+    }
+}
+
 /// main building block to create a renderable component
 pub trait Widget {
     fn node(&self) -> ViewNode;
@@ -75,7 +82,7 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn state<F>(self, mut state_fn: F) -> Self
+    fn set_state<F>(self, mut state_fn: F) -> Self
     where
         F: FnMut(&mut WidgetState)
     {
@@ -87,13 +94,99 @@ pub trait WidgetExt: Widget + Sized {
         });
         self
     }
-}
 
-impl Default for WidgetCallback {
-    fn default() -> Self {
-        Self(Map::with_capacity(5))
+    fn set_color<F>(self, f: F) -> Self
+    where
+        F: FnEl<Rgba<u8>> + 'static,
+    {
+        let _ = f;
+        self
+    }
+
+    fn set_stroke_color<F>(self, f: F) -> Self
+    where
+        F: FnEl<Rgba<u8>> + 'static
+    {
+        let _ = f;
+        self
+    }
+
+    fn set_hover_color<F>(self, f: F) -> Self
+    where
+        F: FnAction<Rgba<u8>> + 'static
+    {
+        let _ = f;
+        self
+    }
+
+    fn set_click_color<F>(self, f: F) -> Self
+    where
+        F: FnAction<Rgba<u8>> + 'static,
+    {
+        let _ = f;
+        self
+    }
+
+    fn set_stroke_width<F>(self, f: F) -> Self
+    where
+        F: FnEl<u32> + 'static
+    {
+        let _ = f;
+        self
+    }
+
+    fn set_rotation<F>(self, f: F) -> Self
+    where
+        F: FnEl<f32> + 'static
+    {
+        let _ = f;
+        self
+    }
+
+    fn set_corners<F>(self, f: F) -> Self
+    where
+        F: FnEl<CornerRadius> + 'static
+    {
+        let _ = f;
+        self
+    }
+
+    fn set_shape<F>(self, f: F) -> Self
+    where
+        F: FnEl<Shape> + 'static
+    {
+        let _ = f;
+        self
+    }
+
+    fn set_size(self, size: impl Into<Size>) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            let state = tree.get_mut(&self.id()).unwrap();
+            state.rect.set_size(size.into());
+        });
+        self
+    }
+
+    fn set_dragable(self, value: bool) -> Self {
+        VIEW_STORAGE.with(|s| {
+            let mut tree = s.tree.borrow_mut();
+            let state = tree.get_mut(&self.id()).unwrap();
+            state.dragable = value;
+        });
+        self
     }
 }
+
+/// this is just a wrapper over `FnMut(Option<T>) -> T`
+pub trait FnEl<T>: FnMut(Option<T>) -> T {}
+
+impl<F, T> FnEl<T> for F where F: FnMut(Option<T>) -> T {}
+
+/// this is just a wrapper over `FnMut() -> T`
+pub trait FnAction<T>: FnMut() -> T {}
+
+impl<F, T> FnAction<T> for F where F: FnMut() -> T {}
 
 impl std::ops::Deref for WidgetCallback {
     type Target = Map<WidgetEvent, Box<dyn FnMut()>>;

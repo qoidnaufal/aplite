@@ -278,7 +278,6 @@ impl Scene<'_> {
 
         let mut element = Element::new()
             .with_shape(shape)
-            .with_transform_id(offset as _)
             .with_border_width(border_width);
 
         match border {

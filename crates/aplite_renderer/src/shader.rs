@@ -33,15 +33,14 @@ struct Element {
     shape: u32,
     border_width: f32,
     atlas_id: i32,
-    transform_id: u32,
 }
 
 @group(1) @binding(0) var<storage> elements: array<Element>;
 @group(1) @binding(1) var<storage> transforms: array<mat3x2<f32>>;
 
 // scale -> rotate -> translate
-fn transform_point(element: Element, pos: vec2<f32>) -> vec2f {
-    let t = transforms[element.transform_id];
+fn transform_point(index: u32, pos: vec2<f32>) -> vec2f {
+    let t = transforms[index];
 
     let e_mat = mat2x2<f32>(t[0], t[1]);
 
@@ -66,7 +65,7 @@ struct FragmentPayload {
 fn vs_main(vertex: VertexInput) -> FragmentPayload {
     let element = elements[vertex.id];
 
-    let pos = transform_point(element, vertex.pos);
+    let pos = transform_point(vertex.id, vertex.pos);
 
     var out: FragmentPayload;
     out.uv = select(vertex.uv * 2 - 1, vertex.uv, element.atlas_id > -1);
@@ -103,24 +102,25 @@ fn sdSegment(p: vec2f, a: vec2f, b: vec2f) -> f32 {
     return length(pa - ba * h);
 }
 
-fn sdf(uv: vec2<f32>, element: Element, border_width: f32) -> f32 {
-    let transform = transforms[element.transform_id];
+fn sdf(uv: vec2<f32>, index: u32, element: Element) -> f32 {
+    let transform = transforms[index];
     let size = vec2f(transform[0].x, transform[1].y);
+    let w = element.border_width;
 
     switch element.shape {
         case 0u: {
             let p = uv * size.x;
-            let r = size.x - border_width;
+            let r = size.x - w;
             return sdCircle(p, r);
         }
         case 1u: {
             let p = uv * size;
-            let b = size - border_width;
+            let b = size - w;
             return sdRect(p, b);
         }
         case 2u: {
             let p = uv * size;
-            let b = size - border_width;
+            let b = size - w;
             let r = scale_radius(element.radius, size.x);
             return sdRoundedRect(p, b, r);
         }
@@ -141,7 +141,7 @@ fn fs_main(in: FragmentPayload) -> @location(0) vec4<f32> {
 
     if element.atlas_id > -1 { return textureSample(t, s, in.uv); }
 
-    let sdf = sdf(in.uv, element, element.border_width);
+    let sdf = sdf(in.uv, in.index, element);
     let blend = 1.0 - smoothstep(0.0, element.border_width, abs(sdf));
 
     let color = select(vec4f(0.0), element.background, sdf < 0.0);

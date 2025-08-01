@@ -5,7 +5,7 @@ fn first_row() -> impl IntoView {
     HStack::new()
         .child(
             Image::new(|| image_reader("examples/assets/image1.jpg"))
-                .state(|state| state.set_image_aspect_ratio(Defined((8, 5))))
+                .set_state(|state| state.set_image_aspect_ratio(Defined((8, 5))))
         )
         .child(
             Image::new(|| image_reader("examples/assets/image2.jpg"))
@@ -15,7 +15,7 @@ fn first_row() -> impl IntoView {
                 .set_color(|_| Rgba::PURPLE)
                 .set_hover_color(|| Rgba::RED)
         )
-        .state(|s| {
+        .set_state(|s| {
             s.set_spacing(40.);
             s.set_padding(Padding::new(20., 20., 40., 40.));
         })
@@ -64,7 +64,7 @@ fn button_stack(
         )
         .set_color(|_| Rgba::new(0, 0, 0, 30))
         .set_dragable(true)
-        .state(|s| {
+        .set_state(|s| {
             s.set_min_width(400.);
             s.set_align_h(AlignH::Center);
             s.set_align_v(AlignV::Middle);
@@ -90,7 +90,7 @@ fn second_row(
         )
         .set_color(|_| Rgba::LIGHT_GRAY)
         .set_dragable(true)
-        .state(|s| {
+        .set_state(|s| {
             s.set_padding(Padding::splat(30.));
             s.set_spacing(5.);
         })
