@@ -1,7 +1,7 @@
-use std::rc::{Rc, Weak};
+use std::sync::{Arc, Weak};
 use crate::graph::ReactiveId;
 
-pub(crate) struct AnySubscriber(Rc<dyn Subscriber>);
+pub(crate) struct AnySubscriber(Arc<dyn Subscriber>);
 
 pub(crate) struct WeakSubscriber(Weak<dyn Subscriber>);
 
@@ -19,11 +19,11 @@ pub(crate) trait ToAnySubscriber {
 
 impl AnySubscriber {
     pub(crate) fn new<T: Subscriber + 'static>(inner: T) -> Self {
-        Self(Rc::new(inner))
+        Self(Arc::new(inner))
     }
 
     pub(crate) fn downgrade(&self) -> WeakSubscriber {
-        WeakSubscriber(Rc::downgrade(&self.0))
+        WeakSubscriber(Arc::downgrade(&self.0))
     }
 }
 
@@ -71,20 +71,20 @@ impl Subscriber for WeakSubscriber {
 
 impl Clone for AnySubscriber {
     fn clone(&self) -> Self {
-        Self(Rc::clone(&self.0))
+        Self(Arc::clone(&self.0))
     }
 }
 
 impl PartialEq for AnySubscriber {
     fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
+        Arc::ptr_eq(&self.0, &other.0)
     }
 }
 
 impl std::fmt::Debug for AnySubscriber {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AnySubscriber")
-            .field("addr", &Rc::as_ptr(&self.0).addr())
+            .field("addr", &(Arc::as_ptr(&self.0) as *const usize as usize))
             .finish()
     }
 }
@@ -104,7 +104,7 @@ impl PartialEq for WeakSubscriber {
 impl std::fmt::Debug for WeakSubscriber {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("WeakSubscriber")
-            .field("addr", &self.0.as_ptr().addr())
+            .field("addr", &(self.0.as_ptr() as *const usize as usize))
             .finish()
     }
 }

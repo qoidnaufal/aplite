@@ -115,7 +115,7 @@ mod channel_test {
 
     #[test]
     fn poll() {
-        let runtime = Runtime::init_local();
+        let runtime = Runtime::init();
 
         runtime.spawn_local(async {
             let (tx, mut rx) = Channel::new();

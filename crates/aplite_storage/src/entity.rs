@@ -15,7 +15,7 @@ where
     fn version(&self) -> u32;
 }
 
-/// A macro to confeniently implement [`Entity`] trait to be stored in the [`Tree`].
+/// A macro to conveniently implement [`Entity`] trait to be stored in the [`Tree`] or [`IndexMap`](crate::index_map::IndexMap).
 /// You just need to specify the name.
 /// # Example
 /// ```ignore

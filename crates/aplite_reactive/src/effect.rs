@@ -1,5 +1,4 @@
-use std::rc::Rc;
-use std::cell::RefCell;
+use std::sync::{Arc, RwLock};
 use aplite_future::{
     Channel,
     Sender,
@@ -43,7 +42,7 @@ impl Effect {
         });
 
         Executor::spawn_local(async move {
-            let value = Rc::new(RefCell::new(None::<R>));
+            let value = Arc::new(RwLock::new(None::<R>));
 
             while rx.recv().await.is_some() {
                 #[cfg(test)] eprintln!("[NOTIFIED] {id:?} is running the function");
@@ -51,9 +50,10 @@ impl Effect {
 
                 let prev_scope = GRAPH.with(|graph| graph.swap_current(Some(weak_subscriber.clone())));
 
-                let prev_value = value.borrow_mut().take();
+                let mut lock = value.write().unwrap();
+                let prev_value = lock.take();
                 let new_val = f(prev_value);
-                *value.borrow_mut() = Some(new_val);
+                *lock = Some(new_val);
 
                 let _ = GRAPH.with(|graph| graph.swap_current(prev_scope));
             }
@@ -65,14 +65,14 @@ impl Effect {
 
 pub(crate) struct EffectInner {
     pub(crate) sender: Sender,
-    pub(crate) source: RefCell<Vec<ReactiveId>>,
+    pub(crate) source: RwLock<Vec<ReactiveId>>,
 }
 
 impl EffectInner {
     fn new(sender: Sender) -> Self {
         Self {
             sender,
-            source: RefCell::new(Vec::new()),
+            source: RwLock::new(Vec::new()),
         }
     }
 }
@@ -83,11 +83,11 @@ impl Subscriber for EffectInner {
     }
 
     fn add_source(&self, source: ReactiveId) {
-        self.source.borrow_mut().push(source);
+        self.source.write().unwrap().push(source);
     }
 
     fn clear_source(&self) {
-        let mut sources = self.source.borrow_mut();
+        let mut sources = self.source.write().unwrap();
         let drained_sources = sources.drain(..);
         GRAPH.with(|graph| drained_sources
             .into_iter()
@@ -112,31 +112,9 @@ mod effect_test {
     use crate::reactive_traits::*;
     use super::*;
 
-    // #[test]
-    // fn sleep_count() {
-    //     let rt = Runtime::init_local();
-
-    //     rt.spawn_local(async move {
-    //         let (counter, set_counter) = Signal::split(0);
-
-    //         Effect::new(move |_| {
-    //             eprintln!("rerun: {}", counter.get());
-    //         });
-
-    //         Executor::spawn_local(async move {
-    //             for i in 0..4 {
-    //                 sleep(1000).await;
-    //                 set_counter.set(i + 1);
-    //             }
-    //         });
-    //     });
-
-    //     rt.run();
-    // }
-
     #[test]
     fn effect() {
-        let rt = Runtime::init_local();
+        let rt = Runtime::init();
 
         let use_last = Signal::new(false);
         let (first, set_first) = Signal::split("Dario");
@@ -197,6 +175,28 @@ mod effect_test {
         });
         rt.run();
     }
+
+    // #[test]
+    // fn sleep_count() {
+    //     let rt = Runtime::init_local();
+
+    //     rt.spawn_local(async move {
+    //         let (counter, set_counter) = Signal::split(0);
+
+    //         Effect::new(move |_| {
+    //             eprintln!("rerun: {}", counter.get());
+    //         });
+
+    //         Executor::spawn_local(async move {
+    //             for i in 0..4 {
+    //                 sleep(1000).await;
+    //                 set_counter.set(i + 1);
+    //             }
+    //         });
+    //     });
+
+    //     rt.run();
+    // }
 
     // #[test]
     // fn child_effect() {

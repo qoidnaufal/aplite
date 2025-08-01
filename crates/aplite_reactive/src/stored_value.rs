@@ -1,18 +1,17 @@
 use std::any::Any;
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 
 use crate::subscriber::{Subscriber, WeakSubscriber};
 
 pub(crate) struct StoredValue {
-    pub(crate) value: Rc<dyn Any>,
+    pub(crate) value: Arc<dyn Any>,
     pub(crate) subscribers: Vec<WeakSubscriber>,
 }
 
 impl StoredValue {
     pub(crate) fn new<T: Any + 'static>(value: T) -> Self {
         Self {
-            value: Rc::new(RefCell::new(value)),
+            value: Arc::new(RwLock::new(value)),
             subscribers: Default::default(),
         }
     }
@@ -37,7 +36,7 @@ impl StoredValue {
     }
 
     #[inline(always)]
-    pub(crate) fn downcast_ref<T: 'static>(&self) -> Option<&T> {
-        self.value.downcast_ref::<T>()
+    pub(crate) fn downcast_ref<T: 'static>(&self) -> Option<&RwLock<T>> {
+        self.value.downcast_ref::<RwLock<T>>()
     }
 }

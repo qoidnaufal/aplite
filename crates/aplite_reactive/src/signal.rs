@@ -5,6 +5,7 @@ use super::reactive_traits::*;
 use crate::signal_read::SignalRead;
 use crate::graph::{ReactiveId, GRAPH};
 use crate::signal_write::SignalWrite;
+use crate::stored_value::StoredValue;
 
 #[derive(Clone, Copy)]
 pub struct Signal<T> {
@@ -14,11 +15,20 @@ pub struct Signal<T> {
 
 impl<T: 'static> Signal<T> {
     pub fn new(value: T) -> Self {
-        GRAPH.with(|rt| rt.create_signal(value))
+        let id = GRAPH.with(|cell| {
+            cell.storage
+                .borrow_mut()
+                .insert(StoredValue::new(value))
+        });
+
+        Self {
+            id,
+            phantom: PhantomData
+        }
     }
 
     pub fn split(value: T) -> (SignalRead<T>, SignalWrite<T>) {
-        GRAPH.with(|rt| rt.create_signal(value)).into_split()
+        Self::new(value).into_split()
     }
 
     pub fn into_split(self) -> (SignalRead<T>, SignalWrite<T>) {

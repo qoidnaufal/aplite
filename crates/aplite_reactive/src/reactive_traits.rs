@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-
 use crate::graph::{ReactiveId, GRAPH};
 
 /*
@@ -57,9 +55,9 @@ pub trait Read: Reactive + Track {
         GRAPH.with(|graph| {
             let storage = graph.storage.borrow();
             let value = storage.get(self.id()).unwrap();
-            let v = value.downcast_ref::<RefCell<Self::Value>>()
+            let v = value.downcast_ref::<Self::Value>()
                 .unwrap();
-            f(&v.borrow())
+            f(&v.read().unwrap())
         })
     }
 }
@@ -73,9 +71,9 @@ pub trait Write: Reactive {
             let storage = graph.storage.borrow();
             if let Some(value) = storage.get(self.id()) {
                 let v = value
-                    .downcast_ref::<RefCell<Self::Value>>()
+                    .downcast_ref::<Self::Value>()
                     .unwrap();
-                f(&mut v.borrow_mut());
+                f(&mut v.write().unwrap());
             }
         });
     }

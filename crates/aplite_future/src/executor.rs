@@ -36,7 +36,7 @@ mod executor_test {
 
     #[test]
     fn spawn_test() {
-        let runtime = Runtime::init_local();
+        let runtime = Runtime::init();
 
         runtime.spawn_local(async {
             Executor::spawn_local(async {

@@ -1,15 +1,14 @@
-use std::any::Any;
 use std::cell::RefCell;
-use std::marker::PhantomData;
+// use std::sync::Arc;
 
 use aplite_storage::{IndexMap, Entity, entity};
 
 use crate::stored_value::StoredValue;
 use crate::subscriber::{Subscriber, AnySubscriber, WeakSubscriber};
-use crate::signal::Signal;
+// use crate::reactive_traits::Reactive;
 
 thread_local! {
-    pub(crate) static GRAPH: ReactiveGraph = ReactiveGraph::new();
+    pub(crate) static GRAPH: ReactiveGraph = ReactiveGraph::default();
 }
 
 entity! {
@@ -27,34 +26,17 @@ entity! {
 
 type ValueStorage = IndexMap<ReactiveId, StoredValue>;
 type SubscriberStorage = IndexMap<EffectId, AnySubscriber>;
+// type ReactiveStorage = IndexMap<ReactiveId, Arc<dyn Reactive>>;
 
+#[derive(Default)]
 pub(crate) struct ReactiveGraph {
+    // pub(crate) reactive_storage: RefCell<ReactiveStorage>,
     pub(crate) storage: RefCell<ValueStorage>,
     pub(crate) current: RefCell<Option<WeakSubscriber>>,
     pub(crate) subscribers: RefCell<SubscriberStorage>,
 }
 
 impl ReactiveGraph {
-    pub(crate) fn new() -> Self {
-        Self {
-            storage: Default::default(),
-            current: Default::default(),
-            subscribers: Default::default(),
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) fn create_signal<T: Any + 'static>(&self, value: T) -> Signal<T> {
-        let id = self.storage
-            .borrow_mut()
-            .insert(StoredValue::new(value));
-
-        Signal {
-            id,
-            phantom: PhantomData,
-        }
-    }
-
     pub(crate) fn track(&self, id: &ReactiveId) {
         let current = self.current.borrow();
 
@@ -89,7 +71,7 @@ impl ReactiveGraph {
 }
 
 #[cfg(test)]
-mod reactive_test {
+mod signal_test {
     use crate::Signal;
     use crate::reactive_traits::*;
 

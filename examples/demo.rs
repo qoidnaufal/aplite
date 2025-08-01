@@ -129,7 +129,7 @@ fn select_color(val: i32) -> Rgba<u8> {
 }
 
 fn main() {
-    let rt = aplite_future::Runtime::init_local();
+    let rt = aplite_future::Runtime::init();
     rt.spawn_local(async {
         Aplite::new(root)
             .set_window_attributes(|window| {

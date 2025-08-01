@@ -19,7 +19,7 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    pub fn init_local() -> Self {
+    pub fn init() -> Self {
         let (tx, rx) = channel();
         let this = Self { tx: Arc::new(tx), rx };
         CURRENT_RUNTIME.with(|cell| {
