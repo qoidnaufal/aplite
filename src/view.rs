@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use aplite_reactive::*;
 use aplite_renderer::Shape;
-use aplite_storage::{entity, Entity, Tree, Map};
+use aplite_storage::{entity, Entity, Tree, U64Map};
 use aplite_types::{
     CornerRadius,
     Paint,
@@ -26,7 +26,7 @@ thread_local! {
 
 pub(crate) struct ViewStorage {
     pub(crate) tree: RefCell<Tree<ViewId, WidgetState>>,
-    pub(crate) storage: RefCell<Map<ViewId, View>>,
+    pub(crate) storage: RefCell<U64Map<ViewId, View>>,
 
     // WARN: do you really need separate id for paint?
     pub(crate) hoverable: RefCell<Vec<ViewId>>,
@@ -37,7 +37,7 @@ impl ViewStorage {
     fn new() -> Self {
         Self {
             tree: RefCell::new(Tree::with_capacity(1024)),
-            storage: RefCell::new(Map::new()),
+            storage: RefCell::new(U64Map::new()),
             hoverable: RefCell::new(Vec::new()),
             dirty: Signal::new(false),
         }

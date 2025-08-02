@@ -68,7 +68,7 @@ impl Stream for Receiver {
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         if let Some(inner) = self.0.upgrade() {
-            eprintln!(">> polled");
+            #[cfg(test)] eprintln!(">> polled");
             inner.set_waker(cx.waker());
 
             if inner.signal.swap(false, Ordering::Relaxed) {

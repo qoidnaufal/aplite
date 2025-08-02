@@ -7,9 +7,9 @@ use std::collections::hash_map::{
     Drain,
 };
 
-pub struct Map<K, V>(pub(crate) HashMap<K, V, U64Hasher>);
+pub struct U64Map<K, V>(pub(crate) HashMap<K, V, U64Hasher>);
 
-impl<K, V> Map<K, V> {
+impl<K, V> U64Map<K, V> {
     pub fn new() -> Self {
         Self(HashMap::with_hasher(U64Hasher(0)))
     }
@@ -47,7 +47,7 @@ impl<K, V> Map<K, V> {
     }
 }
 
-impl<K, V> Map<K, V>
+impl<K, V> U64Map<K, V>
 where
     K: std::hash::Hash + Eq,
 {
@@ -72,19 +72,19 @@ where
     }
 }
 
-impl<K: Clone, V: Clone> Clone for Map<K, V> {
+impl<K: Clone, V: Clone> Clone for U64Map<K, V> {
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }
 }
 
-impl<K, V> Default for Map<K, V> {
+impl<K, V> Default for U64Map<K, V> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<K, V> std::ops::Index<&K> for Map<K, V>
+impl<K, V> std::ops::Index<&K> for U64Map<K, V>
 where
     K: std::hash::Hash + Eq
 {
@@ -94,7 +94,7 @@ where
     }
 }
 
-impl<K, V> std::fmt::Debug for Map<K, V>
+impl<K, V> std::fmt::Debug for U64Map<K, V>
 where
     K: std::fmt::Debug,
     V: std::fmt::Debug,
@@ -143,7 +143,7 @@ mod hash_test {
     #[test]
     fn time_benchmark() {
         const REPEAT: usize = 1000000;
-        let mut map = Map::new();
+        let mut map = U64Map::new();
         let now = std::time::Instant::now();
         for i in 0..REPEAT {
             map.insert(TestId(i as u64, 0), i);

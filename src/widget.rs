@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use aplite_renderer::Shape;
-use aplite_storage::Map;
+use aplite_storage::U64Map;
 use aplite_types::{Rgba, CornerRadius, Size};
 
 use crate::state::WidgetState;
@@ -29,7 +29,7 @@ thread_local! {
 
 type Callbacks = HashMap<ViewId, WidgetCallback>;
 
-pub(crate) struct WidgetCallback(Map<WidgetEvent, Box<dyn FnMut()>>);
+pub(crate) struct WidgetCallback(U64Map<WidgetEvent, Box<dyn FnMut()>>);
 
 #[repr(u64)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,7 +43,7 @@ pub enum WidgetEvent {
 
 impl Default for WidgetCallback {
     fn default() -> Self {
-        Self(Map::with_capacity(5))
+        Self(U64Map::with_capacity(5))
     }
 }
 
@@ -189,7 +189,7 @@ pub trait FnAction<T>: FnMut() -> T {}
 impl<F, T> FnAction<T> for F where F: FnMut() -> T {}
 
 impl std::ops::Deref for WidgetCallback {
-    type Target = Map<WidgetEvent, Box<dyn FnMut()>>;
+    type Target = U64Map<WidgetEvent, Box<dyn FnMut()>>;
 
     fn deref(&self) -> &Self::Target { &self.0 }
 }

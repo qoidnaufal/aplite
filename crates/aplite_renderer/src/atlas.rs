@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
 use aplite_types::{Rect, Size, Vec2f, ImageData, ImageRef};
-use aplite_storage::{IndexMap, entity, Entity, Map};
+use aplite_storage::{IndexMap, entity, Entity, U64Map};
 
 entity! { pub AtlasId }
 
@@ -12,7 +12,7 @@ pub(crate) struct Atlas {
     pub(crate) bind_group: wgpu::BindGroup,
 
     allocator: AtlasAllocator,
-    pending_data: Map<AtlasId, ImageData>,
+    pending_data: U64Map<AtlasId, ImageData>,
     processed: HashMap<ImageRef, AtlasId>,
 }
 
@@ -42,7 +42,7 @@ impl Atlas {
             allocator: AtlasAllocator::new(size),
             texture,
             bind_group,
-            pending_data: Map::new(),
+            pending_data: U64Map::new(),
             processed: HashMap::new(),
         }
     }

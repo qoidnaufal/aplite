@@ -83,9 +83,7 @@ impl PartialEq for AnySubscriber {
 
 impl std::fmt::Debug for AnySubscriber {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AnySubscriber")
-            .field("addr", &(Arc::as_ptr(&self.0) as *const usize as usize))
-            .finish()
+        write!(f, "{:#x}", &(Arc::as_ptr(&self.0) as *const usize as usize))
     }
 }
 
@@ -103,8 +101,6 @@ impl PartialEq for WeakSubscriber {
 
 impl std::fmt::Debug for WeakSubscriber {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("WeakSubscriber")
-            .field("addr", &(self.0.as_ptr() as *const usize as usize))
-            .finish()
+        write!(f, "{:#x}", self.0.as_ptr() as *const usize as usize)
     }
 }

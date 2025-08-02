@@ -7,7 +7,7 @@ mod slot;
 
 pub use tree::*;
 pub use entity::Entity;
-pub use hash::Map;
+pub use hash::U64Map;
 pub use index_map::IndexMap;
 
 #[derive(Debug)]

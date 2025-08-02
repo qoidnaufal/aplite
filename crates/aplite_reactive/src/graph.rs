@@ -1,11 +1,9 @@
 use std::cell::RefCell;
-// use std::sync::Arc;
 
 use aplite_storage::{IndexMap, Entity, entity};
 
 use crate::stored_value::StoredValue;
 use crate::subscriber::{Subscriber, AnySubscriber, WeakSubscriber};
-// use crate::reactive_traits::Reactive;
 
 thread_local! {
     pub(crate) static GRAPH: ReactiveGraph = ReactiveGraph::default();
@@ -26,11 +24,9 @@ entity! {
 
 type ValueStorage = IndexMap<ReactiveId, StoredValue>;
 type SubscriberStorage = IndexMap<EffectId, AnySubscriber>;
-// type ReactiveStorage = IndexMap<ReactiveId, Arc<dyn Reactive>>;
 
 #[derive(Default)]
 pub(crate) struct ReactiveGraph {
-    // pub(crate) reactive_storage: RefCell<ReactiveStorage>,
     pub(crate) storage: RefCell<ValueStorage>,
     pub(crate) current: RefCell<Option<WeakSubscriber>>,
     pub(crate) subscribers: RefCell<SubscriberStorage>,
@@ -42,7 +38,7 @@ impl ReactiveGraph {
 
         if let Some(weak_subscriber) = current.as_ref()
         && let Some(value) = self.storage.borrow_mut().get_mut(id) {
-            #[cfg(test)] eprintln!("[TRACKING] {id:?} inside {weak_subscriber:?}");
+            #[cfg(test)] eprintln!(" TRACKING: {id:?} inside {weak_subscriber:?}");
             weak_subscriber.add_source(*id);
             value.add_subscriber(weak_subscriber.clone());
         }
@@ -50,14 +46,14 @@ impl ReactiveGraph {
 
     pub(crate) fn untrack(&self, id: &ReactiveId) {
         if let Some(value) = self.storage.borrow_mut().get_mut(id) {
-            #[cfg(test)] eprintln!("[UNTRACKD] {id:?}");
+            #[cfg(test)] eprintln!("UNTRACKED: {id:?}");
             value.clear_subscribers();
         }
     }
 
     pub(crate) fn notify_subscribers(&self, id: &ReactiveId) {
         if let Some(stored_value) = self.storage.borrow().get(id) {
-            #[cfg(test)] eprintln!("[NOTIFYING] {id:?} is notifying the subscribers");
+            #[cfg(test)] eprintln!("\nNOTIFYING: {id:?} is notifying the subscribers");
             stored_value.notify_subscribers();
         }
     }

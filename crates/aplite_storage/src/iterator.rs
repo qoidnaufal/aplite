@@ -2,7 +2,12 @@ use crate::entity::Entity;
 use crate::tree::Tree;
 use crate::slot::Content;
 use crate::index_map::IndexMap;
-use crate::hash::Map;
+use crate::hash::U64Map;
+
+use std::iter::FilterMap;
+use std::slice::Iter;
+use std::iter::Enumerate;
+use crate::slot::Slot;
 
 /*
 #########################################################
@@ -58,7 +63,11 @@ impl<'a, E: Entity, T> NodeRef<'a, E, T> {
 
 impl<'a, E: Entity, T> TreeIterator<'a, E, T> {
     fn new(tree: &'a Tree<E, T>) -> Self {
-        Self { inner: tree.data.iter(), tree }
+        let inner = tree.data.iter();
+        Self {
+            inner,
+            tree,
+        }
     }
 }
 
@@ -82,7 +91,18 @@ impl<'a, E: Entity, T> Iterator for TreeIterator<'a, E, T> {
 #########################################################
 */
 
-impl<'a, E, T: 'a> IntoIterator for &'a IndexMap<E, T>
+fn filter_fn<'a, E, T>((i, slot): (usize, &'a Slot<T>)) -> Option<(E, Option<&'a T>)>
+where
+    E: Entity
+{
+    matches!(slot.content, Content::Occupied(_))
+        .then_some((
+            E::new(i as u64, slot.version),
+            slot.get_content()
+        ))
+}
+
+impl<'a, E, T> IntoIterator for &'a IndexMap<E, T>
 where
     E: Entity,
 {
@@ -90,16 +110,23 @@ where
     type IntoIter = IndexMapIterator<'a, E, T>;
 
     fn into_iter(self) -> Self::IntoIter {
+        let inner = self
+            .inner
+            .iter()
+            .enumerate()
+            .filter_map(filter_fn as fn((usize, &Slot<T>)) -> Option<(E, Option<&T>)>);
+
         IndexMapIterator {
-            inner: self,
-            counter: 0,
+            inner,
         }
     }
 }
 
-pub struct IndexMapIterator<'a, E: Entity, T: 'a> {
-    inner: &'a IndexMap<E, T>,
-    counter: usize,
+pub struct IndexMapIterator<'a, E: Entity, T> {
+    inner: FilterMap<
+        Enumerate<Iter<'a, Slot<T>>>,
+        fn((usize, &'a Slot<T>)) -> Option<(E, Option<&'a T>)>
+    >,
 }
 
 impl<'a, E, T> Iterator for IndexMapIterator<'a, E, T>
@@ -109,15 +136,8 @@ where
     type Item = (E, &'a T);
     fn next(&mut self) -> Option<Self::Item> {
         self.inner
-            .inner
-            .iter()
-            .enumerate()
-            .filter(|(_, slot)| matches!(slot.content, Content::Occupied(_)))
-            .nth(self.counter)
-            .map(|(i, slot)| {
-                self.counter += 1;
-                (E::new(i as u64, slot.version), slot.get_content().unwrap())
-            })
+            .next()
+            .map(|(e, val)| (e, val.unwrap()))
     }
 }
 
@@ -129,7 +149,7 @@ where
 #########################################################
 */
 
-impl<'a, K, V> IntoIterator for &'a Map<K, V> {
+impl<'a, K, V> IntoIterator for &'a U64Map<K, V> {
     type Item = (&'a K, &'a V);
     type IntoIter = std::collections::hash_map::Iter<'a, K, V>;
 

@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 use std::task::{Wake, Context, Poll};
 use std::future::Future;
 
-use crate::runtime::WeakSender;
+use crate::executor::WeakSender;
 
 type PinnedFuture = Pin<Box<dyn Future<Output = ()>>>;
 
@@ -14,10 +14,8 @@ pub(crate) struct Task {
 
 impl Wake for Task {
     fn wake(self: Arc<Self>) {
-        let cloned = Arc::clone(&self);
-        if let Some(sender) = self.sender.upgrade() {
-            let _ = sender.send(cloned);
-        }
+        let task = Arc::clone(&self);
+        self.sender.send(task);
     }
 }
 

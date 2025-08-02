@@ -45,7 +45,7 @@ impl Effect {
             let value = Arc::new(RwLock::new(None::<R>));
 
             while rx.recv().await.is_some() {
-                #[cfg(test)] eprintln!("[NOTIFIED] {id:?} is running the function");
+                #[cfg(test)] eprintln!("\n NOTIFIED: {id:?}   is running the function");
                 weak_subscriber.clear_source();
 
                 let prev_scope = GRAPH.with(|graph| graph.swap_current(Some(weak_subscriber.clone())));
@@ -79,6 +79,7 @@ impl EffectInner {
 
 impl Subscriber for EffectInner {
     fn notify(&self) {
+        // self.clear_source();
         self.sender.notify();
     }
 
