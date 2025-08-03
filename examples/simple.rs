@@ -31,21 +31,21 @@ fn simple() -> impl IntoView {
     Effect::new(move |_| counter.read(|val| eprint!("Counter: {val}    \r")));
 
     let button = Button::new()
-        .set_border_color(|_| Rgba::WHITE)
-        .set_border_width(|_| 6)
-        .set_rotation(move |_| rotate.get())
-        .set_corners(|_| CornerRadius::splat(47.))
-        .set_dragable(true)
-        .set_size((200, 69))
+        .border_color(|_| Rgba::WHITE)
+        .border_width(|_| 6)
+        .rotation(move |_| rotate.get())
+        .corners(|_| CornerRadius::splat(47.))
+        .dragable(true)
+        .size((200, 69))
         .on(LeftClick, click_count);
 
     let circle = CircleWidget::new()
-        .set_background(color)
-        .set_shape(shape)
+        .color(color)
+        .shape(shape)
         .on(LeftClick, click_rotate)
-        .set_border_width(|_| 6)
-        .set_dragable(true)
-        .set_size((150, 150));
+        .border_width(|_| 6)
+        .dragable(true)
+        .size((150, 150));
 
     button.and(circle)
 }

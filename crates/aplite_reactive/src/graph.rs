@@ -1,17 +1,68 @@
 use std::cell::RefCell;
+use std::marker::PhantomData;
+use std::sync::Arc;
+use std::any::Any;
 
 use aplite_storage::{IndexMap, Entity, entity};
 
-use crate::stored_value::StoredValue;
-use crate::subscriber::{Subscriber, AnySubscriber, WeakSubscriber};
+use crate::subscriber::AnySubscriber;
+use crate::reactive_traits::*;
 
 thread_local! {
     pub(crate) static GRAPH: ReactiveGraph = ReactiveGraph::default();
 }
 
 entity! {
-    pub ReactiveId,
-    pub EffectId,
+    pub(crate) ReactiveId,
+}
+
+pub(crate) struct ReactiveNode<R> {
+    pub(crate) id: ReactiveId,
+    marker: PhantomData<R>,
+}
+
+impl<R> Clone for ReactiveNode<R> {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<R> PartialEq for ReactiveNode<R> {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl<R> PartialOrd for ReactiveNode<R> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.id.partial_cmp(&other.id)
+    }
+}
+
+impl<R> Ord for ReactiveNode<R> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.id.cmp(&other.id)
+    }
+}
+
+impl<R> Copy for ReactiveNode<R> {}
+impl<R> Eq for ReactiveNode<R> {}
+
+impl<R> std::hash::Hash for ReactiveNode<R> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
+
+impl<R> std::fmt::Debug for ReactiveNode<R> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct(std::any::type_name::<R>())
+            .field("id", &self.id)
+            .finish()
+    }
 }
 
 /*
@@ -22,46 +73,28 @@ entity! {
 #########################################################
 */
 
-type ValueStorage = IndexMap<ReactiveId, StoredValue>;
-type SubscriberStorage = IndexMap<EffectId, AnySubscriber>;
+type Storage = IndexMap<ReactiveId, Arc<dyn Any>>;
 
 #[derive(Default)]
 pub(crate) struct ReactiveGraph {
-    pub(crate) storage: RefCell<ValueStorage>,
-    pub(crate) current: RefCell<Option<WeakSubscriber>>,
-    pub(crate) subscribers: RefCell<SubscriberStorage>,
+    pub(crate) storage: RefCell<Storage>,
+    pub(crate) current: RefCell<Option<AnySubscriber>>,
 }
 
 impl ReactiveGraph {
-    pub(crate) fn track(&self, id: &ReactiveId) {
-        let current = self.current.borrow();
-
-        if let Some(weak_subscriber) = current.as_ref()
-        && let Some(value) = self.storage.borrow_mut().get_mut(id) {
-            #[cfg(test)] eprintln!(" TRACKING: {id:?} inside {weak_subscriber:?}");
-            weak_subscriber.add_source(*id);
-            value.add_subscriber(weak_subscriber.clone());
-        }
+    pub(crate) fn insert<R: 'static>(&self, r: R) -> ReactiveNode<R> {
+        let id = self.storage.borrow_mut().insert(Arc::new(r));
+        ReactiveNode { id, marker: PhantomData }
     }
 
-    pub(crate) fn untrack(&self, id: &ReactiveId) {
-        if let Some(value) = self.storage.borrow_mut().get_mut(id) {
-            #[cfg(test)] eprintln!("UNTRACKED: {id:?}");
-            value.clear_subscribers();
-        }
-    }
-
-    pub(crate) fn notify_subscribers(&self, id: &ReactiveId) {
-        if let Some(stored_value) = self.storage.borrow().get(id) {
-            #[cfg(test)] eprintln!("\nNOTIFYING: {id:?} is notifying the subscribers");
-            stored_value.notify_subscribers();
-        }
+    pub(crate) fn get<R: Reactive>(&self, node: &ReactiveNode<R>) -> Option<Arc<dyn Any>> {
+        self.storage.borrow().get(&node.id).map(|arc| Arc::clone(&arc))
     }
 
     pub(crate) fn swap_current(
         &self,
-        subscriber: Option<WeakSubscriber>,
-    ) -> Option<WeakSubscriber> {
+        subscriber: Option<AnySubscriber>,
+    ) -> Option<AnySubscriber> {
         self.current.replace(subscriber)
     }
 }

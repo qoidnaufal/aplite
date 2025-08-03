@@ -1,5 +1,3 @@
-use crate::graph::{ReactiveId, GRAPH};
-
 /*
 #########################################################
 #                                                       #
@@ -9,28 +7,21 @@ use crate::graph::{ReactiveId, GRAPH};
 */
 
 pub trait Reactive {
-    fn id(&self) -> &ReactiveId;
+    fn dirty(&self);
+
+    fn subscribe(&self);
+
+    fn unsubscribe(&self);
 }
 
-pub trait Track: Reactive {
-    fn track(&self) {
-        GRAPH.with(|graph| graph.track(self.id()))
-    }
+pub trait Track {
+    fn track(&self);
 
-    fn untrack(&self) {
-        GRAPH.with(|graph| {
-            let mut storage = graph.storage.borrow_mut();
-            if let Some(stored_value) = storage.get_mut(&self.id()) {
-                stored_value.clear_subscribers();
-            }
-        })
-    }
+    fn untrack(&self);
 }
 
-pub trait Notify: Reactive {
-    fn notify(&self) {
-        GRAPH.with(|graph| graph.notify_subscribers(self.id()))
-    }
+pub trait Notify {
+    fn notify(&self);
 }
 
 /*
@@ -41,7 +32,7 @@ pub trait Notify: Reactive {
 #########################################################
 */
 
-pub trait Read: Reactive + Track {
+pub trait Read: Track {
     type Value: 'static;
 
     /// read and apply function to the value, and track the underying signal
@@ -51,32 +42,14 @@ pub trait Read: Reactive + Track {
     }
 
     /// read value without tracking the signal, and apply a function to the value
-    fn read_untracked<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
-        GRAPH.with(|graph| {
-            let storage = graph.storage.borrow();
-            let value = storage.get(self.id()).unwrap();
-            let v = value.downcast_ref::<Self::Value>()
-                .unwrap();
-            f(&v.read().unwrap())
-        })
-    }
+    fn read_untracked<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R;
 }
 
-pub trait Write: Reactive {
+pub trait Write {
     type Value: 'static;
 
     /// updating the value without notifying it's subscribers
-    fn write_untracked(&self, f: impl FnOnce(&mut Self::Value)) {
-        GRAPH.with(|graph| {
-            let storage = graph.storage.borrow();
-            if let Some(value) = storage.get(self.id()) {
-                let v = value
-                    .downcast_ref::<Self::Value>()
-                    .unwrap();
-                f(&mut v.write().unwrap());
-            }
-        });
-    }
+    fn write_untracked(&self, f: impl FnOnce(&mut Self::Value));
 }
 
 /*
@@ -149,23 +122,11 @@ impl<T: Notify + Write> Update for T {}
 #########################################################
 */
 
-pub trait Dispose: Reactive + Track {
+pub trait Dispose {
     /// untrack this signal and then remove it from the reactive system
     /// be careful accessing the value of disposed signal will cause [`panic!()`](core::panic)
-    fn dispose(&self) {
-        self.untrack();
-        GRAPH.with(|graph| {
-            // graph.untrack(self.id());
-            graph.storage.borrow_mut().remove(self.id());
-        })
-    }
+    fn dispose(&self);
 
     /// check if a signal has been disposed or not
-    fn is_disposed(&self) -> bool {
-        GRAPH.with(|graph| {
-            graph.storage.borrow().get(self.id()).is_some()
-        })
-    }
+    fn is_disposed(&self) -> bool;
 }
-
-impl<T: Reactive + Track> Dispose for T {}

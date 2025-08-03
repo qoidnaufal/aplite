@@ -1,13 +1,12 @@
-use crate::entity::Entity;
-use crate::tree::Tree;
-use crate::slot::Content;
-use crate::index_map::IndexMap;
-use crate::hash::U64Map;
-
 use std::iter::FilterMap;
 use std::slice::Iter;
 use std::iter::Enumerate;
-use crate::slot::Slot;
+
+use crate::entity::Entity;
+use crate::tree::Tree;
+use crate::slot::{Slot, Content};
+use crate::index_map::IndexMap;
+use crate::hash::U64Map;
 
 /*
 #########################################################
@@ -22,7 +21,10 @@ impl<'a, E: Entity, T> IntoIterator for &'a Tree<E, T> {
     type IntoIter = TreeIterator<'a, E, T>;
 
     fn into_iter(self) -> Self::IntoIter {
-        TreeIterator::new(self)
+        TreeIterator {
+            inner: self.data.iter(),
+            tree: self,
+        }
     }
 }
 
@@ -59,16 +61,6 @@ impl<'a, E: Entity, T> NodeRef<'a, E, T> {
     pub fn next_sibling(&self) -> Option<&'a E> { self.next_sibling }
 
     pub fn data(&self) -> &'a T { self.data }
-}
-
-impl<'a, E: Entity, T> TreeIterator<'a, E, T> {
-    fn new(tree: &'a Tree<E, T>) -> Self {
-        let inner = tree.data.iter();
-        Self {
-            inner,
-            tree,
-        }
-    }
 }
 
 impl<'a, E: Entity, T> Iterator for TreeIterator<'a, E, T> {
@@ -144,7 +136,7 @@ where
 /*
 #########################################################
 #                                                       #
-#                          MAP                          #
+#                        U64MAP                         #
 #                                                       #
 #########################################################
 */

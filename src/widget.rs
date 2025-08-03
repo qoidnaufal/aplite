@@ -95,7 +95,7 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn set_background<F>(self, f: F) -> Self
+    fn color<F>(self, f: F) -> Self
     where
         F: FnEl<Rgba<u8>> + 'static,
     {
@@ -103,7 +103,7 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn set_border_color<F>(self, f: F) -> Self
+    fn border_color<F>(self, f: F) -> Self
     where
         F: FnEl<Rgba<u8>> + 'static
     {
@@ -111,7 +111,7 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn set_hover_color<F>(self, f: F) -> Self
+    fn hover_color<F>(self, f: F) -> Self
     where
         F: FnAction<Rgba<u8>> + 'static
     {
@@ -119,7 +119,7 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn set_click_color<F>(self, f: F) -> Self
+    fn click_color<F>(self, f: F) -> Self
     where
         F: FnAction<Rgba<u8>> + 'static,
     {
@@ -127,7 +127,7 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn set_border_width<F>(self, f: F) -> Self
+    fn border_width<F>(self, f: F) -> Self
     where
         F: FnEl<u32> + 'static
     {
@@ -135,7 +135,7 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn set_rotation<F>(self, f: F) -> Self
+    fn rotation<F>(self, f: F) -> Self
     where
         F: FnEl<f32> + 'static
     {
@@ -143,7 +143,7 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn set_corners<F>(self, f: F) -> Self
+    fn corners<F>(self, f: F) -> Self
     where
         F: FnEl<CornerRadius> + 'static
     {
@@ -151,7 +151,7 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn set_shape<F>(self, f: F) -> Self
+    fn shape<F>(self, f: F) -> Self
     where
         F: FnEl<Shape> + 'static
     {
@@ -159,7 +159,7 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn set_size(self, size: impl Into<Size>) -> Self {
+    fn size(self, size: impl Into<Size>) -> Self {
         VIEW_STORAGE.with(|s| {
             let mut tree = s.tree.borrow_mut();
             let state = tree.get_mut(&self.id()).unwrap();
@@ -168,7 +168,7 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn set_dragable(self, value: bool) -> Self {
+    fn dragable(self, value: bool) -> Self {
         VIEW_STORAGE.with(|s| {
             let mut tree = s.tree.borrow_mut();
             let state = tree.get_mut(&self.id()).unwrap();

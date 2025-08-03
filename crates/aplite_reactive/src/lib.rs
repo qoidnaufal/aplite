@@ -6,7 +6,7 @@ mod signal;
 mod signal_read;
 mod signal_write;
 mod subscriber;
-// mod source;
+mod source;
 
 pub use effect::*;
 pub use signal::*;

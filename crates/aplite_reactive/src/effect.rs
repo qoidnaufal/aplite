@@ -5,8 +5,10 @@ use aplite_future::{
     Executor,
 };
 
-use crate::graph::{ReactiveId, EffectId, GRAPH};
+use crate::graph::{ReactiveNode, GRAPH};
 use crate::subscriber::{Subscriber, ToAnySubscriber, AnySubscriber};
+use crate::source::AnySource;
+use crate::reactive_traits::*;
 
 /// [`Effect`] is a scope to synchronize the reactive node (eg: [`Signal`](crate::signal::Signal)) with anything.
 /// # Example
@@ -20,7 +22,7 @@ use crate::subscriber::{Subscriber, ToAnySubscriber, AnySubscriber};
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Effect {
-    id: EffectId,
+    node: ReactiveNode<Arc<Reactor>>,
 }
 
 impl Effect {
@@ -32,43 +34,42 @@ impl Effect {
         let (tx, mut rx) = Channel::new();
         tx.notify();
 
-        let inner = EffectInner::new(tx);
-        let any_subscriber = inner.to_any_subscriber();
-        let weak_subscriber = any_subscriber.downgrade();
-        let id = GRAPH.with(|graph| {
-            graph.subscribers
-                .borrow_mut()
-                .insert(any_subscriber)
+        let reactor = Arc::new(Reactor::new(tx));
+        let node = GRAPH.with(|graph| {
+            graph.insert(reactor)
         });
 
         Executor::spawn_local(async move {
             let value = Arc::new(RwLock::new(None::<R>));
 
             while rx.recv().await.is_some() {
-                #[cfg(test)] eprintln!("\n NOTIFIED: {id:?}   is running the function");
-                weak_subscriber.clear_source();
-
-                let prev_scope = GRAPH.with(|graph| graph.swap_current(Some(weak_subscriber.clone())));
+                #[cfg(test)] eprintln!("\n[NOTIFIED]      : {node:?}");
+                let prev_scope = GRAPH.with(|graph| {
+                    let stored = graph.get(&node).unwrap();
+                    let reactor = stored.downcast_ref::<Arc<Reactor>>().unwrap();
+                    reactor.clear_source();
+                    graph.swap_current(Some(Arc::clone(reactor).to_any_subscriber()))
+                });
 
                 let mut lock = value.write().unwrap();
                 let prev_value = lock.take();
                 let new_val = f(prev_value);
                 *lock = Some(new_val);
 
-                let _ = GRAPH.with(|graph| graph.swap_current(prev_scope));
+                GRAPH.with(|graph| graph.swap_current(prev_scope));
             }
         });
 
-        Self { id }
+        Self { node }
     }
 }
 
-pub(crate) struct EffectInner {
+pub(crate) struct Reactor {
     pub(crate) sender: Sender,
-    pub(crate) source: RwLock<Vec<ReactiveId>>,
+    pub(crate) source: RwLock<Vec<AnySource>>,
 }
 
-impl EffectInner {
+impl Reactor {
     fn new(sender: Sender) -> Self {
         Self {
             sender,
@@ -77,29 +78,75 @@ impl EffectInner {
     }
 }
 
-impl Subscriber for EffectInner {
-    fn notify(&self) {
-        // self.clear_source();
-        self.sender.notify();
-    }
-
-    fn add_source(&self, source: ReactiveId) {
+impl Subscriber for Reactor {
+    fn add_source(&self, source: AnySource) {
         self.source.write().unwrap().push(source);
     }
 
     fn clear_source(&self) {
         let mut sources = self.source.write().unwrap();
         let drained_sources = sources.drain(..);
-        GRAPH.with(|graph| drained_sources
-            .into_iter()
-            .for_each(|id| graph.untrack(&id))
-        );
+        drained_sources.into_iter().for_each(|source| source.untrack())
     }
 }
 
-impl ToAnySubscriber for EffectInner {
+impl Subscriber for Arc<Reactor> {
+    fn add_source(&self, source: AnySource) {
+        self.as_ref().add_source(source);
+    }
+
+    fn clear_source(&self) {
+        self.as_ref().clear_source();
+    }
+}
+
+impl Notify for Reactor {
+    fn notify(&self) {
+        self.sender.notify();
+    }
+}
+
+impl Notify for Arc<Reactor> {
+    fn notify(&self) {
+        self.as_ref().notify();
+    }
+}
+
+impl ToAnySubscriber for Arc<Reactor> {
     fn to_any_subscriber(self) -> AnySubscriber {
         AnySubscriber::new(self)
+    }
+}
+
+impl Reactive for Reactor {
+    fn dirty(&self) {
+        self.notify();
+    }
+
+    fn subscribe(&self) {}
+
+    fn unsubscribe(&self) {
+        self.clear_source();
+    }
+}
+
+impl Reactive for Arc<Reactor> {
+    fn dirty(&self) {
+        self.as_ref().dirty();
+    }
+
+    fn subscribe(&self) {}
+
+    fn unsubscribe(&self) {
+        self.as_ref().unsubscribe();
+    }
+}
+
+impl std::fmt::Debug for Reactor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EffectInner")
+            .field("id", &std::any::TypeId::of::<Self>())
+            .finish()
     }
 }
 

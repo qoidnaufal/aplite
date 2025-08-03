@@ -12,17 +12,17 @@ fn first_row() -> impl IntoView {
         )
         .child(
             CircleWidget::new()
-                .set_background(|_| Rgba::PURPLE)
-                .set_hover_color(|| Rgba::RED)
+                .color(|_| Rgba::PURPLE)
+                .hover_color(|| Rgba::RED)
         )
         .set_state(|s| {
             s.set_spacing(40.);
             s.set_padding(Padding::new(20., 20., 40., 40.));
         })
-        .set_corners(|_| CornerRadius::splat(10.))
-        .set_border_width(|_| 5)
-        .set_background(|_| Rgba::LIGHT_GRAY)
-        .set_border_color(|_| Rgba::DARK_GRAY)
+        .corners(|_| CornerRadius::splat(10.))
+        .border_width(|_| 5)
+        .color(|_| Rgba::LIGHT_GRAY)
+        .border_color(|_| Rgba::DARK_GRAY)
 }
 
 fn button_stack(
@@ -34,36 +34,36 @@ fn button_stack(
     VStack::new()
         .child(
             Button::new()
-                .set_hover_color(|| Rgba::BLUE)
-                .set_border_width(|_| 5)
-                .set_corners(|_| CornerRadius::new(80., 80., 0., 0.))
-                .set_click_color(|| Rgba::DARK_GRAY)
+                .hover_color(|| Rgba::BLUE)
+                .border_width(|_| 5)
+                .corners(|_| CornerRadius::new(80., 80., 0., 0.))
+                .click_color(|| Rgba::DARK_GRAY)
                 .on(LeftClick, inc)
         )
         .child(
             Button::new()
-                .set_background(|_| Rgba::GREEN)
-                .set_hover_color(|| Rgba::LIGHT_GRAY)
-                .set_click_color(|| Rgba::DARK_GREEN)
-                .set_border_width(|_| 5)
-                .set_corners(|_| CornerRadius::splat(50.))
+                .color(|_| Rgba::GREEN)
+                .hover_color(|| Rgba::LIGHT_GRAY)
+                .click_color(|| Rgba::DARK_GREEN)
+                .border_width(|_| 5)
+                .corners(|_| CornerRadius::splat(50.))
                 .on(LeftClick, dec)
         )
         .child(
             Button::new()
-                .set_background(|_| Rgba::BLUE)
-                .set_hover_color(|| Rgba::PURPLE)
-                .set_border_width(|_| 5)
-                .set_corners(|_| CornerRadius::new(0., 69., 0., 69.))
+                .color(|_| Rgba::BLUE)
+                .hover_color(|| Rgba::PURPLE)
+                .border_width(|_| 5)
+                .corners(|_| CornerRadius::new(0., 69., 0., 69.))
         )
         .child(
             Button::new()
-                .set_corners(|_| CornerRadius::splat(70.))
-                .set_rotation(rotation)
-                .set_background(color)
+                .corners(|_| CornerRadius::splat(70.))
+                .rotation(rotation)
+                .color(color)
         )
-        .set_background(|_| Rgba::new(0, 0, 0, 30))
-        .set_dragable(true)
+        .color(|_| Rgba::new(0, 0, 0, 30))
+        .dragable(true)
         .set_state(|s| {
             s.set_min_width(400.);
             s.set_align_h(AlignH::Center);
@@ -83,13 +83,13 @@ fn second_row(
         .child(button_stack(inc, dec, rotation, color))
         .child(
             CircleWidget::new()
-                .set_background(|_| rgba_hex("#104bcdbf"))
-                .set_hover_color(|| Rgba::GREEN)
-                .set_border_color(|_| 200.into())
-                .set_border_width(|_| 3)
+                .color(|_| rgba_hex("#104bcdbf"))
+                .hover_color(|| Rgba::GREEN)
+                .border_color(|_| 200.into())
+                .border_width(|_| 3)
         )
-        .set_background(|_| Rgba::LIGHT_GRAY)
-        .set_dragable(true)
+        .color(|_| Rgba::LIGHT_GRAY)
+        .dragable(true)
         .set_state(|s| {
             s.set_padding(Padding::splat(30.));
             s.set_spacing(5.);
@@ -107,11 +107,11 @@ fn root() -> impl IntoView {
     Effect::new(move |_| eprint!("{}        \r", counter.get()));
 
     let circle = CircleWidget::new()
-        .set_background(|_| Rgba::new(169, 72, 43, 255))
-        .set_hover_color(|| Rgba::new(169, 72, 43, 200))
-        .set_border_color(|_| Rgba::WHITE)
-        .set_border_width(|_| 5)
-        .set_dragable(true);
+        .color(|_| Rgba::new(169, 72, 43, 255))
+        .hover_color(|| Rgba::new(169, 72, 43, 200))
+        .border_color(|_| Rgba::WHITE)
+        .border_width(|_| 5)
+        .dragable(true);
 
     first_row()
         .and(second_row(inc, dec, rotation, color))
