@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use crate::graph::{ReactiveNode, GRAPH};
 use crate::stored_value::StoredValue;
@@ -8,33 +8,27 @@ use crate::reactive_traits::*;
 
 #[derive(Clone, Copy)]
 pub struct SignalWrite<T> {
-    pub(crate) node: ReactiveNode<Arc<StoredValue<T>>>,
+    pub(crate) node: ReactiveNode<Arc<RwLock<StoredValue<T>>>>,
 }
 
 impl<T: 'static> SignalWrite<T> {
-    pub(crate) fn new(node: ReactiveNode<Arc<StoredValue<T>>>) -> Self {
+    pub(crate) fn new(node: ReactiveNode<Arc<RwLock<StoredValue<T>>>>) -> Self {
         Self { node }
     }
-}
 
-impl<T: 'static> Reactive for SignalWrite<T> {
-    fn dirty(&self) {
-        self.notify();
+    pub fn as_signal(&self) -> Signal<T> {
+        Signal { node: self.node }
     }
-
-    fn subscribe(&self) {}
-
-    fn unsubscribe(&self) {}
 }
 
 impl<T: 'static> Notify for SignalWrite<T> {
     fn notify(&self) {
-        #[cfg(test)] eprintln!("\n[NOTIFYING]     : {self:?} is notifying the subscribers");
+        #[cfg(test)] eprintln!("\n[NOTIFYING]     : {self:?}");
         GRAPH.with(|graph| {
             if let Some(any) = graph.get(&self.node)
-            && let Some(stored_value) = any.downcast_ref::<Arc<StoredValue<T>>>()
+            && let Some(stored_value) = any.downcast_ref::<Arc<RwLock<StoredValue<T>>>>()
             {
-                stored_value.dirty();
+                stored_value.notify();
             }
         })
     }
@@ -46,29 +40,18 @@ impl<T: 'static> Write for SignalWrite<T> {
     fn write_untracked(&self, f: impl FnOnce(&mut Self::Value)) {
         GRAPH.with(|graph| {
             let any = graph.get(&self.node).unwrap();
-            let stored_value = any.downcast_ref::<Arc<StoredValue<Self::Value>>>().unwrap();
-            let mut v = stored_value.value.write().unwrap();
-            f(&mut v);
+            let lock = any.downcast_ref::<Arc<RwLock<StoredValue<Self::Value>>>>().unwrap();
+            let mut stored = lock.write().unwrap();
+            f(&mut stored.value);
         });
     }
 }
 
 impl<T: 'static> Dispose for SignalWrite<T> {
-    fn dispose(&self) {
-        GRAPH.with(|graph| {
-            if let Some(any) = graph.get(&self.node)
-            && let Some(stored_value) = any.downcast_ref::<Arc<StoredValue<T>>>()
-            {
-                stored_value.untrack();
-            }
-            graph.storage.borrow_mut().remove(&self.node.id);
-        })
-    }
+    fn dispose(&self) { self.as_signal().dispose() }
 
     fn is_disposed(&self) -> bool {
-        GRAPH.with(|graph| {
-            graph.storage.borrow().get(&self.node.id).is_some()
-        })
+        GRAPH.with(|graph| graph.get(&self.node).is_none())
     }
 }
 

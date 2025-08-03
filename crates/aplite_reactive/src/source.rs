@@ -14,8 +14,14 @@ impl AnySource {
     }
 }
 
-pub(crate) trait ToAnySource {
+pub(crate) trait ToAnySource: Source {
     fn to_any_source(self) -> AnySource;
+}
+
+impl ToAnySource for AnySource {
+    fn to_any_source(self) -> AnySource {
+        self.clone()
+    }
 }
 
 pub(crate) trait Source: Track + Notify {

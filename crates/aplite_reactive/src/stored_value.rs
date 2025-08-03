@@ -6,21 +6,23 @@ use crate::source::{Source, ToAnySource, AnySource};
 use crate::graph::GRAPH;
 
 pub(crate) struct StoredValue<T> {
-    pub(crate) value: RwLock<T>,
-    pub(crate) subscribers: RwLock<Vec<AnySubscriber>>,
+    pub(crate) value: T,
+    pub(crate) subscribers: Vec<AnySubscriber>,
 }
 
 impl<T: 'static> StoredValue<T> {
     pub(crate) fn new(value: T) -> Self {
         Self {
-            value: RwLock::new(value),
-            subscribers: RwLock::new(Default::default()),
+            value,
+            subscribers: Default::default(),
         }
     }
+}
 
-    pub(crate) fn notify_subscribers(&self) {
-        if let Ok(subscribers) = self.subscribers.try_read() {
-            subscribers
+impl<T: 'static> Notify for RwLock<StoredValue<T>> {
+    fn notify(&self) {
+        if let Ok(this) = self.try_read() {
+            this.subscribers
                 .iter()
                 .for_each(|subscriber| {
                     subscriber.notify();
@@ -29,66 +31,29 @@ impl<T: 'static> StoredValue<T> {
     }
 }
 
-impl<T: 'static> Reactive for StoredValue<T> {
-    fn dirty(&self) {
-        self.notify();
-    }
-
-    fn subscribe(&self) {
-        self.track();
-    }
-
-    fn unsubscribe(&self) {
-        self.untrack();
-    }
-}
-
-impl<T: 'static> Reactive for Arc<StoredValue<T>> {
-    fn dirty(&self) {
-        self.notify();
-    }
-
-    fn subscribe(&self) {
-        self.track();
-    }
-
-    fn unsubscribe(&self) {
-        self.untrack();
-    }
-}
-
-impl<T: 'static> Notify for StoredValue<T> {
+impl<T: 'static> Notify for Arc<RwLock<StoredValue<T>>> {
     fn notify(&self) {
-        self.notify_subscribers();
+        if let Ok(stored_value) = self.try_read() {
+            stored_value
+                .subscribers
+                .iter()
+                .for_each(|subscriber| {
+                    subscriber.notify();
+                });
+        }
     }
 }
 
-impl<T: 'static> Notify for Arc<StoredValue<T>> {
-    fn notify(&self) {
-        self.as_ref().notify_subscribers();
-    }
-}
-
-impl<T: 'static> Track for StoredValue<T> {
-    fn track(&self) {
-        GRAPH.with(|graph| {
-            if let Some(current) = graph.current.borrow().as_ref() {
-                if let Ok(mut subscribers) = self.subscribers.try_write()
-                && !subscribers.contains(&current)
-                {
-                    subscribers.push(current.clone());
-                }
-            }
-        })
-    }
+impl<T: 'static> Track for RwLock<StoredValue<T>> {
+    fn track(&self) {}
 
     fn untrack(&self) {
-        #[cfg(test)] eprintln!(" └─ [UNTRACKING]: {self:?}");
+        #[cfg(test)] eprintln!(" └─ [UNTRACKING]: {:?}", self.read().ok().unwrap());
         self.clear_subscribers();
     }
 }
 
-impl<T: 'static> Track for Arc<StoredValue<T>> {
+impl<T: 'static> Track for Arc<RwLock<StoredValue<T>>> {
     fn track(&self) {
         GRAPH.with(|graph| {
             if let Some(current) = graph.current.borrow().as_ref() {
@@ -99,27 +64,38 @@ impl<T: 'static> Track for Arc<StoredValue<T>> {
     }
 
     fn untrack(&self) {
-        self.as_ref().clear_subscribers();
+        self.as_ref().untrack();
     }
 }
 
-impl<T: 'static> Source for StoredValue<T> {
+impl<T: 'static> Source for RwLock<StoredValue<T>> {
     fn add_subscriber(&self, subscriber: AnySubscriber) {
-        if let Ok(mut subscribers) = self.subscribers.try_write()
-        && !subscribers.contains(&subscriber)
+        if let Ok(mut this) = self.try_write()
+        && !this.subscribers.contains(&subscriber)
         {
-            subscribers.push(subscriber);
+            this.subscribers.push(subscriber);
         }
     }
 
+    // FIXME: this is slow, find a better way
     fn clear_subscribers(&self) {
-        if let Ok(mut subscribers) = self.subscribers.try_write() {
-            subscribers.clear();
+        if let Ok(mut this) = self.try_write() {
+            GRAPH.with(|graph| {
+                if let Some(current) = graph.current
+                    .borrow()
+                    .as_ref()
+                && let Some(idx) = this.subscribers
+                    .iter()
+                    .position(|s| s == current)
+                {
+                    this.subscribers.swap_remove(idx);
+                }
+            })
         }
     }
 }
 
-impl<T: 'static> Source for Arc<StoredValue<T>> {
+impl<T: 'static> Source for Arc<RwLock<StoredValue<T>>> {
     fn add_subscriber(&self, subscriber: AnySubscriber) {
         self.as_ref().add_subscriber(subscriber);
     }
@@ -129,7 +105,13 @@ impl<T: 'static> Source for Arc<StoredValue<T>> {
     }
 }
 
-impl<T: 'static> ToAnySource for Arc<StoredValue<T>> {
+impl<T: 'static> ToAnySource for RwLock<StoredValue<T>> {
+    fn to_any_source(self) -> AnySource {
+        AnySource::new(Arc::new(self))
+    }
+}
+
+impl<T: 'static> ToAnySource for Arc<RwLock<StoredValue<T>>> {
     fn to_any_source(self) -> AnySource {
         AnySource::new(self)
     }

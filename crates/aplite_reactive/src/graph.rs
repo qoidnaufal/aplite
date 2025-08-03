@@ -82,13 +82,17 @@ pub(crate) struct ReactiveGraph {
 }
 
 impl ReactiveGraph {
-    pub(crate) fn insert<R: 'static>(&self, r: R) -> ReactiveNode<R> {
+    pub(crate) fn insert<R: Reactive + 'static>(&self, r: R) -> ReactiveNode<R> {
         let id = self.storage.borrow_mut().insert(Arc::new(r));
         ReactiveNode { id, marker: PhantomData }
     }
 
     pub(crate) fn get<R: Reactive>(&self, node: &ReactiveNode<R>) -> Option<Arc<dyn Any>> {
         self.storage.borrow().get(&node.id).map(|arc| Arc::clone(&arc))
+    }
+
+    pub(crate) fn remove<R: Reactive>(&self, node: &ReactiveNode<R>) -> Option<Arc<dyn Any>> {
+        self.storage.borrow_mut().remove(&node.id)
     }
 
     pub(crate) fn swap_current(

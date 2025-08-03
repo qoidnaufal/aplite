@@ -5,7 +5,7 @@ use aplite_future::{
     Executor,
 };
 
-use crate::graph::{ReactiveNode, GRAPH};
+use crate::graph::GRAPH;
 use crate::subscriber::{Subscriber, ToAnySubscriber, AnySubscriber};
 use crate::source::AnySource;
 use crate::reactive_traits::*;
@@ -22,7 +22,7 @@ use crate::reactive_traits::*;
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Effect {
-    node: ReactiveNode<Arc<Reactor>>,
+    // node: ReactiveNode<Arc<Reactor>>,
 }
 
 impl Effect {
@@ -35,21 +35,21 @@ impl Effect {
         tx.notify();
 
         let reactor = Arc::new(Reactor::new(tx));
-        let node = GRAPH.with(|graph| {
-            graph.insert(reactor)
-        });
+        // let node = GRAPH.with(|graph| {
+        //     graph.insert(Arc::clone(&reactor))
+        // });
 
         Executor::spawn_local(async move {
             let value = Arc::new(RwLock::new(None::<R>));
 
             while rx.recv().await.is_some() {
-                #[cfg(test)] eprintln!("\n[NOTIFIED]      : {node:?}");
+                #[cfg(test)] eprintln!("\n[NOTIFIED]      : {:?}", reactor);
+
                 let prev_scope = GRAPH.with(|graph| {
-                    let stored = graph.get(&node).unwrap();
-                    let reactor = stored.downcast_ref::<Arc<Reactor>>().unwrap();
-                    reactor.clear_source();
-                    graph.swap_current(Some(Arc::clone(reactor).to_any_subscriber()))
+                    let subscriber = reactor.clone().to_any_subscriber();
+                    graph.swap_current(Some(subscriber))
                 });
+                reactor.clear_source();
 
                 let mut lock = value.write().unwrap();
                 let prev_value = lock.take();
@@ -60,7 +60,7 @@ impl Effect {
             }
         });
 
-        Self { node }
+        Self { }
     }
 }
 
@@ -118,34 +118,20 @@ impl ToAnySubscriber for Arc<Reactor> {
     }
 }
 
-impl Reactive for Reactor {
-    fn dirty(&self) {
-        self.notify();
-    }
-
-    fn subscribe(&self) {}
-
-    fn unsubscribe(&self) {
-        self.clear_source();
-    }
+impl Track for Reactor {
+    fn track(&self) {}
+    fn untrack(&self) {}
 }
 
-impl Reactive for Arc<Reactor> {
-    fn dirty(&self) {
-        self.as_ref().dirty();
-    }
-
-    fn subscribe(&self) {}
-
-    fn unsubscribe(&self) {
-        self.as_ref().unsubscribe();
-    }
+impl Track for Arc<Reactor> {
+    fn track(&self) {}
+    fn untrack(&self) {}
 }
 
 impl std::fmt::Debug for Reactor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("EffectInner")
-            .field("id", &std::any::TypeId::of::<Self>())
+        f.debug_struct("Reactor")
+            .field("source_count", &self.source.read().map(|s| s.len()).unwrap_or_default())
             .finish()
     }
 }
@@ -154,8 +140,7 @@ impl std::fmt::Debug for Reactor {
 mod effect_test {
     use std::rc::Rc;
     use std::cell::RefCell;
-    use aplite_future::{Runtime, Executor};
-    use aplite_future::sleep;
+    use aplite_future::{Runtime, Executor, sleep};
     use crate::signal::Signal;
     use crate::reactive_traits::*;
     use super::*;
@@ -168,10 +153,10 @@ mod effect_test {
         let (first, set_first) = Signal::split("Dario");
         let (last, set_last) = Signal::split("");
 
-        rt.spawn_local(async move {
-            let name = Rc::new(RefCell::new(String::new()));
-            let set_name = Rc::clone(&name);
+        let name = Rc::new(RefCell::new(String::new()));
+        let set_name = Rc::clone(&name);
 
+        rt.spawn_local(async move {
             Effect::new(move |_| {
                 if use_last.get() {
                     *set_name.borrow_mut() = first.get().to_string() + " " + last.get();
@@ -180,114 +165,47 @@ mod effect_test {
                 }
             });
 
-            Executor::spawn_local(async move {
-                // eprintln!("-- setting first name to Mario, SHOULD RERUN");
-                set_first.set("Mario");
-                sleep(1000).await;
-
-                // eprintln!("-- setting last name to Ballotelli");
-                set_last.set("Ballotelli");
-                sleep(1000).await;
-                assert_eq!("Mario", name.borrow().as_str());
-
-                // eprintln!("\n-- set to use last name, SHOULD RERUN");
-                use_last.set(true);
-                sleep(1000).await;
-                assert_eq!("Mario Ballotelli", name.borrow().as_str());
-
-                // eprintln!("-- set to use first only, SHOULD RERUN");
-                use_last.set(false);
-                sleep(1000).await;
-                assert_eq!("Mario", name.borrow().as_str());
-
-                // eprintln!("-- setting last name to Gomez");
-                set_last.set("Gomez");
-                sleep(1000).await;
-                assert_eq!("Mario", name.borrow().as_str());
-
-                // eprintln!("\n-- setting last name to Bros");
-                set_last.set("Bros");
-                sleep(1000).await;
-                assert_eq!("Mario", name.borrow().as_str());
-
-                // eprintln!("\n-- setting last name to Kempes");
-                set_last.set("Kempes");
-                sleep(1000).await;
-                assert_eq!("Mario", name.borrow().as_str());
-
-                // eprintln!("\n-- set to use last name, SHOULD RERUN");
-                use_last.set(true);
-                sleep(1000).await;
-                assert_eq!("Mario Kempes", name.borrow().as_str());
-            });
+            Effect::new(move |_| eprintln!("last name: {}", last.get()));
         });
+
+        // Executor::spawn_local(async {
+        //     aplite_future::block_on(sleep(4000));
+        //     eprintln!("done");
+        // });
+
+        Executor::spawn_local(async move {
+            set_first.set("Mario");
+            sleep(1000).await;
+
+            set_last.set("Ballotelli");
+            sleep(1000).await;
+            assert_eq!("Mario", name.borrow().as_str());
+
+            use_last.set(true);
+            sleep(1000).await;
+            assert_eq!("Mario Ballotelli", name.borrow().as_str());
+
+            use_last.set(false);
+            sleep(1000).await;
+            assert_eq!("Mario", name.borrow().as_str());
+
+            set_last.set("Gomez");
+            sleep(1000).await;
+            assert_eq!("Mario", name.borrow().as_str());
+
+            set_last.set("Bros");
+            sleep(1000).await;
+            assert_eq!("Mario", name.borrow().as_str());
+
+            set_last.set("Kempes");
+            sleep(1000).await;
+            assert_eq!("Mario", name.borrow().as_str());
+
+            use_last.set(true);
+            sleep(1000).await;
+            assert_eq!("Mario Kempes", name.borrow().as_str());
+        });
+
         rt.run();
     }
-
-    // #[test]
-    // fn sleep_count() {
-    //     let rt = Runtime::init_local();
-
-    //     rt.spawn_local(async move {
-    //         let (counter, set_counter) = Signal::split(0);
-
-    //         Effect::new(move |_| {
-    //             eprintln!("rerun: {}", counter.get());
-    //         });
-
-    //         Executor::spawn_local(async move {
-    //             for i in 0..4 {
-    //                 sleep(1000).await;
-    //                 set_counter.set(i + 1);
-    //             }
-    //         });
-    //     });
-
-    //     rt.run();
-    // }
-
-    // #[test]
-    // fn child_effect() {
-    //     let rt = Runtime::init_local();
-    //     rt.spawn_local(async {
-    //         let (check, set_check) = Signal::split(false);
-    //         let (outer_name, set_outer_name) = Signal::split("Steve");
-
-    //         let someone = Rc::new(RefCell::new(String::new()));
-    //         let outer_one = Rc::clone(&someone);
-
-    //         Effect::new(move |_| {
-    //             let (inner_name, set_inner_name) = Signal::split("");
-    //             let inner_one = Rc::clone(&outer_one);
-
-    //             Effect::new(move |_| {
-    //                 if check.get() {
-    //                     inner_name.with(|n| *inner_one.borrow_mut() = n.to_string());
-    //                 }
-    //             });
-
-    //             if check.get() {
-    //                 set_inner_name.set("Oscar");
-    //             } else {
-    //                 *outer_one.borrow_mut() = outer_name.get().to_string();
-    //             }
-    //         });
-
-    //         sleep(1000).await;
-
-    //         assert_eq!(someone.borrow().as_str(), "Steve");
-
-    //         set_check.set(true);
-    //         assert_eq!(someone.borrow().as_str(), "Oscar");
-
-    //         set_outer_name.set("Douglas");
-
-    //         set_check.set(false);
-    //         assert_eq!(someone.borrow().as_str(), "Douglas");
-
-    //         set_check.set(true);
-    //         assert_eq!(someone.borrow().as_str(), "Oscar");
-    //     });
-    //     rt.run();
-    // }
 }

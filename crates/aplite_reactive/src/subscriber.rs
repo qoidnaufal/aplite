@@ -15,6 +15,12 @@ pub(crate) trait ToAnySubscriber: Subscriber {
     fn to_any_subscriber(self) -> AnySubscriber;
 }
 
+impl ToAnySubscriber for AnySubscriber {
+    fn to_any_subscriber(self) -> AnySubscriber {
+        self.clone()
+    }
+}
+
 impl AnySubscriber {
     pub(crate) fn new(inner: Arc<dyn Subscriber>) -> Self {
         Self(Arc::downgrade(&inner))
@@ -55,6 +61,18 @@ impl Clone for AnySubscriber {
 
 impl PartialEq for AnySubscriber {
     fn eq(&self, other: &Self) -> bool {
+        Weak::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl PartialEq<&AnySubscriber> for AnySubscriber {
+    fn eq(&self, other: &&AnySubscriber) -> bool {
+        Weak::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl PartialEq<AnySubscriber> for &AnySubscriber {
+    fn eq(&self, other: &AnySubscriber) -> bool {
         Weak::ptr_eq(&self.0, &other.0)
     }
 }

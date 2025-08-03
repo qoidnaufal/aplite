@@ -6,23 +6,19 @@
 #########################################################
 */
 
-pub trait Reactive {
-    fn dirty(&self);
-
-    fn subscribe(&self);
-
-    fn unsubscribe(&self);
-}
+pub trait Reactive: Track + Notify {}
 
 pub trait Track {
     fn track(&self);
 
-    fn untrack(&self);
+    fn untrack(&self) {}
 }
 
 pub trait Notify {
     fn notify(&self);
 }
+
+impl<T> Reactive for T where T: Track + Notify {}
 
 /*
 #########################################################
@@ -123,7 +119,7 @@ impl<T: Notify + Write> Update for T {}
 */
 
 pub trait Dispose {
-    /// untrack this signal and then remove it from the reactive system
+    /// remove and untrack this signal from the reactive system
     /// be careful accessing the value of disposed signal will cause [`panic!()`](core::panic)
     fn dispose(&self);
 
