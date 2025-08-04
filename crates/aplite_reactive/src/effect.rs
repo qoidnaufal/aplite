@@ -33,7 +33,6 @@ impl Effect {
         R: 'static,
     {
         let (tx, rx) = Channel::new();
-        tx.notify();
         Self::with_scope(Scope::new(tx), rx, f)
     }
 
@@ -42,6 +41,7 @@ impl Effect {
         F: FnMut(Option<R>) -> R + 'static,
         R: 'static,
     {
+        scope.sender.notify();
         let scope = Arc::new(scope);
         let node = GRAPH.with(|graph| {
             graph.insert(Arc::clone(&scope))

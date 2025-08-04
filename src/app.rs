@@ -221,52 +221,6 @@ impl ApplicationHandler for Aplite {
     }
 }
 
-// pub struct WindowAttributes {
-//     title: &'static str,
-//     inner_size: Size,
-//     decorations: bool,
-//     transparent: bool,
-//     maximized: bool,
-//     resizable: bool,
-// }
-
-// impl Default for WindowAttributes {
-//     fn default() -> Self {
-//         Self {
-//             title: "GUI App",
-//             inner_size: DEFAULT_SCREEN_SIZE,
-//             decorations: true,
-//             transparent: false,
-//             maximized: false,
-//             resizable: true,
-//         }
-//     }
-// }
-
-// #[cfg(target_os = "macos")]
-// impl From<&WindowAttributes> for winit::window::WindowAttributes {
-//     fn from(w: &WindowAttributes) -> Self {
-//         use winit::platform::macos::WindowAttributesExtMacOS;
-
-//         Self::default()
-//             .with_inner_size(LogicalSize::new(w.inner_size.width as u32, w.inner_size.height as u32))
-//             .with_title(w.title)
-//             .with_transparent(w.transparent)
-//             .with_maximized(w.maximized)
-//             .with_resizable(w.resizable)
-//             .with_titlebar_hidden(!w.decorations)
-//     }
-// }
-
-// #[cfg(not(target_os = "macos"))]
-// impl From<&WindowAttributes> for winit::window::WindowAttributes {
-//     fn from(w: &WindowAttributes) -> Self {
-//         Self::default()
-//             .with_inner_size(LogicalSize::new(w.inner_size.width(), w.inner_size.height()))
-//             .with_title(w.title)
-//             .with_transparent(w.transparent)
-//             .with_maximized(w.maximized)
-//             .with_resizable(w.resizable)
-//             .with_decorations(w.decorations)
-//     }
-// }
+struct Runtime {
+    proxy: winit::event_loop::EventLoopProxy<()>,
+}

@@ -33,6 +33,8 @@ pub(crate) trait Read {
 
     /// read and apply function to the value, and track the underying signal
     fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R;
+
+    fn try_read<R, F: FnOnce(Option<&Self::Value>) -> Option<R>>(&self, f: F) -> Option<R>;
 }
 
 pub(crate) trait Write {
@@ -59,7 +61,14 @@ pub trait Get: Track {
         self.get_untracked()
     }
 
+    fn try_get(&self) -> Option<Self::Value> {
+        self.track();
+        self.try_get_untracked()
+    }
+
     fn get_untracked(&self) -> Self::Value;
+
+    fn try_get_untracked(&self) -> Option<Self::Value>;
 }
 
 pub trait With: Track {
@@ -73,7 +82,21 @@ pub trait With: Track {
         self.with_untracked(f)
     }
 
-    fn with_untracked<F, R>(&self, f: F) -> R where F: FnOnce(&Self::Value) -> R;
+    fn try_with<F, R>(&self, f: F) -> Option<R>
+    where
+        F: FnOnce(Option<&Self::Value>) -> Option<R>
+    {
+        self.track();
+        self.try_with_untracked(f)
+    }
+
+    fn with_untracked<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&Self::Value) -> R;
+
+    fn try_with_untracked<F, R>(&self, f: F) -> Option<R>
+    where
+        F: FnOnce(Option<&Self::Value>) -> Option<R>;
 }
 
 /*

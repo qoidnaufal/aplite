@@ -24,24 +24,12 @@ impl<T: 'static> SignalRead<T> {
 impl<T: 'static> Track for SignalRead<T> {
     fn track(&self) {
         #[cfg(test)] eprintln!(" └─ [TRACKING]  : {self:?}");
-        GRAPH.with(|graph| {
-            if let Some(any) = graph.get(&self.node)
-            && let Some(stored_value) = any.downcast_ref::<Arc<RwLock<StoredValue<T>>>>()
-            {
-                stored_value.track();
-            }
-        })
+        GRAPH.with(|graph| graph.with_downcast_void(&self.node, |node| node.track()))
     }
 
     fn untrack(&self) {
         #[cfg(test)] eprintln!("[UNTRACKING]: {self:?}");
-        GRAPH.with(|graph| {
-            if let Some(any) = graph.get(&self.node)
-            && let Some(stored_value) = any.downcast_ref::<Arc<RwLock<StoredValue<T>>>>()
-            {
-                stored_value.untrack();
-            }
-        })
+        GRAPH.with(|graph| graph.with_downcast_void(&self.node, |node| node.untrack()))
     }
 }
 
@@ -49,12 +37,18 @@ impl<T: 'static> Read for SignalRead<T> {
     type Value = T;
 
     fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
-        GRAPH.with(|graph| {
-            let any = graph.get(&self.node).unwrap();
-            let lock = any.downcast_ref::<Arc<RwLock<StoredValue<Self::Value>>>>().unwrap();
-            let stored = lock.read().unwrap();
-            f(&stored.value)
-        })
+        GRAPH.with(|graph| graph.with_downcast(&self.node, |lock| {
+            f(&lock.read().unwrap().value)
+        }))
+    }
+
+    fn try_read<R, F: FnOnce(Option<&Self::Value>) -> Option<R>>(&self, f: F) -> Option<R> {
+        GRAPH.with(|graph| graph.try_with_downcast(&self.node, |node| {
+            let value = node.and_then(|node| {
+                node.try_read().ok()
+            });
+            f(value.as_ref().map(|v| &v.value))
+        }))
     }
 }
 
@@ -64,13 +58,27 @@ impl<T: Clone + 'static> Get for SignalRead<T> {
     fn get_untracked(&self) -> Self::Value {
         self.read(Clone::clone)
     }
+
+    fn try_get_untracked(&self) -> Option<Self::Value> {
+        self.try_read(|v| v.map(Clone::clone))
+    }
 }
 
 impl<T: 'static> With for SignalRead<T> {
     type Value = T;
 
-    fn with_untracked<F, R>(&self, f: F) -> R where F: FnOnce(&Self::Value) -> R {
+    fn with_untracked<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&Self::Value) -> R
+    {
         self.read(f)
+    }
+
+    fn try_with_untracked<F, R>(&self, f: F) -> Option<R>
+    where
+        F: FnOnce(Option<&Self::Value>) -> Option<R>
+    {
+        self.try_read(f)
     }
 }
 

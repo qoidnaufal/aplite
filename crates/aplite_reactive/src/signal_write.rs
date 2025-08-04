@@ -24,13 +24,7 @@ impl<T: 'static> SignalWrite<T> {
 impl<T: 'static> Notify for SignalWrite<T> {
     fn notify(&self) {
         #[cfg(test)] eprintln!("\n[NOTIFYING]     : {self:?}");
-        GRAPH.with(|graph| {
-            if let Some(any) = graph.get(&self.node)
-            && let Some(stored_value) = any.downcast_ref::<Arc<RwLock<StoredValue<T>>>>()
-            {
-                stored_value.notify();
-            }
-        })
+        GRAPH.with(|graph| graph.with_downcast(&self.node, |lock| lock.notify()))
     }
 }
 
@@ -38,12 +32,9 @@ impl<T: 'static> Write for SignalWrite<T> {
     type Value = T;
 
     fn write(&self, f: impl FnOnce(&mut Self::Value)) {
-        GRAPH.with(|graph| {
-            let any = graph.get(&self.node).unwrap();
-            let lock = any.downcast_ref::<Arc<RwLock<StoredValue<Self::Value>>>>().unwrap();
-            let mut stored = lock.write().unwrap();
-            f(&mut stored.value);
-        });
+        GRAPH.with(|graph| graph.with_downcast(&self.node, |lock| {
+            f(&mut lock.write().unwrap().value)
+        }));
     }
 }
 

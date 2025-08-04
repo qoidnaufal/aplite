@@ -35,17 +35,44 @@ impl ReactiveGraph {
     }
 
     pub(crate) fn get<R: Reactive>(&self, node: &ReactiveNode<R>) -> Option<Arc<dyn Any>> {
-        self.storage.borrow().get(&node.id).map(|arc| Arc::clone(&arc))
+        self.storage.borrow().get(&node.id).map(|any| Arc::clone(&any))
+    }
+
+    pub(crate) fn with_downcast<R, F, U>(&self, node: &ReactiveNode<R>, f: F) -> U
+    where
+        R: Reactive + 'static,
+        F: FnOnce(&R) -> U,
+    {
+        let any = self.get(node).unwrap();
+        let r = any.downcast_ref::<R>().unwrap();
+        f(r)
+    }
+
+    pub(crate) fn with_downcast_void<R, F>(&self, node: &ReactiveNode<R>, f: F)
+    where
+        R: Reactive + 'static,
+        F: FnOnce(&R),
+    {
+        if let Some(any) = self.get(node)
+        && let Some(r) = any.downcast_ref::<R>()
+        {
+            f(r)
+        }
+    }
+
+    pub(crate) fn try_with_downcast<R, F, U>(&self, node: &ReactiveNode<R>, f: F) -> Option<U>
+    where
+        R: Reactive + 'static,
+        F: FnOnce(Option<&R>) -> Option<U>,
+    {
+        self.get(node).and_then(|any| f(any.downcast_ref::<R>()))
     }
 
     pub(crate) fn remove<R: Reactive>(&self, node: &ReactiveNode<R>) -> Option<Arc<dyn Any>> {
         self.storage.borrow_mut().remove(&node.id)
     }
 
-    pub(crate) fn set_scope(
-        &self,
-        subscriber: Option<AnySubscriber>,
-    ) -> Option<AnySubscriber> {
+    pub(crate) fn set_scope(&self, subscriber: Option<AnySubscriber>) -> Option<AnySubscriber> {
         self.current.replace(subscriber)
     }
 }
@@ -126,8 +153,9 @@ mod signal_test {
         set_counter.set(-69);
         assert_eq!(counter.get(), -69);
 
-        let r = counter.read(|num| num.to_string());
-        assert_eq!(r.parse(), Ok(-69));
+        let r = counter.try_with(|num| num.map(ToString::to_string));
+        assert!(r.is_some());
+        assert_eq!(r.unwrap().parse(), Ok(-69));
     }
 
     #[test]

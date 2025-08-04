@@ -46,37 +46,19 @@ impl<T: 'static> Signal<T> {
 impl<T: 'static> Track for Signal<T> {
     fn track(&self) {
         #[cfg(test)] eprintln!(" └─ [TRACKING]  : {self:?}");
-        GRAPH.with(|graph| {
-            if let Some(any) = graph.get(&self.node)
-            && let Some(stored_value) = any.downcast_ref::<Arc<RwLock<StoredValue<T>>>>()
-            {
-                stored_value.track();
-            }
-        })
+        GRAPH.with(|graph| graph.with_downcast_void(&self.node, |node| node.track()))
     }
 
     fn untrack(&self) {
         #[cfg(test)] eprintln!("[UNTRACKING]: {self:?}");
-        GRAPH.with(|graph| {
-            if let Some(any) = graph.get(&self.node)
-            && let Some(stored_value) = any.downcast_ref::<Arc<RwLock<StoredValue<T>>>>()
-            {
-                stored_value.untrack();
-            }
-        })
+        GRAPH.with(|graph| graph.with_downcast_void(&self.node, |node| node.untrack()))
     }
 }
 
 impl<T: 'static> Notify for Signal<T> {
     fn notify(&self) {
         #[cfg(test)] eprintln!("\n[NOTIFYING]     : {self:?}");
-        GRAPH.with(|graph| {
-            if let Some(any) = graph.get(&self.node)
-            && let Some(stored_value) = any.downcast_ref::<Arc<RwLock<StoredValue<T>>>>()
-            {
-                stored_value.notify();
-            }
-        })
+        GRAPH.with(|graph| graph.with_downcast_void(&self.node, |lock| lock.notify()))
     }
 }
 
@@ -84,12 +66,18 @@ impl<T: 'static> Read for Signal<T> {
     type Value = T;
 
     fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
-        GRAPH.with(|graph| {
-            let any = graph.get(&self.node).unwrap();
-            let lock = any.downcast_ref::<Arc<RwLock<StoredValue<Self::Value>>>>().unwrap();
-            let stored = lock.read().unwrap();
-            f(&stored.value)
-        })
+        GRAPH.with(|graph| graph.with_downcast(&self.node, |lock| {
+            f(&lock.read().unwrap().value)
+        }))
+    }
+
+    fn try_read<R, F: FnOnce(Option<&Self::Value>) -> Option<R>>(&self, f: F) -> Option<R> {
+        GRAPH.with(|graph| graph.try_with_downcast(&self.node, |node| {
+            let value = node.and_then(|node| {
+                node.try_read().ok()
+            });
+            f(value.as_ref().map(|v| &v.value))
+        }))
     }
 }
 
@@ -99,6 +87,10 @@ impl<T: Clone + 'static> Get for Signal<T> {
     fn get_untracked(&self) -> Self::Value {
         self.read(Clone::clone)
     }
+
+    fn try_get_untracked(&self) -> Option<Self::Value> {
+        self.try_read(|n| n.map(Clone::clone))
+    }
 }
 
 impl<T: 'static> With for Signal<T> {
@@ -107,18 +99,23 @@ impl<T: 'static> With for Signal<T> {
     fn with_untracked<F, R>(&self, f: F) -> R where F: FnOnce(&Self::Value) -> R {
         self.read(f)
     }
+
+    fn try_with_untracked<F, R>(&self, f: F) -> Option<R>
+    where
+        F: FnOnce(Option<&Self::Value>) -> Option<R>
+    {
+        self.try_read(f)
+    }
 }
 
 impl<T: 'static> Write for Signal<T> {
     type Value = T;
 
     fn write(&self, f: impl FnOnce(&mut Self::Value)) {
-        GRAPH.with(|graph| {
-            let any = graph.get(&self.node).unwrap();
-            let lock = any.downcast_ref::<Arc<RwLock<StoredValue<Self::Value>>>>().unwrap();
+        GRAPH.with(|graph| graph.with_downcast(&self.node, |lock| {
             let mut stored = lock.write().unwrap();
-            f(&mut stored.value);
-        });
+            f(&mut stored.value)
+        }));
     }
 }
 
