@@ -1,11 +1,14 @@
-use std::sync::{Arc, Weak, OnceLock, RwLock};
+use std::sync::{Arc, Weak, OnceLock};
 use std::sync::mpsc::{Sender, Receiver, channel};
 use std::task::{Waker, Context};
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering::Relaxed;
 
 use crate::task::Task;
 
 thread_local! {
     pub(crate) static CURRENT: OnceLock<WeakSender> = OnceLock::new();
+    pub(crate) static COUNT: AtomicU64 = AtomicU64::new(0);
 }
 
 #[derive(Debug)]
@@ -16,6 +19,13 @@ type ArcSender = Arc<Sender<Arc<Task>>>;
 pub struct Runtime {
     tx: ArcSender,
     rx: Receiver<Arc<Task>>,
+}
+
+impl Drop for Runtime {
+    fn drop(&mut self) {
+        drop(CURRENT);
+        drop(COUNT);
+    }
 }
 
 impl Runtime {
@@ -32,11 +42,7 @@ impl Runtime {
     }
 
     pub fn spawn_local(&self, future: impl Future<Output = ()> + 'static) {
-        let future = Box::pin(future);
-        let task = Arc::new(Task {
-            future: RwLock::new(Some(future)),
-            sender: WeakSender::new(&self.tx),
-        });
+        let task = Arc::new(Task::new(WeakSender::new(&self.tx), future));
         let _ = self.tx.send(task);
     }
 
@@ -49,8 +55,22 @@ impl Runtime {
                 let cx = &mut Context::from_waker(&waker);
 
                 match future.as_mut().poll(cx) {
-                    std::task::Poll::Ready(()) => drop(future),
+                    std::task::Poll::Ready(_) => drop(future),
                     std::task::Poll::Pending => *lock = Some(future),
+                }
+            }
+
+            let mut empty = false;
+            if let Ok(future) = task.future.try_read() {
+                if future.is_none() {
+                    empty = true;
+                }
+            }
+
+            if empty {
+                drop(task);
+                if COUNT.with(|num| num.load(Relaxed)) == 0 {
+                    break;
                 }
             }
         };
@@ -86,10 +106,7 @@ impl Executor {
     pub fn spawn_local(future: impl Future<Output = ()> + 'static) {
         CURRENT.with(|cell| {
             if let Some(spawner) = cell.get() {
-                let task = Arc::new(Task {
-                    future: RwLock::new(Some(Box::pin(future))),
-                    sender: spawner.clone(),
-                });
+                let task = Arc::new(Task::new(spawner.clone(), future));
                 spawner.send(task);
             }
         });

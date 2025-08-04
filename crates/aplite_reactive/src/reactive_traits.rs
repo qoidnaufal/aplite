@@ -28,24 +28,18 @@ impl<T> Reactive for T where T: Track + Notify {}
 #########################################################
 */
 
-pub trait Read: Track {
+pub(crate) trait Read {
     type Value: 'static;
 
     /// read and apply function to the value, and track the underying signal
-    fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
-        self.track();
-        self.read_untracked(f)
-    }
-
-    /// read value without tracking the signal, and apply a function to the value
-    fn read_untracked<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R;
+    fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R;
 }
 
-pub trait Write {
+pub(crate) trait Write {
     type Value: 'static;
 
     /// updating the value without notifying it's subscribers
-    fn write_untracked(&self, f: impl FnOnce(&mut Self::Value));
+    fn write(&self, f: impl FnOnce(&mut Self::Value));
 }
 
 /*
@@ -56,23 +50,31 @@ pub trait Write {
 #########################################################
 */
 
-pub trait Get
-where
-    Self: Read,
-    <Self as Read>::Value: Clone,
-{
+pub trait Get: Track {
+    type Value: Clone + 'static;
+
     /// track the signal & clone the value
-    fn get(&self) -> <Self as Read>::Value {
+    fn get(&self) -> Self::Value {
         self.track();
         self.get_untracked()
     }
 
-    fn get_untracked(&self) -> <Self as Read>::Value {
-        self.read_untracked(|val| val.clone())
-    }
+    fn get_untracked(&self) -> Self::Value;
 }
 
-impl<T> Get for T where T: Track + Read, T::Value: Clone, {}
+pub trait With: Track {
+    type Value: 'static;
+
+    fn with<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&Self::Value) -> R
+    {
+        self.track();
+        self.with_untracked(f)
+    }
+
+    fn with_untracked<F, R>(&self, f: F) -> R where F: FnOnce(&Self::Value) -> R;
+}
 
 /*
 #########################################################
@@ -82,33 +84,29 @@ impl<T> Get for T where T: Track + Read, T::Value: Clone, {}
 #########################################################
 */
 
-pub trait Set: Notify + Write {
+pub trait Set: Notify {
+    type Value: 'static;
+
     /// update the value directly and notify the subscribers
-    fn set(&self, value: <Self as Write>::Value) {
+    fn set(&self, value: Self::Value) {
         self.set_untracked(value);
         self.notify();
     }
 
-    fn set_untracked(&self, value: <Self as Write>::Value) {
-        self.write_untracked(|val| *val = value);
-    }
+    fn set_untracked(&self, value: Self::Value);
 }
 
-impl<T: Notify + Write> Set for T {}
+pub trait Update: Notify {
+    type Value: 'static;
 
-pub trait Update: Notify + Write {
     /// update the value via a closure and notify the subscribers
-    fn update(&self, f: impl FnOnce(&mut <Self as Write>::Value)) {
-        self.write_untracked(f);
+    fn update(&self, f: impl FnOnce(&mut Self::Value)) {
+        self.update_untracked(f);
         self.notify();
     }
 
-    fn update_untracked(&self, f: impl FnOnce(&mut <Self as Write>::Value)) {
-        self.write_untracked(f);
-    }
+    fn update_untracked(&self, f: impl FnOnce(&mut Self::Value));
 }
-
-impl<T: Notify + Write> Update for T {}
 
 /*
 #########################################################

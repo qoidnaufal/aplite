@@ -2,10 +2,11 @@ use std::sync::{Arc, RwLock};
 use aplite_future::{
     Channel,
     Sender,
+    Receiver,
     Executor,
 };
 
-use crate::graph::GRAPH;
+use crate::graph::{ReactiveNode, GRAPH};
 use crate::subscriber::{Subscriber, ToAnySubscriber, AnySubscriber};
 use crate::source::AnySource;
 use crate::reactive_traits::*;
@@ -22,55 +23,71 @@ use crate::reactive_traits::*;
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Effect {
-    // node: ReactiveNode<Arc<Reactor>>,
+    node: ReactiveNode<Arc<Scope>>,
 }
 
 impl Effect {
-    pub fn new<F, R>(mut f: F) -> Self
+    pub fn new<F, R>(f: F) -> Self
     where
         F: FnMut(Option<R>) -> R + 'static,
         R: 'static,
     {
-        let (tx, mut rx) = Channel::new();
+        let (tx, rx) = Channel::new();
         tx.notify();
+        Self::with_scope(Scope::new(tx), rx, f)
+    }
 
-        let reactor = Arc::new(Reactor::new(tx));
-        // let node = GRAPH.with(|graph| {
-        //     graph.insert(Arc::clone(&reactor))
-        // });
+    pub fn with_scope<F, R>(scope: Scope, mut rx: Receiver, mut f: F) -> Self
+    where
+        F: FnMut(Option<R>) -> R + 'static,
+        R: 'static,
+    {
+        let scope = Arc::new(scope);
+        let node = GRAPH.with(|graph| {
+            graph.insert(Arc::clone(&scope))
+        });
+        let scope = scope.to_any_subscriber();
+        let this = Self { node };
 
         Executor::spawn_local(async move {
             let value = Arc::new(RwLock::new(None::<R>));
 
             while rx.recv().await.is_some() {
-                #[cfg(test)] eprintln!("\n[NOTIFIED]      : {:?}", reactor);
+                #[cfg(test)] eprintln!("\n[NOTIFIED]      : {:?}", this);
 
-                let prev_scope = GRAPH.with(|graph| {
-                    let subscriber = reactor.clone().to_any_subscriber();
-                    graph.swap_current(Some(subscriber))
-                });
-                reactor.clear_source();
+                let prev_scope = GRAPH.with(|graph| graph.set_scope(Some(scope.clone())));
+
+                scope.clear_source();
 
                 let mut lock = value.write().unwrap();
                 let prev_value = lock.take();
                 let new_val = f(prev_value);
+
                 *lock = Some(new_val);
 
-                GRAPH.with(|graph| graph.swap_current(prev_scope));
+                GRAPH.with(|graph| graph.set_scope(prev_scope));
+
+                let source_count = scope.source_count();
+                #[cfg(test)] eprintln!("current source count: {source_count}");
+                if source_count == 0 { break; }
             }
+
+            drop(rx);
+            drop(scope);
+            GRAPH.with(|graph| graph.remove(&node));
         });
 
-        Self { }
+        this
     }
 }
 
-pub(crate) struct Reactor {
+pub struct Scope {
     pub(crate) sender: Sender,
     pub(crate) source: RwLock<Vec<AnySource>>,
 }
 
-impl Reactor {
-    fn new(sender: Sender) -> Self {
+impl Scope {
+    pub fn new(sender: Sender) -> Self {
         Self {
             sender,
             source: RwLock::new(Vec::new()),
@@ -78,7 +95,7 @@ impl Reactor {
     }
 }
 
-impl Subscriber for Reactor {
+impl Subscriber for Scope {
     fn add_source(&self, source: AnySource) {
         self.source.write().unwrap().push(source);
     }
@@ -88,9 +105,13 @@ impl Subscriber for Reactor {
         let drained_sources = sources.drain(..);
         drained_sources.into_iter().for_each(|source| source.untrack())
     }
+
+    fn source_count(&self) -> usize {
+        self.source.try_read().unwrap().len()
+    }
 }
 
-impl Subscriber for Arc<Reactor> {
+impl Subscriber for Arc<Scope> {
     fn add_source(&self, source: AnySource) {
         self.as_ref().add_source(source);
     }
@@ -98,39 +119,43 @@ impl Subscriber for Arc<Reactor> {
     fn clear_source(&self) {
         self.as_ref().clear_source();
     }
+
+    fn source_count(&self) -> usize {
+        self.as_ref().source_count()
+    }
 }
 
-impl Notify for Reactor {
+impl Notify for Scope {
     fn notify(&self) {
         self.sender.notify();
     }
 }
 
-impl Notify for Arc<Reactor> {
+impl Notify for Arc<Scope> {
     fn notify(&self) {
         self.as_ref().notify();
     }
 }
 
-impl ToAnySubscriber for Arc<Reactor> {
+impl ToAnySubscriber for Arc<Scope> {
     fn to_any_subscriber(self) -> AnySubscriber {
         AnySubscriber::new(self)
     }
 }
 
-impl Track for Reactor {
+impl Track for Scope {
     fn track(&self) {}
     fn untrack(&self) {}
 }
 
-impl Track for Arc<Reactor> {
+impl Track for Arc<Scope> {
     fn track(&self) {}
     fn untrack(&self) {}
 }
 
-impl std::fmt::Debug for Reactor {
+impl std::fmt::Debug for Scope {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Reactor")
+        f.debug_struct("Scope")
             .field("source_count", &self.source.read().map(|s| s.len()).unwrap_or_default())
             .finish()
     }
@@ -161,21 +186,16 @@ mod effect_test {
                 if use_last.get() {
                     *set_name.borrow_mut() = first.get().to_string() + " " + last.get();
                 } else {
-                    *set_name.borrow_mut() = first.read(|n| n.to_string());
+                    *set_name.borrow_mut() = first.with(|n| n.to_string());
                 }
             });
 
-            Effect::new(move |_| eprintln!("last name: {}", last.get()));
+            Effect::new(move |_| eprintln!("last name: {}", last.get_untracked()));
         });
 
-        // Executor::spawn_local(async {
-        //     aplite_future::block_on(sleep(4000));
-        //     eprintln!("done");
-        // });
-
         Executor::spawn_local(async move {
-            set_first.set("Mario");
             sleep(1000).await;
+            set_first.set("Mario");
 
             set_last.set("Ballotelli");
             sleep(1000).await;

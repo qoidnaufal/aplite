@@ -83,7 +83,7 @@ impl<T: 'static> Notify for Signal<T> {
 impl<T: 'static> Read for Signal<T> {
     type Value = T;
 
-    fn read_untracked<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
+    fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
         GRAPH.with(|graph| {
             let any = graph.get(&self.node).unwrap();
             let lock = any.downcast_ref::<Arc<RwLock<StoredValue<Self::Value>>>>().unwrap();
@@ -93,16 +93,48 @@ impl<T: 'static> Read for Signal<T> {
     }
 }
 
+impl<T: Clone + 'static> Get for Signal<T> {
+    type Value = T;
+
+    fn get_untracked(&self) -> Self::Value {
+        self.read(Clone::clone)
+    }
+}
+
+impl<T: 'static> With for Signal<T> {
+    type Value = T;
+
+    fn with_untracked<F, R>(&self, f: F) -> R where F: FnOnce(&Self::Value) -> R {
+        self.read(f)
+    }
+}
+
 impl<T: 'static> Write for Signal<T> {
     type Value = T;
 
-    fn write_untracked(&self, f: impl FnOnce(&mut Self::Value)) {
+    fn write(&self, f: impl FnOnce(&mut Self::Value)) {
         GRAPH.with(|graph| {
             let any = graph.get(&self.node).unwrap();
             let lock = any.downcast_ref::<Arc<RwLock<StoredValue<Self::Value>>>>().unwrap();
             let mut stored = lock.write().unwrap();
             f(&mut stored.value);
         });
+    }
+}
+
+impl<T: 'static> Set for Signal<T> {
+    type Value = T;
+
+    fn set_untracked(&self, value: Self::Value) {
+        self.write(|old| *old = value);
+    }
+}
+
+impl<T: 'static> Update for Signal<T> {
+    type Value = T;
+
+    fn update_untracked(&self, f: impl FnOnce(&mut Self::Value)) {
+        self.write(f);
     }
 }
 

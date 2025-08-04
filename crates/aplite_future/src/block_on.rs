@@ -48,7 +48,7 @@ impl Signal {
 
 impl std::task::Wake for Signal {
     fn wake(self: std::sync::Arc<Self>) {
-        // (&self).wake_by_ref();
+        (&self).wake_by_ref();
     }
 
     fn wake_by_ref(self: &std::sync::Arc<Self>) {

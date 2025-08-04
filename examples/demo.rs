@@ -101,7 +101,7 @@ fn root() -> impl IntoView {
 
     let inc = move || set_counter.update(|num| *num += 1);
     let dec = move || set_counter.update(|num| *num -= 1);
-    let rotation = move |_| counter.read(|val| *val as f32 * 3.0);
+    let rotation = move |_| counter.with(|val| *val as f32 * 3.0);
     let color = move |_| select_color(counter.get());
 
     Effect::new(move |_| eprint!("{}        \r", counter.get()));

@@ -12,6 +12,52 @@ thread_local! {
     pub(crate) static GRAPH: ReactiveGraph = ReactiveGraph::default();
 }
 
+/*
+#########################################################
+#                                                       #
+#                         Graph                         #
+#                                                       #
+#########################################################
+*/
+
+type Storage = IndexMap<ReactiveId, Arc<dyn Any>>;
+
+#[derive(Default)]
+pub(crate) struct ReactiveGraph {
+    pub(crate) storage: RefCell<Storage>,
+    pub(crate) current: RefCell<Option<AnySubscriber>>,
+}
+
+impl ReactiveGraph {
+    pub(crate) fn insert<R: Reactive + 'static>(&self, r: R) -> ReactiveNode<R> {
+        let id = self.storage.borrow_mut().insert(Arc::new(r));
+        ReactiveNode { id, marker: PhantomData }
+    }
+
+    pub(crate) fn get<R: Reactive>(&self, node: &ReactiveNode<R>) -> Option<Arc<dyn Any>> {
+        self.storage.borrow().get(&node.id).map(|arc| Arc::clone(&arc))
+    }
+
+    pub(crate) fn remove<R: Reactive>(&self, node: &ReactiveNode<R>) -> Option<Arc<dyn Any>> {
+        self.storage.borrow_mut().remove(&node.id)
+    }
+
+    pub(crate) fn set_scope(
+        &self,
+        subscriber: Option<AnySubscriber>,
+    ) -> Option<AnySubscriber> {
+        self.current.replace(subscriber)
+    }
+}
+
+/*
+#########################################################
+#                                                       #
+#                          Node                         #
+#                                                       #
+#########################################################
+*/
+
 entity! {
     pub(crate) ReactiveId,
 }
@@ -62,44 +108,6 @@ impl<R> std::fmt::Debug for ReactiveNode<R> {
         f.debug_struct(std::any::type_name::<R>())
             .field("id", &self.id)
             .finish()
-    }
-}
-
-/*
-#########################################################
-#                                                       #
-#                         Graph                         #
-#                                                       #
-#########################################################
-*/
-
-type Storage = IndexMap<ReactiveId, Arc<dyn Any>>;
-
-#[derive(Default)]
-pub(crate) struct ReactiveGraph {
-    pub(crate) storage: RefCell<Storage>,
-    pub(crate) current: RefCell<Option<AnySubscriber>>,
-}
-
-impl ReactiveGraph {
-    pub(crate) fn insert<R: Reactive + 'static>(&self, r: R) -> ReactiveNode<R> {
-        let id = self.storage.borrow_mut().insert(Arc::new(r));
-        ReactiveNode { id, marker: PhantomData }
-    }
-
-    pub(crate) fn get<R: Reactive>(&self, node: &ReactiveNode<R>) -> Option<Arc<dyn Any>> {
-        self.storage.borrow().get(&node.id).map(|arc| Arc::clone(&arc))
-    }
-
-    pub(crate) fn remove<R: Reactive>(&self, node: &ReactiveNode<R>) -> Option<Arc<dyn Any>> {
-        self.storage.borrow_mut().remove(&node.id)
-    }
-
-    pub(crate) fn swap_current(
-        &self,
-        subscriber: Option<AnySubscriber>,
-    ) -> Option<AnySubscriber> {
-        self.current.replace(subscriber)
     }
 }
 

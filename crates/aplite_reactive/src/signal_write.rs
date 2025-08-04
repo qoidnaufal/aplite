@@ -37,13 +37,29 @@ impl<T: 'static> Notify for SignalWrite<T> {
 impl<T: 'static> Write for SignalWrite<T> {
     type Value = T;
 
-    fn write_untracked(&self, f: impl FnOnce(&mut Self::Value)) {
+    fn write(&self, f: impl FnOnce(&mut Self::Value)) {
         GRAPH.with(|graph| {
             let any = graph.get(&self.node).unwrap();
             let lock = any.downcast_ref::<Arc<RwLock<StoredValue<Self::Value>>>>().unwrap();
             let mut stored = lock.write().unwrap();
             f(&mut stored.value);
         });
+    }
+}
+
+impl<T: 'static> Set for SignalWrite<T> {
+    type Value = T;
+
+    fn set_untracked(&self, value: Self::Value) {
+        self.write(|old| *old = value);
+    }
+}
+
+impl<T: 'static> Update for SignalWrite<T> {
+    type Value = T;
+
+    fn update_untracked(&self, f: impl FnOnce(&mut Self::Value)) {
+        self.write(f);
     }
 }
 

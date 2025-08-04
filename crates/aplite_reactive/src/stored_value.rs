@@ -33,14 +33,7 @@ impl<T: 'static> Notify for RwLock<StoredValue<T>> {
 
 impl<T: 'static> Notify for Arc<RwLock<StoredValue<T>>> {
     fn notify(&self) {
-        if let Ok(stored_value) = self.try_read() {
-            stored_value
-                .subscribers
-                .iter()
-                .for_each(|subscriber| {
-                    subscriber.notify();
-                });
-        }
+        self.as_ref().notify();
     }
 }
 
@@ -48,7 +41,7 @@ impl<T: 'static> Track for RwLock<StoredValue<T>> {
     fn track(&self) {}
 
     fn untrack(&self) {
-        #[cfg(test)] eprintln!(" └─ [UNTRACKING]: {:?}", self.read().ok().unwrap());
+        #[cfg(test)] eprintln!(" └─ [UNTRACKING]: {:?}", self.read().unwrap());
         self.clear_subscribers();
     }
 }
@@ -77,20 +70,19 @@ impl<T: 'static> Source for RwLock<StoredValue<T>> {
         }
     }
 
-    // FIXME: this is slow, find a better way
+    // FIXME: this is slow?, ideally should just call .clear(), find a better way
     fn clear_subscribers(&self) {
         if let Ok(mut this) = self.try_write() {
-            GRAPH.with(|graph| {
-                if let Some(current) = graph.current
-                    .borrow()
-                    .as_ref()
-                && let Some(idx) = this.subscribers
-                    .iter()
-                    .position(|s| s == current)
-                {
-                    this.subscribers.swap_remove(idx);
-                }
-            })
+            GRAPH.with(|graph| if let Some(current) = graph
+                .current
+                .borrow()
+                .as_ref() && let Some(idx) = this
+                .subscribers
+                .iter()
+                .position(|s| s == current)
+            {
+                this.subscribers.swap_remove(idx);
+            });
         }
     }
 }

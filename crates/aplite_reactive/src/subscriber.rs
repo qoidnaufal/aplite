@@ -7,8 +7,8 @@ pub(crate) struct AnySubscriber(pub(crate) Weak<dyn Subscriber>);
 
 pub(crate) trait Subscriber: Notify {
     fn add_source(&self, source: AnySource);
-
     fn clear_source(&self);
+    fn source_count(&self) -> usize;
 }
 
 pub(crate) trait ToAnySubscriber: Subscriber {
@@ -43,6 +43,12 @@ impl Subscriber for AnySubscriber {
             subscriber.clear_source();
         }
     }
+
+    fn source_count(&self) -> usize {
+        self.upgrade()
+            .map(|subscriber| subscriber.source_count())
+            .unwrap_or_default()
+    }
 }
 
 impl Notify for AnySubscriber {
@@ -51,6 +57,11 @@ impl Notify for AnySubscriber {
             subscriber.notify();
         }
     }
+}
+
+impl Track for AnySubscriber {
+    fn track(&self) { }
+    fn untrack(&self) { }
 }
 
 impl Clone for AnySubscriber {

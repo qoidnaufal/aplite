@@ -14,8 +14,8 @@ pub use signal_read::*;
 pub use signal_write::*;
 pub use reactive_traits::{
     Dispose,
-    Read,
     Get,
+    With,
     Update,
     Set,
 };

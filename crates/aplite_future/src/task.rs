@@ -2,8 +2,9 @@ use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::task::{Wake, Context, Poll};
 use std::future::Future;
+use std::sync::atomic::Ordering::Relaxed;
 
-use crate::executor::WeakSender;
+use crate::executor::{WeakSender, COUNT};
 
 type PinnedFuture = Pin<Box<dyn Future<Output = ()>>>;
 
@@ -21,6 +22,22 @@ impl Wake for Task {
 
 unsafe impl Send for Task {}
 unsafe impl Sync for Task {}
+
+impl Task {
+    pub(crate) fn new(sender: WeakSender, future: impl Future<Output = ()> + 'static) -> Self {
+        COUNT.with(|num| num.fetch_add(1, Relaxed));
+        Self {
+            future: RwLock::new(Some(Box::pin(future))),
+            sender,
+        }
+    }
+}
+
+impl Drop for Task {
+    fn drop(&mut self) {
+        COUNT.with(|num| num.fetch_sub(1, Relaxed));
+    }
+}
 
 use std::time::Instant;
 use std::time::Duration;
