@@ -21,13 +21,6 @@ pub struct Runtime {
     rx: Receiver<Arc<Task>>,
 }
 
-impl Drop for Runtime {
-    fn drop(&mut self) {
-        drop(CURRENT);
-        drop(COUNT);
-    }
-}
-
 impl Runtime {
     pub fn init() -> Self {
         let (tx, rx) = channel();
@@ -140,5 +133,26 @@ mod runtime_test {
         });
 
         runtime.run();
+    }
+}
+
+mod alt {
+    use std::sync::Arc;
+    use std::pin::Pin;
+    use std::task::Waker;
+
+    use aplite_storage::{IndexMap, Entity, entity};
+
+    entity! { TaskId }
+
+    type PinnedFuture = Pin<Box<dyn Future<Output = ()>>>;
+
+    pub(crate) struct Task {
+        pub(crate) future: PinnedFuture,
+        pub(crate) waker: Arc<Waker>,
+    }
+
+    struct Executor {
+        queue: IndexMap<TaskId, Task>,
     }
 }

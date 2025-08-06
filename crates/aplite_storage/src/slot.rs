@@ -2,7 +2,7 @@
 pub(crate) enum Content<T> {
     Occupied(T),
     // contains index of next free slot
-    Vacant(u64),
+    Vacant(u32),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]

@@ -37,14 +37,14 @@ impl RoundedRect {
     }
 
     #[inline(always)]
-    pub fn from_points_radius(p1: Vec2f, p2: Vec2f, radius: CornerRadius) -> Self {
-        let rect = Rect::from_points(p1, p2);
+    pub fn from_vec2f_radius(v1: Vec2f, v2: Vec2f, radius: CornerRadius) -> Self {
+        let rect = Rect::from_vec2f(v1, v2);
         Self::from_rect_radius(rect, radius)
     }
 
     #[inline(always)]
     pub const fn from_point_size_radius(point: Vec2f, size: Size, radius: CornerRadius) -> Self {
-        let rect = Rect::from_point_size(point, size);
+        let rect = Rect::from_vec2f_size(point, size);
         Self::from_rect_radius(rect, radius)
     }
 

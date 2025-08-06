@@ -19,7 +19,7 @@ impl Rect {
 
     /// Calculate a [`Rect`] from the two given points
     #[inline(always)]
-    pub fn from_points(p1: Vec2f, p2: Vec2f) -> Self {
+    pub fn from_vec2f(p1: Vec2f, p2: Vec2f) -> Self {
         let origin = p1.min(p2);
         let size = p1.max(p2) - origin;
         Self {
@@ -31,8 +31,8 @@ impl Rect {
     }
 
     #[inline(always)]
-    pub const fn from_point_size(point: Vec2f, size: Size) -> Self {
-        Self::new(point.x, point.y, size.width, size.height)
+    pub const fn from_vec2f_size(vec2f: Vec2f, size: Size) -> Self {
+        Self::new(vec2f.x, vec2f.y, size.width, size.height)
     }
 
     #[inline(always)]
@@ -41,8 +41,13 @@ impl Rect {
     }
 
     #[inline(always)]
-    pub const fn pos(&self) -> Vec2f {
+    pub const fn vec2f(&self) -> Vec2f {
         Vec2f::new(self.x, self.y)
+    }
+
+    #[inline(always)]
+    pub const fn point(&self) -> crate::Point {
+        crate::Point::new(self.x, self.y)
     }
 
     #[inline(always)]
@@ -96,9 +101,33 @@ impl Rect {
     }
 }
 
+impl From<(Vec2f, Vec2f)> for Rect {
+    fn from((v0, v1): (Vec2f, Vec2f)) -> Self {
+        Self::from_vec2f(v0, v1)
+    }
+}
+
+impl From<[Vec2f; 2]> for Rect {
+    fn from([v0, v1]: [Vec2f; 2]) -> Self {
+        Self::from_vec2f(v0, v1)
+    }
+}
+
+impl From<&[Vec2f]> for Rect {
+    fn from(slice: &[Vec2f]) -> Self {
+        Self::from_vec2f(slice[0], slice[1])
+    }
+}
+
+impl From<(Vec2f, Size)> for Rect {
+    fn from((vec2f, size): (Vec2f, Size)) -> Self {
+        Self::from_vec2f_size(vec2f, size)
+    }
+}
+
 impl PartialEq for Rect {
     fn eq(&self, other: &Self) -> bool {
-        self.pos().eq(&other.pos())
+        self.vec2f().eq(&other.vec2f())
         && self.size().eq(&other.size())
     }
 }
@@ -108,5 +137,11 @@ impl Eq for Rect {}
 impl PartialOrd for Rect {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.size().partial_cmp(&other.size())
+    }
+}
+
+impl Ord for Rect {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.size().cmp(&other.size())
     }
 }

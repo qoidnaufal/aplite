@@ -102,6 +102,7 @@ fn sdSegment(p: vec2f, a: vec2f, b: vec2f) -> f32 {
     return length(pa - ba * h);
 }
 
+// should use uv - center here
 fn sdf(uv: vec2<f32>, index: u32, element: Element) -> f32 {
     let transform = transforms[index];
     let size = vec2f(transform[0].x, transform[1].y);

@@ -106,6 +106,9 @@ dependencies = [
 [[package]]
 name = "aplite_future"
 version = "0.1.0"
+dependencies = [
+ "aplite_storage",
+]
 
 [[package]]
 name = "aplite_reactive"

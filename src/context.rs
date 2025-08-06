@@ -144,7 +144,7 @@ impl Context {
             VIEW_STORAGE.with(|s| {
                 let mut tree = s.tree.borrow_mut();
                 let state = tree.get_mut(hover_id).unwrap();
-                let pos = state.rect.pos();
+                let pos = state.rect.vec2f();
                 self.cursor.click.offset = self.cursor.click.pos - pos;
                 state.event = Some(WidgetEvent::LeftClick);
             });

@@ -151,9 +151,9 @@ impl Matrix3x2 {
 
     #[inline(always)]
     pub fn transform_point(&self, point: Vec2u) -> Vec2u {
-        let p = point.to_vec2f();
+        let p = point.vec2f();
         let vec2f = self.transform_vec2f(p);
-        vec2f.to_vec2u()
+        vec2f.vec2u()
     }
 
     #[inline(always)]
@@ -219,7 +219,7 @@ mod matrix_test {
         let mat3x2 = Matrix3x2::from_scale_translate(2.0, 3.0, 4.0, 5.0);
         let point = Vec2u::new(100, 100);
 
-        let res = mat3x2.transform_point(point).to_vec2f();
+        let res = mat3x2.transform_point(point).vec2f();
         let cpr = Vec2f::new(204.0, 305.0);
 
         eprintln!("{mat3x2:?}");

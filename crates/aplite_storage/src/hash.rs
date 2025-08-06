@@ -146,14 +146,14 @@ mod hash_test {
         let mut map = U64Map::new();
         let now = std::time::Instant::now();
         for i in 0..REPEAT {
-            map.insert(TestId(i as u64, 0), i);
+            map.insert(TestId::new(i as u32, 0), i);
         }
         let time_map = now.elapsed();
 
         let mut hashmap = std::collections::HashMap::new();
         let now = std::time::Instant::now();
         for i in 0..REPEAT {
-            hashmap.insert(TestId(i as u64, 0), i);
+            hashmap.insert(TestId::new(i as u32, 0), i);
         }
         let time_std = now.elapsed();
 
@@ -168,19 +168,19 @@ mod hash_test {
 
         let now = std::time::Instant::now();
         for i in 0..REPEAT {
-            let _ = map.get(&TestId(i as _, 0));
+            let _ = map.get(&TestId::new(i as u32, 0));
         }
         let time_get_map = now.elapsed();
 
         let now = std::time::Instant::now();
         for i in 0..REPEAT {
-            let _ = hashmap.get(&TestId(i as _, 0));
+            let _ = hashmap.get(&TestId::new(i as _, 0));
         }
         let time_get_std = now.elapsed();
 
         let now = std::time::Instant::now();
         for i in 0..REPEAT {
-            let _ = indexmap.get(&TestId(i as _, 0));
+            let _ = indexmap.get(&TestId::new(i as _, 0));
         }
         let time_get_indexmap = now.elapsed();
 

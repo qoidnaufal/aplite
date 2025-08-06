@@ -220,7 +220,3 @@ impl ApplicationHandler for Aplite {
         }
     }
 }
-
-struct Runtime {
-    proxy: winit::event_loop::EventLoopProxy<()>,
-}

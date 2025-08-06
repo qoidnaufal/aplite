@@ -1,5 +1,5 @@
 use crate::entity::Entity;
-use crate::iterator::{TreeIterator, NodeRef};
+use crate::iterator::{TreeIter, IndexMapIter, IndexMapIterMut, NodeRef, NodeMut};
 use crate::index_map::IndexMap;
 
 /// Array based data structure, where the related information is allocated parallel to the main [`Entity`].
@@ -282,13 +282,6 @@ impl<E: Entity, T> Tree<E, T> {
         self.data.is_empty()
     }
 
-    pub fn get_node_ref<'a>(&'a self, entity: &'a E) -> Option<NodeRef<'a, E, T>> {
-        self.get(entity)
-            .map(|data| {
-                NodeRef::new(self, *entity, data)
-            })
-    }
-
     pub fn contains(&self, entity: &E) -> bool {
         self.data.contains(entity)
     }
@@ -300,7 +293,26 @@ impl<E: Entity, T> Tree<E, T> {
         self.next_sibling.clear();
     }
 
-    pub fn iter(&self) -> TreeIterator<'_, E, T> { self.into_iter() }
+    pub fn get_node_ref<'a>(&'a self, entity: &E) -> Option<NodeRef<'a, E, T>> {
+        self.get(entity)
+            .map(|data| {
+                NodeRef::new(self, *entity, data)
+            })
+    }
+
+    pub fn get_node_mut<'a>(&'a mut self, entity: &E) -> NodeMut<'a, E, T> {
+        NodeMut::new(self, *entity)
+    }
+
+    pub fn iter(&self) -> TreeIter<'_, E, T> { self.into_iter() }
+
+    pub fn data_iter(&self) -> IndexMapIter<'_, E, T> {
+        self.data.iter()
+    }
+
+    pub fn data_iter_mut(&mut self) -> IndexMapIterMut<'_, E, T> {
+        self.data.iter_mut()
+    }
 }
 
 impl<E: Entity, T> std::fmt::Debug for Tree<E, T> {
@@ -385,7 +397,7 @@ mod tree_test {
                 tree.add_child(parent, id);
             }
             if i > 0 && i % 3 == 0 {
-                parent = tree.get_first_child(&TestId(1, 0)).map(|e| *e);
+                parent = tree.get_first_child(&TestId::new(1, 0)).map(|e| *e);
             } else {
                 parent = Some(id);
             }
@@ -399,29 +411,30 @@ mod tree_test {
         eprintln!("{tree:?}");
         eprintln!("{:?}", tree.data);
 
-        let ancestor = tree.get_root(&TestId(9, 0));
-        let parent = tree.get_parent(&TestId(6, 0));
-        let four_is_mem_of_two = tree.is_member_of(&TestId(4, 0), &TestId(2, 0));
-        let nine_is_mem_of_two = tree.is_member_of(&TestId(9, 0), &TestId(2, 0));
-        let next_sibling = tree.get_next_sibling(&TestId(4, 0));
+        let root_id = TestId::new(9, 0);
+        let ancestor = tree.get_root(&root_id);
+        let parent = tree.get_parent(&TestId::new(6, 0));
+        let four_is_mem_of_two = tree.is_member_of(&TestId::new(4, 0), &TestId::new(2, 0));
+        let nine_is_mem_of_two = tree.is_member_of(&TestId::new(9, 0), &TestId::new(2, 0));
+        let next_sibling = tree.get_next_sibling(&TestId::new(4, 0));
 
-        assert_eq!(ancestor, Some(&TestId(0, 0)));
-        assert_eq!(parent, Some(&TestId(5, 0)));
+        assert_eq!(ancestor, Some(&TestId::new(0, 0)));
+        assert_eq!(parent, Some(&TestId::new(5, 0)));
         assert_eq!(four_is_mem_of_two, nine_is_mem_of_two);
-        assert_eq!(next_sibling, Some(&TestId(7, 0)));
+        assert_eq!(next_sibling, Some(&TestId::new(7, 0)));
     }
 
     #[test]
     fn remove_first_child() {
         let mut tree = setup_tree();
 
-        let first_child = tree.get_first_child(&TestId(2, 0)).copied().unwrap();
+        let first_child = tree.get_first_child(&TestId::new(2, 0)).copied().unwrap();
         let next_sibling = tree.get_next_sibling(&first_child).copied();
-        assert_eq!(first_child, TestId(3, 0));
+        assert_eq!(first_child, TestId::new(3, 0));
 
-        let _removed = tree.remove(TestId(3, 0));
+        let _removed = tree.remove(TestId::new(3, 0));
 
-        let first_child_after_removal = tree.get_first_child(&TestId(2, 0)).copied();
+        let first_child_after_removal = tree.get_first_child(&TestId::new(2, 0)).copied();
         assert_eq!(first_child_after_removal, next_sibling);
 
         // eprintln!("{tree:?}");
@@ -433,9 +446,9 @@ mod tree_test {
     fn remove_middle_child() {
         let mut tree = setup_tree();
 
-        let sibling_before_removal = tree.get_next_sibling(&TestId(4, 0)).copied();
-        let _removed = tree.remove(TestId(4, 0));
-        let sibling_after_removal = tree.get_next_sibling(&TestId(3, 0)).copied();
+        let sibling_before_removal = tree.get_next_sibling(&TestId::new(4, 0)).copied();
+        let _removed = tree.remove(TestId::new(4, 0));
+        let sibling_after_removal = tree.get_next_sibling(&TestId::new(3, 0)).copied();
         assert_eq!(sibling_before_removal, sibling_after_removal);
 
         // eprintln!("{tree:?}");
@@ -447,11 +460,11 @@ mod tree_test {
     fn insert_after_remove() {
         let mut tree = setup_tree();
 
-        let _ = tree.remove(TestId(4, 0));
+        let _ = tree.remove(TestId::new(4, 0));
         let reuse = tree.insert(());
 
-        tree.add_child(&TestId(7, 0), reuse);
-        assert_eq!(&TestId(7, 0), tree.get_parent(&reuse).unwrap());
+        tree.add_child(&TestId::new(7, 0), reuse);
+        assert_eq!(&TestId::new(7, 0), tree.get_parent(&reuse).unwrap());
 
         eprintln!("{tree:?}");
     }

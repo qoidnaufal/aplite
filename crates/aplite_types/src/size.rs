@@ -66,6 +66,10 @@ impl Size {
         let gcd = gcd(self.width, self.height);
         Fraction::new(self.width / gcd, self.height / gcd)
     }
+
+    pub fn rect(self) -> crate::Rect {
+        crate::Rect::from_size(self)
+    }
 }
 
 // arithmetic operation
@@ -111,6 +115,12 @@ impl Eq for Size {}
 impl PartialOrd for Size {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.area().partial_cmp(&other.area())
+    }
+}
+
+impl Ord for Size {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.area().total_cmp(&other.area())
     }
 }
 

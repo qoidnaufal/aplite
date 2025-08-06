@@ -203,7 +203,7 @@ impl AtlasAllocator {
         match self.last_parent {
             Some(last_parent) => {
                 if let Some((parent, pos)) = self.scan(size) {
-                    let id = self.allocated.insert(Rect::from_point_size(pos, size));
+                    let id = self.allocated.insert(Rect::from_vec2f_size(pos, size));
 
                     self.parent[id.index()] = Some(parent);
 
@@ -217,7 +217,7 @@ impl AtlasAllocator {
                     // inserting as the next sibling of the last parent
                     let last_rect = self.allocated.get(&last_parent).unwrap();
                     let pos = Vec2f::new(0.0, last_rect.max_y());
-                    let id = self.allocated.insert(Rect::from_point_size(pos, size));
+                    let id = self.allocated.insert(Rect::from_vec2f_size(pos, size));
 
                     self.next_sibling[last_parent.index()] = Some(id);
                     self.last_parent = Some(id);

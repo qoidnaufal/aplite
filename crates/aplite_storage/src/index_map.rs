@@ -1,13 +1,13 @@
 use std::marker::PhantomData;
 use crate::entity::Entity;
-use crate::iterator::IndexMapIterator;
+use crate::iterator::{IndexMapIter, IndexMapIterMut};
 use crate::slot::*;
 use crate::Error;
 
 pub struct IndexMap<E: Entity, T> {
     pub(crate) inner: Vec<Slot<T>>,
-    next: u64,
-    count: u64,
+    next: u32,
+    count: u32,
     marker: PhantomData<E>
 }
 
@@ -31,7 +31,7 @@ impl<E: Entity, T: PartialEq> IndexMap<E, T> {
                 slot.get_content()
                     .is_some_and(|content| content == &data)
             }) {
-            return Ok(E::new(idx as u64, slot.version))
+            return Ok(E::new(idx as u32, slot.version))
         } else {
             self.try_insert(data)
         }
@@ -81,7 +81,7 @@ impl<E: Entity, T> IndexMap<E, T> {
 
     #[inline(always)]
     pub fn try_insert(&mut self, data: T) -> Result<E, Error> {
-        if self.count + 1 == u64::MAX { return Err(Error::ReachedMaxId) }
+        if self.count + 1 == u32::MAX { return Err(Error::ReachedMaxId) }
 
         match self.inner.get_mut(self.next as usize) {
             // first time or after removal
@@ -162,7 +162,7 @@ impl<E: Entity, T> IndexMap<E, T> {
         {
             let ret = std::mem::replace(&mut slot.content, Content::Vacant(self.next));
             slot.version += 1;
-            self.next = entity.index() as u64;
+            self.next = entity.index() as u32;
             self.count -= 1;
             match ret {
                 Content::Occupied(data) => Some(data),
@@ -187,9 +187,6 @@ impl<E: Entity, T> IndexMap<E, T> {
     pub fn is_empty(&self) -> bool { self.count == 0 }
 
     #[inline(always)]
-    pub fn iter(&self) -> IndexMapIterator<'_, E, T> { self.into_iter() }
-
-    #[inline(always)]
     pub fn clear(&mut self) {
         self.inner.clear();
         self.inner.push(Slot {
@@ -199,6 +196,12 @@ impl<E: Entity, T> IndexMap<E, T> {
         self.next = 0;
         self.count = 0;
     }
+
+    #[inline(always)]
+    pub fn iter(&self) -> IndexMapIter<'_, E, T> { self.into_iter() }
+
+    #[inline(always)]
+    pub fn iter_mut(&mut self) -> IndexMapIterMut<'_, E, T> { self.into_iter() }
 }
 
 impl<E, T> std::fmt::Debug for IndexMap<E, T>
@@ -244,7 +247,7 @@ impl<E: Entity, T: Clone> Clone for IndexMap<E, T> {
 }
 
 #[cfg(test)]
-mod storage_test {
+mod index_test {
     use super::*;
     use crate::entity;
 

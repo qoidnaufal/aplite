@@ -42,7 +42,7 @@ impl Inner {
         match inner.as_ref() {
             Some(old) if old.will_wake(new) => {},
             _ => *inner = {
-                // eprintln!(">> storing waker");
+                #[cfg(test)] eprintln!(">> storing waker");
                 Some(new.clone())
             },
         }
