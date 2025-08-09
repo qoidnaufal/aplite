@@ -10,7 +10,7 @@ use winit::application::ApplicationHandler;
 use aplite_reactive::*;
 use aplite_types::Size;
 use aplite_renderer::Renderer;
-use aplite_future::block_on;
+use aplite_future::{block_on, Executor};
 
 use crate::prelude::ApliteResult;
 use crate::context::Context;
@@ -56,8 +56,8 @@ impl Aplite {
         }
     }
 
-    // FIXME: figure out how to integrate async runtime here
     pub fn launch(mut self) -> ApliteResult {
+        Executor::init();
         let event_loop = EventLoop::new()?;
         event_loop.run_app(&mut self)?;
 
@@ -200,7 +200,7 @@ impl Aplite {
 impl ApplicationHandler for Aplite {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         self.initialize_window_and_renderer(event_loop)
-            .unwrap_or_else(|_| event_loop.exit())
+            .unwrap_or_else(|_| event_loop.exit());
     }
 
     fn window_event(
@@ -217,6 +217,105 @@ impl ApplicationHandler for Aplite {
             WindowEvent::CursorMoved { position, .. } => self.handle_mouse_move(&window_id, position),
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => self.set_scale_factor(scale_factor),
             _ => {}
+        }
+    }
+}
+
+#[allow(unused)]
+mod alt {
+    use std::pin::Pin;
+    use std::future::Future;
+    use std::sync::{Arc, RwLock};
+    use std::collections::HashMap;
+    use std::sync::mpsc::{sync_channel, SyncSender, Receiver};
+
+    use winit::event_loop::{EventLoop, ActiveEventLoop, EventLoopProxy};
+    use winit::application::ApplicationHandler;
+    use winit::window::{Window, WindowId};
+    use winit::event::WindowEvent;
+
+    use aplite_storage::IndexMap;
+
+    use crate::view::IntoView;
+
+    struct App<F> {
+        pending_view: Option<F>,
+    }
+
+    impl<F, IV> App<F>
+    where
+        F: FnOnce() -> IV + 'static,
+        IV: IntoView + 'static,
+    {
+        fn new(view_fn: F) -> Self {
+            Self {
+                pending_view: Some(view_fn),
+            }
+        }
+
+        fn launch(mut self) {
+            let event_loop = EventLoop::<()>::with_user_event()
+                .build()
+                .expect("Event loop creation should be supported by current platform");
+
+            let view = self.pending_view.take().unwrap();
+
+            let mut rt = Runtime::new(event_loop.create_proxy(), view());
+
+            event_loop
+                .run_app(&mut rt)
+                .expect("EventLoop is supported by current platform to run the app");
+        }
+    }
+
+    aplite_macro::entity! { TaskId }
+
+    struct Task {
+        future: Pin<Box<dyn Future<Output = ()>>>,
+        waker: RwLock<Option<EventLoopProxy<()>>>,
+    }
+
+    struct Runtime {
+        view: Box<dyn IntoView>,
+        window: HashMap<WindowId, Arc<Window>>,
+        proxy: EventLoopProxy<()>,
+        tasks: IndexMap<TaskId, Task>,
+        context: std::task::Context<'static>,
+    }
+
+    impl Runtime {
+        fn new<IV: IntoView + 'static>(proxy: EventLoopProxy<()>, view: IV) -> Self {
+            Self {
+                view: Box::new(view),
+                window: HashMap::new(),
+                proxy,
+                tasks: IndexMap::new(),
+                context: std::task::Context::from_waker(std::task::Waker::noop()),
+            }
+        }
+
+        fn dispatch(&mut self, event_loop: &ActiveEventLoop) {
+        }
+
+        fn send_event(&self) {
+            self.proxy.send_event(()).unwrap();
+        }
+    }
+
+    impl ApplicationHandler for Runtime {
+        fn resumed(&mut self, _event_loop: &ActiveEventLoop) {}
+
+        fn window_event(
+            &mut self,
+            _event_loop: &ActiveEventLoop,
+            _window_id: WindowId,
+            _event: WindowEvent,
+        ) {
+           todo!() 
+        }
+
+        fn user_event(&mut self, event_loop: &ActiveEventLoop, event: ()) {
+            todo!()
         }
     }
 }

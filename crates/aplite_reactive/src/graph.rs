@@ -1,16 +1,26 @@
-use std::cell::RefCell;
 use std::marker::PhantomData;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock, OnceLock};
 use std::any::Any;
 
-use aplite_storage::{IndexMap, Entity, entity};
+use aplite_storage::IndexMap;
+use aplite_macro::entity;
 
 use crate::subscriber::AnySubscriber;
 use crate::reactive_traits::*;
 
-thread_local! {
-    pub(crate) static GRAPH: ReactiveGraph = ReactiveGraph::default();
+static GRAPH: OnceLock<Arc<RwLock<ReactiveGraph>>> = OnceLock::new();
+
+type Storage = IndexMap<ReactiveId, Box<dyn Any + Send + Sync>>;
+
+// TODO: make the graph lives on another thread?
+#[derive(Default)]
+pub(crate) struct ReactiveGraph {
+    pub(crate) storage: Storage,
+    pub(crate) current: Option<AnySubscriber>,
 }
+
+unsafe impl Send for ReactiveGraph {}
+unsafe impl Sync for ReactiveGraph {}
 
 /*
 #########################################################
@@ -20,60 +30,64 @@ thread_local! {
 #########################################################
 */
 
-type Storage = IndexMap<ReactiveId, Arc<dyn Any>>;
+pub(crate) struct Graph;
 
-#[derive(Default)]
-pub(crate) struct ReactiveGraph {
-    pub(crate) storage: RefCell<Storage>,
-    pub(crate) current: RefCell<Option<AnySubscriber>>,
-}
-
-impl ReactiveGraph {
-    pub(crate) fn insert<R: Reactive + 'static>(&self, r: R) -> ReactiveNode<R> {
-        let id = self.storage.borrow_mut().insert(Arc::new(r));
-        ReactiveNode { id, marker: PhantomData }
+impl Graph {
+    pub(crate) fn insert<R: Reactive + Send + Sync + 'static>(r: R) -> Node<R> {
+        let mut graph = GRAPH.get_or_init(Default::default).write().unwrap();
+        let id = graph.storage.insert(Box::new(r));
+        Node { id, marker: PhantomData }
     }
 
-    pub(crate) fn get<R: Reactive>(&self, node: &ReactiveNode<R>) -> Option<Arc<dyn Any>> {
-        self.storage.borrow().get(&node.id).map(|any| Arc::clone(&any))
+    pub(crate) fn with<U>(f: impl FnOnce(&ReactiveGraph) -> U) -> U {
+        f(&GRAPH.get_or_init(Default::default).read().unwrap())
     }
 
-    pub(crate) fn with_downcast<R, F, U>(&self, node: &ReactiveNode<R>, f: F) -> U
+    // pub(crate) fn with_mut<U>(f: impl FnOnce(&mut ReactiveGraph) -> U) -> U {
+    //     f(&mut GRAPH.get_or_init(Default::default).write().unwrap())
+    // }
+
+    pub(crate) fn with_downcast<R, F, U>(node: &Node<R>, f: F) -> U
     where
-        R: Reactive + 'static,
+        R: Reactive + Send + Sync + 'static,
         F: FnOnce(&R) -> U,
     {
-        let any = self.get(node).unwrap();
-        let r = any.downcast_ref::<R>().unwrap();
-        f(r)
+        let graph = GRAPH.get_or_init(Default::default).read().unwrap();
+        let r = graph
+            .storage
+            .get(&node.id)
+            .and_then(|any| any.downcast_ref::<R>())
+            .unwrap();
+        f(&r)
     }
 
-    pub(crate) fn with_downcast_void<R, F>(&self, node: &ReactiveNode<R>, f: F)
+    pub(crate) fn try_with_downcast<R, F, U>(node: &Node<R>, f: F) -> Option<U>
     where
-        R: Reactive + 'static,
-        F: FnOnce(&R),
-    {
-        if let Some(any) = self.get(node)
-        && let Some(r) = any.downcast_ref::<R>()
-        {
-            f(r)
-        }
-    }
-
-    pub(crate) fn try_with_downcast<R, F, U>(&self, node: &ReactiveNode<R>, f: F) -> Option<U>
-    where
-        R: Reactive + 'static,
+        R: Reactive + Send + Sync + 'static,
         F: FnOnce(Option<&R>) -> Option<U>,
     {
-        self.get(node).and_then(|any| f(any.downcast_ref::<R>()))
+        let graph = GRAPH.get_or_init(Default::default).read().unwrap();
+        graph
+            .storage
+            .get(&node.id)
+            .and_then(|any| f(any.downcast_ref::<R>()))
     }
 
-    pub(crate) fn remove<R: Reactive>(&self, node: &ReactiveNode<R>) -> Option<Arc<dyn Any>> {
-        self.storage.borrow_mut().remove(&node.id)
+    pub(crate) fn set_scope(subscriber: Option<AnySubscriber>) -> Option<AnySubscriber> {
+        let mut graph = GRAPH.get_or_init(Default::default).write().unwrap();
+        let prev = graph.current.take();
+        graph.current = subscriber;
+        prev
     }
 
-    pub(crate) fn set_scope(&self, subscriber: Option<AnySubscriber>) -> Option<AnySubscriber> {
-        self.current.replace(subscriber)
+    pub(crate) fn remove<R: Reactive + Send + Sync>(node: &Node<R>) -> Option<Box<dyn Any + Send + Sync>> {
+        let mut graph = GRAPH.get_or_init(Default::default).write().unwrap();
+        graph.storage.remove(&node.id)
+    }
+
+    pub(crate) fn is_removed<R: Reactive + Send + Sync>(node: &Node<R>) -> bool {
+        let graph = GRAPH.get_or_init(Default::default).read().unwrap();
+        graph.storage.get(&node.id).is_none()
     }
 }
 
@@ -85,16 +99,19 @@ impl ReactiveGraph {
 #########################################################
 */
 
+// type Map = RwLock<IndexMap<ReactiveId, Box<dyn Any + Send + Sync>>>;
+// pub(crate) static STORAGE: OnceLock<Map> = OnceLock::new();
+
 entity! {
     pub(crate) ReactiveId,
 }
 
-pub(crate) struct ReactiveNode<R> {
+pub(crate) struct Node<R> {
     pub(crate) id: ReactiveId,
     marker: PhantomData<R>,
 }
 
-impl<R> Clone for ReactiveNode<R> {
+impl<R> Clone for Node<R> {
     fn clone(&self) -> Self {
         Self {
             id: self.id,
@@ -103,34 +120,34 @@ impl<R> Clone for ReactiveNode<R> {
     }
 }
 
-impl<R> PartialEq for ReactiveNode<R> {
+impl<R> PartialEq for Node<R> {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 
-impl<R> PartialOrd for ReactiveNode<R> {
+impl<R> PartialOrd for Node<R> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.id.partial_cmp(&other.id)
     }
 }
 
-impl<R> Ord for ReactiveNode<R> {
+impl<R> Ord for Node<R> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.id.cmp(&other.id)
     }
 }
 
-impl<R> Copy for ReactiveNode<R> {}
-impl<R> Eq for ReactiveNode<R> {}
+impl<R> Copy for Node<R> {}
+impl<R> Eq for Node<R> {}
 
-impl<R> std::hash::Hash for ReactiveNode<R> {
+impl<R> std::hash::Hash for Node<R> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.id.hash(state);
     }
 }
 
-impl<R> std::fmt::Debug for ReactiveNode<R> {
+impl<R> std::fmt::Debug for Node<R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct(std::any::type_name::<R>())
             .field("id", &self.id)

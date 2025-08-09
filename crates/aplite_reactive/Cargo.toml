@@ -8,4 +8,5 @@ repository.workspace = true
 
 [dependencies]
 aplite_storage = { path = "../aplite_storage" }
+aplite_macro = { path = "../aplite_macro" }
 aplite_future = { path = "../aplite_future" }

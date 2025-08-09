@@ -135,10 +135,10 @@ impl BuildHasher for U64Hasher {
 mod hash_test {
     use super::*;
     use crate::index_map::IndexMap;
-    use crate::entity;
+    use crate::create_entity;
     use crate::Entity;
 
-    entity! { TestId }
+    create_entity! { TestId }
 
     #[test]
     fn time_benchmark() {

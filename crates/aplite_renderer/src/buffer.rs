@@ -77,7 +77,7 @@ impl<T> Buffer<T> {
         }
     }
 
-    pub(crate) fn bind_group_entry(&self, binding: u32) -> wgpu::BindGroupEntry {
+    pub(crate) fn bind_group_entry(&self, binding: u32) -> wgpu::BindGroupEntry<'_> {
         wgpu::BindGroupEntry {
             binding,
             resource: self.buffer.as_entire_binding(),

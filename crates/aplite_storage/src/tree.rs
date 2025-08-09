@@ -384,9 +384,9 @@ impl<E: Entity, T> std::fmt::Debug for Tree<E, T> {
 #[cfg(test)]
 mod tree_test {
     use super::*;
-    use crate::entity;
+    use crate::create_entity;
 
-    entity! { TestId }
+    create_entity! { TestId }
 
     fn setup_tree() -> Tree<TestId, ()> {
         let mut tree: Tree<TestId, ()> = Tree::with_capacity(10);

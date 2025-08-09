@@ -6,7 +6,7 @@ use aplite_future::{
     Executor,
 };
 
-use crate::graph::{ReactiveNode, GRAPH};
+use crate::graph::{Node, Graph};
 use crate::subscriber::{Subscriber, ToAnySubscriber, AnySubscriber};
 use crate::source::AnySource;
 use crate::reactive_traits::*;
@@ -15,7 +15,6 @@ use crate::reactive_traits::*;
 /// # Example
 /// ```ignore
 /// let (counter, set_counter) = Signal::split(0i32);
-
 /// Effect::new(move |_| eprintln!("{}", counter.get()));
 ///
 /// // and then do something with the set_counter
@@ -23,7 +22,7 @@ use crate::reactive_traits::*;
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Effect {
-    node: ReactiveNode<Arc<Scope>>,
+    node: Node<Arc<Scope>>,
 }
 
 impl Effect {
@@ -43,41 +42,29 @@ impl Effect {
     {
         scope.sender.notify();
         let scope = Arc::new(scope);
-        let node = GRAPH.with(|graph| {
-            graph.insert(Arc::clone(&scope))
-        });
+        let node = Graph::insert(Arc::clone(&scope));
         let scope = scope.to_any_subscriber();
-        let this = Self { node };
 
-        Executor::spawn_local(async move {
+        Executor::spawn(async move {
             let value = Arc::new(RwLock::new(None::<R>));
 
             while rx.recv().await.is_some() {
-                #[cfg(test)] eprintln!("\n[NOTIFIED]      : {:?}", this);
+                #[cfg(test)] eprintln!("\n[NOTIFIED]      : {:?}", node);
 
-                let prev_scope = GRAPH.with(|graph| graph.set_scope(Some(scope.clone())));
+                let prev_scope = Graph::set_scope(Some(scope.clone()));
 
                 scope.clear_source();
 
                 let mut lock = value.write().unwrap();
                 let prev_value = lock.take();
                 let new_val = f(prev_value);
-
                 *lock = Some(new_val);
 
-                GRAPH.with(|graph| graph.set_scope(prev_scope));
-
-                let source_count = scope.source_count();
-                #[cfg(test)] eprintln!("current source count: {source_count}");
-                if source_count == 0 { break; }
+                Graph::set_scope(prev_scope);
             }
-
-            drop(rx);
-            drop(scope);
-            GRAPH.with(|graph| graph.remove(&node));
         });
 
-        this
+        Self { node }
     }
 }
 
@@ -85,6 +72,9 @@ pub struct Scope {
     pub(crate) sender: Sender,
     pub(crate) source: RwLock<Vec<AnySource>>,
 }
+
+unsafe impl Send for Scope {}
+unsafe impl Sync for Scope {}
 
 impl Scope {
     pub fn new(sender: Sender) -> Self {
@@ -105,10 +95,6 @@ impl Subscriber for Scope {
         let drained_sources = sources.drain(..);
         drained_sources.into_iter().for_each(|source| source.untrack())
     }
-
-    fn source_count(&self) -> usize {
-        self.source.try_read().unwrap().len()
-    }
 }
 
 impl Subscriber for Arc<Scope> {
@@ -118,10 +104,6 @@ impl Subscriber for Arc<Scope> {
 
     fn clear_source(&self) {
         self.as_ref().clear_source();
-    }
-
-    fn source_count(&self) -> usize {
-        self.as_ref().source_count()
     }
 }
 
@@ -165,14 +147,14 @@ impl std::fmt::Debug for Scope {
 mod effect_test {
     use std::rc::Rc;
     use std::cell::RefCell;
-    use aplite_future::{Runtime, Executor, sleep};
+    use aplite_future::{Executor, sleep};
     use crate::signal::Signal;
     use crate::reactive_traits::*;
     use super::*;
 
     #[test]
     fn effect() {
-        let rt = Runtime::init();
+        Executor::init();
 
         let use_last = Signal::new(false);
         let (first, set_first) = Signal::split("Dario");
@@ -181,7 +163,7 @@ mod effect_test {
         let name = Rc::new(RefCell::new(String::new()));
         let set_name = Rc::clone(&name);
 
-        rt.spawn_local(async move {
+        Executor::spawn(async move {
             Effect::new(move |_| {
                 if use_last.get() {
                     *set_name.borrow_mut() = first.get().to_string() + " " + last.get();
@@ -193,7 +175,7 @@ mod effect_test {
             Effect::new(move |_| eprintln!("last name: {}", last.get_untracked()));
         });
 
-        Executor::spawn_local(async move {
+        Executor::spawn(async move {
             sleep(1000).await;
             set_first.set("Mario");
 
@@ -226,6 +208,6 @@ mod effect_test {
             assert_eq!("Mario Kempes", name.borrow().as_str());
         });
 
-        rt.run();
+        std::thread::sleep(std::time::Duration::from_secs(10));
     }
 }

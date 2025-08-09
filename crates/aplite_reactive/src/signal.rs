@@ -1,22 +1,19 @@
 use std::sync::{Arc, RwLock};
 
 use crate::signal_read::SignalRead;
-use crate::graph::{ReactiveNode, GRAPH};
+use crate::graph::{Node, Graph};
 use crate::signal_write::SignalWrite;
 use crate::stored_value::StoredValue;
 use crate::reactive_traits::*;
 
 #[derive(Clone, Copy)]
 pub struct Signal<T> {
-    pub(crate) node: ReactiveNode<Arc<RwLock<StoredValue<T>>>>,
+    pub(crate) node: Node<Arc<RwLock<StoredValue<T>>>>,
 }
 
 impl<T: 'static> Signal<T> {
     pub fn new(value: T) -> Self {
-        let node = GRAPH.with(|graph| {
-            let stored_value = Arc::new(RwLock::new(StoredValue::new(value)));
-            graph.insert(stored_value)
-        });
+        let node = Graph::insert(Arc::new(RwLock::new(StoredValue::new(value))));
 
         Self {
             node,
@@ -46,19 +43,19 @@ impl<T: 'static> Signal<T> {
 impl<T: 'static> Track for Signal<T> {
     fn track(&self) {
         #[cfg(test)] eprintln!(" └─ [TRACKING]  : {self:?}");
-        GRAPH.with(|graph| graph.with_downcast_void(&self.node, |node| node.track()))
+        Graph::with_downcast(&self.node, |node| node.track())
     }
 
     fn untrack(&self) {
         #[cfg(test)] eprintln!("[UNTRACKING]: {self:?}");
-        GRAPH.with(|graph| graph.with_downcast_void(&self.node, |node| node.untrack()))
+        Graph::with_downcast(&self.node, |node| node.untrack())
     }
 }
 
 impl<T: 'static> Notify for Signal<T> {
     fn notify(&self) {
         #[cfg(test)] eprintln!("\n[NOTIFYING]     : {self:?}");
-        GRAPH.with(|graph| graph.with_downcast_void(&self.node, |lock| lock.notify()))
+        Graph::with_downcast(&self.node, |node| node.notify())
     }
 }
 
@@ -66,18 +63,18 @@ impl<T: 'static> Read for Signal<T> {
     type Value = T;
 
     fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
-        GRAPH.with(|graph| graph.with_downcast(&self.node, |lock| {
-            f(&lock.read().unwrap().value)
-        }))
+        Graph::with_downcast(&self.node, |node| {
+            f(&node.read().unwrap().value)
+        })
     }
 
     fn try_read<R, F: FnOnce(Option<&Self::Value>) -> Option<R>>(&self, f: F) -> Option<R> {
-        GRAPH.with(|graph| graph.try_with_downcast(&self.node, |node| {
+        Graph::try_with_downcast(&self.node, |node| {
             let value = node.and_then(|node| {
                 node.try_read().ok()
             });
             f(value.as_ref().map(|v| &v.value))
-        }))
+        })
     }
 }
 
@@ -112,10 +109,10 @@ impl<T: 'static> Write for Signal<T> {
     type Value = T;
 
     fn write(&self, f: impl FnOnce(&mut Self::Value)) {
-        GRAPH.with(|graph| graph.with_downcast(&self.node, |lock| {
-            let mut stored = lock.write().unwrap();
+        Graph::with_downcast(&self.node, |node| {
+            let mut stored = node.write().unwrap();
             f(&mut stored.value)
-        }));
+        })
     }
 }
 
@@ -137,17 +134,15 @@ impl<T: 'static> Update for Signal<T> {
 
 impl<T: 'static> Dispose for Signal<T> {
     fn dispose(&self) {
-        GRAPH.with(|graph| {
-            if let Some(any) = graph.remove(&self.node)
-            && let Some(stored_value) = any.downcast_ref::<Arc<RwLock<StoredValue<T>>>>()
-            {
-                stored_value.untrack();
-            }
-        })
+        if let Some(any) = Graph::remove(&self.node)
+        && let Some(stored_value) = any.downcast_ref::<Arc<RwLock<StoredValue<T>>>>()
+        {
+            stored_value.untrack();
+        }
     }
 
     fn is_disposed(&self) -> bool {
-        GRAPH.with(|graph| graph.get(&self.node).is_none())
+        Graph::is_removed(&self.node)
     }
 }
 

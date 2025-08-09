@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use aplite_reactive::*;
 use aplite_renderer::Shape;
-use aplite_storage::{entity, Entity, Tree, U64Map};
+use aplite_storage::{Tree, U64Map};
 use aplite_types::{
     CornerRadius,
     Paint,
@@ -17,7 +17,7 @@ use crate::context::layout::{
     AlignV,
 };
 
-entity! { pub ViewId }
+aplite_macro::entity! { pub ViewId }
 
 // FIXME: this is kinda cheating, and not fun at all
 thread_local! {

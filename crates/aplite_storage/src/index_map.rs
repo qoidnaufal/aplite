@@ -249,9 +249,9 @@ impl<E: Entity, T: Clone> Clone for IndexMap<E, T> {
 #[cfg(test)]
 mod index_test {
     use super::*;
-    use crate::entity;
+    use crate::{create_entity, Entity};
 
-    entity! { TestId }
+    create_entity! { TestId }
 
     #[test]
     fn no_duplicate() {
@@ -270,6 +270,25 @@ mod index_test {
             }
         }
 
+        assert_eq!(storage.len(), created_ids.len());
+    }
+
+    #[test]
+    fn insert_get() {
+        let mut storage = IndexMap::<TestId, String>::with_capacity(10);
+        let mut created_ids = vec![];
+
+        for i in 0..10 {
+            let data = if i > 0 && i % 3 == 0 {
+                "Double".to_string()
+            } else {
+                i.to_string()
+            };
+            let id = storage.insert(data);
+            created_ids.push(id);
+        }
+
+        assert!(created_ids.iter().all(|id| storage.get(id).is_some()));
         assert_eq!(storage.len(), created_ids.len());
     }
 }

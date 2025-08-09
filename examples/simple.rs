@@ -28,14 +28,13 @@ fn simple() -> impl IntoView {
     let click_count = move || set_counter.update(|num| *num += 1);
     let click_rotate = move || set_rotate.update(|val| *val += 30.0);
 
-    Effect::new(move |_| counter.with(|val| eprint!("Counter: {val}    \r")));
+    Effect::new(move |_| counter.with(|val| eprintln!("Counter: {val}")));
 
     let button = Button::new()
         .border_color(|_| Rgba::WHITE)
         .border_width(|_| 6)
         .rotation(move |_| rotate.get())
         .corners(|_| CornerRadius::splat(47.))
-        .dragable(true)
         .size((200, 69))
         .on(LeftClick, click_count);
 
@@ -44,7 +43,6 @@ fn simple() -> impl IntoView {
         .shape(shape)
         .on(LeftClick, click_rotate)
         .border_width(|_| 6)
-        .dragable(true)
         .size((150, 150));
 
     button.and(circle)

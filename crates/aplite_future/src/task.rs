@@ -2,21 +2,19 @@ use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::task::{Wake, Context, Poll};
 use std::future::Future;
-use std::sync::atomic::Ordering::Relaxed;
-
-use crate::executor::{WeakSender, COUNT};
+use std::sync::mpsc::Sender;
 
 type PinnedFuture = Pin<Box<dyn Future<Output = ()>>>;
 
 pub(crate) struct Task {
     pub(crate) future: RwLock<Option<PinnedFuture>>,
-    pub(crate) sender: WeakSender,
+    sender: Sender<Arc<Task>>,
 }
 
 impl Wake for Task {
     fn wake(self: Arc<Self>) {
         let task = Arc::clone(&self);
-        self.sender.send(task);
+        let _ = self.sender.send(task);
     }
 }
 
@@ -24,18 +22,14 @@ unsafe impl Send for Task {}
 unsafe impl Sync for Task {}
 
 impl Task {
-    pub(crate) fn new(sender: WeakSender, future: impl Future<Output = ()> + 'static) -> Self {
-        COUNT.with(|num| num.fetch_add(1, Relaxed));
+    pub(crate) fn new<F>(sender: Sender<Arc<Task>>, future: F) -> Self
+    where
+        F: Future<Output = ()> + 'static,
+    {
         Self {
             future: RwLock::new(Some(Box::pin(future))),
             sender,
         }
-    }
-}
-
-impl Drop for Task {
-    fn drop(&mut self) {
-        COUNT.with(|num| num.fetch_sub(1, Relaxed));
     }
 }
 

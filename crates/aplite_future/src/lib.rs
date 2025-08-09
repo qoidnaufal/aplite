@@ -6,6 +6,6 @@ mod task;
 
 pub use block_on::block_on;
 pub use task::sleep;
-pub use executor::{Runtime, Executor};
+pub use executor::Executor;
 pub use channel::*;
 pub use stream::*;

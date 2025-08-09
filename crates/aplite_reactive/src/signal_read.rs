@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 
-use crate::graph::{ReactiveNode, GRAPH};
+use crate::graph::{Node, Graph};
 use crate::stored_value::StoredValue;
 use crate::reactive_traits::*;
 use crate::signal::Signal;
@@ -8,11 +8,11 @@ use crate::signal_write::SignalWrite;
 
 #[derive(Clone, Copy)]
 pub struct SignalRead<T> {
-    pub(crate) node: ReactiveNode<Arc<RwLock<StoredValue<T>>>>,
+    pub(crate) node: Node<Arc<RwLock<StoredValue<T>>>>,
 }
 
 impl<T: 'static> SignalRead<T> {
-    pub(crate) fn new(node: ReactiveNode<Arc<RwLock<StoredValue<T>>>>) -> Self {
+    pub(crate) fn new(node: Node<Arc<RwLock<StoredValue<T>>>>) -> Self {
         Self { node }
     }
 
@@ -24,12 +24,12 @@ impl<T: 'static> SignalRead<T> {
 impl<T: 'static> Track for SignalRead<T> {
     fn track(&self) {
         #[cfg(test)] eprintln!(" └─ [TRACKING]  : {self:?}");
-        GRAPH.with(|graph| graph.with_downcast_void(&self.node, |node| node.track()))
+        Graph::with_downcast(&self.node, |node| node.track())
     }
 
     fn untrack(&self) {
         #[cfg(test)] eprintln!("[UNTRACKING]: {self:?}");
-        GRAPH.with(|graph| graph.with_downcast_void(&self.node, |node| node.untrack()))
+        Graph::with_downcast(&self.node, |node| node.untrack())
     }
 }
 
@@ -37,18 +37,18 @@ impl<T: 'static> Read for SignalRead<T> {
     type Value = T;
 
     fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
-        GRAPH.with(|graph| graph.with_downcast(&self.node, |lock| {
-            f(&lock.read().unwrap().value)
-        }))
+        Graph::with_downcast(&self.node, |node| {
+            f(&node.read().unwrap().value)
+        })
     }
 
     fn try_read<R, F: FnOnce(Option<&Self::Value>) -> Option<R>>(&self, f: F) -> Option<R> {
-        GRAPH.with(|graph| graph.try_with_downcast(&self.node, |node| {
+        Graph::try_with_downcast(&self.node, |node| {
             let value = node.and_then(|node| {
                 node.try_read().ok()
             });
             f(value.as_ref().map(|v| &v.value))
-        }))
+        })
     }
 }
 
@@ -86,7 +86,7 @@ impl<T: 'static> Dispose for SignalRead<T> {
     fn dispose(&self) { self.as_signal().dispose() }
 
     fn is_disposed(&self) -> bool {
-        GRAPH.with(|graph| graph.get(&self.node).is_none())
+        Graph::is_removed(&self.node)
     }
 }
 

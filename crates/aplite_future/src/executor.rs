@@ -1,115 +1,69 @@
-use std::sync::{Arc, Weak, OnceLock};
+use std::sync::{Arc, OnceLock};
 use std::sync::mpsc::{Sender, Receiver, channel};
-use std::task::{Waker, Context};
-use std::sync::atomic::AtomicU64;
-use std::sync::atomic::Ordering::Relaxed;
+use std::task::{Waker, Context, Poll};
 
 use crate::task::Task;
 
-thread_local! {
-    pub(crate) static CURRENT: OnceLock<WeakSender> = OnceLock::new();
-    pub(crate) static COUNT: AtomicU64 = AtomicU64::new(0);
-}
+pub(crate) static SPAWNER: OnceLock<Sender<Arc<Task>>> = OnceLock::new();
 
-#[derive(Debug)]
-pub(crate) struct WeakSender(Weak<Sender<Arc<Task>>>);
-
-type ArcSender = Arc<Sender<Arc<Task>>>;
-
-pub struct Runtime {
-    tx: ArcSender,
+struct Worker {
+    tx: Sender<Arc<Task>>,
     rx: Receiver<Arc<Task>>,
 }
 
-impl Runtime {
-    pub fn init() -> Self {
-        let (tx, rx) = channel();
-        let this = Self { tx: Arc::new(tx), rx };
-
-        CURRENT.with(|cell| {
-            cell.set(WeakSender::new(&this.tx))
-                .expect("There should be no other runtime");
-        });
-
-        this
-    }
-
-    pub fn spawn_local(&self, future: impl Future<Output = ()> + 'static) {
-        let task = Arc::new(Task::new(WeakSender::new(&self.tx), future));
-        let _ = self.tx.send(task);
-    }
-
-    pub fn run(&self) {
-        while let Ok(task) = self.rx.try_recv() {
-            if let Ok(mut lock) = task.future.try_write()
+impl Worker {
+    pub fn work(&self) {
+        while let Ok(task) = self.rx.recv() {
+            if let Ok(mut lock) = task.future.write()
             && let Some(mut future) = lock.take()
             {
                 let waker = Waker::from(Arc::clone(&task));
                 let cx = &mut Context::from_waker(&waker);
 
                 match future.as_mut().poll(cx) {
-                    std::task::Poll::Ready(_) => drop(future),
-                    std::task::Poll::Pending => *lock = Some(future),
+                    Poll::Ready(_) => drop(future),
+                    Poll::Pending => *lock = Some(future),
                 }
             }
 
             let mut empty = false;
-            if let Ok(future) = task.future.try_read() {
+            if let Ok(future) = task.future.read() {
                 if future.is_none() {
                     empty = true;
                 }
             }
 
-            if empty {
-                drop(task);
-                if COUNT.with(|num| num.load(Relaxed)) == 0 {
-                    break;
-                }
-            }
+            if empty { drop(task) }
         };
     }
 }
 
-impl WeakSender {
-    pub(crate) fn new(tx: &ArcSender) -> Self {
-        Self(Arc::downgrade(tx))
-    }
-
-    #[inline(always)]
-    pub(crate) fn upgrade(&self) -> Option<ArcSender> {
-        self.0.upgrade()
-    }
-
-    pub(crate) fn send(&self, task: Arc<Task>) {
-        if let Some(sender) = self.upgrade() {
-            let _ = sender.send(task);
-        }
-    }
-}
-
-impl Clone for WeakSender {
-    fn clone(&self) -> Self {
-        Self(Weak::clone(&self.0))
-    }
-}
+unsafe impl Send for Worker {}
+unsafe impl Sync for Worker {}
 
 pub struct Executor;
 
 impl Executor {
-    pub fn spawn_local(future: impl Future<Output = ()> + 'static) {
-        CURRENT.with(|cell| {
-            if let Some(spawner) = cell.get() {
-                let task = Arc::new(Task::new(spawner.clone(), future));
-                spawner.send(task);
-            }
-        });
+    pub fn init() {
+        let (tx, rx) = channel();
+        let worker = Worker { tx, rx };
+
+        SPAWNER.set(worker.tx.clone()).expect("Executor can only be initiated once");
+
+        let builder = std::thread::Builder::new().name("worker".to_string());
+        builder.spawn(move || worker.work()).unwrap();
+    }
+
+    pub fn spawn(future: impl Future<Output = ()> + 'static) {
+        let spawner = SPAWNER.get().unwrap();
+        let task = Arc::new(Task::new(spawner.clone(), future));
+        let _ = spawner.send(task);
     }
 }
 
 #[cfg(test)]
-mod runtime_test {
+mod excutor_test {
     use super::Executor;
-    use crate::executor::Runtime;
     
     async fn dummy_async() -> std::io::Result<String> {
         use std::fs::File;
@@ -123,36 +77,11 @@ mod runtime_test {
 
     #[test]
     fn spawn_test() {
-        let runtime = Runtime::init();
+        Executor::init();
 
-        runtime.spawn_local(async {
-            Executor::spawn_local(async {
-                let result = dummy_async().await;
-                assert!(result.is_ok());
-            });
+        Executor::spawn(async {
+            let result = dummy_async().await;
+            assert!(result.is_ok());
         });
-
-        runtime.run();
-    }
-}
-
-mod alt {
-    use std::sync::Arc;
-    use std::pin::Pin;
-    use std::task::Waker;
-
-    use aplite_storage::{IndexMap, Entity, entity};
-
-    entity! { TaskId }
-
-    type PinnedFuture = Pin<Box<dyn Future<Output = ()>>>;
-
-    pub(crate) struct Task {
-        pub(crate) future: PinnedFuture,
-        pub(crate) waker: Arc<Waker>,
-    }
-
-    struct Executor {
-        queue: IndexMap<TaskId, Task>,
     }
 }

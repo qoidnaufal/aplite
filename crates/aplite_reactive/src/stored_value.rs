@@ -3,12 +3,15 @@ use std::sync::{Arc, RwLock};
 use crate::reactive_traits::*;
 use crate::subscriber::{AnySubscriber, Subscriber};
 use crate::source::{Source, ToAnySource, AnySource};
-use crate::graph::GRAPH;
+use crate::graph::Graph;
 
 pub(crate) struct StoredValue<T> {
     pub(crate) value: T,
     pub(crate) subscribers: Vec<AnySubscriber>,
 }
+
+unsafe impl<T> Send for StoredValue<T> {}
+unsafe impl<T> Sync for StoredValue<T> {}
 
 impl<T: 'static> StoredValue<T> {
     pub(crate) fn new(value: T) -> Self {
@@ -21,7 +24,7 @@ impl<T: 'static> StoredValue<T> {
 
 impl<T: 'static> Notify for RwLock<StoredValue<T>> {
     fn notify(&self) {
-        if let Ok(this) = self.try_read() {
+        if let Ok(this) = self.read() {
             this.subscribers
                 .iter()
                 .for_each(|subscriber| {
@@ -48,8 +51,8 @@ impl<T: 'static> Track for RwLock<StoredValue<T>> {
 
 impl<T: 'static> Track for Arc<RwLock<StoredValue<T>>> {
     fn track(&self) {
-        GRAPH.with(|graph| {
-            if let Some(current) = graph.current.borrow().as_ref() {
+        Graph::with(|graph| {
+            if let Some(current) = graph.current.as_ref() {
                 current.add_source(self.clone().to_any_source());
                 self.add_subscriber(current.clone());
             }
@@ -63,7 +66,7 @@ impl<T: 'static> Track for Arc<RwLock<StoredValue<T>>> {
 
 impl<T: 'static> Source for RwLock<StoredValue<T>> {
     fn add_subscriber(&self, subscriber: AnySubscriber) {
-        if let Ok(mut this) = self.try_write()
+        if let Ok(mut this) = self.write()
         && !this.subscribers.contains(&subscriber)
         {
             this.subscribers.push(subscriber);
@@ -72,16 +75,17 @@ impl<T: 'static> Source for RwLock<StoredValue<T>> {
 
     // FIXME: this is slow?, ideally should just call .clear(), find a better way
     fn clear_subscribers(&self) {
-        if let Ok(mut this) = self.try_write() {
-            GRAPH.with(|graph| if let Some(current) = graph
+        if let Ok(mut this) = self.write() {
+            Graph::with(|graph| {
+                if let Some(current) = graph
                 .current
-                .borrow()
                 .as_ref() && let Some(idx) = this
                 .subscribers
                 .iter()
                 .position(|s| s == current)
-            {
-                this.subscribers.swap_remove(idx);
+                {
+                    this.subscribers.swap_remove(idx);
+                }
             });
         }
     }

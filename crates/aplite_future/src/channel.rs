@@ -34,11 +34,24 @@ impl Sender {
         self.0.signal.store(true, Ordering::Relaxed);
         self.0.wake_by_ref();
     }
+
+    pub fn close(&self) {
+        unsafe {
+            let weak_count = Arc::weak_count(&self.0);
+            let strong_count = Arc::strong_count(&self.0);
+            for _ in 0..weak_count {
+                Arc::decrement_strong_count(Arc::as_ptr(&self.0));
+            }
+            for _ in 0..strong_count {
+                Arc::decrement_strong_count(Arc::as_ptr(&self.0));
+            }
+        }
+    }
 }
 
 impl Inner {
     fn set_waker(&self, new: &Waker) {
-        let mut inner = self.waker.try_write().unwrap();
+        let mut inner = self.waker.write().unwrap();
         match inner.as_ref() {
             Some(old) if old.will_wake(new) => {},
             _ => *inner = {
@@ -55,8 +68,9 @@ impl Wake for Inner {
     }
 
     fn wake_by_ref(self: &Arc<Self>) {
-        let mut lock = self.waker.try_write().unwrap();
-        if let Some(waker) = lock.take() {
+        if let Ok(mut lock) = self.waker.write()
+        && let Some(waker) = lock.take()
+        {
             #[cfg(test)] eprintln!(">> waking up");
             waker.wake();
         }
@@ -86,41 +100,49 @@ impl Stream for Receiver {
 
 impl Receiver {
     pub async fn recv(&mut self) -> Option<()> {
-        PollReceive { inner: self }.await
+        self.await
     }
 }
 
-struct PollReceive<'a, T>
-where
-    T: ?Sized + Stream
-{
-    inner: &'a mut T
-}
+impl Future for Receiver {
+    type Output = Option<()>;
 
-impl<T> Future for PollReceive<'_, T>
-where
-    T: ?Sized + Stream + Unpin,
-{
-    type Output = Option<T::Item>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        Pin::new(&mut self.inner).poll_next(cx)
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.poll_next(cx)
     }
 }
+
+// struct Recv<'a, T>
+// where
+//     T: ?Sized + Stream
+// {
+//     inner: &'a mut T
+// }
+
+// impl<T> Future for Recv<'_, T>
+// where
+//     T: ?Sized + Stream + Unpin,
+// {
+//     type Output = Option<T::Item>;
+
+//     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+//         Pin::new(&mut self.inner).poll_next(cx)
+//     }
+// }
 
 #[cfg(test)]
 mod channel_test {
     use super::*;
-    use crate::{Runtime, Executor};
+    use crate::Executor;
 
     #[test]
     fn poll() {
-        let runtime = Runtime::init();
+        Executor::init();
 
-        runtime.spawn_local(async {
+        Executor::spawn(async {
             let (tx, mut rx) = Channel::new();
 
-            Executor::spawn_local(async move {
+            Executor::spawn(async move {
                 while rx.recv().await.is_some() {
                     eprintln!("notified")
                 }
@@ -131,7 +153,5 @@ mod channel_test {
                 tx.notify();
             }
         });
-
-        runtime.run();
     }
 }

@@ -8,6 +8,48 @@ pub(crate) struct MeshBuffer {
     pub(crate) offset: u64,
 }
 
+impl MeshBuffer {
+    pub(crate) fn new(device: &wgpu::Device) -> Self {
+        Self {
+            indices: Buffer::new(device, 1024 * 6, wgpu::BufferUsages::INDEX, "index"),
+            vertices: Buffer::new(device, 1024 * 4, wgpu::BufferUsages::VERTEX, "vertex"),
+            offset: 0,
+        }
+    }
+
+    pub(crate) fn indices_slice(&self) -> wgpu::BufferSlice<'_> {
+        self.indices.slice(0..self.offset * 6)
+    }
+
+    pub(crate) fn vertices_slice(&self) -> wgpu::BufferSlice<'_> {
+        self.vertices.slice(0..self.offset * 4)
+    }
+
+    pub(crate) fn vertice_layout<'a>() -> wgpu::VertexBufferLayout<'a> {
+        wgpu::VertexBufferLayout {
+            array_stride: size_of::<Vertex>() as u64,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x2,
+                    offset: 0,
+                    shader_location: 0,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x2,
+                    offset: size_of::<Vec2f>() as u64,
+                    shader_location: 1,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Uint32,
+                    offset: size_of::<Vec2f>() as u64 * 2,
+                    shader_location: 2,
+                }
+            ],
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct Indices([u32; 6]);
 
@@ -127,56 +169,16 @@ impl std::ops::DerefMut for Vertices {
     }
 }
 
-impl MeshBuffer {
-    pub(crate) fn new(device: &wgpu::Device) -> Self {
-        Self {
-            indices: Buffer::new(device, 1024 * 6, wgpu::BufferUsages::INDEX, "index"),
-            vertices: Buffer::new(device, 1024 * 4, wgpu::BufferUsages::VERTEX, "vertex"),
-            offset: 0,
-        }
-    }
+// struct Indx {
+//     i: Vec<u32>,
+// }
 
-    // pub(crate) fn write_data(
-    //     &mut self,
-    //     device: &wgpu::Device,
-    //     queue: &wgpu::Queue,
-    //     indices: &[u32],
-    //     vertices: &[Vertex],
-    // ) {
-    //     self.offset = indices.len() as u64 / 6;
-    //     self.indices.write(device, queue, 0, indices);
-    //     self.vertices.write(device, queue, 0, vertices);
-    // }
+// struct Vrtx {
+//     v: Vec<Vertex>,
+// }
 
-    pub(crate) fn indices_slice(&self) -> wgpu::BufferSlice {
-        self.indices.slice(0..self.offset * 6)
-    }
-
-    pub(crate) fn vertices_slice(&self) -> wgpu::BufferSlice {
-        self.vertices.slice(0..self.offset * 4)
-    }
-
-    pub(crate) fn vertice_layout<'a>() -> wgpu::VertexBufferLayout<'a> {
-        wgpu::VertexBufferLayout {
-            array_stride: size_of::<Vertex>() as u64,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x2,
-                    offset: 0,
-                    shader_location: 0,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x2,
-                    offset: size_of::<Vec2f>() as u64,
-                    shader_location: 1,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Uint32,
-                    offset: size_of::<Vec2f>() as u64 * 2,
-                    shader_location: 2,
-                }
-            ],
-        }
-    }
-}
+// struct Mesh {
+//     indices: Vec<Indx>,
+//     vertices: Vec<Vrtx>,
+//     indices_count: u64,
+// }

@@ -9,5 +9,6 @@ repository.workspace = true
 [dependencies]
 aplite_types.workspace = true
 aplite_storage.workspace = true
+aplite_macro.workspace = true
 winit.workspace = true
 wgpu.workspace = true

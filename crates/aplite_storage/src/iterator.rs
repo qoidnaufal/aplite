@@ -281,9 +281,9 @@ mod iterator_test {
     use crate::tree::Tree;
     use crate::entity::Entity;
     use crate::index_map::IndexMap;
-    use crate::entity;
+    use crate::create_entity;
 
-    entity! { TestId }
+    create_entity! { TestId }
 
     #[test]
     fn tree() {

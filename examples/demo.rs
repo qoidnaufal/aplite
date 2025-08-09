@@ -128,14 +128,10 @@ fn select_color(val: i32) -> Rgba<u8> {
     )
 }
 
-fn main() {
-    let rt = aplite_future::Runtime::init();
-    rt.spawn_local(async {
-        Aplite::new(root)
-            .set_window_attributes(|window| {
-                window.title = "Demo".into();
-            })
-            .launch().unwrap();
-    });
-    rt.run();
+fn main() -> ApliteResult {
+    Aplite::new(root)
+        .set_window_attributes(|window| {
+            window.title = "Demo".into();
+        })
+        .launch()
 }

@@ -1,5 +1,5 @@
 [package]
-name = "aplite_future"
+name = "aplite_macro"
 version = "0.1.0"
 edition.workspace = true
 authors.workspace = true
@@ -7,3 +7,4 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+aplite_storage = { path = "../aplite_storage" }

@@ -159,6 +159,7 @@ impl Context {
                         && let MouseButton::Left = self.cursor.state.button
                         && let Some(callback) = callbacks.get_mut(&WidgetEvent::LeftClick)
                         {
+                            eprintln!("{id:?} run callback");
                             callback();
                         }
                     })

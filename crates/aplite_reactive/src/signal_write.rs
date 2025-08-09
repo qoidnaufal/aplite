@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 
-use crate::graph::{ReactiveNode, GRAPH};
+use crate::graph::{Node, Graph};
 use crate::stored_value::StoredValue;
 use crate::signal::Signal;
 use crate::signal_read::SignalRead;
@@ -8,11 +8,11 @@ use crate::reactive_traits::*;
 
 #[derive(Clone, Copy)]
 pub struct SignalWrite<T> {
-    pub(crate) node: ReactiveNode<Arc<RwLock<StoredValue<T>>>>,
+    pub(crate) node: Node<Arc<RwLock<StoredValue<T>>>>,
 }
 
 impl<T: 'static> SignalWrite<T> {
-    pub(crate) fn new(node: ReactiveNode<Arc<RwLock<StoredValue<T>>>>) -> Self {
+    pub(crate) fn new(node: Node<Arc<RwLock<StoredValue<T>>>>) -> Self {
         Self { node }
     }
 
@@ -24,7 +24,7 @@ impl<T: 'static> SignalWrite<T> {
 impl<T: 'static> Notify for SignalWrite<T> {
     fn notify(&self) {
         #[cfg(test)] eprintln!("\n[NOTIFYING]     : {self:?}");
-        GRAPH.with(|graph| graph.with_downcast(&self.node, |lock| lock.notify()))
+        Graph::with_downcast(&self.node, |node| node.notify())
     }
 }
 
@@ -32,9 +32,10 @@ impl<T: 'static> Write for SignalWrite<T> {
     type Value = T;
 
     fn write(&self, f: impl FnOnce(&mut Self::Value)) {
-        GRAPH.with(|graph| graph.with_downcast(&self.node, |lock| {
-            f(&mut lock.write().unwrap().value)
-        }));
+        Graph::with_downcast(&self.node, |node| {
+            let mut stored = node.write().unwrap();
+            f(&mut stored.value)
+        })
     }
 }
 
@@ -58,7 +59,7 @@ impl<T: 'static> Dispose for SignalWrite<T> {
     fn dispose(&self) { self.as_signal().dispose() }
 
     fn is_disposed(&self) -> bool {
-        GRAPH.with(|graph| graph.get(&self.node).is_none())
+        Graph::is_removed(&self.node)
     }
 }
 

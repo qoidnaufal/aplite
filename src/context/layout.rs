@@ -161,7 +161,9 @@ impl LayoutContext {
         let rules = VIEW_STORAGE.with(|s| {
             let tree = s.tree.borrow();
             let state = tree.get(&entity).unwrap();
-            Rules::new(state)
+            let rules = Rules::new(state);
+            drop(tree);
+            rules
         });
         Self {
             entity,
@@ -209,6 +211,7 @@ impl LayoutContext {
         self.next_pos = self.rules.start_pos(child_total_size, len);
     }
 
+    // FIXME: this is not possible without signal?
     fn assign_position(&mut self, child: &ViewId) {
         VIEW_STORAGE.with(|s| {
             let mut tree = s.tree.borrow_mut();
