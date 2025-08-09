@@ -125,8 +125,8 @@ impl Cursor {
     }
 
     pub(crate) fn is_idling(&self) -> bool {
-        self.is_hovering_same_obj() && !self.is_clicking()
-        || self.hover.curr.is_none() && self.hover.prev.is_none()
+        (self.is_hovering_same_obj() && !self.is_clicking())
+            || (self.hover.curr.is_none() && self.hover.prev.is_none())
     }
 
     pub(crate) fn is_clicking(&self) -> bool {

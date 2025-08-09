@@ -139,7 +139,7 @@ impl Aplite {
 impl Aplite {
     fn handle_resize(&mut self, size: PhysicalSize<u32>) {
         if let Some(renderer) = self.renderer.as_mut()
-        && size.width > 0 && size.height > 0
+            && size.width > 0 && size.height > 0
         {
             renderer.resize(size);
         }
@@ -153,7 +153,8 @@ impl Aplite {
 
     fn handle_mouse_move(&mut self, window_id: &WindowId, pos: PhysicalPosition<f64>) {
         if let Some(renderer) = self.renderer.as_mut()
-        && let Some(WindowHandle { root_id, .. }) = self.window.get(window_id) {
+            && let Some(WindowHandle { root_id, .. }) = self.window.get(window_id)
+        {
             let logical_pos = pos.to_logical::<f32>(renderer.scale_factor());
             self.cx.handle_mouse_move(root_id, (logical_pos.x, logical_pos.y));
         }
@@ -173,7 +174,7 @@ impl Aplite {
     // WARN: not sure if retained mode works like this
     fn handle_redraw_request(&mut self, window_id: &WindowId, event_loop: &ActiveEventLoop) {
         if let Some(window_handle) = self.window.get(window_id)
-        && let Some(renderer) = self.renderer.as_mut()
+            && let Some(renderer) = self.renderer.as_mut()
         {
             #[cfg(feature = "render_stats")] let start = std::time::Instant::now();
 
@@ -217,105 +218,6 @@ impl ApplicationHandler for Aplite {
             WindowEvent::CursorMoved { position, .. } => self.handle_mouse_move(&window_id, position),
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => self.set_scale_factor(scale_factor),
             _ => {}
-        }
-    }
-}
-
-#[allow(unused)]
-mod alt {
-    use std::pin::Pin;
-    use std::future::Future;
-    use std::sync::{Arc, RwLock};
-    use std::collections::HashMap;
-    use std::sync::mpsc::{sync_channel, SyncSender, Receiver};
-
-    use winit::event_loop::{EventLoop, ActiveEventLoop, EventLoopProxy};
-    use winit::application::ApplicationHandler;
-    use winit::window::{Window, WindowId};
-    use winit::event::WindowEvent;
-
-    use aplite_storage::IndexMap;
-
-    use crate::view::IntoView;
-
-    struct App<F> {
-        pending_view: Option<F>,
-    }
-
-    impl<F, IV> App<F>
-    where
-        F: FnOnce() -> IV + 'static,
-        IV: IntoView + 'static,
-    {
-        fn new(view_fn: F) -> Self {
-            Self {
-                pending_view: Some(view_fn),
-            }
-        }
-
-        fn launch(mut self) {
-            let event_loop = EventLoop::<()>::with_user_event()
-                .build()
-                .expect("Event loop creation should be supported by current platform");
-
-            let view = self.pending_view.take().unwrap();
-
-            let mut rt = Runtime::new(event_loop.create_proxy(), view());
-
-            event_loop
-                .run_app(&mut rt)
-                .expect("EventLoop is supported by current platform to run the app");
-        }
-    }
-
-    aplite_macro::entity! { TaskId }
-
-    struct Task {
-        future: Pin<Box<dyn Future<Output = ()>>>,
-        waker: RwLock<Option<EventLoopProxy<()>>>,
-    }
-
-    struct Runtime {
-        view: Box<dyn IntoView>,
-        window: HashMap<WindowId, Arc<Window>>,
-        proxy: EventLoopProxy<()>,
-        tasks: IndexMap<TaskId, Task>,
-        context: std::task::Context<'static>,
-    }
-
-    impl Runtime {
-        fn new<IV: IntoView + 'static>(proxy: EventLoopProxy<()>, view: IV) -> Self {
-            Self {
-                view: Box::new(view),
-                window: HashMap::new(),
-                proxy,
-                tasks: IndexMap::new(),
-                context: std::task::Context::from_waker(std::task::Waker::noop()),
-            }
-        }
-
-        fn dispatch(&mut self, event_loop: &ActiveEventLoop) {
-        }
-
-        fn send_event(&self) {
-            self.proxy.send_event(()).unwrap();
-        }
-    }
-
-    impl ApplicationHandler for Runtime {
-        fn resumed(&mut self, _event_loop: &ActiveEventLoop) {}
-
-        fn window_event(
-            &mut self,
-            _event_loop: &ActiveEventLoop,
-            _window_id: WindowId,
-            _event: WindowEvent,
-        ) {
-           todo!() 
-        }
-
-        fn user_event(&mut self, event_loop: &ActiveEventLoop, event: ()) {
-            todo!()
         }
     }
 }

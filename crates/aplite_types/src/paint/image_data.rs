@@ -106,7 +106,8 @@ impl PartialEq<ImageData> for ImageRef {
 impl PartialEq for ImageRef {
     fn eq(&self, other: &Self) -> bool {
         if let Some(byte1) = self.bytes.upgrade()
-        && let Some(byte2) = other.bytes.upgrade() {
+            && let Some(byte2) = other.bytes.upgrade()
+        {
             Arc::ptr_eq(&byte1, &byte2)
         } else {
             false

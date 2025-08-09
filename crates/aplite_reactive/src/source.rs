@@ -14,16 +14,6 @@ impl AnySource {
     }
 }
 
-pub(crate) trait ToAnySource: Source {
-    fn to_any_source(self) -> AnySource;
-}
-
-impl ToAnySource for AnySource {
-    fn to_any_source(self) -> AnySource {
-        self.clone()
-    }
-}
-
 pub(crate) trait Source: Track + Notify {
     fn add_subscriber(&self, subscriber: AnySubscriber);
     fn clear_subscribers(&self);
@@ -37,8 +27,8 @@ impl Source for AnySource {
     }
 
     fn clear_subscribers(&self) {
-        if let Some(any_source) = self.0.upgrade() {
-            any_source.clear_subscribers();
+        if let Some(source) = self.upgrade() {
+            source.clear_subscribers();
         }
     }
 }
@@ -79,6 +69,16 @@ impl PartialEq for AnySource {
 
 impl std::fmt::Debug for AnySource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "AnySource({:#x})", &(Weak::as_ptr(&self.0) as *const usize as usize))
+        write!(f, "AnySource({:#x})", &(Weak::as_ptr(&self.0).addr()))
+    }
+}
+
+pub(crate) trait ToAnySource: Source {
+    fn to_any_source(self) -> AnySource;
+}
+
+impl ToAnySource for AnySource {
+    fn to_any_source(self) -> AnySource {
+        self.clone()
     }
 }

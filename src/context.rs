@@ -139,8 +139,15 @@ impl Context {
     }
 
     pub(crate) fn handle_click(&mut self, action: impl Into<MouseAction>, button: impl Into<MouseButton>) {
-        self.cursor.set_click_state(action.into(), button.into());
-        if let Some(hover_id) = self.cursor.hover.curr.as_ref() {
+        let action: MouseAction = action.into();
+        let button: MouseButton = button.into();
+
+        self.cursor.set_click_state(action, button);
+
+        if let Some(hover_id) = self.cursor.hover.curr.as_ref()
+            && action == MouseAction::Pressed
+            && button == MouseButton::Left
+        {
             VIEW_STORAGE.with(|s| {
                 let mut tree = s.tree.borrow_mut();
                 let state = tree.get_mut(hover_id).unwrap();
@@ -150,16 +157,16 @@ impl Context {
             });
             self.pending_event.push(*hover_id);
         }
+
         if self.cursor.state.action == MouseAction::Released {
             self.pending_event
                 .drain(..)
                 .for_each(|id| {
                     CALLBACKS.with(|cb| {
                         if let Some(callbacks) = cb.borrow_mut().get_mut(&id)
-                        && let MouseButton::Left = self.cursor.state.button
-                        && let Some(callback) = callbacks.get_mut(&WidgetEvent::LeftClick)
+                            && let MouseButton::Left = self.cursor.state.button
+                            && let Some(callback) = callbacks.get_mut(&WidgetEvent::LeftClick)
                         {
-                            eprintln!("{id:?} run callback");
                             callback();
                         }
                     })

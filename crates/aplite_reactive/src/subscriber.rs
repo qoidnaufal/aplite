@@ -10,16 +10,6 @@ pub(crate) trait Subscriber: Notify {
     fn clear_source(&self);
 }
 
-pub(crate) trait ToAnySubscriber: Subscriber {
-    fn to_any_subscriber(self) -> AnySubscriber;
-}
-
-impl ToAnySubscriber for AnySubscriber {
-    fn to_any_subscriber(self) -> AnySubscriber {
-        self.clone()
-    }
-}
-
 impl AnySubscriber {
     pub(crate) fn new(inner: Arc<dyn Subscriber>) -> Self {
         Self(Arc::downgrade(&inner))
@@ -53,8 +43,8 @@ impl Notify for AnySubscriber {
 }
 
 impl Track for AnySubscriber {
-    fn track(&self) { }
-    fn untrack(&self) { }
+    fn track(&self) {}
+    fn untrack(&self) {}
 }
 
 impl Clone for AnySubscriber {
@@ -83,6 +73,16 @@ impl PartialEq<AnySubscriber> for &AnySubscriber {
 
 impl std::fmt::Debug for AnySubscriber {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "AnySubscriber({:#x})", self.0.as_ptr() as *const usize as usize)
+        write!(f, "AnySubscriber({:#x})", self.0.as_ptr().addr())
+    }
+}
+
+pub(crate) trait ToAnySubscriber: Subscriber {
+    fn to_any_subscriber(self) -> AnySubscriber;
+}
+
+impl ToAnySubscriber for AnySubscriber {
+    fn to_any_subscriber(self) -> AnySubscriber {
+        self.clone()
     }
 }

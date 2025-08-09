@@ -87,7 +87,7 @@ impl Rect {
     #[inline(always)]
     pub fn contains(&self, p: Vec2f) -> bool {
         (self.x..self.max_x()).contains(&p.x)
-        && (self.y..self.max_y()).contains(&p.y)
+            && (self.y..self.max_y()).contains(&p.y)
     }
 
     #[inline(always)]
@@ -128,7 +128,7 @@ impl From<(Vec2f, Size)> for Rect {
 impl PartialEq for Rect {
     fn eq(&self, other: &Self) -> bool {
         self.vec2f().eq(&other.vec2f())
-        && self.size().eq(&other.size())
+            && self.size().eq(&other.size())
     }
 }
 

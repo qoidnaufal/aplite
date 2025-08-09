@@ -3,17 +3,24 @@ use std::sync::{Arc, RwLock};
 use crate::signal_read::SignalRead;
 use crate::graph::{Node, Graph};
 use crate::signal_write::SignalWrite;
-use crate::stored_value::StoredValue;
+use crate::stored_value::Value;
 use crate::reactive_traits::*;
+use crate::source::*;
+use crate::subscriber::*;
 
-#[derive(Clone, Copy)]
 pub struct Signal<T> {
-    pub(crate) node: Node<Arc<RwLock<StoredValue<T>>>>,
+    pub(crate) node: Node<Arc<RwLock<Value<T>>>>,
 }
+
+impl<T> Clone for Signal<T> {
+    fn clone(&self) -> Self { Self { node: self.node } }
+}
+
+impl<T> Copy for Signal<T> {}
 
 impl<T: 'static> Signal<T> {
     pub fn new(value: T) -> Self {
-        let node = Graph::insert(Arc::new(RwLock::new(StoredValue::new(value))));
+        let node = Graph::insert(Arc::new(RwLock::new(Value::new(value))));
 
         Self {
             node,
@@ -40,10 +47,31 @@ impl<T: 'static> Signal<T> {
     }
 }
 
+impl<T: 'static> Source for Signal<T> {
+    fn add_subscriber(&self, subscriber: AnySubscriber) {
+        Graph::with_downcast(&self.node, |node| node.add_subscriber(subscriber))
+    }
+
+    fn clear_subscribers(&self) {
+        Graph::with_downcast(&self.node, |node| node.clear_subscribers())
+    }
+}
+
+impl<T: 'static> ToAnySource for Signal<T> {
+    fn to_any_source(self) -> AnySource {
+        Graph::with_downcast(&self.node, |node| node.clone().to_any_source())
+    }
+}
+
 impl<T: 'static> Track for Signal<T> {
     fn track(&self) {
         #[cfg(test)] eprintln!(" └─ [TRACKING]  : {self:?}");
-        Graph::with_downcast(&self.node, |node| node.track())
+        Graph::with_downcast(&self.node, |node| node.track());
+        Graph::with(|graph| {
+            if let Some(current) = graph.current.as_ref() {
+                current.add_source(self.to_any_source());
+            }
+        });
     }
 
     fn untrack(&self) {
@@ -135,7 +163,7 @@ impl<T: 'static> Update for Signal<T> {
 impl<T: 'static> Dispose for Signal<T> {
     fn dispose(&self) {
         if let Some(any) = Graph::remove(&self.node)
-        && let Some(stored_value) = any.downcast_ref::<Arc<RwLock<StoredValue<T>>>>()
+        && let Some(stored_value) = any.downcast_ref::<Arc<RwLock<Value<T>>>>()
         {
             stored_value.untrack();
         }

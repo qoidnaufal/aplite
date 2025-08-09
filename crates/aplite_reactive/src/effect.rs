@@ -87,13 +87,17 @@ impl Scope {
 
 impl Subscriber for Scope {
     fn add_source(&self, source: AnySource) {
-        self.source.write().unwrap().push(source);
+        let mut sources = self.source.write().unwrap();
+        if !sources.contains(&source) {
+            sources.push(source);
+        }
     }
 
     fn clear_source(&self) {
         let mut sources = self.source.write().unwrap();
-        let drained_sources = sources.drain(..);
-        drained_sources.into_iter().for_each(|source| source.untrack())
+        sources.clear();
+        // let drained_sources = sources.drain(..);
+        // drained_sources.into_iter().for_each(|source| source.untrack())
     }
 }
 

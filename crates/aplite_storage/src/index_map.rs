@@ -158,7 +158,7 @@ impl<E: Entity, T> IndexMap<E, T> {
     #[inline(always)]
     pub fn remove(&mut self, entity: &E) -> Option<T> {
         if let Some(slot) = self.inner.get_mut(entity.index())
-        && slot.version == entity.version()
+            && slot.version == entity.version()
         {
             let ret = std::mem::replace(&mut slot.content, Content::Vacant(self.next));
             slot.version += 1;

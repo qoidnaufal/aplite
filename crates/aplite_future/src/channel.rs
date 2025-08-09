@@ -69,7 +69,7 @@ impl Wake for Inner {
 
     fn wake_by_ref(self: &Arc<Self>) {
         if let Ok(mut lock) = self.waker.write()
-        && let Some(waker) = lock.take()
+            && let Some(waker) = lock.take()
         {
             #[cfg(test)] eprintln!(">> waking up");
             waker.wake();

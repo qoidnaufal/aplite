@@ -106,7 +106,7 @@ impl std::ops::Div<Self> for Size {
 impl PartialEq for Size {
     fn eq(&self, other: &Self) -> bool {
         self.width == other.width
-        && self.height == other.height
+            && self.height == other.height
     }
 }
 

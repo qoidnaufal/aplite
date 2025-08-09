@@ -1,18 +1,23 @@
 use std::sync::{Arc, RwLock};
 
 use crate::graph::{Node, Graph};
-use crate::stored_value::StoredValue;
+use crate::stored_value::Value;
 use crate::signal::Signal;
 use crate::signal_read::SignalRead;
 use crate::reactive_traits::*;
 
-#[derive(Clone, Copy)]
 pub struct SignalWrite<T> {
-    pub(crate) node: Node<Arc<RwLock<StoredValue<T>>>>,
+    pub(crate) node: Node<Arc<RwLock<Value<T>>>>,
 }
 
+impl<T> Clone for SignalWrite<T> {
+    fn clone(&self) -> Self { Self { node: self.node } }
+}
+
+impl<T> Copy for SignalWrite<T> {}
+
 impl<T: 'static> SignalWrite<T> {
-    pub(crate) fn new(node: Node<Arc<RwLock<StoredValue<T>>>>) -> Self {
+    pub(crate) fn new(node: Node<Arc<RwLock<Value<T>>>>) -> Self {
         Self { node }
     }
 

@@ -118,9 +118,9 @@ impl From<Rgba<f32>> for Rgba<u8> {
 impl<T: PartialEq> PartialEq for Rgba<T> {
     fn eq(&self, other: &Self) -> bool {
         self.r == other.r
-        && self.g == other.g
-        && self.b == other.b
-        && self.a == other.a
+            && self.g == other.g
+            && self.b == other.b
+            && self.a == other.a
     }
 }
 

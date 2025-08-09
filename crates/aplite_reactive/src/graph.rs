@@ -12,7 +12,6 @@ static GRAPH: OnceLock<Arc<RwLock<ReactiveGraph>>> = OnceLock::new();
 
 type Storage = IndexMap<ReactiveId, Box<dyn Any + Send + Sync>>;
 
-// TODO: make the graph lives on another thread?
 #[derive(Default)]
 pub(crate) struct ReactiveGraph {
     pub(crate) storage: Storage,
@@ -39,13 +38,10 @@ impl Graph {
         Node { id, marker: PhantomData }
     }
 
+    #[inline(always)]
     pub(crate) fn with<U>(f: impl FnOnce(&ReactiveGraph) -> U) -> U {
         f(&GRAPH.get_or_init(Default::default).read().unwrap())
     }
-
-    // pub(crate) fn with_mut<U>(f: impl FnOnce(&mut ReactiveGraph) -> U) -> U {
-    //     f(&mut GRAPH.get_or_init(Default::default).write().unwrap())
-    // }
 
     pub(crate) fn with_downcast<R, F, U>(node: &Node<R>, f: F) -> U
     where
@@ -99,12 +95,7 @@ impl Graph {
 #########################################################
 */
 
-// type Map = RwLock<IndexMap<ReactiveId, Box<dyn Any + Send + Sync>>>;
-// pub(crate) static STORAGE: OnceLock<Map> = OnceLock::new();
-
-entity! {
-    pub(crate) ReactiveId,
-}
+entity! { pub(crate) ReactiveId }
 
 pub(crate) struct Node<R> {
     pub(crate) id: ReactiveId,

@@ -1,18 +1,25 @@
 use std::sync::{Arc, RwLock};
 
 use crate::graph::{Node, Graph};
-use crate::stored_value::StoredValue;
+use crate::stored_value::Value;
 use crate::reactive_traits::*;
 use crate::signal::Signal;
 use crate::signal_write::SignalWrite;
+use crate::source::*;
+use crate::subscriber::*;
 
-#[derive(Clone, Copy)]
 pub struct SignalRead<T> {
-    pub(crate) node: Node<Arc<RwLock<StoredValue<T>>>>,
+    pub(crate) node: Node<Arc<RwLock<Value<T>>>>,
 }
 
+impl<T> Clone for SignalRead<T> {
+    fn clone(&self) -> Self { Self { node: self.node } }
+}
+
+impl<T> Copy for SignalRead<T> {}
+
 impl<T: 'static> SignalRead<T> {
-    pub(crate) fn new(node: Node<Arc<RwLock<StoredValue<T>>>>) -> Self {
+    pub(crate) fn new(node: Node<Arc<RwLock<Value<T>>>>) -> Self {
         Self { node }
     }
 
@@ -21,14 +28,38 @@ impl<T: 'static> SignalRead<T> {
     }
 }
 
+impl<T: 'static> Source for SignalRead<T> {
+    fn add_subscriber(&self, subscriber: AnySubscriber) {
+        Graph::with_downcast(&self.node, |node| node.add_subscriber(subscriber))
+    }
+
+    fn clear_subscribers(&self) {
+        Graph::with_downcast(&self.node, |node| node.clear_subscribers())
+    }
+}
+
+impl<T: 'static> ToAnySource for SignalRead<T> {
+    fn to_any_source(self) -> AnySource {
+        Graph::with_downcast(&self.node, |node| node.clone().to_any_source())
+    }
+}
+
+impl<T: 'static> Notify for SignalRead<T> {
+    fn notify(&self) {}
+}
+
 impl<T: 'static> Track for SignalRead<T> {
     fn track(&self) {
         #[cfg(test)] eprintln!(" └─ [TRACKING]  : {self:?}");
-        Graph::with_downcast(&self.node, |node| node.track())
+        Graph::with_downcast(&self.node, |node| node.track());
+        Graph::with(|graph| {
+            if let Some(current) = graph.current.as_ref() {
+                current.add_source(self.to_any_source());
+            }
+        });
     }
 
     fn untrack(&self) {
-        #[cfg(test)] eprintln!("[UNTRACKING]: {self:?}");
         Graph::with_downcast(&self.node, |node| node.untrack())
     }
 }
