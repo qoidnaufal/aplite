@@ -1,10 +1,12 @@
+use std::rc::{Rc, Weak};
 use std::cell::RefCell;
 
-use aplite_reactive::*;
 use aplite_renderer::Shape;
-use aplite_storage::{Tree, U64Map};
+use aplite_reactive::*;
+use aplite_storage::{Tree, Entity, entity};
 use aplite_types::{
     CornerRadius,
+    Rgba,
     Paint,
     Size,
 };
@@ -17,7 +19,7 @@ use crate::context::layout::{
     AlignV,
 };
 
-aplite_macro::entity! { pub ViewId }
+entity! { pub ViewId }
 
 // FIXME: this is kinda cheating, and not fun at all
 thread_local! {
@@ -25,8 +27,8 @@ thread_local! {
 }
 
 pub(crate) struct ViewStorage {
-    pub(crate) tree: RefCell<Tree<ViewId, WidgetState>>,
-    pub(crate) storage: RefCell<U64Map<ViewId, View>>,
+    pub(crate) tree: RefCell<Tree<ViewId, Rc<RefCell<WidgetState>>>>,
+    // pub(crate) storage: RefCell<U64Map<ViewId, View>>,
 
     // WARN: do you really need separate id for paint?
     pub(crate) hoverable: RefCell<Vec<ViewId>>,
@@ -37,35 +39,33 @@ impl ViewStorage {
     fn new() -> Self {
         Self {
             tree: RefCell::new(Tree::with_capacity(1024)),
-            storage: RefCell::new(U64Map::new()),
+            // storage: RefCell::new(U64Map::new()),
             hoverable: RefCell::new(Vec::new()),
             dirty: Signal::new(false),
         }
     }
 
-    pub(crate) fn insert(&self, data: WidgetState) -> ViewId {
+    pub(crate) fn insert(&self, data: Rc<RefCell<WidgetState>>) -> ViewId {
         self.tree.borrow_mut().insert(data)
+    }
+
+    pub(crate) fn get_widget_state(&self, id: &ViewId) -> Option<Rc<RefCell<WidgetState>>> {
+        self.tree.borrow().get(id).map(|rc| Rc::clone(rc))
     }
 
     // FIXME: there's logic error when appending on a fn() -> impl IntoView
     pub(crate) fn append_child(&self, id: &ViewId, child: impl IntoView) {
         let child_id = child.id();
-        let tree = self.tree.borrow();
-
-        drop(tree);
 
         self.tree.borrow_mut().add_child(id, child_id);
-        self.storage.borrow_mut().insert(child_id, child.into_view());
+        // self.storage.borrow_mut().insert(child_id, child.into_view());
     }
 
     pub(crate) fn add_sibling(&self, id: &ViewId, sibling: impl IntoView) {
         let sibling_id = sibling.id();
-        let tree = self.tree.borrow();
-
-        drop(tree);
 
         self.tree.borrow_mut().add_sibling(id, sibling_id);
-        self.storage.borrow_mut().insert(sibling_id, sibling.into_view());
+        // self.storage.borrow_mut().insert(sibling_id, sibling.into_view());
     }
 
     #[inline(always)]
@@ -113,25 +113,31 @@ impl View {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct ViewNode(pub(crate) ViewId);
+#[derive(Clone, Debug)]
+pub struct ViewNode(
+    pub(crate) ViewId,
+    Weak<RefCell<WidgetState>>,
+    Signal<bool>,
+);
 
 impl ViewNode {
     pub fn new() -> Self {
         VIEW_STORAGE.with(|s| {
-            let state = WidgetState::new();
+            let state = Rc::new(RefCell::new(WidgetState::new()));
+            let inner = Rc::downgrade(&state);
             let id = s.insert(state);
 
-            Self(id)
+            Self(id, inner, s.dirty)
         })
     }
 
     pub(crate) fn window(size: Size) -> Self {
         VIEW_STORAGE.with(|s| {
-            let state = WidgetState::window(size);
+            let state = Rc::new(RefCell::new(WidgetState::window(size)));
+            let inner = Rc::downgrade(&state);
             let id = s.insert(state);
 
-            Self(id)
+            Self(id, inner, s.dirty)
         })
     }
 
@@ -140,13 +146,15 @@ impl ViewNode {
         self.0
     }
 
+    #[inline(always)]
+    pub(crate) fn upgrade(&self) -> Option<Rc<RefCell<WidgetState>>> {
+        self.1.upgrade()
+    }
+
     pub fn with_name(self, name: &'static str) -> Self {
-        VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            if let Some(state) = tree.get_mut(&self.0) {
-                state.set_name(name);
-            }
-        });
+        if let Some(state) = self.upgrade() {
+            state.borrow_mut().set_name(name);
+        }
         self
     }
 
@@ -155,52 +163,37 @@ impl ViewNode {
     /// - (f32, f32)
     /// - [`Size`](aplite_types::Size)
     pub fn with_size(self, size: impl Into<Size>) -> Self {
-        VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            if let Some(state) = tree.get_mut(&self.0) {
-                state.set_size(size);
-            }
-        });
+        if let Some(state) = self.upgrade() {
+            state.borrow_mut().set_size(size);
+        }
         self
     }
 
     pub fn with_min_width(self, val: f32) -> Self {
-        VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            if let Some(state) = tree.get_mut(&self.0) {
-                state.min_width = Some(val);
-            }
-        });
+        if let Some(state) = self.upgrade() {
+            state.borrow_mut().min_width = Some(val);
+        }
         self
     }
 
     pub fn with_max_width(self, val: f32) -> Self {
-        VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            if let Some(state) = tree.get_mut(&self.0) {
-                state.max_width = Some(val);
-            }
-        });
+        if let Some(state) = self.upgrade() {
+            state.borrow_mut().max_width = Some(val);
+        }
         self
     }
 
     pub fn with_min_height(self, val: f32) -> Self {
-        VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            if let Some(state) = tree.get_mut(&self.0) {
-                state.min_height = Some(val);
-            }
-        });
+        if let Some(state) = self.upgrade() {
+            state.borrow_mut().min_height = Some(val);
+        }
         self
     }
 
     pub fn with_max_height(self, val: f32) -> Self {
-        VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            if let Some(state) = tree.get_mut(&self.0) {
-                state.max_height = Some(val);
-            }
-        });
+        if let Some(state) = self.upgrade() {
+            state.borrow_mut().max_height = Some(val);
+        }
         self
     }
 
@@ -208,12 +201,9 @@ impl ViewNode {
     /// - [`ImageData`](aplite_types::ImageData)
     /// - [`Rgba`](aplite_types::Rgba)
     pub fn with_background_paint(self, paint: impl Into<Paint>) -> Self {
-        VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            if let Some(state) = tree.get_mut(&self.0) {
-                state.background = paint.into();
-            }
-        });
+        if let Some(state) = self.upgrade() {
+            state.borrow_mut().background = paint.into();
+        }
         self
     }
 
@@ -221,103 +211,97 @@ impl ViewNode {
     /// - [`ImageData`](aplite_types::ImageData)
     /// - [`Rgba`](aplite_types::Rgba)
     pub fn with_border_paint(self, color: impl Into<Paint>) -> Self {
-        VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            if let Some(state) = tree.get_mut(&self.0) {
-                state.border_color = color.into();
-            }
-        });
+        if let Some(state) = self.upgrade() {
+            state.borrow_mut().border_color = color.into();
+        }
         self
     }
 
-    pub fn with_stroke_width(self, val: u32) -> Self {
-        VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            if let Some(state) = tree.get_mut(&self.0) {
-                state.border_width = val as _;
-            }
-        });
+    pub fn with_stroke_width(self, val: f32) -> Self {
+        if let Some(state) = self.upgrade() {
+            state.borrow_mut().border_width = val;
+        }
         self
     }
 
     pub fn with_shape(self, shape: Shape) -> Self {
-        VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            if let Some(state) = tree.get_mut(&self.0) {
-                state.shape = shape;
-            }
-        });
+        if let Some(state) = self.upgrade() {
+            state.borrow_mut().shape = shape;
+        }
         self
     }
 
     pub fn with_rotation_deg(self, deg: f32) -> Self {
-        VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            if let Some(state) = tree.get_mut(&self.0) {
-                state.set_rotation_deg(deg);
-            }
-        });
-        self
+        self.with_rotation_rad(deg.to_radians())
     }
 
     pub fn with_rotation_rad(self, rad: f32) -> Self {
-        VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            if let Some(state) = tree.get_mut(&self.0) {
-                state.set_rotation_rad(rad);
-            }
-        });
+        if let Some(state) = self.upgrade() {
+            state.borrow_mut().set_rotation_rad(rad);
+        }
         self
     }
 
     pub fn with_corner_radius(self, val: CornerRadius) -> Self {
-        VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            if let Some(state) = tree.get_mut(&self.0) {
-                state.set_corner_radius(val);
-            }
-        });
+        if let Some(state) = self.upgrade() {
+            state.borrow_mut().set_corner_radius(val);
+        }
         self
     }
 
     pub fn with_horizontal_align(self, align_h: AlignH) -> Self {
-        VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            if let Some(state) = tree.get_mut(&self.0) {
-                state.align_h = align_h;
-            }
-        });
+        if let Some(state) = self.upgrade() {
+            state.borrow_mut().align_h = align_h;
+        }
         self
     }
 
     pub fn with_vertical_align(self, align_v: AlignV) -> Self {
-        VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            if let Some(state) = tree.get_mut(&self.0) {
-                state.align_v = align_v;
-            }
-        });
+        if let Some(state) = self.upgrade() {
+            state.borrow_mut().align_v = align_v;
+        }
         self
     }
 
     pub fn with_orientation(self, orientation: Orientation) -> Self {
-        VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            if let Some(state) = tree.get_mut(&self.0) {
-                state.orientation = orientation;
-            }
-        });
+        if let Some(state) = self.upgrade() {
+            state.borrow_mut().orientation = orientation;
+        }
         self
     }
 
     pub fn set_hoverable(self) -> Self {
+        if let Some(state) = self.upgrade() {
+            state.borrow_mut().hoverable = true;
+        }
         VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            if let Some(state) = tree.get_mut(&self.0) {
-                state.hoverable = true;
-            }
             s.hoverable.borrow_mut().push(self.0);
         });
         self
+    }
+
+    pub fn set_color(&self, color: Rgba<u8>) {
+        if let Some(state) = self.upgrade() {
+            state.borrow_mut().background = color.into();
+            self.2.set(true);
+        }
+    }
+
+    pub fn set_shape(&self, shape: Shape) {
+        if let Some(state) = self.upgrade() {
+            state.borrow_mut().shape = shape;
+            self.2.set(true);
+        }
+    }
+
+    pub fn set_rotation_deg(&self, deg: f32) {
+        self.set_rotation_rad(deg.to_radians());
+    }
+
+    pub fn set_rotation_rad(&self, rad: f32) {
+        if let Some(state) = self.upgrade() {
+            state.borrow_mut().rotation = rad;
+            self.2.set(true);
+        }
     }
 }

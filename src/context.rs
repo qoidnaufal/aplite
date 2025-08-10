@@ -91,9 +91,8 @@ impl Context {
                     .borrow()
                     .iter()
                     .find(|&id| {
-                        let tree = s.tree.borrow();
-                        let state = tree.get(&id).unwrap();
-                        state.detect_hover(&self.cursor)
+                        let state = s.get_widget_state(id).unwrap();
+                        state.borrow().detect_hover(&self.cursor)
                     })
                     .copied()
             });
@@ -113,10 +112,9 @@ impl Context {
         if !self.cursor.is_idling() {
             if let Some(hover_id) = self.cursor.hover.curr {
                 let dragable = VIEW_STORAGE.with(|s| {
-                    s.tree
-                        .borrow()
-                        .get(&hover_id)
+                    s.get_widget_state(&hover_id)
                         .unwrap()
+                        .borrow()
                         .dragable
                 });
                 if self.cursor.is_dragging(&hover_id) && dragable {
@@ -130,9 +128,11 @@ impl Context {
     fn handle_drag(&mut self, hover_id: &ViewId) {
         let pos = self.cursor.hover.pos - self.cursor.click.offset;
         VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            let state = tree.get_mut(hover_id).unwrap();
-            state.rect.set_pos(pos.into());
+            let state = s.get_widget_state(hover_id).unwrap();
+            state.borrow_mut().rect.set_pos(pos.into());
+
+            drop(state);
+
             LayoutContext::new(*hover_id).calculate();
             Self::toggle_dirty();
         });
@@ -149,11 +149,10 @@ impl Context {
             && button == MouseButton::Left
         {
             VIEW_STORAGE.with(|s| {
-                let mut tree = s.tree.borrow_mut();
-                let state = tree.get_mut(hover_id).unwrap();
-                let pos = state.rect.vec2f();
+                let state = s.get_widget_state(hover_id).unwrap();
+                let pos = state.borrow().rect.vec2f();
                 self.cursor.click.offset = self.cursor.click.pos - pos;
-                state.event = Some(WidgetEvent::LeftClick);
+                state.borrow_mut().event = Some(WidgetEvent::LeftClick);
             });
             self.pending_event.push(*hover_id);
         }
@@ -165,7 +164,7 @@ impl Context {
                     CALLBACKS.with(|cb| {
                         if let Some(callbacks) = cb.borrow_mut().get_mut(&id)
                             && let MouseButton::Left = self.cursor.state.button
-                            && let Some(callback) = callbacks.get_mut(&WidgetEvent::LeftClick)
+                            && let Some(callback) = callbacks.get_mut(WidgetEvent::LeftClick)
                         {
                             callback();
                         }
@@ -174,9 +173,8 @@ impl Context {
 
             if let Some(hover_id) = self.cursor.hover.curr.as_ref() {
                 VIEW_STORAGE.with(|s| {
-                    let mut tree = s.tree.borrow_mut();
-                    let state = tree.get_mut(hover_id).unwrap();
-                    state.event = None;
+                    let state = s.get_widget_state(hover_id).unwrap();
+                    state.borrow_mut().event = None;
                 });
             }
 
@@ -198,8 +196,8 @@ impl Context {
                 .iter()
                 .for_each(|view_id| {
                     let size = scene.size();
-                    let tree = s.tree.borrow();
-                    let state = tree.get(view_id).unwrap();
+                    let state = s.get_widget_state(view_id).unwrap();
+                    let state = state.borrow();
 
                     let background = state.background.as_paint_ref();
                     let border = state.border_color.as_paint_ref();

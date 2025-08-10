@@ -13,13 +13,10 @@ where
 
     /// The version of this [`Entity`]
     fn version(&self) -> u32;
-
-    /// Used for hashing function
-    fn hasher(&self) -> u64;
 }
 
 #[macro_export]
-macro_rules! create_entity {
+macro_rules! entity {
     { $vis:vis $name:ident } => {
         #[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
         $vis struct $name(u64);
@@ -37,27 +34,23 @@ macro_rules! create_entity {
             fn version(&self) -> u32 {
                 (self.0 >> 32) as u32
             }
-
-            fn hasher(&self) -> u64 {
-                self.0
-            }
         }
 
         impl std::fmt::Debug for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{}({})", stringify!($name), self.index())
+                write!(f, "{}({})", stringify!($name), self.0 as u32)
             }
         }
 
         impl std::fmt::Display for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{}({})", stringify!($name), self.index())
+                write!(f, "{}({})", stringify!($name), self.0 as u32)
             }
         }
 
         impl std::hash::Hash for $name {
             fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-                state.write_u64(self.hasher());
+                state.write_u64((self.0 as u32) as u64);
             }
         }
     };

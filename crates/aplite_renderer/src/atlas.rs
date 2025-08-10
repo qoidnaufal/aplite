@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
 use aplite_types::{Rect, Size, Vec2f, ImageData, ImageRef};
-use aplite_storage::{IndexMap, U64Map};
+use aplite_storage::{IndexMap, U64Map, Entity, entity};
 
-aplite_macro::entity! { pub AtlasId }
+entity! { pub AtlasId }
 
 pub(crate) struct Atlas {
     texture: wgpu::Texture,

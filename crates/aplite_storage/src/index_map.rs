@@ -53,7 +53,7 @@ impl<E: Entity, T> IndexMap<E, T> {
     /// but kinda wasteful if you don't really use all the capacity.
     #[inline(always)]
     pub fn with_max_capacity() -> Self {
-        let capacity = u64::MAX - 1;
+        let capacity = u32::MAX - 1;
         Self::new_with_capacity(capacity as usize)
     }
 
@@ -249,9 +249,9 @@ impl<E: Entity, T: Clone> Clone for IndexMap<E, T> {
 #[cfg(test)]
 mod index_test {
     use super::*;
-    use crate::{create_entity, Entity};
+    use crate::{entity, Entity};
 
-    create_entity! { TestId }
+    entity! { TestId }
 
     #[test]
     fn no_duplicate() {

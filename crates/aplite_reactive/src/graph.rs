@@ -2,8 +2,7 @@ use std::marker::PhantomData;
 use std::sync::{Arc, RwLock, OnceLock};
 use std::any::Any;
 
-use aplite_storage::IndexMap;
-use aplite_macro::entity;
+use aplite_storage::{IndexMap, Entity, entity};
 
 use crate::subscriber::AnySubscriber;
 use crate::reactive_traits::*;

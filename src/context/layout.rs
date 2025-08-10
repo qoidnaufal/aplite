@@ -158,17 +158,13 @@ impl Rules {
 
 impl LayoutContext {
     pub(crate) fn new(entity: ViewId) -> Self {
-        let rules = VIEW_STORAGE.with(|s| {
-            let tree = s.tree.borrow();
-            let state = tree.get(&entity).unwrap();
-            let rules = Rules::new(state);
-            drop(tree);
-            rules
-        });
         Self {
+            rules: VIEW_STORAGE.with(|s| {
+                let state = s.get_widget_state(&entity).unwrap();
+                Rules::new(&state.borrow())
+            }),
             entity,
             next_pos: Vec2f::new(0., 0.),
-            rules,
         }
     }
 
@@ -194,8 +190,7 @@ impl LayoutContext {
             c.iter()
                 .map(|child| {
                     VIEW_STORAGE.with(|s| {
-                        let tree = s.tree.borrow();
-                        let rect = tree.get(child).unwrap().rect;
+                        let rect = s.get_widget_state(child).unwrap().borrow().rect;
 
                         match self.rules.orientation {
                             Orientation::Vertical => rect.size().height,
@@ -214,9 +209,9 @@ impl LayoutContext {
     // FIXME: this is not possible without signal?
     fn assign_position(&mut self, child: &ViewId) {
         VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            let state = tree.get_mut(child).unwrap();
-            let size = state.rect.size();
+            let state = s.get_widget_state(child).unwrap();
+            let size = state.borrow().rect.size();
+            let mut state = state.borrow_mut();
 
             match self.rules.orientation {
                 Orientation::Vertical => {
@@ -243,12 +238,14 @@ impl LayoutContext {
 pub(crate) fn calculate_size_recursive(id: &ViewId) -> Size {
     VIEW_STORAGE.with(|s| {
         let tree = s.tree.borrow();
-        let state = tree.get(id).unwrap();
+        let state = tree.get(id).unwrap().borrow();
         let padding = state.padding;
         let orientation = state.orientation;
         let spacing = state.spacing;
         let mut size = state.rect.size();
         let maybe_children = tree.get_all_children(id);
+
+        drop(state);
         drop(tree);
 
         if let Some(children) = maybe_children {
@@ -278,13 +275,14 @@ pub(crate) fn calculate_size_recursive(id: &ViewId) -> Size {
         }
 
         let tree = s.tree.borrow();
-        let state = tree.get(id).unwrap();
+        let state = tree.get(id).unwrap().borrow();
 
         if let AspectRatio::Defined(tuple) = state.image_aspect_ratio {
             match tree.get_parent(id) {
                 Some(parent) if tree
                     .get(parent)
                     .unwrap()
+                    .borrow()
                     .orientation
                     .is_vertical() => size.adjust_height_aspect_ratio(tuple.into()),
                 _ => size.adjust_width_aspect_ratio(tuple.into()),
@@ -295,11 +293,12 @@ pub(crate) fn calculate_size_recursive(id: &ViewId) -> Size {
             .adjust_on_min_constraints(state.min_width, state.min_height)
             .adjust_on_max_constraints(state.max_width, state.max_height);
 
+        drop(state);
         drop(tree);
 
-        let mut tree_mut = s.tree.borrow_mut();
-        let state_mut = tree_mut.get_mut(id).unwrap();
-        state_mut.rect.set_size(final_size);
+        let mut tree = s.tree.borrow_mut();
+        let mut state = tree.get_mut(id).unwrap().borrow_mut();
+        state.rect.set_size(final_size);
 
         final_size
     })

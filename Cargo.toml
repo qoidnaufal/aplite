@@ -19,7 +19,7 @@ members = [
   "crates/aplite_renderer",
   "crates/aplite_stats",
   "crates/aplite_reactive",
-  "crates/aplite_storage", "crates/aplite_macro",
+  "crates/aplite_storage",
 ]
 
 [dependencies]
@@ -27,7 +27,6 @@ winit.workspace = true
 wgpu.workspace = true
 aplite_types.workspace = true
 aplite_storage.workspace = true
-aplite_macro.workspace = true
 aplite_stats = { path = "crates/aplite_stats", default-features = false, optional = true }
 aplite_reactive = { path = "crates/aplite_reactive" }
 aplite_renderer = { path = "crates/aplite_renderer" }
@@ -42,7 +41,6 @@ optional = true
 [workspace.dependencies]
 aplite_storage = { path = "crates/aplite_storage" }
 aplite_types = { path = "crates/aplite_types" }
-aplite_macro = { path = "crates/aplite_macro" }
 wgpu = "26.0.1"
 winit = "0.30.11"
 

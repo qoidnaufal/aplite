@@ -22,18 +22,14 @@ impl Worker {
 
                 match future.as_mut().poll(cx) {
                     Poll::Ready(_) => drop(future),
-                    Poll::Pending => *lock = Some(future),
+                    Poll::Pending => {
+                        *lock = Some(future);
+                        continue;
+                    },
                 }
             }
 
-            let mut empty = false;
-            if let Ok(future) = task.future.read() {
-                if future.is_none() {
-                    empty = true;
-                }
-            }
-
-            if empty { drop(task) }
+            drop(task);
         };
     }
 }

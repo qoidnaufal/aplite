@@ -1,9 +1,8 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
 
 use aplite_renderer::Shape;
-use aplite_storage::U64Map;
 use aplite_types::{Rgba, CornerRadius, Size};
+use aplite_storage::U64Map;
 
 use crate::state::WidgetState;
 use crate::view::{
@@ -27,11 +26,9 @@ thread_local! {
     pub(crate) static CALLBACKS: RefCell<Callbacks> = RefCell::new(Default::default());
 }
 
-type Callbacks = HashMap<ViewId, WidgetCallback>;
+type Callbacks = U64Map<ViewId, CallbackStore>;
 
-pub(crate) struct WidgetCallback(U64Map<WidgetEvent, Box<dyn FnMut()>>);
-
-#[repr(u64)]
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WidgetEvent {
     Hover,
@@ -39,12 +36,6 @@ pub enum WidgetEvent {
     RightClick,
     Drag,
     Input,
-}
-
-impl Default for WidgetCallback {
-    fn default() -> Self {
-        Self(U64Map::with_capacity(5))
-    }
 }
 
 /// main building block to create a renderable component
@@ -86,123 +77,102 @@ pub trait WidgetExt: Widget + Sized {
     where
         F: FnMut(&mut WidgetState)
     {
-        VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            if let Some(state) = tree.get_mut(&self.id()) {
-                state_fn(state);
-            }
-        });
+        if let Some(state) = self.node().upgrade() {
+            state_fn(&mut state.borrow_mut())
+        }
         self
     }
 
-    fn color<F>(self, f: F) -> Self
-    where
-        F: FnEl<Rgba<u8>> + 'static,
-    {
-        let _ = f;
+    fn color(self, color: Rgba<u8>) -> Self {
+        if let Some(state) = self.node().upgrade() {
+            state.borrow_mut().background = color.into();
+        }
         self
     }
 
-    fn border_color<F>(self, f: F) -> Self
-    where
-        F: FnEl<Rgba<u8>> + 'static
-    {
-        let _ = f;
+    fn border_color(self, color: Rgba<u8>) -> Self {
+        if let Some(state) = self.node().upgrade() {
+            state.borrow_mut().border_color = color.into();
+        }
         self
     }
 
-    fn hover_color<F>(self, f: F) -> Self
-    where
-        F: FnAction<Rgba<u8>> + 'static
-    {
-        let _ = f;
+    fn hover_color(self, color: Rgba<u8>) -> Self {
+        let _ = color;
         self
     }
 
-    fn click_color<F>(self, f: F) -> Self
-    where
-        F: FnAction<Rgba<u8>> + 'static,
-    {
-        let _ = f;
+    fn click_color(self, color: Rgba<u8>) -> Self {
+        let _ = color;
         self
     }
 
-    fn border_width<F>(self, f: F) -> Self
-    where
-        F: FnEl<u32> + 'static
-    {
-        let _ = f;
+    fn border_width(self, val: f32) -> Self {
+        if let Some(state) = self.node().upgrade() {
+            state.borrow_mut().border_width = val;
+        }
         self
     }
 
-    fn rotation<F>(self, f: F) -> Self
-    where
-        F: FnEl<f32> + 'static
-    {
-        let _ = f;
+    fn corners(self, corners: CornerRadius) -> Self {
+        if let Some(state) = self.node().upgrade() {
+            state.borrow_mut().corner_radius = corners;
+        }
         self
     }
 
-    fn corners<F>(self, f: F) -> Self
-    where
-        F: FnEl<CornerRadius> + 'static
-    {
-        let _ = f;
-        self
-    }
-
-    fn shape<F>(self, f: F) -> Self
-    where
-        F: FnEl<Shape> + 'static
-    {
-        let _ = f;
+    fn shape(self, shape: Shape) -> Self {
+        if let Some(state) = self.node().upgrade() {
+            state.borrow_mut().shape = shape;
+        }
         self
     }
 
     fn size(self, size: impl Into<Size>) -> Self {
-        VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            let state = tree.get_mut(&self.id()).unwrap();
-            state.rect.set_size(size.into());
-        });
+        if let Some(state) = self.node().upgrade() {
+            state.borrow_mut().rect.set_size(size.into());
+        }
         self
     }
 
     fn dragable(self, value: bool) -> Self {
+        if let Some(state) = self.node().upgrade() {
+            state.borrow_mut().dragable = value;
+        }
         VIEW_STORAGE.with(|s| {
-            let mut tree = s.tree.borrow_mut();
-            let state = tree.get_mut(&self.id()).unwrap();
-            state.dragable = value;
+            let mut hoverable = s.hoverable.borrow_mut();
+            if !hoverable.contains(&self.id()) {
+                hoverable.push(self.id());
+            }
         });
         self
     }
 }
 
-/// this is just a wrapper over `FnMut(Option<T>) -> T`
-pub trait FnEl<T>: FnMut(Option<T>) -> T {}
+pub(crate) struct CallbackStore(Box<[Option<Box<dyn FnMut()>>; 5]>);
 
-impl<F, T> FnEl<T> for F where F: FnMut(Option<T>) -> T {}
-
-/// this is just a wrapper over `FnMut() -> T`
-pub trait FnAction<T>: FnMut() -> T {}
-
-impl<F, T> FnAction<T> for F where F: FnMut() -> T {}
-
-impl std::ops::Deref for WidgetCallback {
-    type Target = U64Map<WidgetEvent, Box<dyn FnMut()>>;
-
-    fn deref(&self) -> &Self::Target { &self.0 }
-}
-
-impl std::ops::DerefMut for WidgetCallback {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+impl Default for CallbackStore {
+    fn default() -> Self {
+        Self(Box::new([None, None, None, None, None]))
     }
 }
 
-impl std::hash::Hash for WidgetEvent {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_u64(*self as u64);
+impl CallbackStore {
+    pub(crate) fn insert(
+        &mut self,
+        event: WidgetEvent,
+        callback: Box<dyn FnMut()>,
+    ) -> Option<Box<dyn FnMut()>> {
+        self.0[event as usize].replace(callback)
+    }
+
+    #[allow(unused)]
+    pub(crate) fn get(&self, event: WidgetEvent) -> Option<&Box<dyn FnMut()>> {
+        self.0[event as usize].as_ref()
+    }
+
+    pub(crate) fn get_mut(&mut self, event: WidgetEvent) -> Option<&mut Box<dyn FnMut()>> {
+        self.0[event as usize].as_mut()
     }
 }
 
@@ -214,7 +184,7 @@ impl CircleWidget {
     pub fn new() -> Self {
         let node = ViewNode::new()
             .with_name("Circle")
-            .with_stroke_width(5)
+            .with_stroke_width(5.)
             .with_shape(Shape::Circle)
             .with_size((100., 100.));
 
@@ -226,6 +196,6 @@ impl CircleWidget {
 
 impl Widget for CircleWidget {
     fn node(&self) -> ViewNode {
-        self.node
+        self.node.clone()
     }
 }

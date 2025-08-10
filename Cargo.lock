@@ -93,7 +93,6 @@ name = "aplite"
 version = "0.1.0"
 dependencies = [
  "aplite_future",
- "aplite_macro",
  "aplite_reactive",
  "aplite_renderer",
  "aplite_stats",
@@ -109,18 +108,10 @@ name = "aplite_future"
 version = "0.1.0"
 
 [[package]]
-name = "aplite_macro"
-version = "0.1.0"
-dependencies = [
- "aplite_storage",
-]
-
-[[package]]
 name = "aplite_reactive"
 version = "0.1.0"
 dependencies = [
  "aplite_future",
- "aplite_macro",
  "aplite_storage",
 ]
 
@@ -128,7 +119,6 @@ dependencies = [
 name = "aplite_renderer"
 version = "0.1.0"
 dependencies = [
- "aplite_macro",
  "aplite_storage",
  "aplite_types",
  "wgpu",

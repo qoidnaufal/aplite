@@ -55,6 +55,10 @@ where
         self.0.insert(k, v)
     }
 
+    pub fn entry(&mut self, k: K) -> std::collections::hash_map::Entry<'_, K, V> {
+        self.0.entry(k)
+    }
+
     pub fn get(&self, k: &K) -> Option<&V> {
         self.0.get(k)
     }
@@ -135,10 +139,10 @@ impl BuildHasher for U64Hasher {
 mod hash_test {
     use super::*;
     use crate::index_map::IndexMap;
-    use crate::create_entity;
+    use crate::entity;
     use crate::Entity;
 
-    create_entity! { TestId }
+    entity! { TestId }
 
     #[test]
     fn time_benchmark() {

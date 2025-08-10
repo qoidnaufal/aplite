@@ -12,57 +12,64 @@ fn first_row() -> impl IntoView {
         )
         .child(
             CircleWidget::new()
-                .color(|_| Rgba::PURPLE)
-                .hover_color(|| Rgba::RED)
+                .color(Rgba::PURPLE)
+                .hover_color(Rgba::RED)
         )
         .set_state(|s| {
             s.set_spacing(40.);
             s.set_padding(Padding::new(20., 20., 40., 40.));
         })
-        .corners(|_| CornerRadius::splat(10.))
-        .border_width(|_| 5)
-        .color(|_| Rgba::LIGHT_GRAY)
-        .border_color(|_| Rgba::DARK_GRAY)
+        .corners(CornerRadius::splat(10.))
+        .border_width(5.0)
+        .color(Rgba::LIGHT_GRAY)
+        .border_color(Rgba::DARK_GRAY)
 }
 
 fn button_stack(
     inc: impl Fn() + 'static,
     dec: impl Fn() + 'static,
-    rotation: impl FnMut(Option<f32>) -> f32 + 'static,
-    color: impl FnMut(Option<Rgba<u8>>) -> Rgba<u8> + 'static,
+    counter: SignalRead<i32>,
 ) -> impl IntoView {
     VStack::new()
         .child(
             Button::new()
-                .hover_color(|| Rgba::BLUE)
-                .border_width(|_| 5)
-                .corners(|_| CornerRadius::new(80., 80., 0., 0.))
-                .click_color(|| Rgba::DARK_GRAY)
+                .hover_color(Rgba::BLUE)
+                .border_width(5.0)
+                .corners(CornerRadius::new(80., 80., 0., 0.))
+                .click_color(Rgba::DARK_GRAY)
                 .on(LeftClick, inc)
         )
         .child(
             Button::new()
-                .color(|_| Rgba::GREEN)
-                .hover_color(|| Rgba::LIGHT_GRAY)
-                .click_color(|| Rgba::DARK_GREEN)
-                .border_width(|_| 5)
-                .corners(|_| CornerRadius::splat(50.))
+                .color(Rgba::GREEN)
+                .hover_color(Rgba::LIGHT_GRAY)
+                .click_color(Rgba::DARK_GREEN)
+                .border_width(5.0)
+                .corners(CornerRadius::splat(50.))
                 .on(LeftClick, dec)
         )
         .child(
             Button::new()
-                .color(|_| Rgba::BLUE)
-                .hover_color(|| Rgba::PURPLE)
-                .border_width(|_| 5)
-                .corners(|_| CornerRadius::new(0., 69., 0., 69.))
+                .color(Rgba::BLUE)
+                .hover_color(Rgba::PURPLE)
+                .border_width(5.0)
+                .corners(CornerRadius::new(0., 69., 0., 69.))
         )
-        .child(
-            Button::new()
-                .corners(|_| CornerRadius::splat(70.))
-                .rotation(rotation)
-                .color(color)
-        )
-        .color(|_| Rgba::new(0, 0, 0, 30))
+        .child({
+            let button = Button::new().corners(CornerRadius::splat(70.));
+
+            let node = button.node();
+
+            Effect::new(move |_| {
+                counter.with(|num| {
+                    node.set_color(select_color(*num));
+                    node.set_rotation_deg(*num as f32 * 3.0);
+                })
+            });
+
+            button
+        })
+        .color(Rgba::new(0, 0, 0, 30))
         .dragable(true)
         .set_state(|s| {
             s.set_min_width(400.);
@@ -76,19 +83,18 @@ fn button_stack(
 fn second_row(
     inc: impl Fn() + 'static,
     dec: impl Fn() + 'static,
-    rotation: impl FnMut(Option<f32>) -> f32 + 'static,
-    color: impl FnMut(Option<Rgba<u8>>) -> Rgba<u8> + 'static,
+    counter: SignalRead<i32>,
 ) -> impl IntoView {
     HStack::new()
-        .child(button_stack(inc, dec, rotation, color))
+        .child(button_stack(inc, dec, counter))
         .child(
             CircleWidget::new()
-                .color(|_| rgba_hex("#104bcdbf"))
-                .hover_color(|| Rgba::GREEN)
-                .border_color(|_| 200.into())
-                .border_width(|_| 3)
+                .color(rgba_hex("#104bcdbf"))
+                .hover_color(Rgba::GREEN)
+                .border_color(200.into())
+                .border_width(3.0)
         )
-        .color(|_| Rgba::LIGHT_GRAY)
+        .color(Rgba::LIGHT_GRAY)
         .dragable(true)
         .set_state(|s| {
             s.set_padding(Padding::splat(30.));
@@ -101,31 +107,24 @@ fn root() -> impl IntoView {
 
     let inc = move || set_counter.update(|num| *num += 1);
     let dec = move || set_counter.update(|num| *num -= 1);
-    let rotation = move |_| counter.with(|val| *val as f32 * 3.0);
-    let color = move |_| select_color(counter.get());
 
     Effect::new(move |_| eprint!("{}        \r", counter.get()));
 
     let circle = CircleWidget::new()
-        .color(|_| Rgba::new(169, 72, 43, 255))
-        .hover_color(|| Rgba::new(169, 72, 43, 200))
-        .border_color(|_| Rgba::WHITE)
-        .border_width(|_| 5)
+        .color(Rgba::new(169, 72, 43, 255))
+        .hover_color(Rgba::new(169, 72, 43, 200))
+        .border_color(Rgba::WHITE)
+        .border_width(5.0)
         .dragable(true);
 
     first_row()
-        .and(second_row(inc, dec, rotation, color))
+        .and(second_row(inc, dec, counter))
         .and(circle)
 }
 
 fn select_color(val: i32) -> Rgba<u8> {
-    let val = val as u8;
-    rgba_u8(
-        val % 255,
-        (val * 3) % 255,
-        (val * 10) % 255,
-        (255 - (val * 7) % 255).max(137)
-    )
+    let val = val as u32;
+    Rgba::from_u32(val)
 }
 
 fn main() -> ApliteResult {

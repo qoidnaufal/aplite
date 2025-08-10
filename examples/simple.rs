@@ -22,28 +22,34 @@ fn simple() -> impl IntoView {
     let (counter, set_counter) = Signal::split(0u32);
     let (rotate, set_rotate) = Signal::split(0.0);
 
-    let color = move |_| get_color(counter.get());
-    let shape = move |_| get_shape(counter.get());
-
     let click_count = move || set_counter.update(|num| *num += 1);
-    let click_rotate = move || set_rotate.update(|val| *val += 30.0);
+    let click_rotate = move || set_rotate.update(|val| *val += 10.0);
 
     Effect::new(move |_| counter.with(|val| eprintln!("Counter: {val}")));
 
     let button = Button::new()
-        .border_color(|_| Rgba::WHITE)
-        .border_width(|_| 6)
-        .rotation(move |_| rotate.get())
-        .corners(|_| CornerRadius::splat(47.))
+        .border_color(Rgba::WHITE)
+        .border_width(6.0)
+        .dragable(true)
+        .corners(CornerRadius::splat(47.))
         .size((200, 69))
         .on(LeftClick, click_count);
 
     let circle = CircleWidget::new()
-        .color(color)
-        .shape(shape)
+        .dragable(true)
         .on(LeftClick, click_rotate)
-        .border_width(|_| 6)
+        .border_width(6.0)
         .size((150, 150));
+
+    let button_node = button.node();
+    let circle_node = circle.node();
+
+    Effect::new(move |_| counter.with(|num| {
+        circle_node.set_color(get_color(*num));
+        circle_node.set_shape(get_shape(*num));
+    }));
+
+    Effect::new(move |_| button_node.set_rotation_deg(rotate.get()));
 
     button.and(circle)
 }

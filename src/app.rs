@@ -99,7 +99,7 @@ impl Aplite {
             let root_view = View::window(Size::new(size.width, size.height));
             let root_id = root_view.node.id();
 
-            s.storage.borrow_mut().insert(root_id, root_view);
+            // s.storage.borrow_mut().insert(root_id, root_view);
 
             if let Some(view_fn) = self.pending_views.take() {
                 let view = view_fn(window_id);

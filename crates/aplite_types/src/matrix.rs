@@ -92,9 +92,10 @@ impl Matrix3x2 {
 
     #[inline(always)]
     pub fn from_scale_rad_translate(sx: f32, sy: f32, rad: f32, tx: f32, ty: f32) -> Self {
+        let (sin, cos) = rad.sin_cos();
         Self([
-            [sx * rad.cos(), sx * -rad.sin()],
-            [sy * rad.sin(), sy *  rad.cos()],
+            [sx * cos, sx * -sin],
+            [sy * sin, sy *  cos],
             [tx, ty],
         ])
     }
