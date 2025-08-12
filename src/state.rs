@@ -10,7 +10,7 @@ use aplite_types::{
 };
 
 use crate::context::layout::{AlignV, AlignH, Orientation, Padding};
-use crate::context::cursor::Cursor;
+// use crate::context::cursor::Cursor;
 use crate::widget::WidgetEvent;
 
 #[derive(Debug, Clone, Copy)]

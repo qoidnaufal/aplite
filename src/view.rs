@@ -26,7 +26,7 @@ thread_local! {
 }
 
 pub(crate) struct ViewStorage {
-    // FIXME: this is nasty and slow
+    // FIXME: this is nasty and slow, also i want the tree to store Box<dyn Widget>
     pub(crate) tree: RefCell<Tree<ViewId, Rc<RefCell<WidgetState>>>>,
     pub(crate) views: RefCell<Vec<View>>,
     pub(crate) hoverable: RefCell<Vec<ViewId>>,

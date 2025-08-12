@@ -63,6 +63,11 @@ impl<E: Entity, T> Tree<E, T> {
         self.data.get_mut(entity)
     }
 
+    pub fn with<F: FnMut(&T)>(&self, mut f: F) {
+        self.iter()
+            .for_each(|node| f(node.data()));
+    }
+
     pub fn remove(&mut self, entity: E) -> Vec<E> {
         let mut to_remove = vec![entity];
         let mut current = entity;
@@ -258,6 +263,15 @@ impl<E: Entity, T> Tree<E, T> {
             });
         }
         members
+    }
+
+    pub fn with_all_members_of<F>(&self, entity: &E, mut f: F)
+    where
+        F: FnMut(&T)
+    {
+        self.iter()
+            .filter(|node| self.is_member_of(&node.id(), entity))
+            .for_each(|node| f(node.data()));
     }
 
     pub fn is_member_of(&self, entity: &E, ancestor: &E) -> bool {

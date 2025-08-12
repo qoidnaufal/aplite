@@ -215,11 +215,12 @@ pub trait WidgetExt: Widget + Sized {
     }
 }
 
-thread_local! {
-    pub(crate) static CALLBACKS: RefCell<Callbacks> = RefCell::new(Default::default());
-}
+// -------------------------------------
 
-type Callbacks = U64Map<ViewId, CallbackStore>;
+thread_local! {
+    pub(crate) static CALLBACKS: RefCell<U64Map<ViewId, CallbackStore>>
+        = RefCell::new(Default::default());
+}
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -258,6 +259,8 @@ impl CallbackStore {
     }
 }
 
+// -------------------------------------
+
 pub(crate) struct WindowWidget {
     node: ViewNode,
 }
@@ -275,6 +278,8 @@ impl Widget for WindowWidget {
         self.node.clone()
     }
 }
+
+// -------------------------------------
 
 pub struct CircleWidget {
     node: ViewNode,
@@ -297,5 +302,146 @@ impl CircleWidget {
 impl Widget for CircleWidget {
     fn node(&self) -> ViewNode {
         self.node.clone()
+    }
+}
+
+// -------------------------------------
+
+#[cfg(test)]
+mod alt {
+    use crate::state::WidgetState;
+    use aplite_types::Rect;
+
+    struct Button {
+        state: WidgetState,
+        children: Vec<Box<dyn Widget>>,
+    }
+
+    impl Button {
+        fn new(name: &'static str) -> Self {
+            Self {
+                state: WidgetState::new().with_name(name),
+                children: Vec::new(),
+            }
+        }
+    }
+
+    trait Widget {
+        fn state_ref(&self) -> &WidgetState;
+        fn state_mut(&mut self) -> &mut WidgetState;
+        fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>>;
+        fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>>;
+
+        fn render(&self, renderer: &mut Vec<String>) {
+            renderer.push(self.state_ref().name.to_string());
+
+            if let Some(children) = self.children_ref() {
+                children.iter()
+                    .for_each(|w| w.render(renderer));
+            }
+        }
+
+        fn layout(&mut self, parent_bound: Rect) {
+            let offset = (parent_bound.x, parent_bound.y);
+            self.state_mut().set_position(offset.into());
+            let bound = self.state_ref().rect;
+            if let Some(children) = self.children_mut() {
+                children
+                    .iter_mut()
+                    .for_each(|w| w.layout(bound));
+            }
+        }
+    }
+
+    trait WidgetExt: Widget + Sized {
+        fn child(mut self, child: impl Widget + 'static) -> Self {
+            if let Some(children) = self.children_mut() {
+                children.push(Box::new(child));
+            }
+            self
+        }
+    }
+
+    impl<T: Widget + Sized> WidgetExt for T {}
+
+    trait IntoView: Widget {
+        fn into_view(self) -> View;
+    }
+
+    impl Widget for Button {
+        fn state_ref(&self) -> &WidgetState {
+            &self.state
+        }
+
+        fn state_mut(&mut self) -> &mut WidgetState {
+            &mut self.state
+        }
+
+        fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
+            Some(&self.children)
+        }
+
+        fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
+            Some(&mut self.children)
+        }
+    }
+
+    struct View {
+        widget: Box<dyn Widget>,
+    }
+
+    impl View {
+    }
+
+    impl<T: Widget + 'static> IntoView for T {
+        fn into_view(self) -> View {
+            View {
+                widget: Box::new(self),
+            }
+        }
+    }
+
+    impl Widget for View {
+        fn state_ref(&self) -> &WidgetState {
+            self.widget.as_ref().state_ref()
+        }
+
+        fn state_mut(&mut self) -> &mut WidgetState {
+            self.widget.as_mut().state_mut()
+        }
+
+        fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
+            self.widget.as_ref().children_ref()
+        }
+
+        fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
+            self.widget.as_mut().children_mut()
+        }
+    }
+
+    fn root() -> impl IntoView {
+        Button::new("root")
+            .child({
+                Button::new("one")
+                    .child(Button::new("four"))
+                    .child(Button::new("five"))
+            })
+            .child(Button::new("two"))
+            .child(Button::new("three"))
+    }
+
+    #[test]
+    fn alt_test() {
+        let mut renderer: Vec<String> = vec![];
+        let screen = Rect::new(0.0, 0.0, 100.0, 100.0);
+
+        let mut root = root().into_view();
+
+        root.render(&mut renderer);
+        root.layout(screen);
+
+        eprintln!("{renderer:#?}");
+
+        renderer.clear();
     }
 }

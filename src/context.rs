@@ -3,7 +3,7 @@ use aplite_renderer::Renderer;
 use aplite_types::Vec2f;
 
 use crate::view::{VIEW_STORAGE, ViewId};
-use crate::widget::{CALLBACKS, WidgetEvent, Widget};
+use crate::widget::{CALLBACKS, WidgetEvent};
 
 pub(crate) mod cursor;
 pub mod layout;
@@ -92,14 +92,15 @@ impl Context {
                     .iter()
                     .filter_map(|node| {
                         let data = node.data();
-                        data.borrow()
-                            .hoverable
-                            .then_some((node.id(), data.borrow().rect))
+                        let data = data.borrow();
+                        let filter = data.hoverable || data.dragable;
+                        filter.then_some((node.id(), data.rect))
                     })
-                    .find_map(|(id, rect)| rect
+                    .filter_map(|(id, rect)| rect
                         .contains(self.cursor.hover.pos)
                         .then_some(id)
                     )
+                    .max()
             });
 
             match hovered {
@@ -195,24 +196,61 @@ impl Context {
 // #########################################################
 
 impl Context {
-    pub(crate) fn prepare_data(&self, _root_id: ViewId, renderer: &mut Renderer) {
+    pub(crate) fn prepare_data(&self, root_id: ViewId, renderer: &mut Renderer) {
 
         VIEW_STORAGE.with(|s| {
+            use crate::widget::Widget;
+
+            let _ = root_id;
             let views = s.views.borrow();
-            views.iter().rev().for_each(|view| {
-                view.render(renderer);
-            });
+
+            views
+                .iter()
+                .rev()
+                .for_each(|view| {
+                    view.render(renderer);
+                });
+
+            // let tree = s.tree.borrow();
+
+            // tree.with_all_members_of(&root_id, |state| {
+            //     let scene = renderer.scene();
+            //     let scene_size = scene.size();
+            //     let state = state.borrow();
+
+            //     let background = state.background_paint.as_paint_ref();
+            //     let border = state.border_paint.as_paint_ref();
+            //     let shape = state.shape;
+            //     let rotation = state.rotation;
+            //     let transform = state.get_transform(scene_size);
+
+            //     let border_width = if state.border_width == 0.0 {
+            //         5.0 / scene_size.width
+            //     } else {
+            //         state.border_width / scene_size.width
+            //     };
+
+            //     scene.draw(
+            //         transform,
+            //         rotation,
+            //         background,
+            //         border,
+            //         border_width,
+            //         shape,
+            //     );
+            // });
+
             // s.get_all_members_of(&root_id)
             //     .iter()
             //     .for_each(|view_id| {
             //         let scene = renderer.scene();
 
             //         let scene_size = scene.size();
-            //         // let state = s.get_widget_state(view_id).unwrap();
-            //         let state = crate::state::WidgetState::new();
+            //         let state = s.get_widget_state(view_id).unwrap();
+            //         let state = state.borrow();
 
-            //         let background = state.background.as_paint_ref();
-            //         let border = state.border_color.as_paint_ref();
+            //         let background = state.background_paint.as_paint_ref();
+            //         let border = state.border_paint.as_paint_ref();
             //         let shape = state.shape;
             //         let rotation = state.rotation;
             //         let transform = state.get_transform(scene_size);
