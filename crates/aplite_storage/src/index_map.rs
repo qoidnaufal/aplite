@@ -254,6 +254,41 @@ mod index_test {
     entity! { TestId }
 
     #[test]
+    fn insert_get() {
+        let mut storage = IndexMap::<TestId, ()>::with_capacity(10);
+        let mut created_ids = Vec::with_capacity(10);
+
+        for _ in 0..10 {
+            let id = storage.insert(());
+            created_ids.push(id);
+        }
+
+        assert!(created_ids.iter().all(|id| storage.get(id).is_some()));
+        assert_eq!(storage.len(), created_ids.len());
+    }
+
+    #[test]
+    fn remove() {
+        let mut storage = IndexMap::<TestId, ()>::with_capacity(10);
+        let mut created_ids = Vec::with_capacity(10);
+
+        for _ in 0..10 {
+            let id = storage.insert(());
+            created_ids.push(id);
+        }
+
+        created_ids.iter().for_each(|id| storage.remove(id).unwrap());
+
+        let mut new_ids = Vec::with_capacity(10);
+        for _ in 0..10 {
+            let new_id = storage.insert(());
+            new_ids.push(new_id);
+        }
+
+        assert_ne!(created_ids, new_ids);
+    }
+
+    #[test]
     fn no_duplicate() {
         let mut storage = IndexMap::<TestId, String>::with_capacity(10);
         let mut created_ids = vec![];
@@ -270,25 +305,6 @@ mod index_test {
             }
         }
 
-        assert_eq!(storage.len(), created_ids.len());
-    }
-
-    #[test]
-    fn insert_get() {
-        let mut storage = IndexMap::<TestId, String>::with_capacity(10);
-        let mut created_ids = vec![];
-
-        for i in 0..10 {
-            let data = if i > 0 && i % 3 == 0 {
-                "Double".to_string()
-            } else {
-                i.to_string()
-            };
-            let id = storage.insert(data);
-            created_ids.push(id);
-        }
-
-        assert!(created_ids.iter().all(|id| storage.get(id).is_some()));
         assert_eq!(storage.len(), created_ids.len());
     }
 }

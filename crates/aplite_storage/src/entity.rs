@@ -24,7 +24,7 @@ macro_rules! entity {
         impl Entity for $name {
             // not sure if this is a good idea to do this
             fn new(index: u32, version: u32) -> Self {
-                Self(((version as u64) << 32) + index as u64)
+                Self(((version as u64) << 32) | index as u64)
             }
 
             fn index(&self) -> usize {

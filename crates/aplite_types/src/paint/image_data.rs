@@ -21,7 +21,7 @@ impl ImageData {
     }
 
     pub fn aspect_ratio(&self) -> Fraction {
-        Size::new(self.width as f32, self.height as f32).aspect_ratio()
+        Size::new(self.width as _, self.height as _).aspect_ratio()
     }
 }
 

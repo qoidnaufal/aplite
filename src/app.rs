@@ -15,7 +15,8 @@ use aplite_future::{block_on, Executor};
 use crate::prelude::ApliteResult;
 use crate::context::Context;
 use crate::error::ApliteError;
-use crate::view::{IntoView, View, ViewId, VIEW_STORAGE};
+use crate::view::{IntoView, ViewId};
+use crate::widget::{Widget, WidgetExt, WindowWidget};
 
 pub(crate) const DEFAULT_SCREEN_SIZE: LogicalSize<u32> = LogicalSize::new(800, 600);
 
@@ -95,15 +96,13 @@ impl Aplite {
             .inner_size()
             .to_logical(window.scale_factor());
 
-        let root_id = VIEW_STORAGE.with(|s| {
-            let root_view = View::window(Size::new(size.width, size.height));
-            let root_id = root_view.node.id();
-
-            // s.storage.borrow_mut().insert(root_id, root_view);
+        let root_id = {
+            let root_view = WindowWidget::new(Size::new(size.width, size.height));
+            let root_id = root_view.id();
 
             if let Some(view_fn) = self.pending_views.take() {
                 let view = view_fn(window_id);
-                s.append_child(&root_id, view);
+                root_view.child(view);
 
                 self.cx.layout_the_whole_window(&root_id);
 
@@ -111,7 +110,7 @@ impl Aplite {
             }
 
             root_id
-        });
+        };
 
         let window_handle = WindowHandle {
             window: Arc::clone(&window),
@@ -180,7 +179,7 @@ impl Aplite {
 
             match renderer.begin() {
                 Ok(()) => {
-                    self.cx.prepare_data(window_handle.root_id, renderer.new_scene());
+                    self.cx.prepare_data(window_handle.root_id, renderer);
                     renderer.encode();
                     window_handle.window.pre_present_notify();
                     renderer.finish();

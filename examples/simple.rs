@@ -30,13 +30,13 @@ fn simple() -> impl IntoView {
     let button = Button::new()
         .border_color(Rgba::WHITE)
         .border_width(6.0)
-        .dragable(true)
+        .dragable()
         .corners(CornerRadius::splat(47.))
         .size((200, 69))
         .on(LeftClick, click_count);
 
     let circle = CircleWidget::new()
-        .dragable(true)
+        .dragable()
         .on(LeftClick, click_rotate)
         .border_width(6.0)
         .size((150, 150));

@@ -41,8 +41,8 @@ pub struct WidgetState {
     pub(crate) corner_radius: CornerRadius,
     pub(crate) border_width: f32,
     pub(crate) event: Option<WidgetEvent>,
-    pub(crate) background: Paint,
-    pub(crate) border_color: Paint,
+    pub(crate) background_paint: Paint,
+    pub(crate) border_paint: Paint,
     pub(crate) dragable: bool,
     pub(crate) hoverable: bool,
 }
@@ -76,8 +76,8 @@ impl Default for WidgetState {
             shape: Shape::Rect,
             corner_radius: CornerRadius::splat(0.0),
             event: None,
-            background: Paint::Color(Rgba::RED),
-            border_color: Paint::Color(Rgba::WHITE),
+            background_paint: Paint::Color(Rgba::RED),
+            border_paint: Paint::Color(Rgba::WHITE),
             border_width: 0.0,
         }
     }
@@ -90,16 +90,16 @@ impl WidgetState {
             name: "Root",
             rect: Rect::from_size(size),
             align_h: AlignH::Center,
-            background: Paint::Color(Rgba::TRANSPARENT),
-            border_color: Paint::Color(Rgba::TRANSPARENT),
+            background_paint: Paint::Color(Rgba::TRANSPARENT),
+            border_paint: Paint::Color(Rgba::TRANSPARENT),
             ..Default::default()
         }
     }
 
     // FIXME: consider rotation & maybe some precision
-    pub(crate) fn detect_hover(&self, cursor: &Cursor) -> bool {
-        self.rect.contains(cursor.hover.pos)
-    }
+    // pub(crate) fn detect_hover(&self, cursor: &Cursor) -> bool {
+    //     self.rect.contains(cursor.hover.pos)
+    // }
 
     pub(crate) fn get_transform(&self, screen: Size) -> Matrix3x2 {
         let rect = self.rect;
@@ -108,11 +108,11 @@ impl WidgetState {
         let sx = rect.width / screen.width;
         let sy = rect.height / screen.height;
 
-        Matrix3x2::from_scale_rad_translate(sx, sy, self.rotation, tx, ty)
+        Matrix3x2::from_scale_translate(sx, sy, tx, ty)
     }
 }
 
-// creation
+// builder
 impl WidgetState {
     pub fn new() -> Self {
         Self::default()
@@ -224,8 +224,13 @@ impl WidgetState {
         self
     }
 
-    pub fn with_dragable(mut self, drag: bool) -> Self {
-        self.set_dragable(drag);
+    pub fn with_dragable(mut self) -> Self {
+        self.set_dragable(true);
+        self
+    }
+
+    pub fn with_border_width(mut self, val: f32) -> Self {
+        self.border_width = val;
         self
     }
 }
@@ -326,7 +331,7 @@ impl WidgetState {
     /// - [`ImageData`](aplite_types::ImageData)
     /// - [`Rgba`](aplite_types::Rgba)
     pub fn set_background(&mut self, paint: impl Into<Paint>) {
-        self.background = paint.into();
+        self.background_paint = paint.into();
     }
 
     #[inline(always)]
@@ -334,7 +339,7 @@ impl WidgetState {
     /// - [`ImageData`](aplite_types::ImageData)
     /// - [`Rgba`](aplite_types::Rgba)
     pub fn set_border_color(&mut self, color: impl Into<Paint>) {
-        self.border_color = color.into();
+        self.border_paint = color.into();
     }
 
     #[inline(always)]

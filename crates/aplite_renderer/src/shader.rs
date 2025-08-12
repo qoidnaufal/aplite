@@ -31,6 +31,7 @@ struct Element {
     border: vec4<f32>,
     radius: Radius,
     shape: u32,
+    rotation: f32,
     border_width: f32,
     atlas_id: i32,
 }
@@ -39,14 +40,20 @@ struct Element {
 @group(1) @binding(1) var<storage> transforms: array<mat3x2<f32>>;
 
 // scale -> rotate -> translate
-fn transform_point(index: u32, pos: vec2<f32>) -> vec2f {
-    let t = transforms[index];
+fn transform_point(tx: mat3x2<f32>, rotation: f32, pos: vec2<f32>) -> vec2f {
+    let sin = sin(rotation);
+    let cos = cos(rotation);
 
-    let e_mat = mat2x2<f32>(t[0], t[1]);
+    let r = mat2x2<f32>(
+        cos, -sin,
+        sin,  cos,
+    );
+
+    let t = mat2x2<f32>(tx[0], tx[1]);
 
     let s_mat = mat2x2<f32>(screen_t[0], screen_t[1]);
 
-    return s_mat * (e_mat * pos + t[2]) + screen_t[2];
+    return s_mat * (r * t * pos + tx[2]) + screen_t[2];
 }
 
 struct VertexInput {
@@ -64,8 +71,9 @@ struct FragmentPayload {
 @vertex
 fn vs_main(vertex: VertexInput) -> FragmentPayload {
     let element = elements[vertex.id];
+    let transform = transforms[vertex.id];
 
-    let pos = transform_point(vertex.id, vertex.pos);
+    let pos = transform_point(transform, element.rotation, vertex.pos);
 
     var out: FragmentPayload;
     out.uv = select(vertex.uv * 2 - 1, vertex.uv, element.atlas_id > -1);
@@ -106,22 +114,22 @@ fn sdSegment(p: vec2f, a: vec2f, b: vec2f) -> f32 {
 fn sdf(uv: vec2<f32>, index: u32, element: Element) -> f32 {
     let transform = transforms[index];
     let size = vec2f(transform[0].x, transform[1].y);
-    let w = element.border_width;
+    let border_width = element.border_width;
 
     switch element.shape {
         case 0u: {
             let p = uv * size.x;
-            let r = size.x - w;
+            let r = size.x - border_width;
             return sdCircle(p, r);
         }
         case 1u: {
             let p = uv * size;
-            let b = size - w;
+            let b = size - border_width;
             return sdRect(p, b);
         }
         case 2u: {
             let p = uv * size;
-            let b = size - w;
+            let b = size - border_width;
             let r = scale_radius(element.radius, size.x);
             return sdRoundedRect(p, b, r);
         }

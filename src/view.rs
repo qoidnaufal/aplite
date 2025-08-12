@@ -1,5 +1,5 @@
-use std::rc::{Rc, Weak};
 use std::cell::RefCell;
+use std::rc::{Rc, Weak};
 
 use aplite_renderer::Shape;
 use aplite_reactive::*;
@@ -21,51 +21,48 @@ use crate::context::layout::{
 
 entity! { pub ViewId }
 
-// FIXME: this is kinda cheating, and not fun at all
 thread_local! {
     pub(crate) static VIEW_STORAGE: ViewStorage = ViewStorage::new();
 }
 
 pub(crate) struct ViewStorage {
+    // FIXME: this is nasty and slow
     pub(crate) tree: RefCell<Tree<ViewId, Rc<RefCell<WidgetState>>>>,
-    // pub(crate) storage: RefCell<U64Map<ViewId, View>>,
-
-    // WARN: do you really need separate id for paint?
+    pub(crate) views: RefCell<Vec<View>>,
     pub(crate) hoverable: RefCell<Vec<ViewId>>,
     pub(crate) dirty: Signal<bool>,
 }
 
 impl ViewStorage {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             tree: RefCell::new(Tree::with_capacity(1024)),
-            // storage: RefCell::new(U64Map::new()),
+            views: RefCell::new(Vec::with_capacity(1024)),
             hoverable: RefCell::new(Vec::new()),
             dirty: Signal::new(false),
         }
     }
 
-    pub(crate) fn insert(&self, data: Rc<RefCell<WidgetState>>) -> ViewId {
-        self.tree.borrow_mut().insert(data)
+    pub(crate) fn insert(&self, state: Rc<RefCell<WidgetState>>) -> ViewId {
+        self.tree.borrow_mut().insert(state)
     }
 
     pub(crate) fn get_widget_state(&self, id: &ViewId) -> Option<Rc<RefCell<WidgetState>>> {
         self.tree.borrow().get(id).map(|rc| Rc::clone(rc))
     }
 
-    // FIXME: there's logic error when appending on a fn() -> impl IntoView
     pub(crate) fn append_child(&self, id: &ViewId, child: impl IntoView) {
         let child_id = child.id();
-
+        let child_view = child.into_view();
+        self.views.borrow_mut().push(child_view);
         self.tree.borrow_mut().add_child(id, child_id);
-        // self.storage.borrow_mut().insert(child_id, child.into_view());
     }
 
     pub(crate) fn add_sibling(&self, id: &ViewId, sibling: impl IntoView) {
         let sibling_id = sibling.id();
-
+        let sibling_view = sibling.into_view();
+        self.views.borrow_mut().push(sibling_view);
         self.tree.borrow_mut().add_sibling(id, sibling_id);
-        // self.storage.borrow_mut().insert(sibling_id, sibling.into_view());
     }
 
     #[inline(always)]
@@ -78,46 +75,42 @@ pub trait IntoView: Widget {
     fn into_view(self) -> View;
 }
 
-impl<T: Widget> IntoView for T {
+impl<T: Widget + 'static> IntoView for T {
     fn into_view(self) -> View {
         View::new(self)
     }
 }
 
-impl Widget for Box<dyn IntoView> {
-    fn id(&self) -> ViewId {
-        self.as_ref().id()
-    }
-
-    fn node(&self) -> ViewNode {
-        self.as_ref().node()
-    }
-}
-
 /// wrapper over [`Widget`] trait to be stored inside [`ViewStorage`]
 pub struct View {
-    pub(crate) node: ViewNode,
+    inner: Box<dyn Widget>
 }
 
 impl View {
-    fn new(widget: impl IntoView) -> Self {
+    fn new(widget: impl IntoView + 'static) -> Self {
         Self {
-            node: widget.node(),
+            inner: Box::new(widget),
         }
     }
+}
 
-    pub(crate) fn window(size: Size) -> Self {
-        Self {
-            node: ViewNode::window(size),
-        }
+impl Widget for View {
+    fn node(&self) -> ViewNode {
+        self.inner.node()
+    }
+}
+
+impl Widget for Box<dyn IntoView> {
+    fn node(&self) -> ViewNode {
+        self.as_ref().node()
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct ViewNode(
     pub(crate) ViewId,
-    Weak<RefCell<WidgetState>>,
-    Signal<bool>,
+    pub(crate) Weak<RefCell<WidgetState>>,
+    pub(crate) SignalWrite<bool>,
 );
 
 impl ViewNode {
@@ -127,7 +120,7 @@ impl ViewNode {
             let inner = Rc::downgrade(&state);
             let id = s.insert(state);
 
-            Self(id, inner, s.dirty)
+            Self(id, inner, s.dirty.write_only())
         })
     }
 
@@ -137,13 +130,8 @@ impl ViewNode {
             let inner = Rc::downgrade(&state);
             let id = s.insert(state);
 
-            Self(id, inner, s.dirty)
+            Self(id, inner, s.dirty.write_only())
         })
-    }
-
-    #[inline(always)]
-    pub fn id(&self) -> ViewId {
-        self.0
     }
 
     #[inline(always)]
@@ -202,7 +190,7 @@ impl ViewNode {
     /// - [`Rgba`](aplite_types::Rgba)
     pub fn with_background_paint(self, paint: impl Into<Paint>) -> Self {
         if let Some(state) = self.upgrade() {
-            state.borrow_mut().background = paint.into();
+            state.borrow_mut().background_paint = paint.into();
         }
         self
     }
@@ -212,7 +200,7 @@ impl ViewNode {
     /// - [`Rgba`](aplite_types::Rgba)
     pub fn with_border_paint(self, color: impl Into<Paint>) -> Self {
         if let Some(state) = self.upgrade() {
-            state.borrow_mut().border_color = color.into();
+            state.borrow_mut().border_paint = color.into();
         }
         self
     }
@@ -270,19 +258,22 @@ impl ViewNode {
         self
     }
 
-    pub fn set_hoverable(self) -> Self {
+    pub fn hoverable(self) -> Self {
         if let Some(state) = self.upgrade() {
             state.borrow_mut().hoverable = true;
         }
         VIEW_STORAGE.with(|s| {
-            s.hoverable.borrow_mut().push(self.0);
+            let mut hoverable = s.hoverable.borrow_mut();
+            if !hoverable.contains(&self.0) {
+                hoverable.push(self.0);
+            }
         });
         self
     }
 
     pub fn set_color(&self, color: Rgba<u8>) {
         if let Some(state) = self.upgrade() {
-            state.borrow_mut().background = color.into();
+            state.borrow_mut().background_paint = color.into();
             self.2.set(true);
         }
     }
@@ -301,6 +292,13 @@ impl ViewNode {
     pub fn set_rotation_rad(&self, rad: f32) {
         if let Some(state) = self.upgrade() {
             state.borrow_mut().rotation = rad;
+            self.2.set(true);
+        }
+    }
+
+    pub fn set_spacing(&self, val: f32) {
+        if let Some(state) = self.upgrade() {
+            state.borrow_mut().spacing = val;
             self.2.set(true);
         }
     }

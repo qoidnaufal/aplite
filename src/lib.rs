@@ -14,7 +14,7 @@ pub mod prelude {
 
     pub use crate::app::Aplite;
     pub use crate::context::Context;
-    pub use crate::state::AspectRatio;
+    pub use crate::state::{WidgetState, AspectRatio};
     pub use crate::context::layout::{
         Orientation,
         Padding,

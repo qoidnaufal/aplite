@@ -167,7 +167,7 @@ impl Renderer {
     }
 
     #[inline(always)]
-    pub fn new_scene(&mut self) -> Scene<'_> {
+    pub fn scene(&mut self) -> Scene<'_> {
         Scene {
             screen_res: self.screen_res(),
             device: &self.device,
@@ -265,10 +265,11 @@ pub struct Scene<'a> {
 // FIXME: this feels immediate mode to me, idk
 impl Scene<'_> {
     pub fn draw(
-        &mut self,
+        self,
         transform: Matrix3x2,
-        background: PaintRef<'_>,
-        border: PaintRef<'_>,
+        rotation: f32,
+        background_paint: PaintRef<'_>,
+        border_paint: PaintRef<'_>,
         border_width: f32,
         shape: Shape,
     ) {
@@ -278,16 +279,17 @@ impl Scene<'_> {
 
         let mut element = Element::new()
             .with_shape(shape)
+            .with_rotation(rotation)
             .with_border_width(border_width);
 
-        match border {
+        match border_paint {
             PaintRef::Color(rgba) => {
                 element.border = rgba.f32();
             },
             PaintRef::Image(_image_ref) => {},
         }
 
-        let atlas_id = match background {
+        let atlas_id = match background_paint {
             PaintRef::Color(rgba) => {
                 element.background = rgba.f32();
                 None

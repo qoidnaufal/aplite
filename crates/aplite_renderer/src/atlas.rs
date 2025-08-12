@@ -51,7 +51,7 @@ impl Atlas {
         if let Some(id) = self.processed.get(&data.downgrade()) {
             return Some(*id)
         }
-        let size = Size::new(data.width as f32, data.height as f32);
+        let size = Size::new(data.width as _, data.height as _);
         if let Some(id) = self.allocator.alloc(size) {
             self.pending_data.insert(id, data);
 

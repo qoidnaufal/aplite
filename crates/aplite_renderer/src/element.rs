@@ -7,6 +7,7 @@ pub struct Element {
     pub(crate) border: Rgba<f32>,
     pub(crate) corners: CornerRadius,
     pub(crate) shape: Shape,
+    pub(crate) rotation: f32, // FIXME: this is temporary
     pub(crate) border_width: f32,
     pub(crate) atlas_id: i32,
 }
@@ -27,6 +28,7 @@ impl Element {
             border: Rgba::new(1., 1., 1., 1.),
             corners: CornerRadius::splat(25.),
             shape: Shape::RoundedRect,
+            rotation: 0.0,
             border_width: 0.0,
             atlas_id: -1,
         }
@@ -54,6 +56,11 @@ impl Element {
 
     pub fn with_shape(mut self, shape: Shape) -> Self {
         self.shape = shape;
+        self
+    }
+
+    pub fn with_rotation(mut self, val: f32) -> Self {
+        self.rotation = val;
         self
     }
 

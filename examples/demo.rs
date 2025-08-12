@@ -5,7 +5,7 @@ fn first_row() -> impl IntoView {
     HStack::new()
         .child(
             Image::new(|| image_reader("examples/assets/image1.jpg"))
-                .set_state(|state| state.set_image_aspect_ratio(Defined((8, 5))))
+                .image_aspect_ratio(Defined((8, 5)))
         )
         .child(
             Image::new(|| image_reader("examples/assets/image2.jpg"))
@@ -15,10 +15,8 @@ fn first_row() -> impl IntoView {
                 .color(Rgba::PURPLE)
                 .hover_color(Rgba::RED)
         )
-        .set_state(|s| {
-            s.set_spacing(40.);
-            s.set_padding(Padding::new(20., 20., 40., 40.));
-        })
+        .spacing(40.)
+        .padding(Padding::new(20., 20., 40., 40.))
         .corners(CornerRadius::splat(10.))
         .border_width(5.0)
         .color(Rgba::LIGHT_GRAY)
@@ -29,6 +27,7 @@ fn button_stack(
     inc: impl Fn() + 'static,
     dec: impl Fn() + 'static,
     counter: SignalRead<i32>,
+    set_counter: SignalWrite<i32>,
 ) -> impl IntoView {
     VStack::new()
         .child(
@@ -54,6 +53,7 @@ fn button_stack(
                 .hover_color(Rgba::PURPLE)
                 .border_width(5.0)
                 .corners(CornerRadius::new(0., 69., 0., 69.))
+                .on(LeftClick, move || set_counter.set(0))
         )
         .child({
             let button = Button::new().corners(CornerRadius::splat(70.));
@@ -70,23 +70,22 @@ fn button_stack(
             button
         })
         .color(Rgba::new(0, 0, 0, 30))
-        .dragable(true)
-        .set_state(|s| {
-            s.set_min_width(400.);
-            s.set_align_h(AlignH::Center);
-            s.set_align_v(AlignV::Middle);
-            s.set_padding(Padding::splat(10.));
-            s.set_spacing(5.);
-        })
+        .dragable()
+        .padding(Padding::splat(10.))
+        .spacing(5.)
+        .min_width(400.)
+        .align_h(AlignH::Center)
+        .align_v(AlignV::Middle)
 }
 
 fn second_row(
     inc: impl Fn() + 'static,
     dec: impl Fn() + 'static,
     counter: SignalRead<i32>,
+    set_counter: SignalWrite<i32>,
 ) -> impl IntoView {
     HStack::new()
-        .child(button_stack(inc, dec, counter))
+        .child(button_stack(inc, dec, counter, set_counter))
         .child(
             CircleWidget::new()
                 .color(rgba_hex("#104bcdbf"))
@@ -95,11 +94,9 @@ fn second_row(
                 .border_width(3.0)
         )
         .color(Rgba::LIGHT_GRAY)
-        .dragable(true)
-        .set_state(|s| {
-            s.set_padding(Padding::splat(30.));
-            s.set_spacing(5.);
-        })
+        .dragable()
+        .padding(Padding::splat(30.))
+        .spacing(5.)
 }
 
 fn root() -> impl IntoView {
@@ -108,17 +105,17 @@ fn root() -> impl IntoView {
     let inc = move || set_counter.update(|num| *num += 1);
     let dec = move || set_counter.update(|num| *num -= 1);
 
-    Effect::new(move |_| eprint!("{}        \r", counter.get()));
+    Effect::new(move |_| eprintln!("{:?}", counter.get()));
 
     let circle = CircleWidget::new()
         .color(Rgba::new(169, 72, 43, 255))
         .hover_color(Rgba::new(169, 72, 43, 200))
         .border_color(Rgba::WHITE)
         .border_width(5.0)
-        .dragable(true);
+        .dragable();
 
     first_row()
-        .and(second_row(inc, dec, counter))
+        .and(second_row(inc, dec, counter, set_counter))
         .and(circle)
 }
 

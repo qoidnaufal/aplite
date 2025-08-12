@@ -91,6 +91,7 @@ impl Matrix3x2 {
     }
 
     #[inline(always)]
+    // FIXME: why did i get zero value on 90 degree
     pub fn from_scale_rad_translate(sx: f32, sy: f32, rad: f32, tx: f32, ty: f32) -> Self {
         let (sin, cos) = rad.sin_cos();
         Self([

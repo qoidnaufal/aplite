@@ -1,10 +1,11 @@
 use std::cell::RefCell;
 
-use aplite_renderer::Shape;
+use aplite_renderer::{Shape, Renderer};
 use aplite_types::{Rgba, CornerRadius, Size};
 use aplite_storage::U64Map;
 
-use crate::state::WidgetState;
+use crate::state::AspectRatio;
+use crate::context::layout::*;
 use crate::view::{
     IntoView,
     ViewId,
@@ -22,28 +23,40 @@ pub use {
     stack::*,
 };
 
-thread_local! {
-    pub(crate) static CALLBACKS: RefCell<Callbacks> = RefCell::new(Default::default());
-}
-
-type Callbacks = U64Map<ViewId, CallbackStore>;
-
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WidgetEvent {
-    Hover,
-    LeftClick,
-    RightClick,
-    Drag,
-    Input,
-}
-
 /// main building block to create a renderable component
 pub trait Widget {
     fn node(&self) -> ViewNode;
 
     fn id(&self) -> ViewId {
         self.node().0
+    }
+
+    fn render(&self, renderer: &mut Renderer) {
+        let scene = renderer.scene();
+        let size = scene.size();
+
+        let state = self.node().upgrade().unwrap();
+        let state = state.borrow();
+
+        let transform = state.get_transform(size);
+        let rotation = state.rotation;
+        let background_paint = state.background_paint.as_paint_ref();
+        let border_paint = state.border_paint.as_paint_ref();
+        let border_width = if state.border_width == 0.0 {
+            5.0 / size.width
+        } else {
+            state.border_width / size.width
+        };
+        let shape = state.shape;
+
+        scene.draw(
+            transform,
+            rotation,
+            background_paint,
+            border_paint,
+            border_width,
+            shape
+        );
     }
 }
 
@@ -73,26 +86,23 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn set_state<F>(self, mut state_fn: F) -> Self
-    where
-        F: FnMut(&mut WidgetState)
-    {
+    fn image_aspect_ratio(self, val: AspectRatio) -> Self {
         if let Some(state) = self.node().upgrade() {
-            state_fn(&mut state.borrow_mut())
+            state.borrow_mut().image_aspect_ratio = val;
         }
         self
     }
 
     fn color(self, color: Rgba<u8>) -> Self {
         if let Some(state) = self.node().upgrade() {
-            state.borrow_mut().background = color.into();
+            state.borrow_mut().background_paint = color.into();
         }
         self
     }
 
     fn border_color(self, color: Rgba<u8>) -> Self {
         if let Some(state) = self.node().upgrade() {
-            state.borrow_mut().border_color = color.into();
+            state.borrow_mut().border_paint = color.into();
         }
         self
     }
@@ -135,9 +145,9 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn dragable(self, value: bool) -> Self {
+    fn dragable(self) -> Self {
         if let Some(state) = self.node().upgrade() {
-            state.borrow_mut().dragable = value;
+            state.borrow_mut().dragable = true;
         }
         VIEW_STORAGE.with(|s| {
             let mut hoverable = s.hoverable.borrow_mut();
@@ -147,6 +157,78 @@ pub trait WidgetExt: Widget + Sized {
         });
         self
     }
+
+    fn spacing(self, val: f32) -> Self {
+        if let Some(state) = self.node().upgrade() {
+            state.borrow_mut().spacing = val;
+        }
+        self
+    }
+
+    fn padding(self, padding: Padding) -> Self {
+        if let Some(state) = self.node().upgrade() {
+            state.borrow_mut().padding = padding;
+        }
+        self
+    }
+
+    fn min_width(self, val: f32) -> Self {
+        if let Some(state) = self.node().upgrade() {
+            state.borrow_mut().min_width = Some(val);
+        }
+        self
+    }
+
+    fn min_height(self, val: f32) -> Self {
+        if let Some(state) = self.node().upgrade() {
+            state.borrow_mut().min_height = Some(val);
+        }
+        self
+    }
+
+    fn max_width(self, val: f32) -> Self {
+        if let Some(state) = self.node().upgrade() {
+            state.borrow_mut().max_width = Some(val);
+        }
+        self
+    }
+
+    fn max_height(self, val: f32) -> Self {
+        if let Some(state) = self.node().upgrade() {
+            state.borrow_mut().max_height = Some(val);
+        }
+        self
+    }
+
+    fn align_h(self, align_h: AlignH) -> Self {
+        if let Some(state) = self.node().upgrade() {
+            state.borrow_mut().align_h = align_h;
+        }
+        self
+    }
+
+    fn align_v(self, align_v: AlignV) -> Self {
+        if let Some(state) = self.node().upgrade() {
+            state.borrow_mut().align_v = align_v;
+        }
+        self
+    }
+}
+
+thread_local! {
+    pub(crate) static CALLBACKS: RefCell<Callbacks> = RefCell::new(Default::default());
+}
+
+type Callbacks = U64Map<ViewId, CallbackStore>;
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WidgetEvent {
+    Hover,
+    LeftClick,
+    RightClick,
+    Drag,
+    Input,
 }
 
 pub(crate) struct CallbackStore(Box<[Option<Box<dyn FnMut()>>; 5]>);
@@ -173,6 +255,24 @@ impl CallbackStore {
 
     pub(crate) fn get_mut(&mut self, event: WidgetEvent) -> Option<&mut Box<dyn FnMut()>> {
         self.0[event as usize].as_mut()
+    }
+}
+
+pub(crate) struct WindowWidget {
+    node: ViewNode,
+}
+
+impl WindowWidget {
+    pub(crate) fn new(size: Size) -> Self {
+        Self {
+            node: ViewNode::window(size)
+        }
+    }
+}
+
+impl Widget for WindowWidget {
+    fn node(&self) -> ViewNode {
+        self.node.clone()
     }
 }
 
