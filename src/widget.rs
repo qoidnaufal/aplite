@@ -309,47 +309,60 @@ impl Widget for CircleWidget {
 
 #[cfg(test)]
 mod alt {
+    use std::rc::{Rc, Weak};
+    use std::cell::RefCell;
     use crate::state::WidgetState;
     use aplite_types::Rect;
 
-    struct Button {
-        state: WidgetState,
-        children: Vec<Box<dyn Widget>>,
+    #[derive(Clone, Copy)]
+    struct WidgetId(u64);
+
+    impl WidgetId {
+        fn new() -> Self {
+            static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            Self(COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+        }
     }
 
-    impl Button {
-        fn new(name: &'static str) -> Self {
-            Self {
-                state: WidgetState::new().with_name(name),
-                children: Vec::new(),
-            }
+    impl std::fmt::Debug for WidgetId {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "WidgetId({})", self.0)
         }
     }
 
     trait Widget {
-        fn state_ref(&self) -> &WidgetState;
-        fn state_mut(&mut self) -> &mut WidgetState;
+        fn id(&self) -> WidgetId;
+        fn state_ref(&self) -> Weak<RefCell<WidgetState>>;
         fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>>;
         fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>>;
 
-        fn render(&self, renderer: &mut Vec<String>) {
-            renderer.push(self.state_ref().name.to_string());
-
-            if let Some(children) = self.children_ref() {
-                children.iter()
-                    .for_each(|w| w.render(renderer));
-            }
+        fn draw(&self, renderer: &mut Vec<String>) {
+            let attr = self.state_ref()
+                    .upgrade()
+                    .unwrap()
+                    .borrow()
+                    .rect;
+            let to_render = format!("{:?} > {attr:?}", self.id());
+            renderer.push(to_render);
         }
 
-        fn layout(&mut self, parent_bound: Rect) {
-            let offset = (parent_bound.x, parent_bound.y);
-            self.state_mut().set_position(offset.into());
-            let bound = self.state_ref().rect;
-            if let Some(children) = self.children_mut() {
+        fn layout(&self, cx: &mut Rect) {
+            let offset = (cx.x, cx.y);
+            let state = self.state_ref().upgrade().unwrap();
+
+            state.borrow_mut().set_position(offset.into());
+
+            let this = state.borrow().rect;
+            cx.y += this.max_y();
+
+            if let Some(children) = self.children_ref() {
                 children
-                    .iter_mut()
-                    .for_each(|w| w.layout(bound));
+                    .iter()
+                    .for_each(|w| w.layout(cx));
             }
+
+            cx.y = this.y;
+            cx.x = this.max_x();
         }
     }
 
@@ -364,17 +377,97 @@ mod alt {
 
     impl<T: Widget + Sized> WidgetExt for T {}
 
-    trait IntoView: Widget {
-        fn into_view(self) -> View;
+    trait Internal: Widget + Sized {
+        fn render(&self, renderer: &mut Vec<String>) {
+            self.draw(renderer);
+            if let Some(children) = self.children_ref() {
+                children.iter().for_each(|w| w.render(renderer));
+            }
+        }
+
+        fn find(&self, id: &WidgetId) -> Option<Box<&dyn Widget>> {
+            if self.id().0 == id.0 {
+                return Some(Box::new(self))
+            }
+
+            self.children_ref().and_then(|vec| {
+                vec.iter().find_map(|w| w.find(id))
+            })
+        }
+
+        fn find_mut(&mut self, id: &WidgetId) -> Option<Box<&mut dyn Widget>> {
+            if self.id().0 == id.0 {
+                return Some(Box::new(self))
+            }
+            self.children_mut().and_then(|vec| {
+                vec.iter_mut().find_map(|w| w.find_mut(id))
+            })
+        }
+
+        fn parent_mut(&mut self, id: &WidgetId) -> Option<Box<&mut dyn Widget>> {
+            if let Some(children) = self.children_ref()
+                && children
+                    .iter()
+                    .any(|w| w.id().0 == id.0)
+            {
+                return Some(Box::new(self))
+            }
+
+            self.children_mut()
+                .and_then(|vec| {
+                    vec.iter_mut()
+                        .find_map(|w| w.parent_mut(id))
+                })
+        }
+
+        fn remove(&mut self, id: &WidgetId) -> Option<Box<dyn Widget>> {
+            self.parent_mut(id)
+                .and_then(|parent| {
+                    parent.children_mut()
+                        .and_then(|children| {
+                            children.iter()
+                                .position(|w| w.id().0 == id.0)
+                                .map(|index| children.remove(index))
+                        })
+                })
+        }
+
+        fn insert<T: Widget + 'static>(&mut self, parent: &WidgetId, widget: T) {
+            if let Some(p) = self.find_mut(parent)
+                && let Some(vec) = p.children_mut()
+            {
+                vec.push(Box::new(widget));
+            }
+        }
+    }
+
+    impl<T: Widget + Sized> Internal for T {}
+
+    struct Button {
+        id: WidgetId,
+        // can do this or just plain WidgetState + use &mut for mutation
+        // although an Rc would enable me to put this into Effect
+        state: Rc<RefCell<WidgetState>>,
+        children: Vec<Box<dyn Widget>>,
+    }
+
+    impl Button {
+        fn new(name: &'static str) -> Self {
+            Self {
+                id: WidgetId::new(),
+                state: Rc::new(RefCell::new(WidgetState::new().with_name(name))),
+                children: Vec::new(),
+            }
+        }
     }
 
     impl Widget for Button {
-        fn state_ref(&self) -> &WidgetState {
-            &self.state
+        fn id(&self) -> WidgetId {
+            self.id
         }
 
-        fn state_mut(&mut self) -> &mut WidgetState {
-            &mut self.state
+        fn state_ref(&self) -> Weak<RefCell<WidgetState>> {
+            Rc::downgrade(&self.state)
         }
 
         fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
@@ -386,11 +479,8 @@ mod alt {
         }
     }
 
-    struct View {
-        widget: Box<dyn Widget>,
-    }
-
-    impl View {
+    trait IntoView: Widget {
+        fn into_view(self) -> View;
     }
 
     impl<T: Widget + 'static> IntoView for T {
@@ -401,47 +491,115 @@ mod alt {
         }
     }
 
+    #[derive(Debug)]
+    struct View {
+        widget: Box<dyn Widget>,
+    }
+
     impl Widget for View {
-        fn state_ref(&self) -> &WidgetState {
-            self.widget.as_ref().state_ref()
+        fn id(&self) -> WidgetId {
+            self.widget.id()
         }
 
-        fn state_mut(&mut self) -> &mut WidgetState {
-            self.widget.as_mut().state_mut()
+        fn state_ref(&self) -> Weak<RefCell<WidgetState>> {
+            self.widget.state_ref()
         }
 
         fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
-            self.widget.as_ref().children_ref()
+            self.widget.children_ref()
         }
 
         fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
-            self.widget.as_mut().children_mut()
+            self.widget.children_mut()
+        }
+    }
+
+    impl Widget for Box<dyn Widget> {
+        fn id(&self) -> WidgetId {
+            self.as_ref().id()
+        }
+
+        fn state_ref(&self) -> Weak<RefCell<WidgetState>> {
+            self.as_ref().state_ref()
+        }
+
+        fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
+            self.as_ref().children_ref()
+        }
+
+        fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
+            self.as_mut().children_mut()
+        }
+    }
+
+    impl std::fmt::Debug for Box<dyn Widget> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            self.as_ref().fmt(f)
+        }
+    }
+
+    impl std::fmt::Debug for &dyn Widget {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct(&self.state_ref()
+                .upgrade()
+                .map(|rc| rc.borrow().name)
+                .unwrap_or("Widget")
+            )
+                .field("id", &self.id())
+                .field("children", &self.children_ref().unwrap_or(&vec![]))
+                .finish()
         }
     }
 
     fn root() -> impl IntoView {
-        Button::new("root")
+        Button::new("Zero")
             .child({
-                Button::new("one")
-                    .child(Button::new("four"))
-                    .child(Button::new("five"))
+                Button::new("One")
+                    .child({
+                        Button::new("Four")
+                            .child(Button::new("Six"))
+                            .child(Button::new("Seven"))
+                            .child(Button::new("Eight"))
+                    })
+                    .child(Button::new("Five"))
             })
-            .child(Button::new("two"))
-            .child(Button::new("three"))
+            .child(Button::new("Two"))
+            .child(Button::new("Three"))
     }
 
     #[test]
     fn alt_test() {
         let mut renderer: Vec<String> = vec![];
-        let screen = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let mut screen = Rect::new(0.0, 0.0, 100.0, 100.0);
 
         let mut root = root().into_view();
+        root.layout(&mut screen);
 
         root.render(&mut renderer);
-        root.layout(screen);
+
+        let to_find = root.find(&WidgetId(5));
+
+        eprintln!("{to_find:#?}");
+        eprintln!("{renderer:#?}");
+        renderer.clear();
+
+        let removed = root.remove(&WidgetId(2));
+        eprintln!("{removed:#?}");
+        let mut screen = Rect::new(0.0, 0.0, 100.0, 100.0);
+        root.layout(&mut screen);
+        root.render(&mut renderer);
 
         eprintln!("{renderer:#?}");
+        renderer.clear();
 
+        let widget = Button::new("to_insert").child(Button::new("sub_child"));
+        root.insert(&WidgetId(1), widget);
+        let mut screen = Rect::new(0.0, 0.0, 100.0, 100.0);
+        root.layout(&mut screen);
+        root.render(&mut renderer);
+
+        eprintln!("{renderer:#?}");
+        eprintln!("{root:#?}");
         renderer.clear();
     }
 }
