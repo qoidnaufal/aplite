@@ -115,7 +115,20 @@ fn root() -> impl IntoView {
         .dragable();
 
     VStack::new()
-        .child(first_row())
+        .child({
+            let first_row = first_row();
+            let node_ref = first_row.node_ref();
+            Effect::new(move |_| {
+                counter.with(|num| {
+                    if *num > 0 && *num % 3 == 0 {
+                        node_ref.hide(true);
+                    } else {
+                        node_ref.hide(false);
+                    }
+                })
+            });
+            first_row
+        })
         .child(second_row(inc, dec, counter, set_counter))
         .child(circle)
         .align_h(AlignH::Center)

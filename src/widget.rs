@@ -77,6 +77,8 @@ pub trait Widget {
     }
 
     fn mouse_hover(&self, cursor: &Cursor) -> Option<WidgetId> {
+        if self.node().borrow().hide { return None }
+
         if let Some(children) = self.children_ref() {
             let hovered = children.iter()
                 .find_map(|child| child.mouse_hover(cursor));
@@ -92,38 +94,41 @@ pub trait Widget {
             .then_some(self.id())
     }
 
-    fn draw(&self, renderer: &mut Renderer) {
+    fn draw(&self, renderer: &mut Renderer) -> bool {
         let node = self.node();
+        let hide = node.borrow().hide;
 
-        if node.borrow().hide { return }
+        if !hide {
+            let state = node.borrow();
+            let scene = renderer.scene();
+            let size = scene.size();
 
-        let state = node.borrow();
-        let scene = renderer.scene();
-        let size = scene.size();
+            let transform = state.get_transform(size);
+            let rotation = state.rotation;
+            let background_paint = state.background_paint.as_paint_ref();
+            let border_paint = state.border_paint.as_paint_ref();
+            let shape = state.shape;
+            let border_width = (state.border_width == 0.0)
+                .then_some(5.0 / size.width)
+                .unwrap_or(state.border_width / size.width);
 
-        let transform = state.get_transform(size);
-        let rotation = state.rotation;
-        let background_paint = state.background_paint.as_paint_ref();
-        let border_paint = state.border_paint.as_paint_ref();
-        let shape = state.shape;
-        let border_width = (state.border_width == 0.0)
-            .then_some(5.0 / size.width)
-            .unwrap_or(state.border_width / size.width);
+            scene.draw(
+                transform,
+                rotation,
+                background_paint,
+                border_paint,
+                border_width,
+                shape
+            );
+        }
 
-        scene.draw(
-            transform,
-            rotation,
-            background_paint,
-            border_paint,
-            border_width,
-            shape
-        );
+        !hide
     }
 
-    fn layout(&self, cx: &mut LayoutCx) {
+    fn layout(&self, cx: &mut LayoutCx) -> bool {
         let node = self.node();
 
-        if node.borrow().hide { return }
+        if node.borrow().hide { return false }
 
         let size = node.borrow().rect.size();
 
@@ -149,6 +154,8 @@ pub trait Widget {
                 cx.next_pos.x += cx.rules.spacing + size.width;
             },
         }
+
+        true
     }
 }
 

@@ -102,9 +102,21 @@ impl<T: Widget + Sized> Render for T {}
 
 pub(crate) trait Render: Widget + Sized {
     fn render(&self, renderer: &mut Renderer) {
-        self.draw(renderer);
-        if let Some(children) = self.children_ref() {
-            children.iter().for_each(|w| w.render(renderer));
+        if self.draw(renderer) {
+            if let Some(children) = self.children_ref() {
+                children.iter().for_each(|w| w.render(renderer));
+            }
+        }
+    }
+
+    // should include calculating the size too here
+    fn calculate_layout(&self, cx: &mut LayoutCx) {
+        if self.layout(cx) {
+            if let Some(children) = self.children_ref() {
+                let mut this_cx = LayoutCx::new(self);
+                children.iter()
+                    .for_each(|child| child.calculate_layout(&mut this_cx));
+            }
         }
     }
 
@@ -163,17 +175,6 @@ pub(crate) trait Render: Widget + Sized {
         state.rect.set_size(final_size);
 
         final_size
-    }
-
-    // should include calculating the size too here
-    fn calculate_layout(&self, cx: &mut LayoutCx) {
-        self.layout(cx);
-
-        if let Some(children) = self.children_ref() {
-            let mut this_cx = LayoutCx::new(self);
-            children.iter()
-                .for_each(|child| child.calculate_layout(&mut this_cx));
-        }
     }
 
     fn find(&self, id: &WidgetId) -> Option<Box<&dyn Widget>> {
