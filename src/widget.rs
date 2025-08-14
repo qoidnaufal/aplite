@@ -68,11 +68,11 @@ pub trait Widget {
         self.node().node_ref()
     }
 
-    fn children_ref(&self) -> Option<&Vec<Box<dyn IntoView>>> {
+    fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
         None
     }
 
-    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn IntoView>>> {
+    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
         None
     }
 
@@ -351,11 +351,11 @@ impl Widget for Box<dyn Widget> {
         self.as_ref().node()
     }
 
-    fn children_ref(&self) -> Option<&Vec<Box<dyn IntoView>>> {
+    fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
         self.as_ref().children_ref()
     }
 
-    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn IntoView>>> {
+    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
         self.as_mut().children_mut()
     }
 }
@@ -369,11 +369,11 @@ impl Widget for Box<&mut dyn Widget> {
         self.as_ref().node()
     }
 
-    fn children_ref(&self) -> Option<&Vec<Box<dyn IntoView>>> {
+    fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
         self.as_ref().children_ref()
     }
 
-    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn IntoView>>> {
+    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
         self.as_mut().children_mut()
     }
 }
@@ -429,13 +429,15 @@ impl CallbackStore {
 pub(crate) struct WindowWidget {
     id: WidgetId,
     node: ViewNode,
+    children: Vec<Box<dyn Widget>>,
 }
 
 impl WindowWidget {
     pub(crate) fn new(rect: Rect) -> Self {
         Self {
             id: WidgetId::new(),
-            node: ViewNode::window(rect)
+            node: ViewNode::window(rect),
+            children: Vec::new(),
         }
     }
 }
@@ -447,6 +449,14 @@ impl Widget for WindowWidget {
 
     fn node(&self) -> ViewNode {
         self.node.clone()
+    }
+
+    fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
+        Some(&self.children)
+    }
+
+    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
+        Some(&mut self.children)
     }
 }
 

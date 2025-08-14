@@ -79,24 +79,6 @@ impl Context {
 
 // #########################################################
 // #                                                       #
-// #                        Layout                         #
-// #                                                       #
-// #########################################################
-
-impl Context {
-    pub(crate) fn layout(&self, id: &ViewId) {
-        // calculate_size_recursive(id);
-        if let Some(view) = self.get_view_ref(id) {
-            view.calculate_size(None);
-            let mut cx = LayoutCx::new(view);
-            view.calculate_layout(&mut cx);
-        }
-        self.toggle_dirty();
-    }
-}
-
-// #########################################################
-// #                                                       #
 // #                     Cursor Event                      #
 // #                                                       #
 // #########################################################
@@ -168,13 +150,18 @@ impl Context {
         if let Some(children) = current.children_ref() {
             let mut cx = LayoutCx::new(&current);
             children.iter()
-                .for_each(|child| child.layout(&mut cx));
+                .for_each(|child| child.calculate_layout(&mut cx));
         }
 
         self.toggle_dirty();
     }
 
-    pub(crate) fn handle_click(&mut self, id: &ViewId, action: impl Into<MouseAction>, button: impl Into<MouseButton>) {
+    pub(crate) fn handle_click(
+        &mut self,
+        id: &ViewId,
+        action: impl Into<MouseAction>,
+        button: impl Into<MouseButton>
+    ) {
         let action: MouseAction = action.into();
         let button: MouseButton = button.into();
 

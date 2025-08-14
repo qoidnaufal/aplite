@@ -118,6 +118,8 @@ fn root() -> impl IntoView {
         .child(first_row())
         .child(second_row(inc, dec, counter, set_counter))
         .child(circle)
+        .align_h(AlignH::Center)
+        .padding(Padding::splat(20.0))
 }
 
 fn select_color(val: i32) -> Rgba<u8> {

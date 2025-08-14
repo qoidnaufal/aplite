@@ -29,24 +29,6 @@ impl<T: Widget + 'static> IntoView for T {
     }
 }
 
-impl Widget for Box<&mut dyn IntoView> {
-    fn id(&self) -> WidgetId {
-        self.as_ref().id()
-    }
-
-    fn node(&self) -> ViewNode {
-        self.as_ref().node()
-    }
-
-    fn children_ref(&self) -> Option<&Vec<Box<dyn IntoView>>> {
-        self.as_ref().children_ref()
-    }
-
-    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn IntoView>>> {
-        self.as_mut().children_mut()
-    }
-}
-
 /// wrapper over [`Widget`] trait to be stored inside [`ViewStorage`]
 pub struct View {
     inner: Box<dyn Widget>
@@ -69,11 +51,11 @@ impl Widget for View {
         self.inner.id()
     }
 
-    fn children_ref(&self) -> Option<&Vec<Box<dyn IntoView>>> {
+    fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
         self.inner.children_ref()
     }
 
-    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn IntoView>>> {
+    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
         self.inner.children_mut()
     }
 }
@@ -87,11 +69,11 @@ impl Widget for Box<dyn IntoView> {
         self.as_ref().id()
     }
 
-    fn children_ref(&self) -> Option<&Vec<Box<dyn IntoView>>> {
+    fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
         self.as_ref().children_ref()
     }
 
-    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn IntoView>>> {
+    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
         self.as_mut().children_mut()
     }
 }
@@ -116,30 +98,9 @@ impl std::fmt::Debug for &dyn Widget {
     }
 }
 
-impl std::fmt::Debug for Box<dyn IntoView> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.as_ref().fmt(f)
-    }
-}
+impl<T: Widget + Sized> Render for T {}
 
-impl std::fmt::Debug for &dyn IntoView {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = self.node().borrow().name;
-        let name = name.is_empty()
-            .then_some(std::any::type_name::<Self>())
-            .unwrap_or(name);
-
-        f.debug_struct(name)
-            .field("id", &self.id())
-            .field("children", &self.children_ref().unwrap_or(&vec![]))
-            .finish()
-        
-    }
-}
-
-impl<T: IntoView + Sized> Render for T {}
-
-pub(crate) trait Render: IntoView + Sized {
+pub(crate) trait Render: Widget + Sized {
     fn render(&self, renderer: &mut Renderer) {
         self.draw(renderer);
         if let Some(children) = self.children_ref() {
@@ -215,7 +176,7 @@ pub(crate) trait Render: IntoView + Sized {
         }
     }
 
-    fn find(&self, id: &WidgetId) -> Option<Box<&dyn IntoView>> {
+    fn find(&self, id: &WidgetId) -> Option<Box<&dyn Widget>> {
         if self.id() == id {
             return Some(Box::new(self))
         }
@@ -225,7 +186,7 @@ pub(crate) trait Render: IntoView + Sized {
         })
     }
 
-    fn find_mut(&mut self, id: &WidgetId) -> Option<Box<&mut dyn IntoView>> {
+    fn find_mut(&mut self, id: &WidgetId) -> Option<Box<&mut dyn Widget>> {
         if self.id() == id {
             return Some(Box::new(self))
         }
@@ -235,7 +196,7 @@ pub(crate) trait Render: IntoView + Sized {
     }
 
     #[allow(unused)]
-    fn parent_mut(&mut self, id: &WidgetId) -> Option<Box<&mut dyn IntoView>> {
+    fn parent_mut(&mut self, id: &WidgetId) -> Option<Box<&mut dyn Widget>> {
         if let Some(children) = self.children_ref()
             && children
                 .iter()
@@ -252,7 +213,7 @@ pub(crate) trait Render: IntoView + Sized {
     }
 
     #[allow(unused)]
-    fn remove(&mut self, id: &WidgetId) -> Option<Box<dyn IntoView>> {
+    fn remove(&mut self, id: &WidgetId) -> Option<Box<dyn Widget>> {
         self.parent_mut(id)
             .and_then(|mut parent| {
                 parent.children_mut()

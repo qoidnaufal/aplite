@@ -22,6 +22,7 @@ pub mod prelude {
         AlignH
     };
     pub use crate::widget::{
+        WidgetId,
         Widget,
         WidgetExt,
         CircleWidget,

@@ -2,7 +2,6 @@ use aplite_types::Rgba;
 use aplite_renderer::Shape;
 
 use crate::context::layout::Orientation;
-use crate::view::IntoView;
 
 use super::{ViewNode, Widget, WidgetId};
 
@@ -17,7 +16,7 @@ pub fn h_stack<F>() -> HStack {
 pub struct VStack {
     id: WidgetId,
     node: ViewNode,
-    children: Vec<Box<dyn IntoView>>,
+    children: Vec<Box<dyn Widget>>,
 }
 
 impl VStack {
@@ -46,11 +45,11 @@ impl Widget for VStack {
         self.node.clone()
     }
 
-    fn children_ref(&self) -> Option<&Vec<Box<dyn IntoView>>> {
+    fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
         Some(&self.children)
     }
 
-    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn IntoView>>> {
+    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
         Some(&mut self.children)
     }
 }
@@ -58,7 +57,7 @@ impl Widget for VStack {
 pub struct HStack {
     id: WidgetId,
     node: ViewNode,
-    children: Vec<Box<dyn IntoView>>,
+    children: Vec<Box<dyn Widget>>,
 }
 
 impl HStack {
@@ -88,11 +87,11 @@ impl Widget for HStack {
         self.node.clone()
     }
 
-    fn children_ref(&self) -> Option<&Vec<Box<dyn IntoView>>> {
+    fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
         Some(&self.children)
     }
 
-    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn IntoView>>> {
+    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
         Some(&mut self.children)
     }
 }

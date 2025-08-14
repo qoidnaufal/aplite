@@ -14,8 +14,9 @@ use aplite_future::{block_on, Executor};
 
 use crate::prelude::ApliteResult;
 use crate::context::Context;
+use crate::context::layout::LayoutCx;
 use crate::error::ApliteError;
-use crate::view::{IntoView, ViewId};
+use crate::view::{IntoView, ViewId, Render};
 use crate::widget::WindowWidget;
 
 pub(crate) const DEFAULT_SCREEN_SIZE: LogicalSize<u32> = LogicalSize::new(800, 600);
@@ -96,19 +97,20 @@ impl Aplite {
             .inner_size()
             .to_logical::<f32>(window.scale_factor());
         let bound = Rect::from_size(Size::new(size.width, size.height));
+        let window_widget = WindowWidget::new(bound);
 
         let root_id = {
             if let Some(view_fn) = self.pending_views.take() {
-                let view = view_fn(window_id).into_view();
+                let view = view_fn(window_id);
+
+                view.calculate_size(None);
+                let mut cx = LayoutCx::new(&window_widget);
+                view.calculate_layout(&mut cx);
 
                 #[cfg(feature = "debug_tree")] eprintln!("{:?}", view);
 
-                let root_id = self.cx.insert_view(view);
-                self.cx.layout(&root_id);
-
-                root_id
+                self.cx.insert_view(view.into_view())
             } else {
-                let window_widget = WindowWidget::new(bound);
                 self.cx.insert_view(window_widget.into_view())
             }
         };
