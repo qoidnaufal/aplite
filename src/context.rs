@@ -1,27 +1,32 @@
 use aplite_reactive::*;
 use aplite_renderer::Renderer;
 use aplite_types::Vec2f;
+use aplite_storage::IndexMap;
 
-use crate::view::{VIEW_STORAGE, ViewId};
-use crate::widget::{CALLBACKS, WidgetEvent};
+use crate::view::{Render, ViewId, View};
+use crate::widget::{CALLBACKS, Widget, WidgetEvent};
 
 pub(crate) mod cursor;
 pub mod layout;
 
 use cursor::{Cursor, MouseAction, MouseButton};
-use layout::{LayoutContext, calculate_size_recursive};
+use layout::LayoutCx;
 
 // FIXME: use this as the main building block to build the widget
 pub struct Context {
+    view_storage: IndexMap<ViewId, View>,
     cursor: Cursor,
     pending_event: Vec<ViewId>,
+    dirty: Signal<bool>,
 }
 
 impl Default for Context {
     fn default() -> Self {
         Self {
+            view_storage: IndexMap::with_capacity(1024),
             cursor: Cursor::new(),
             pending_event: Vec::with_capacity(16),
+            dirty: Signal::new(false),
         }
     }
 }
@@ -39,12 +44,24 @@ impl Context {
 // ########################################################
 
 impl Context {
-    pub(crate) fn dirty() -> Signal<bool> {
-        VIEW_STORAGE.with(|s| s.dirty)
+    pub(crate) fn insert_view(&mut self, view: View) -> ViewId {
+        self.view_storage.insert(view)
     }
 
-    pub(crate) fn toggle_dirty() {
-        VIEW_STORAGE.with(|s| s.dirty.set(true))
+    pub(crate) fn get_view_ref(&self, id: &ViewId) -> Option<&View> {
+        self.view_storage.get(id)
+    }
+
+    pub(crate) fn get_view_mut(&mut self, id: &ViewId) -> Option<&mut View> {
+        self.view_storage.get_mut(id)
+    }
+
+    pub(crate) fn dirty(&self) -> Signal<bool> {
+        self.dirty
+    }
+
+    pub(crate) fn toggle_dirty(&self) {
+        self.dirty.set(true);
     }
 
     // pub(crate) fn toggle_clean(&self) {
@@ -59,10 +76,13 @@ impl Context {
 // #########################################################
 
 impl Context {
-    pub(crate) fn layout_the_whole_window(&self, root_id: &ViewId) {
-        calculate_size_recursive(root_id);
-        LayoutContext::new(*root_id).calculate();
-        Self::toggle_dirty();
+    pub(crate) fn layout(&mut self, id: &ViewId) {
+        // calculate_size_recursive(id);
+        if let Some(view) = self.get_view_mut(id) {
+            let mut cx = LayoutCx::new(view);
+            view.calculate_layout(&mut cx);
+        }
+        self.toggle_dirty();
     }
 }
 
@@ -73,8 +93,9 @@ impl Context {
 // #########################################################
 
 impl Context {
-    pub(crate) fn handle_mouse_move(&mut self, root_id: &ViewId, pos: impl Into<Vec2f>) {
-        if VIEW_STORAGE.with(|s| s.get_all_members_of(root_id).is_empty()) { return }
+    pub(crate) fn handle_mouse_move(&mut self, id: &ViewId, pos: impl Into<Vec2f>) {
+        if self.get_view_ref(id).is_none() { return }
+
         self.cursor.hover.pos = pos.into();
 
         #[cfg(feature = "cursor_stats")] let start = std::time::Instant::now();
@@ -139,7 +160,7 @@ impl Context {
 
             drop(state);
 
-            LayoutContext::new(*hover_id).calculate();
+            LayoutCx::new(*hover_id).calculate();
             Self::toggle_dirty();
         });
     }

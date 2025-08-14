@@ -16,7 +16,7 @@ use crate::prelude::ApliteResult;
 use crate::context::Context;
 use crate::error::ApliteError;
 use crate::view::{IntoView, ViewId};
-use crate::widget::{Widget, WidgetExt, WindowWidget};
+use crate::widget::WindowWidget;
 
 pub(crate) const DEFAULT_SCREEN_SIZE: LogicalSize<u32> = LogicalSize::new(800, 600);
 
@@ -94,22 +94,21 @@ impl Aplite {
         let window_id = window.id();
         let size = window
             .inner_size()
-            .to_logical(window.scale_factor());
+            .to_logical::<f32>(window.scale_factor());
 
         let root_id = {
-            let root_view = WindowWidget::new(Size::new(size.width, size.height));
-            let root_id = root_view.id();
-
             if let Some(view_fn) = self.pending_views.take() {
-                let view = view_fn(window_id);
-                root_view.child(view);
+                let view = view_fn(window_id).into_view();
+                #[cfg(feature = "debug_tree")] eprintln!("{:?}", view);
+                let root_id = self.cx.insert_view(view);
 
-                self.cx.layout_the_whole_window(&root_id);
+                self.cx.layout(&root_id);
 
-                #[cfg(feature = "debug_tree")] eprintln!("{:?}", s.tree.borrow());
+                root_id
+            } else {
+                let window_widget = WindowWidget::new(Size::new(size.width, size.height));
+                self.cx.insert_view(window_widget.into_view())
             }
-
-            root_id
         };
 
         let window_handle = WindowHandle {
@@ -128,7 +127,7 @@ impl Aplite {
 
     /// Track the [`Window`] with the associated root [`ViewId`] for rendering
     fn track_window(&mut self, window: Arc<Window>) {
-        let dirty = Context::dirty();
+        let dirty = self.cx.dirty();
 
         Effect::new(move |_| if dirty.get() { window.request_redraw() });
     }

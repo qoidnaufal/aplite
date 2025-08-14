@@ -19,38 +19,39 @@ where
 macro_rules! entity {
     { $vis:vis $name:ident } => {
         #[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-        $vis struct $name(u64);
+        $vis struct $name(u32, u32);
 
         impl Entity for $name {
             // not sure if this is a good idea to do this
             fn new(index: u32, version: u32) -> Self {
-                Self(((version as u64) << 32) | index as u64)
+                Self(index, version)
             }
 
             fn index(&self) -> usize {
-                (self.0 as u32) as usize
+                self.0 as usize
             }
 
             fn version(&self) -> u32 {
-                (self.0 >> 32) as u32
+                self.1
             }
         }
 
         impl std::fmt::Debug for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{}({})", stringify!($name), self.0 as u32)
+                write!(f, "{}({})", stringify!($name), self.0)
             }
         }
 
         impl std::fmt::Display for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{}({})", stringify!($name), self.0 as u32)
+                write!(f, "{}({})", stringify!($name), self.0)
             }
         }
 
         impl std::hash::Hash for $name {
             fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-                state.write_u64((self.0 as u32) as u64);
+                // state.write_u64(((self.1 as u64) << 32) | self.0 as u64);
+                state.write_u64(self.0 as u64);
             }
         }
     };

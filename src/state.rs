@@ -45,6 +45,7 @@ pub struct WidgetState {
     pub(crate) border_paint: Paint,
     pub(crate) dragable: bool,
     pub(crate) hoverable: bool,
+    pub(crate) hide: bool,
 }
 
 impl std::fmt::Debug for WidgetState {
@@ -79,6 +80,7 @@ impl Default for WidgetState {
             background_paint: Paint::Color(Rgba::RED),
             border_paint: Paint::Color(Rgba::WHITE),
             border_width: 0.0,
+            hide: false,
         }
     }
 }
