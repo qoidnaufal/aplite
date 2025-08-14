@@ -87,10 +87,10 @@ impl Default for WidgetState {
 
 // internal data management
 impl WidgetState {
-    pub(crate) fn window(size: Size) -> Self {
+    pub(crate) fn window(rect: Rect) -> Self {
         Self {
             name: "Root",
-            rect: Rect::from_size(size),
+            rect,
             align_h: AlignH::Center,
             background_paint: Paint::Color(Rgba::TRANSPARENT),
             border_paint: Paint::Color(Rgba::TRANSPARENT),

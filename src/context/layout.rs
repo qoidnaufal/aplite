@@ -1,7 +1,8 @@
-use aplite_types::{Rect, Size, Vec2f};
+use aplite_types::{Rect, Vec2f};
 
 use crate::state::{AspectRatio, WidgetState};
-use crate::view::{ViewNodeRef, ViewNode, IntoView};
+use crate::view::{ViewNodeRef, ViewNode};
+use crate::widget::Widget;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlignH {
@@ -36,6 +37,7 @@ pub struct Padding {
 
 #[derive(Debug)]
 pub(crate) struct Rules {
+    pub(crate) rect: Rect,
     pub(crate) orientation: Orientation,
     pub(crate) align_h: AlignH,
     pub(crate) align_v: AlignV,
@@ -87,6 +89,7 @@ impl Padding {
 impl Rules {
     pub(crate) fn new(state: &WidgetState) -> Self {
         Self {
+            rect: state.rect,
             orientation: state.orientation,
             align_h: state.align_h,
             align_v: state.align_v,
@@ -95,84 +98,93 @@ impl Rules {
         }
     }
 
-    // fn offset_x(&self) -> f32 {
-    //     let pl = self.padding.left;
-    //     let pr = self.padding.right;
+    fn offset_x(&self) -> f32 {
+        let pl = self.padding.left;
+        let pr = self.padding.right;
 
-    //     match self.align_h {
-    //         AlignH::Left => self.rect.x + pl,
-    //         AlignH::Center => {
-    //             self.rect.x + self.rect.width / 2. + pl - pr
-    //         }
-    //         AlignH::Right => self.rect.max_x() - pr
-    //     }
-    // }
+        match self.align_h {
+            AlignH::Left => self.rect.x + pl,
+            AlignH::Center => {
+                self.rect.x + self.rect.width / 2. + pl - pr
+            }
+            AlignH::Right => self.rect.max_x() - pr
+        }
+    }
 
-    // fn offset_y(&self) -> f32 {
-    //     let pt = self.padding.top;
-    //     let pb = self.padding.bottom;
+    fn offset_y(&self) -> f32 {
+        let pt = self.padding.top;
+        let pb = self.padding.bottom;
 
-    //     match self.align_v {
-    //         AlignV::Top => self.rect.y + pt,
-    //         AlignV::Middle => {
-    //             self.rect.y + self.rect.height / 2. + pt - pb
-    //         }
-    //         AlignV::Bottom => self.rect.max_y() - pb,
-    //     }
-    // }
+        match self.align_v {
+            AlignV::Top => self.rect.y + pt,
+            AlignV::Middle => {
+                self.rect.y + self.rect.height / 2. + pt - pb
+            }
+            AlignV::Bottom => self.rect.max_y() - pb,
+        }
+    }
 
-    // fn start_pos(&self, child_total_size: f32, len: f32) -> Vec2f {
-    //     let offset_x = self.offset_x();
-    //     let offset_y = self.offset_y();
-    //     let stretch_factor = self.spacing * (len - 1.);
-    //     let stretch = child_total_size + stretch_factor;
+    fn start_pos(&self, child_total_size: f32, len: f32) -> Vec2f {
+        let offset_x = self.offset_x();
+        let offset_y = self.offset_y();
+        let stretch_factor = self.spacing * (len - 1.);
+        let stretch = child_total_size + stretch_factor;
 
-    //     match self.orientation {
-    //         Orientation::Vertical => {
-    //             let y = match self.align_v {
-    //                 AlignV::Top => offset_y,
-    //                 AlignV::Middle => offset_y - stretch / 2.,
-    //                 AlignV::Bottom => offset_y - stretch,
-    //             };
-    //             Vec2f::new(offset_x, y)
-    //         },
-    //         Orientation::Horizontal => {
-    //             let x = match self.align_h {
-    //                 AlignH::Left => offset_x,
-    //                 AlignH::Center => offset_x - stretch / 2.,
-    //                 AlignH::Right => offset_x - stretch,
-    //             };
-    //             Vec2f::new(x, offset_y)
-    //         }
-    //     }
-    // }
+        match self.orientation {
+            Orientation::Vertical => {
+                let y = match self.align_v {
+                    AlignV::Top => offset_y,
+                    AlignV::Middle => offset_y - stretch / 2.,
+                    AlignV::Bottom => offset_y - stretch,
+                };
+                Vec2f::new(offset_x, y)
+            },
+            Orientation::Horizontal => {
+                let x = match self.align_h {
+                    AlignH::Left => offset_x,
+                    AlignH::Center => offset_x - stretch / 2.,
+                    AlignH::Right => offset_x - stretch,
+                };
+                Vec2f::new(x, offset_y)
+            }
+        }
+    }
 }
 
 pub struct LayoutCx {
     pub(crate) next_pos: Vec2f,
-    pub(crate) node: ViewNode,
     pub(crate) rules: Rules,
 }
 
 impl LayoutCx {
-    pub fn new(view: &dyn IntoView) -> Self {
-        // if let Some(children) = view.children_ref() {
-        //     children.iter()
-        //         .for_each(|child| child.calculate_size());
-        // }
-
-        let node = view.node();
+    pub fn new(parent: &mut dyn Widget) -> Self {
+        let node = parent.node();
         let rules = Rules::new(&node.borrow());
 
-        // children's next pos always started from this node's top left?
-        let next_pos = node.borrow().rect.vec2f();
+        let(total_size, len) = parent.children_ref()
+            .map(|children| {
+                (
+                    children.iter()
+                        .map(|child| {
+                            let rect = child.node().borrow().rect;
+                            match rules.orientation {
+                                Orientation::Vertical => rect.size().height,
+                                Orientation::Horizontal => rect.size().width,
+                            }
+                        })
+                        .sum::<f32>(),
+                    children.len() as f32
+                )
+            }).unwrap_or_default();
+
+        let next_pos = rules.start_pos(total_size, len);
 
         Self {
             rules,
-            node,
             next_pos,
         }
     }
+}
 
     // pub(crate) fn calculate(&mut self) {
     //     let children = VIEW_STORAGE.with(|s| {
@@ -239,7 +251,6 @@ impl LayoutCx {
     //         }
     //     });
     // }
-}
 
 // pub(crate) fn calculate_size_recursive(id: &ViewId) -> Size {
 //     VIEW_STORAGE.with(|s| {

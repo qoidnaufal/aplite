@@ -1,10 +1,12 @@
+use std::sync::OnceLock;
+
 use aplite_reactive::*;
 use aplite_renderer::Renderer;
-use aplite_types::Vec2f;
+use aplite_types::{Vec2f, Rect};
 use aplite_storage::IndexMap;
 
 use crate::view::{Render, ViewId, View};
-use crate::widget::{CALLBACKS, Widget, WidgetEvent};
+use crate::widget::{CALLBACKS, Widget, WidgetEvent, WidgetId};
 
 pub(crate) mod cursor;
 pub mod layout;
@@ -12,21 +14,27 @@ pub mod layout;
 use cursor::{Cursor, MouseAction, MouseButton};
 use layout::LayoutCx;
 
+pub(crate) static DIRTY: OnceLock<Signal<bool>> = OnceLock::new();
+
 // FIXME: use this as the main building block to build the widget
 pub struct Context {
     view_storage: IndexMap<ViewId, View>,
     cursor: Cursor,
-    pending_event: Vec<ViewId>,
+    current: Option<ViewId>,
+    pending_event: Vec<WidgetId>,
     dirty: Signal<bool>,
 }
 
 impl Default for Context {
     fn default() -> Self {
+        let dirty = Signal::new(false);
+        DIRTY.set(dirty).expect("Should only be initialized once");
         Self {
             view_storage: IndexMap::with_capacity(1024),
             cursor: Cursor::new(),
+            current: None,
             pending_event: Vec::with_capacity(16),
-            dirty: Signal::new(false),
+            dirty,
         }
     }
 }
@@ -96,6 +104,7 @@ impl Context {
     pub(crate) fn handle_mouse_move(&mut self, id: &ViewId, pos: impl Into<Vec2f>) {
         if self.get_view_ref(id).is_none() { return }
 
+        let prev = self.current.replace(*id);
         self.cursor.hover.pos = pos.into();
 
         #[cfg(feature = "cursor_stats")] let start = std::time::Instant::now();
@@ -103,47 +112,35 @@ impl Context {
         #[cfg(feature = "cursor_stats")] eprint!("{:?}     \r", start.elapsed());
 
         self.handle_hover();
+
+        self.current = prev;
     }
 
     fn detect_hover(&mut self) {
-        if !self.cursor.is_clicking() {
-            let hovered = VIEW_STORAGE.with(|s| {
-                s.tree
-                    .borrow()
-                    .iter()
-                    .filter_map(|node| {
-                        let data = node.data();
-                        let data = data.borrow();
-                        let filter = data.hoverable || data.dragable;
-                        filter.then_some((node.id(), data.rect))
-                    })
-                    .filter_map(|(id, rect)| rect
-                        .contains(self.cursor.hover.pos)
-                        .then_some(id)
-                    )
-                    .max()
-            });
+        if !self.cursor.is_clicking() && self.current.is_some() {
+            let current = self.current.unwrap();
+            let view = self.get_view_ref(&current).unwrap();
+            let hovered = view.mouse_hover(&self.cursor);
 
             match hovered {
-                Some(id) => {
-                    self.cursor.hover.prev = self.cursor.hover.curr.replace(id);
-                },
-                None => {
-                    self.cursor.hover.prev = self.cursor.hover.curr.take();
-                },
+                Some(id) => self.cursor.hover.prev = self.cursor.hover.curr.replace(id),
+                None => self.cursor.hover.prev = self.cursor.hover.curr.take(),
             }
         }
     }
 
     pub(crate) fn handle_hover(&mut self) {
-        if !self.cursor.is_idling() {
+        if !self.cursor.is_idling() && self.current.is_some() {
             if let Some(hover_id) = self.cursor.hover.curr {
-                let dragable = VIEW_STORAGE.with(|s| {
-                    s.get_widget_state(&hover_id)
-                        .unwrap()
-                        .borrow()
-                        .dragable
-                });
+                let dragable = self.view_storage
+                    .get(&self.current.unwrap())
+                    .unwrap()
+                    .find(&hover_id)
+                    .unwrap()
+                    .node()
+                    .borrow()
+                    .dragable;
+
                 if self.cursor.is_dragging(&hover_id) && dragable {
                     self.cursor.is_dragging = true;
                     self.handle_drag(&hover_id);
@@ -152,35 +149,44 @@ impl Context {
         }
     }
 
-    fn handle_drag(&mut self, hover_id: &ViewId) {
+    fn handle_drag(&mut self, hover_id: &WidgetId) {
         let pos = self.cursor.hover.pos - self.cursor.click.offset;
-        VIEW_STORAGE.with(|s| {
-            let state = s.get_widget_state(hover_id).unwrap();
-            state.borrow_mut().rect.set_pos(pos.into());
 
-            drop(state);
+        let mut current_widget = self.view_storage
+            .get_mut(&self.current.unwrap())
+            .unwrap()
+            .find_mut(hover_id)
+            .unwrap();
 
-            LayoutCx::new(*hover_id).calculate();
-            Self::toggle_dirty();
-        });
+        let node = current_widget.node();
+        let mut state = node.borrow_mut();
+        state.rect.set_pos(pos.into());
+
+        drop(state);
+
+        let mut cx = LayoutCx::new(&mut current_widget);
+        current_widget.layout(&mut cx);
+        self.toggle_dirty();
     }
 
-    pub(crate) fn handle_click(&mut self, action: impl Into<MouseAction>, button: impl Into<MouseButton>) {
+    pub(crate) fn handle_click(&mut self, id: &ViewId, action: impl Into<MouseAction>, button: impl Into<MouseButton>) {
         let action: MouseAction = action.into();
         let button: MouseButton = button.into();
 
         self.cursor.set_click_state(action, button);
 
+        let view = self.view_storage.get(id).unwrap();
+
         if let Some(hover_id) = self.cursor.hover.curr.as_ref()
             && action == MouseAction::Pressed
             && button == MouseButton::Left
         {
-            VIEW_STORAGE.with(|s| {
-                let state = s.get_widget_state(hover_id).unwrap();
-                let pos = state.borrow().rect.vec2f();
-                self.cursor.click.offset = self.cursor.click.pos - pos;
-                state.borrow_mut().event = Some(WidgetEvent::LeftClick);
-            });
+            let widget = view.find(hover_id).unwrap();
+            let node = widget.node();
+            let pos = node.borrow().rect.vec2f();
+
+            self.cursor.click.offset = self.cursor.click.pos - pos;
+            node.borrow_mut().event = Some(WidgetEvent::LeftClick);
             self.pending_event.push(*hover_id);
         }
 
@@ -199,10 +205,9 @@ impl Context {
                 });
 
             if let Some(hover_id) = self.cursor.hover.curr.as_ref() {
-                VIEW_STORAGE.with(|s| {
-                    let state = s.get_widget_state(hover_id).unwrap();
-                    state.borrow_mut().event = None;
-                });
+                let widget = view.find(hover_id).unwrap();
+                let node = widget.node();
+                node.borrow_mut().event = None;
             }
 
             self.cursor.is_dragging = false;
@@ -217,80 +222,9 @@ impl Context {
 // #########################################################
 
 impl Context {
-    pub(crate) fn prepare_data(&self, root_id: ViewId, renderer: &mut Renderer) {
-
-        VIEW_STORAGE.with(|s| {
-            use crate::widget::Widget;
-
-            let _ = root_id;
-            let views = s.views.borrow();
-
-            views
-                .iter()
-                .rev()
-                .for_each(|view| {
-                    view.render(renderer);
-                });
-
-            // let tree = s.tree.borrow();
-
-            // tree.with_all_members_of(&root_id, |state| {
-            //     let scene = renderer.scene();
-            //     let scene_size = scene.size();
-            //     let state = state.borrow();
-
-            //     let background = state.background_paint.as_paint_ref();
-            //     let border = state.border_paint.as_paint_ref();
-            //     let shape = state.shape;
-            //     let rotation = state.rotation;
-            //     let transform = state.get_transform(scene_size);
-
-            //     let border_width = if state.border_width == 0.0 {
-            //         5.0 / scene_size.width
-            //     } else {
-            //         state.border_width / scene_size.width
-            //     };
-
-            //     scene.draw(
-            //         transform,
-            //         rotation,
-            //         background,
-            //         border,
-            //         border_width,
-            //         shape,
-            //     );
-            // });
-
-            // s.get_all_members_of(&root_id)
-            //     .iter()
-            //     .for_each(|view_id| {
-            //         let scene = renderer.scene();
-
-            //         let scene_size = scene.size();
-            //         let state = s.get_widget_state(view_id).unwrap();
-            //         let state = state.borrow();
-
-            //         let background = state.background_paint.as_paint_ref();
-            //         let border = state.border_paint.as_paint_ref();
-            //         let shape = state.shape;
-            //         let rotation = state.rotation;
-            //         let transform = state.get_transform(scene_size);
-
-            //         let border_width = if state.border_width == 0.0 {
-            //             5.0 / scene_size.width
-            //         } else {
-            //             state.border_width / scene_size.width
-            //         };
-
-            //         scene.draw(
-            //             transform,
-            //             rotation,
-            //             background,
-            //             border,
-            //             border_width,
-            //             shape,
-            //         );
-            //     })
-        });
+    pub(crate) fn render(&self, root_id: ViewId, renderer: &mut Renderer) {
+        if let Some(view) = self.view_storage.get(&root_id) {
+            view.render(renderer);
+        }
     }
 }

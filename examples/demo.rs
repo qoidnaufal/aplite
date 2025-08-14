@@ -58,7 +58,7 @@ fn button_stack(
         .child({
             let button = Button::new().corners(CornerRadius::splat(70.));
 
-            let node = button.node();
+            let node = button.node_ref();
 
             Effect::new(move |_| {
                 counter.with(|num| {
@@ -114,9 +114,10 @@ fn root() -> impl IntoView {
         .border_width(5.0)
         .dragable();
 
-    first_row()
-        .and(second_row(inc, dec, counter, set_counter))
-        .and(circle)
+    VStack::new()
+        .child(first_row())
+        .child(second_row(inc, dec, counter, set_counter))
+        .child(circle)
 }
 
 fn select_color(val: i32) -> Rgba<u8> {

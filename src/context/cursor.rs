@@ -1,6 +1,7 @@
 use aplite_types::Vec2f;
 
-use crate::view::ViewId;
+// use crate::view::ViewId;
+use crate::widget::WidgetId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseAction {
@@ -55,8 +56,8 @@ pub struct MouseClick {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MouseHover {
     pub pos: Vec2f,
-    pub curr: Option<ViewId>,
-    pub prev: Option<ViewId>,
+    pub curr: Option<WidgetId>,
+    pub prev: Option<WidgetId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -114,7 +115,7 @@ impl Cursor {
         }
     }
 
-    pub(crate) fn is_dragging(&self, hover_id: &ViewId) -> bool {
+    pub(crate) fn is_dragging(&self, hover_id: &WidgetId) -> bool {
         self.is_clicking()
             && self.hover.curr.is_some_and(|id| &id == hover_id)
             && self.hover.pos != self.click.pos

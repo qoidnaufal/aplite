@@ -41,8 +41,8 @@ fn simple() -> impl IntoView {
         .border_width(6.0)
         .size((150, 150));
 
-    let button_node = button.node();
-    let circle_node = circle.node();
+    let button_node = button.node_ref();
+    let circle_node = circle.node_ref();
 
     Effect::new(move |_| counter.with(|num| {
         circle_node.set_color(get_color(*num));
@@ -51,7 +51,10 @@ fn simple() -> impl IntoView {
 
     Effect::new(move |_| button_node.set_rotation_deg(rotate.get()));
 
-    button.and(circle)
+    VStack::new()
+        .child(button)
+        .child(circle)
+        .dragable()
 }
 
 fn main() -> ApliteResult {

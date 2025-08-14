@@ -320,11 +320,11 @@ impl<E: Entity, T> Tree<E, T> {
 
     pub fn iter(&self) -> TreeIter<'_, E, T> { self.into_iter() }
 
-    pub fn data_iter(&self) -> IndexMapIter<'_, E, T> {
+    pub fn iter_data_ref(&self) -> IndexMapIter<'_, E, T> {
         self.data.iter()
     }
 
-    pub fn data_iter_mut(&mut self) -> IndexMapIterMut<'_, E, T> {
+    pub fn iter_data_mut(&mut self) -> IndexMapIterMut<'_, E, T> {
         self.data.iter_mut()
     }
 }

@@ -2,18 +2,20 @@ use std::cell::{RefCell, Ref, RefMut};
 use std::rc::{Rc, Weak};
 
 use aplite_renderer::{Renderer, Shape};
-// use aplite_reactive::*;
+use aplite_reactive::*;
 use aplite_storage::{Entity, entity};
 use aplite_types::{
     CornerRadius,
     Rgba,
     Paint,
     Size,
+    Rect,
 };
 
 use crate::widget::{Widget, WidgetId};
 use crate::state::WidgetState;
 use crate::context::layout::*;
+use crate::context::DIRTY;
 
 entity! { pub ViewId }
 
@@ -24,6 +26,24 @@ pub trait IntoView: Widget {
 impl<T: Widget + 'static> IntoView for T {
     fn into_view(self) -> View {
         View::new(self)
+    }
+}
+
+impl Widget for Box<&mut dyn IntoView> {
+    fn id(&self) -> WidgetId {
+        self.as_ref().id()
+    }
+
+    fn node(&self) -> ViewNode {
+        self.as_ref().node()
+    }
+
+    fn children_ref(&self) -> Option<&Vec<Box<dyn IntoView>>> {
+        self.as_ref().children_ref()
+    }
+
+    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn IntoView>>> {
+        self.as_mut().children_mut()
     }
 }
 
@@ -127,13 +147,21 @@ pub(crate) trait Render: IntoView + Sized {
         }
     }
 
+    fn calculate_size(&mut self) -> Size {
+        if let Some(children) = self.children_mut() {
+        }
+        todo!()
+    }
+
+    // should include calculating the size too here
     fn calculate_layout(&mut self, cx: &mut LayoutCx) {
         self.layout(cx);
 
-        let mut cx = LayoutCx::new(self);
+        let mut this_cx = LayoutCx::new(self);
+
         if let Some(children) = self.children_mut() {
             children.iter_mut()
-                .for_each(|child| child.calculate_layout(&mut cx));
+                .for_each(|child| child.calculate_layout(&mut this_cx));
         }
     }
 
@@ -174,7 +202,7 @@ pub(crate) trait Render: IntoView + Sized {
 
     fn remove(&mut self, id: &WidgetId) -> Option<Box<dyn IntoView>> {
         self.parent_mut(id)
-            .and_then(|parent| {
+            .and_then(|mut parent| {
                 parent.children_mut()
                     .and_then(|children| {
                         children.iter()
@@ -185,7 +213,7 @@ pub(crate) trait Render: IntoView + Sized {
     }
 
     fn insert<T: Widget + 'static>(&mut self, parent: &WidgetId, widget: T) {
-        if let Some(p) = self.find_mut(parent)
+        if let Some(mut p) = self.find_mut(parent)
             && let Some(vec) = p.children_mut()
         {
             vec.push(Box::new(widget));
@@ -203,15 +231,15 @@ impl ViewNode {
         Self(state)
     }
 
-    pub(crate) fn window(size: Size) -> Self {
-        let state = Rc::new(RefCell::new(WidgetState::window(size)));
+    pub(crate) fn window(rect: Rect) -> Self {
+        let state = Rc::new(RefCell::new(WidgetState::window(rect)));
 
         Self(state)
     }
 
-    #[inline(always)]
-    pub(crate) fn node_ref(&self) -> ViewNodeRef {
-        ViewNodeRef(Rc::downgrade(&self.0))
+    pub fn node_ref(&self) -> ViewNodeRef {
+        let dirty = DIRTY.get().unwrap();
+        ViewNodeRef(Rc::downgrade(&self.0), dirty.write_only())
     }
 
     #[inline(always)]
@@ -320,7 +348,7 @@ impl ViewNode {
 }
 
 #[derive(Clone, Debug)]
-pub struct ViewNodeRef(Weak<RefCell<WidgetState>>);
+pub struct ViewNodeRef(Weak<RefCell<WidgetState>>, SignalWrite<bool>);
 
 impl ViewNodeRef {
     pub(crate) fn upgrade(&self) -> Option<ViewNode> {
@@ -330,14 +358,14 @@ impl ViewNodeRef {
     pub fn set_color(&self, color: Rgba<u8>) {
         if let Some(node) = self.upgrade() {
             node.0.borrow_mut().background_paint = color.into();
-            // self.2.set(true);
+            self.1.set(true);
         }
     }
 
     pub fn set_shape(&self, shape: Shape) {
         if let Some(node) = self.upgrade() {
             node.0.borrow_mut().shape = shape;
-            // self.2.set(true);
+            self.1.set(true);
         }
     }
 
@@ -348,70 +376,21 @@ impl ViewNodeRef {
     pub fn set_rotation_rad(&self, rad: f32) {
         if let Some(node) = self.upgrade() {
             node.0.borrow_mut().rotation = rad;
-            // self.2.set(true);
+            self.1.set(true);
         }
     }
 
     pub fn set_spacing(&self, val: f32) {
         if let Some(node) = self.upgrade() {
             node.0.borrow_mut().spacing = val;
-            // self.2.set(true);
+            self.1.set(true);
         }
     }
 
     pub fn hide(&self, val: bool) {
         if let Some(node) = self.upgrade() {
             node.0.borrow_mut().hide = val;
+            self.1.set(true);
         }
     }
 }
-
-// thread_local! {
-//     pub(crate) static VIEW_STORAGE: ViewStorage = ViewStorage::new();
-// }
-
-// pub(crate) struct ViewStorage {
-//     // FIXME: this is nasty and slow, also i want the tree to store Box<dyn Widget>
-//     pub(crate) tree: RefCell<Tree<ViewId, Rc<RefCell<WidgetState>>>>,
-//     pub(crate) views: RefCell<Vec<View>>,
-//     pub(crate) hoverable: RefCell<Vec<ViewId>>,
-//     pub(crate) dirty: Signal<bool>,
-// }
-
-// impl ViewStorage {
-//     pub(crate) fn new() -> Self {
-//         Self {
-//             tree: RefCell::new(Tree::with_capacity(1024)),
-//             views: RefCell::new(Vec::with_capacity(1024)),
-//             hoverable: RefCell::new(Vec::new()),
-//             dirty: Signal::new(false),
-//         }
-//     }
-
-//     pub(crate) fn insert(&self, state: Rc<RefCell<WidgetState>>) -> ViewId {
-//         self.tree.borrow_mut().insert(state)
-//     }
-
-//     pub(crate) fn get_widget_state(&self, id: &ViewId) -> Option<Rc<RefCell<WidgetState>>> {
-//         self.tree.borrow().get(id).map(|rc| Rc::clone(rc))
-//     }
-
-//     pub(crate) fn append_child(&self, id: &ViewId, child: impl IntoView) {
-//         let child_id = child.id();
-//         let child_view = child.into_view();
-//         self.views.borrow_mut().push(child_view);
-//         self.tree.borrow_mut().add_child(id, child_id);
-//     }
-
-//     pub(crate) fn add_sibling(&self, id: &ViewId, sibling: impl IntoView) {
-//         let sibling_id = sibling.id();
-//         let sibling_view = sibling.into_view();
-//         self.views.borrow_mut().push(sibling_view);
-//         self.tree.borrow_mut().add_sibling(id, sibling_id);
-//     }
-
-//     #[inline(always)]
-//     pub(crate) fn get_all_members_of(&self, root_id: &ViewId) -> Vec<ViewId> {
-//         self.tree.borrow().get_all_members_of(root_id)
-//     }
-// }

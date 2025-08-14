@@ -8,7 +8,7 @@ use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::application::ApplicationHandler;
 
 use aplite_reactive::*;
-use aplite_types::Size;
+use aplite_types::{Size, Rect};
 use aplite_renderer::Renderer;
 use aplite_future::{block_on, Executor};
 
@@ -95,6 +95,7 @@ impl Aplite {
         let size = window
             .inner_size()
             .to_logical::<f32>(window.scale_factor());
+        let bound = Rect::from_size(Size::new(size.width, size.height));
 
         let root_id = {
             if let Some(view_fn) = self.pending_views.take() {
@@ -106,7 +107,7 @@ impl Aplite {
 
                 root_id
             } else {
-                let window_widget = WindowWidget::new(Size::new(size.width, size.height));
+                let window_widget = WindowWidget::new(bound);
                 self.cx.insert_view(window_widget.into_view())
             }
         };
@@ -158,8 +159,10 @@ impl Aplite {
         }
     }
 
-    fn handle_click(&mut self, state: ElementState, button: MouseButton) {
-        self.cx.handle_click(state, button);
+    fn handle_click(&mut self, window_id: &WindowId, state: ElementState, button: MouseButton) {
+        if let Some(WindowHandle { root_id, .. }) = self.window.get(window_id) {
+            self.cx.handle_click(root_id, state, button);
+        }
     }
 
     fn handle_close_request(&mut self, window_id: &WindowId, event_loop: &ActiveEventLoop) {
@@ -178,7 +181,7 @@ impl Aplite {
 
             match renderer.begin() {
                 Ok(()) => {
-                    self.cx.prepare_data(window_handle.root_id, renderer);
+                    self.cx.render(window_handle.root_id, renderer);
                     renderer.encode();
                     window_handle.window.pre_present_notify();
                     renderer.finish();
@@ -212,7 +215,7 @@ impl ApplicationHandler for Aplite {
             WindowEvent::CloseRequested => self.handle_close_request(&window_id, event_loop),
             WindowEvent::RedrawRequested => self.handle_redraw_request(&window_id, event_loop),
             WindowEvent::Resized(size) => self.handle_resize(size),
-            WindowEvent::MouseInput { state, button, .. } => self.handle_click(state, button),
+            WindowEvent::MouseInput { state, button, .. } => self.handle_click(&window_id, state, button),
             WindowEvent::CursorMoved { position, .. } => self.handle_mouse_move(&window_id, position),
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => self.set_scale_factor(scale_factor),
             _ => {}
