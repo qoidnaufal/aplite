@@ -1,7 +1,6 @@
 use aplite_types::{Rect, Vec2f};
 
-use crate::state::{AspectRatio, WidgetState};
-use crate::view::{ViewNodeRef, ViewNode};
+use crate::state::WidgetState;
 use crate::widget::Widget;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -157,7 +156,7 @@ pub struct LayoutCx {
 }
 
 impl LayoutCx {
-    pub fn new(parent: &mut dyn Widget) -> Self {
+    pub fn new(parent: &dyn Widget) -> Self {
         let node = parent.node();
         let rules = Rules::new(&node.borrow());
 

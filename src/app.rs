@@ -100,9 +100,10 @@ impl Aplite {
         let root_id = {
             if let Some(view_fn) = self.pending_views.take() {
                 let view = view_fn(window_id).into_view();
-                #[cfg(feature = "debug_tree")] eprintln!("{:?}", view);
-                let root_id = self.cx.insert_view(view);
 
+                #[cfg(feature = "debug_tree")] eprintln!("{:?}", view);
+
+                let root_id = self.cx.insert_view(view);
                 self.cx.layout(&root_id);
 
                 root_id

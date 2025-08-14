@@ -120,8 +120,7 @@ pub trait Widget {
         );
     }
 
-    // TODO: modify cx's size too
-    fn layout(&mut self, cx: &mut LayoutCx) {
+    fn layout(&self, cx: &mut LayoutCx) {
         let node = self.node();
 
         if node.borrow().hide { return }

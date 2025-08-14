@@ -2,7 +2,7 @@ use std::sync::OnceLock;
 
 use aplite_reactive::*;
 use aplite_renderer::Renderer;
-use aplite_types::{Vec2f, Rect};
+use aplite_types::Vec2f;
 use aplite_storage::IndexMap;
 
 use crate::view::{Render, ViewId, View};
@@ -60,9 +60,9 @@ impl Context {
         self.view_storage.get(id)
     }
 
-    pub(crate) fn get_view_mut(&mut self, id: &ViewId) -> Option<&mut View> {
-        self.view_storage.get_mut(id)
-    }
+    // pub(crate) fn get_view_mut(&mut self, id: &ViewId) -> Option<&mut View> {
+    //     self.view_storage.get_mut(id)
+    // }
 
     pub(crate) fn dirty(&self) -> Signal<bool> {
         self.dirty
@@ -84,9 +84,10 @@ impl Context {
 // #########################################################
 
 impl Context {
-    pub(crate) fn layout(&mut self, id: &ViewId) {
+    pub(crate) fn layout(&self, id: &ViewId) {
         // calculate_size_recursive(id);
-        if let Some(view) = self.get_view_mut(id) {
+        if let Some(view) = self.get_view_ref(id) {
+            view.calculate_size(None);
             let mut cx = LayoutCx::new(view);
             view.calculate_layout(&mut cx);
         }
@@ -152,20 +153,24 @@ impl Context {
     fn handle_drag(&mut self, hover_id: &WidgetId) {
         let pos = self.cursor.hover.pos - self.cursor.click.offset;
 
-        let mut current_widget = self.view_storage
+        let current = self.view_storage
             .get_mut(&self.current.unwrap())
             .unwrap()
             .find_mut(hover_id)
             .unwrap();
 
-        let node = current_widget.node();
+        let node = current.node();
         let mut state = node.borrow_mut();
         state.rect.set_pos(pos.into());
 
         drop(state);
 
-        let mut cx = LayoutCx::new(&mut current_widget);
-        current_widget.layout(&mut cx);
+        if let Some(children) = current.children_ref() {
+            let mut cx = LayoutCx::new(&current);
+            children.iter()
+                .for_each(|child| child.layout(&mut cx));
+        }
+
         self.toggle_dirty();
     }
 

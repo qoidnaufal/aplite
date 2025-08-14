@@ -54,7 +54,9 @@ fn simple() -> impl IntoView {
     VStack::new()
         .child(button)
         .child(circle)
+        .align_h(AlignH::Center)
         .dragable()
+        .padding(Padding::splat(20.0))
 }
 
 fn main() -> ApliteResult {

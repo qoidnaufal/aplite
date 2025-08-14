@@ -13,7 +13,7 @@ use aplite_types::{
 };
 
 use crate::widget::{Widget, WidgetId};
-use crate::state::WidgetState;
+use crate::state::{WidgetState, AspectRatio};
 use crate::context::layout::*;
 use crate::context::DIRTY;
 
@@ -147,20 +147,70 @@ pub(crate) trait Render: IntoView + Sized {
         }
     }
 
-    fn calculate_size(&mut self) -> Size {
-        if let Some(children) = self.children_mut() {
+    fn calculate_size(&self, parent: Option<Box<&dyn Widget>>) -> Size {
+        let node = self.node();
+        let state = node.borrow();
+        let padding = state.padding;
+        let orientation = state.orientation;
+        let spacing = state.spacing;
+        let mut size = state.rect.size();
+
+        if let Some(children) = self.children_ref() {
+            children.iter().for_each(|child| {
+                let child_size = child.calculate_size(Some(Box::new(self)));
+                match orientation {
+                    Orientation::Vertical => {
+                        size.height += child_size.height;
+                        size.width = size.width.max(child_size.width + padding.horizontal());
+                    }
+                    Orientation::Horizontal => {
+                        size.height = size.height.max(child_size.height + padding.vertical());
+                        size.width += child_size.width;
+                    }
+                }
+            });
+            let child_len = children.len() as f32;
+            let stretch = spacing * (child_len - 1.);
+            match orientation {
+                Orientation::Vertical => {
+                    size.height += padding.vertical() + stretch;
+                },
+                Orientation::Horizontal => {
+                    size.width += padding.horizontal() + stretch;
+                },
+            }
         }
-        todo!()
+
+        if let AspectRatio::Defined(tuple) = state.image_aspect_ratio {
+            match parent {
+                Some(parent) if parent
+                    .node()
+                    .borrow()
+                    .orientation
+                    .is_vertical() => size.adjust_height_aspect_ratio(tuple.into()),
+                _ => size.adjust_width_aspect_ratio(tuple.into()),
+            }
+        }
+
+        let final_size = size
+            .adjust_on_min_constraints(state.min_width, state.min_height)
+            .adjust_on_max_constraints(state.max_width, state.max_height);
+
+        drop(state);
+
+        let mut state = node.borrow_mut();
+        state.rect.set_size(final_size);
+
+        final_size
     }
 
     // should include calculating the size too here
-    fn calculate_layout(&mut self, cx: &mut LayoutCx) {
+    fn calculate_layout(&self, cx: &mut LayoutCx) {
         self.layout(cx);
 
-        let mut this_cx = LayoutCx::new(self);
-
-        if let Some(children) = self.children_mut() {
-            children.iter_mut()
+        if let Some(children) = self.children_ref() {
+            let mut this_cx = LayoutCx::new(self);
+            children.iter()
                 .for_each(|child| child.calculate_layout(&mut this_cx));
         }
     }
@@ -184,6 +234,7 @@ pub(crate) trait Render: IntoView + Sized {
         })
     }
 
+    #[allow(unused)]
     fn parent_mut(&mut self, id: &WidgetId) -> Option<Box<&mut dyn IntoView>> {
         if let Some(children) = self.children_ref()
             && children
@@ -200,6 +251,7 @@ pub(crate) trait Render: IntoView + Sized {
             })
     }
 
+    #[allow(unused)]
     fn remove(&mut self, id: &WidgetId) -> Option<Box<dyn IntoView>> {
         self.parent_mut(id)
             .and_then(|mut parent| {
@@ -212,6 +264,7 @@ pub(crate) trait Render: IntoView + Sized {
             })
     }
 
+    #[allow(unused)]
     fn insert<T: Widget + 'static>(&mut self, parent: &WidgetId, widget: T) {
         if let Some(mut p) = self.find_mut(parent)
             && let Some(vec) = p.children_mut()
