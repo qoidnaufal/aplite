@@ -91,7 +91,6 @@ impl WidgetState {
         Self {
             name: "Root",
             rect,
-            align_h: AlignH::Center,
             background_paint: Paint::Color(Rgba::TRANSPARENT),
             border_paint: Paint::Color(Rgba::TRANSPARENT),
             ..Default::default()

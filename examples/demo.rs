@@ -1,23 +1,54 @@
 use aplite::prelude::*;
 use AspectRatio::Defined;
 
-fn first_row() -> impl IntoView {
-    HStack::new()
-        .child(
-            Image::new(|| image_reader("examples/assets/image1.jpg"))
-                .image_aspect_ratio(Defined((8, 5)))
-        )
-        .child(
-            Image::new(|| image_reader("examples/assets/image2.jpg"))
-        )
-        .child(
-            CircleWidget::new()
-                .color(Rgba::PURPLE)
-                .hover_color(Rgba::RED)
-        )
-        .spacing(40.)
+const IMAGE_1: &str = "../../Wallpaper/milky-way-over-mountains-4k-fl-1680x1050-2045764561.jpg";
+const IMAGE_2: &str = "../../Wallpaper/1352909.jpeg";
+const IMAGE_3: &str = "../../Wallpaper/pexels-daejeung-2734512.jpg";
+
+fn image_row(counter: SignalRead<i32>) -> impl IntoView {
+    let image1 = Image::new(|| image_reader(IMAGE_1))
+        .min_width(350.)
+        .image_aspect_ratio(Defined((16, 9)));
+
+    let image2 = Image::new(|| image_reader(IMAGE_2))
+        .min_width(350.)
+        .image_aspect_ratio(Defined((16, 9)));
+
+    let image3 = Image::new(|| image_reader(IMAGE_3))
+        .min_width(350.)
+        .image_aspect_ratio(Defined((16, 9)));
+
+    let node1 = image1.node_ref();
+    let node2 = image2.node_ref();
+    let node3 = image3.node_ref();
+
+    Effect::new(move |_| {
+        let num = counter.get().abs();
+
+        if num == 0 {
+            node1.hide(false);
+            node2.hide(false);
+            node3.hide(false);
+        } else if num % 2 == 0 {
+            node1.hide(false);
+            node2.hide(true);
+            node3.hide(true);
+        } else if num % 3 == 0 {
+            node1.hide(true);
+            node2.hide(false);
+            node3.hide(true);
+        } else {
+            node1.hide(true);
+            node2.hide(true);
+            node3.hide(false);
+        }
+    });
+    VStack::new()
+        .child(image1)
+        .child(image2)
+        .child(image3)
+        .spacing(20.)
         .padding(Padding::new(20., 20., 40., 40.))
-        .corners(CornerRadius::splat(10.))
         .border_width(5.0)
         .border_color(Rgba::DARK_GRAY)
 }
@@ -25,17 +56,16 @@ fn first_row() -> impl IntoView {
 fn button_stack(
     inc: impl Fn() + 'static,
     dec: impl Fn() + 'static,
-    counter: SignalRead<i32>,
     set_counter: SignalWrite<i32>,
 ) -> impl IntoView {
-    VStack::new()
+    HStack::new()
         .child(
             Button::new()
                 .hover_color(Rgba::BLUE)
                 .border_width(5.0)
                 .corners(CornerRadius::new(80., 80., 0., 0.))
                 .click_color(Rgba::DARK_GRAY)
-                .on(LeftClick, inc)
+                .on(LeftClick, dec)
         )
         .child(
             Button::new()
@@ -44,7 +74,7 @@ fn button_stack(
                 .click_color(Rgba::DARK_GREEN)
                 .border_width(5.0)
                 .corners(CornerRadius::splat(50.))
-                .on(LeftClick, dec)
+                .on(LeftClick, move || set_counter.set(0))
         )
         .child(
             Button::new()
@@ -52,49 +82,17 @@ fn button_stack(
                 .hover_color(Rgba::PURPLE)
                 .border_width(5.0)
                 .corners(CornerRadius::new(0., 69., 0., 69.))
-                .on(LeftClick, move || set_counter.set(0))
+                .on(LeftClick, inc)
         )
-        .child({
-            let button = Button::new()
-                .color(Rgba::WHITE)
-                .border_color(Rgba::RED)
-                .corners(CornerRadius::splat(70.));
-
-            let node = button.node_ref();
-            Effect::new(move |_| {
-                counter.with(|num| node.set_rotation_deg(*num as f32 * 3.0))
-            });
-
-            button
-        })
-        .color(Rgba::new(0, 0, 0, 30))
+        .border_color(Rgba::LIGHT_GRAY)
+        .shape(Shape::RoundedRect)
+        .corners(CornerRadius::splat(1.0))
         .dragable()
         .padding(Padding::splat(10.))
         .spacing(5.)
-        .min_width(400.)
+        .min_width(350.)
         .align_h(AlignH::Center)
         .align_v(AlignV::Middle)
-}
-
-fn second_row(
-    inc: impl Fn() + 'static,
-    dec: impl Fn() + 'static,
-    counter: SignalRead<i32>,
-    set_counter: SignalWrite<i32>,
-) -> impl IntoView {
-    HStack::new()
-        .child(button_stack(inc, dec, counter, set_counter))
-        .child(
-            CircleWidget::new()
-                .color(rgba_hex("#104bcdbf"))
-                .hover_color(Rgba::GREEN)
-                .border_color(200.into())
-                .border_width(3.0)
-        )
-        .color(Rgba::LIGHT_GRAY)
-        .dragable()
-        .padding(Padding::splat(30.))
-        .spacing(5.)
 }
 
 fn root() -> impl IntoView {
@@ -103,34 +101,14 @@ fn root() -> impl IntoView {
     let inc = move || set_counter.update(|num| *num += 1);
     let dec = move || set_counter.update(|num| *num -= 1);
 
-    Effect::new(move |_| eprintln!("{:?}", counter.get()));
-
-    let circle = CircleWidget::new()
-        .color(Rgba::new(169, 72, 43, 255))
-        .hover_color(Rgba::new(169, 72, 43, 200))
-        .border_color(Rgba::WHITE)
-        .border_width(5.0)
-        .dragable();
+    Effect::new(move |_| eprint!("{:?}   \r", counter.get()));
 
     VStack::new()
-        .child({
-            let first_row = first_row();
-            let node_ref = first_row.node_ref();
-            Effect::new(move |_| {
-                counter.with(|num| {
-                    if *num > 0 && *num % 3 == 0 {
-                        node_ref.hide(true);
-                    } else {
-                        node_ref.hide(false);
-                    }
-                })
-            });
-            first_row
-        })
-        .child(second_row(inc, dec, counter, set_counter))
-        .child(circle)
-        .align_h(AlignH::Center)
+        .child(button_stack(inc, dec, set_counter))
+        .child(image_row(counter))
+        .align_h(AlignH::Left)
         .padding(Padding::splat(20.0))
+        .spacing(8.)
 }
 
 fn main() -> ApliteResult {

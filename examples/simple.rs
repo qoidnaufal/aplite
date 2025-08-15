@@ -29,6 +29,7 @@ fn simple() -> impl IntoView {
 
     let button = Button::new()
         .border_color(Rgba::WHITE)
+        .color(rgba_hex("#104bcdbf"))
         .border_width(6.0)
         .dragable()
         .corners(CornerRadius::splat(47.))
