@@ -14,7 +14,8 @@ pub mod prelude {
 
     pub use crate::app::Aplite;
     pub use crate::context::Context;
-    pub use crate::state::{WidgetState, AspectRatio};
+    pub use crate::context::cursor::Cursor;
+    pub use crate::state::{ViewNode, AspectRatio};
     pub use crate::context::layout::{
         Orientation,
         Padding,
@@ -39,7 +40,6 @@ pub mod prelude {
     pub use crate::view::{
         IntoView,
         View,
-        ViewNode,
     };
     pub use crate::widget::WidgetEvent::*;
 

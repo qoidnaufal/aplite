@@ -13,10 +13,10 @@ use aplite_renderer::Renderer;
 use aplite_future::{block_on, Executor};
 
 use crate::prelude::ApliteResult;
-use crate::context::Context;
+use crate::context::{Context, ViewId};
 use crate::context::layout::LayoutCx;
 use crate::error::ApliteError;
-use crate::view::{IntoView, ViewId, Render};
+use crate::view::{IntoView, Render};
 use crate::widget::WindowWidget;
 
 pub(crate) const DEFAULT_SCREEN_SIZE: LogicalSize<u32> = LogicalSize::new(800, 600);
@@ -48,7 +48,7 @@ impl Aplite {
     pub fn new_empty() -> Self {
         Self {
             renderer: None,
-            cx: Context::new(),
+            cx: Context::default(),
             window: HashMap::with_capacity(4),
             window_attributes_fn: None,
             pending_views: None,
@@ -223,5 +223,7 @@ impl ApplicationHandler for Aplite {
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => self.set_scale_factor(scale_factor),
             _ => {}
         }
+
+        self.cx.process_pending_update();
     }
 }

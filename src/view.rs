@@ -1,23 +1,10 @@
-use std::cell::{RefCell, Ref, RefMut};
-use std::rc::{Rc, Weak};
-
-use aplite_renderer::{Renderer, Shape};
-use aplite_reactive::*;
-use aplite_storage::{Entity, entity};
-use aplite_types::{
-    CornerRadius,
-    Rgba,
-    Paint,
-    Size,
-    Rect,
-};
+use aplite_renderer::Renderer;
+use aplite_types::Size;
 
 use crate::widget::{Widget, WidgetId};
-use crate::state::{WidgetState, AspectRatio};
+use crate::state::{ViewNode, AspectRatio};
 use crate::context::layout::*;
-use crate::context::DIRTY;
-
-entity! { pub ViewId }
+use crate::context::cursor::Cursor;
 
 pub trait IntoView: Widget {
     fn into_view(self) -> View;
@@ -177,6 +164,24 @@ pub(crate) trait Render: Widget + Sized {
         final_size
     }
 
+    fn mouse_hover(&self, cursor: &Cursor) -> Option<WidgetId> {
+        if self.node().borrow().hide { return None }
+
+        if let Some(children) = self.children_ref() {
+            let hovered = children.iter()
+                .find_map(|child| child.mouse_hover(cursor));
+
+            if hovered.is_some() {
+                return hovered;
+            }
+        }
+
+        self.node().borrow()
+            .rect
+            .contains(cursor.hover.pos)
+            .then_some(self.id())
+    }
+
     fn find(&self, id: &WidgetId) -> Option<Box<&dyn Widget>> {
         if self.id() == id {
             return Some(Box::new(self))
@@ -236,176 +241,3 @@ pub(crate) trait Render: Widget + Sized {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct ViewNode(pub(crate) Rc<RefCell<WidgetState>>);
-
-impl ViewNode {
-    pub fn new() -> Self {
-        let state = Rc::new(RefCell::new(WidgetState::new()));
-
-        Self(state)
-    }
-
-    pub(crate) fn window(rect: Rect) -> Self {
-        let state = Rc::new(RefCell::new(WidgetState::window(rect)));
-
-        Self(state)
-    }
-
-    pub fn node_ref(&self) -> ViewNodeRef {
-        let dirty = DIRTY.get().unwrap();
-        ViewNodeRef(Rc::downgrade(&self.0), dirty.write_only())
-    }
-
-    #[inline(always)]
-    pub(crate) fn borrow(&self) -> Ref<'_, WidgetState> {
-        self.0.borrow()
-    }
-
-    #[inline(always)]
-    pub(crate) fn borrow_mut(&self) -> RefMut<'_, WidgetState> {
-        self.0.borrow_mut()
-    }
-
-    pub fn with_name(self, name: &'static str) -> Self {
-        self.0.borrow_mut().set_name(name);
-        self
-    }
-
-    /// Types which implement [`Into<Size>`] are:
-    /// - (u32, u32)
-    /// - (f32, f32)
-    /// - [`Size`](aplite_types::Size)
-    pub fn with_size(self, size: impl Into<Size>) -> Self {
-        self.0.borrow_mut().set_size(size);
-        self
-    }
-
-    pub fn with_min_width(self, val: f32) -> Self {
-        self.0.borrow_mut().min_width = Some(val);
-        self
-    }
-
-    pub fn with_max_width(self, val: f32) -> Self {
-        self.0.borrow_mut().max_width = Some(val);
-        self
-    }
-
-    pub fn with_min_height(self, val: f32) -> Self {
-        self.0.borrow_mut().min_height = Some(val);
-        self
-    }
-
-    pub fn with_max_height(self, val: f32) -> Self {
-        self.0.borrow_mut().max_height = Some(val);
-        self
-    }
-
-    /// Types which implement [`Into<Paint>`] are:
-    /// - [`ImageData`](aplite_types::ImageData)
-    /// - [`Rgba`](aplite_types::Rgba)
-    pub fn with_background_paint(self, paint: impl Into<Paint>) -> Self {
-        self.0.borrow_mut().background_paint = paint.into();
-        self
-    }
-
-    /// Types which implement [`Into<Paint>`] are:
-    /// - [`ImageData`](aplite_types::ImageData)
-    /// - [`Rgba`](aplite_types::Rgba)
-    pub fn with_border_paint(self, color: impl Into<Paint>) -> Self {
-        self.0.borrow_mut().border_paint = color.into();
-        self
-    }
-
-    pub fn with_stroke_width(self, val: f32) -> Self {
-        self.0.borrow_mut().border_width = val;
-        self
-    }
-
-    pub fn with_shape(self, shape: Shape) -> Self {
-        self.0.borrow_mut().shape = shape;
-        self
-    }
-
-    pub fn with_rotation_deg(self, deg: f32) -> Self {
-        self.with_rotation_rad(deg.to_radians())
-    }
-
-    pub fn with_rotation_rad(self, rad: f32) -> Self {
-        self.0.borrow_mut().set_rotation_rad(rad);
-        self
-    }
-
-    pub fn with_corner_radius(self, val: CornerRadius) -> Self {
-        self.0.borrow_mut().set_corner_radius(val);
-        self
-    }
-
-    pub fn with_horizontal_align(self, align_h: AlignH) -> Self {
-        self.0.borrow_mut().align_h = align_h;
-        self
-    }
-
-    pub fn with_vertical_align(self, align_v: AlignV) -> Self {
-        self.0.borrow_mut().align_v = align_v;
-        self
-    }
-
-    pub fn with_orientation(self, orientation: Orientation) -> Self {
-        self.0.borrow_mut().orientation = orientation;
-        self
-    }
-
-    pub fn hoverable(self) -> Self {
-        self.0.borrow_mut().hoverable = true;
-        self
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct ViewNodeRef(Weak<RefCell<WidgetState>>, SignalWrite<bool>);
-
-impl ViewNodeRef {
-    pub(crate) fn upgrade(&self) -> Option<ViewNode> {
-        self.0.upgrade().map(|rc| ViewNode(rc))
-    }
-
-    pub fn set_color(&self, color: Rgba<u8>) {
-        if let Some(node) = self.upgrade() {
-            node.0.borrow_mut().background_paint = color.into();
-            self.1.set(true);
-        }
-    }
-
-    pub fn set_shape(&self, shape: Shape) {
-        if let Some(node) = self.upgrade() {
-            node.0.borrow_mut().shape = shape;
-            self.1.set(true);
-        }
-    }
-
-    pub fn set_rotation_deg(&self, deg: f32) {
-        self.set_rotation_rad(deg.to_radians());
-    }
-
-    pub fn set_rotation_rad(&self, rad: f32) {
-        if let Some(node) = self.upgrade() {
-            node.0.borrow_mut().rotation = rad;
-            self.1.set(true);
-        }
-    }
-
-    pub fn set_spacing(&self, val: f32) {
-        if let Some(node) = self.upgrade() {
-            node.0.borrow_mut().spacing = val;
-            self.1.set(true);
-        }
-    }
-
-    pub fn hide(&self, val: bool) {
-        if let Some(node) = self.upgrade() {
-            node.0.borrow_mut().hide = val;
-            self.1.set(true);
-        }
-    }
-}

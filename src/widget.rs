@@ -5,14 +5,9 @@ use aplite_renderer::{Shape, Renderer};
 use aplite_types::{Rgba, CornerRadius, Size, Rect};
 use aplite_storage::U64Map;
 
-use crate::state::AspectRatio;
+use crate::state::{ViewNode, ViewNodeRef, AspectRatio};
 use crate::context::layout::*;
-use crate::context::cursor::Cursor;
-use crate::view::{
-    IntoView,
-    ViewNode,
-    ViewNodeRef,
-};
+use crate::view::IntoView;
 
 mod button;
 mod image;
@@ -74,24 +69,6 @@ pub trait Widget {
 
     fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
         None
-    }
-
-    fn mouse_hover(&self, cursor: &Cursor) -> Option<WidgetId> {
-        if self.node().borrow().hide { return None }
-
-        if let Some(children) = self.children_ref() {
-            let hovered = children.iter()
-                .find_map(|child| child.mouse_hover(cursor));
-
-            if hovered.is_some() {
-                return hovered;
-            }
-        }
-
-        self.node().borrow()
-            .rect
-            .contains(cursor.hover.pos)
-            .then_some(self.id())
     }
 
     fn draw(&self, renderer: &mut Renderer) -> bool {
@@ -267,7 +244,7 @@ pub trait WidgetExt: Widget + Sized {
             .adjust_on_min_constraints(min_width, min_height)
             .adjust_on_max_constraints(max_width, max_height);
 
-        node.borrow_mut().set_size(new_size);
+        node.borrow_mut().rect.set_size(new_size);
 
         self
     }
@@ -289,7 +266,7 @@ pub trait WidgetExt: Widget + Sized {
             .adjust_on_min_constraints(min_width, min_height)
             .adjust_on_max_constraints(max_width, max_height);
 
-        node.borrow_mut().set_size(new_size);
+        node.borrow_mut().rect.set_size(new_size);
 
         self
     }
@@ -311,7 +288,7 @@ pub trait WidgetExt: Widget + Sized {
             .adjust_on_min_constraints(min_width, min_height)
             .adjust_on_max_constraints(max_width, max_height);
 
-        node.borrow_mut().set_size(new_size);
+        node.borrow_mut().rect.set_size(new_size);
 
         self
     }
@@ -333,7 +310,7 @@ pub trait WidgetExt: Widget + Sized {
             .adjust_on_min_constraints(min_width, min_height)
             .adjust_on_max_constraints(max_width, max_height);
 
-        node.borrow_mut().set_size(new_size);
+        node.borrow_mut().rect.set_size(new_size);
 
         self
     }

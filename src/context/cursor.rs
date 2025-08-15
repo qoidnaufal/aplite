@@ -3,9 +3,10 @@ use aplite_types::Vec2f;
 // use crate::view::ViewId;
 use crate::widget::WidgetId;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseAction {
     Pressed,
+    #[default]
     Released,
 }
 
@@ -18,8 +19,9 @@ impl From<winit::event::ElementState> for MouseAction {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseButton {
+    #[default]
     Left,
     Right,
     Middle,
@@ -41,96 +43,111 @@ impl From<winit::event::MouseButton> for MouseButton {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MouseState {
-    pub action: MouseAction,
-    pub button: MouseButton,
+    pub(crate) action: MouseAction,
+    pub(crate) button: MouseButton,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct MouseClick {
-    pub pos: Vec2f,
-    pub offset: Vec2f,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct MouseHover {
-    pub pos: Vec2f,
-    pub curr: Option<WidgetId>,
-    pub prev: Option<WidgetId>,
+    pub(crate) pos: Vec2f,
+    pub(crate) curr: Option<WidgetId>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+pub struct MouseClick {
+    pub(crate) pos: Vec2f,
+    pub(crate) offset: Vec2f,
+    pub(crate) captured: Option<WidgetId>,
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct Cursor {
-    pub hover: MouseHover,
-    pub state: MouseState,
-    pub click: MouseClick,
-    pub timer: std::time::Duration,
-    pub is_dragging: bool,
+    pub(crate) state: MouseState,
+    pub(crate) hover: MouseHover,
+    pub(crate) click: MouseClick,
+    pub(crate) is_dragging: bool,
 }
 
-impl Default for Cursor {
-    fn default() -> Self {
-        Self {
-            hover: MouseHover {
-                pos: Vec2f::default(),
-                curr: None,
-                prev: None,
-            },
-            state: MouseState {
-                action: MouseAction::Released,
-                button: MouseButton::Left,
-            },
-            click: MouseClick {
-                pos: Vec2f::default(),
-                offset: Vec2f::default(),
-            },
-            timer: std::time::Duration::from_millis(0),
-            is_dragging: false,
-        }
-    }
+pub enum EmittedClickEvent {
+    NoOp,
+    Captured(WidgetId),
+    TriggerCallback(WidgetId),
 }
 
 impl Cursor {
-    pub(crate) fn new() -> Self {
-        Self::default()
+    #[inline(always)]
+    pub fn hover_pos(&self) -> Vec2f {
+        self.hover.pos
     }
 
+    #[inline(always)]
+    pub fn click_pos(&self) -> Vec2f {
+        self.click.pos
+    }
+
+    #[inline(always)]
+    pub fn button(&self) -> MouseButton {
+        self.state.button
+    }
+
+    #[inline(always)]
+    pub fn action(&self) -> MouseAction {
+        self.state.action
+    }
+
+    #[inline(always)]
     fn set_state(&mut self, action: MouseAction, button: MouseButton) {
         self.state = MouseState { action, button };
     }
 
-    pub(crate) fn set_click_state(&mut self, action: MouseAction, button: MouseButton) {
+    pub(crate) fn process_click_event(
+        &mut self,
+        action: MouseAction,
+        button: MouseButton,
+    ) -> EmittedClickEvent {
         self.set_state(action, button);
 
-        let start = std::time::Instant::now();
         match (self.state.action, self.state.button) {
             (MouseAction::Pressed, MouseButton::Left) => {
                 self.click.pos = self.hover.pos;
+                self.click.captured = self.hover.curr;
+
+                if let Some(captured) = self.click.captured {
+                    EmittedClickEvent::Captured(captured)
+                } else {
+                    EmittedClickEvent::NoOp
+                }
             },
             (MouseAction::Released, MouseButton::Left) => {
-                self.timer = start.elapsed();
+                let captured = self.click.captured.take();
+                let was_dragging = self.is_dragging;
+                self.is_dragging = false;
+
+                if let Some(id) = captured
+                    && self.hover.curr.is_some_and(|hover| hover == id)
+                    && !was_dragging
+                {
+                    EmittedClickEvent::TriggerCallback(id)
+                } else {
+                    EmittedClickEvent::NoOp
+                }
             },
-            _ => {}
+            _ => EmittedClickEvent::NoOp,
         }
     }
 
-    pub(crate) fn is_dragging(&self, hover_id: &WidgetId) -> bool {
-        self.is_clicking()
-            && self.hover.curr.is_some_and(|id| &id == hover_id)
+    #[inline(always)]
+    pub(crate) fn is_dragging(&self) -> bool {
+        self.is_left_clicking()
+            && self.click.captured.is_some()
             && self.hover.pos != self.click.pos
     }
 
-    pub(crate) fn is_hovering_same_obj(&self) -> bool {
-        self.hover.curr == self.hover.prev && self.hover.curr.is_some()
-    }
-
-    pub(crate) fn is_idling(&self) -> bool {
-        (self.is_hovering_same_obj() && !self.is_clicking())
-            || (self.hover.curr.is_none() && self.hover.prev.is_none())
-    }
-
-    pub(crate) fn is_clicking(&self) -> bool {
+    #[inline(always)]
+    pub(crate) fn is_left_clicking(&self) -> bool {
         matches!(self.state.action, MouseAction::Pressed)
+            && matches!(self.state.button, MouseButton::Left)
     }
 }
