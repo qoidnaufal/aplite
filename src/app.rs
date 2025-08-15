@@ -14,7 +14,7 @@ use aplite_future::{block_on, Executor};
 
 use crate::prelude::ApliteResult;
 use crate::context::{Context, ViewId};
-use crate::context::layout::LayoutCx;
+use crate::layout::LayoutCx;
 use crate::error::ApliteError;
 use crate::view::{IntoView, Render};
 use crate::widget::WindowWidget;
@@ -183,7 +183,7 @@ impl Aplite {
             #[cfg(feature = "render_stats")] let start = std::time::Instant::now();
 
             match renderer.begin() {
-                Ok(()) => {
+                Ok(_) => {
                     self.cx.render(window_handle.root_id, renderer);
                     renderer.encode();
                     window_handle.window.pre_present_notify();

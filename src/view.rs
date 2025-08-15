@@ -3,8 +3,8 @@ use aplite_types::Size;
 
 use crate::widget::{Widget, WidgetId};
 use crate::state::{ViewNode, AspectRatio};
-use crate::context::layout::*;
-use crate::context::cursor::Cursor;
+use crate::layout::*;
+use crate::cursor::Cursor;
 
 pub trait IntoView: Widget {
     fn into_view(self) -> View;

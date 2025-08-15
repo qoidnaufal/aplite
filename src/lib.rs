@@ -1,6 +1,8 @@
 mod app;
 mod context;
+mod cursor;
 mod error;
+mod layout;
 mod state;
 mod view;
 mod widget;
@@ -14,9 +16,9 @@ pub mod prelude {
 
     pub use crate::app::Aplite;
     pub use crate::context::Context;
-    pub use crate::context::cursor::Cursor;
+    pub use crate::cursor::Cursor;
     pub use crate::state::{ViewNode, AspectRatio};
-    pub use crate::context::layout::{
+    pub use crate::layout::{
         Orientation,
         Padding,
         AlignV,

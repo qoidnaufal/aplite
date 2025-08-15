@@ -12,7 +12,7 @@ use aplite_types::{
     Rgba,
 };
 
-use crate::context::layout::{AlignV, AlignH, Orientation, Padding};
+use crate::layout::{AlignV, AlignH, Orientation, Padding};
 use crate::context::DIRTY;
 
 #[derive(Debug, Clone, Copy)]

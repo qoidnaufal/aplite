@@ -1,7 +1,7 @@
 use aplite_types::Rgba;
 use aplite_renderer::Shape;
 
-use crate::context::layout::Orientation;
+use crate::layout::Orientation;
 
 use super::{ViewNode, Widget, WidgetId};
 

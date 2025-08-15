@@ -7,12 +7,8 @@ use aplite_storage::{IndexMap, entity, Entity};
 
 use crate::view::{Render, View};
 use crate::widget::{CALLBACKS, Widget, WidgetEvent, WidgetId};
-
-pub(crate) mod cursor;
-pub mod layout;
-
-use cursor::{Cursor, MouseAction, MouseButton, EmittedClickEvent};
-use layout::LayoutCx;
+use crate::cursor::{Cursor, MouseAction, MouseButton, EmittedClickEvent};
+use crate::layout::LayoutCx;
 
 pub(crate) static DIRTY: OnceLock<Signal<bool>> = OnceLock::new();
 
