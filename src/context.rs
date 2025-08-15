@@ -2,15 +2,15 @@ use std::sync::OnceLock;
 
 use aplite_reactive::*;
 use aplite_renderer::Renderer;
-use aplite_types::Vec2f;
+use aplite_types::{Vec2f, Size, Rect};
 use aplite_storage::{IndexMap, entity, Entity};
 
-use crate::view::{Render, View};
-use crate::widget::{CALLBACKS, Widget, WidgetEvent, WidgetId};
+use crate::view::{Render, View, Layout};
+use crate::widget::{CALLBACKS, Widget, WidgetEvent, WidgetId, WindowWidget};
 use crate::cursor::{Cursor, MouseAction, MouseButton, EmittedClickEvent};
 use crate::layout::LayoutCx;
 
-pub(crate) static DIRTY: OnceLock<Signal<bool>> = OnceLock::new();
+pub(crate) static PENDING_EVENT: OnceLock<SignalWrite<Vec<Event>>> = OnceLock::new();
 
 entity! { pub ViewId }
 
@@ -19,6 +19,7 @@ entity! { pub ViewId }
 pub(crate) enum Event {
     Layout,
     Callback(WidgetId),
+    Paint,
     Render,
 }
 
@@ -27,20 +28,23 @@ pub struct Context {
     view_storage: IndexMap<ViewId, View>,
     cursor: Cursor,
     current: Option<ViewId>,
-    pending_event: Vec<Event>,
+    pending_event: Signal<Vec<Event>>,
     dirty: Signal<bool>,
 }
 
 impl Default for Context {
     fn default() -> Self {
-        let dirty = Signal::new(false);
-        DIRTY.set(dirty).expect("Should only be initialized once");
+        let pending_event = Signal::new(Vec::with_capacity(16));
+        PENDING_EVENT
+            .set(pending_event.write_only())
+            .expect("Should only be initialized once");
+
         Self {
             view_storage: IndexMap::with_capacity(1024),
             cursor: Cursor::default(),
             current: None,
-            pending_event: Vec::with_capacity(16),
-            dirty,
+            pending_event,
+            dirty: Signal::new(false),
         }
     }
 }
@@ -68,25 +72,45 @@ impl Context {
         self.dirty.set(true);
     }
 
-    pub(crate) fn process_pending_update(&mut self) {
+    pub(crate) fn process_pending_update(&mut self, view_id: ViewId, size: Size) {
+        if self.pending_event.with_untracked(|vec| vec.is_empty()) { return }
+
+        let prev = self.current.replace(view_id);
+
         self.pending_event
-            .drain(..)
-            .for_each(|event| {
-                match event {
-                    Event::Layout => {},
-                    Event::Callback(widget_id) => {
-                        CALLBACKS.with(|cb| {
-                            if let Some(callbacks) = cb.borrow_mut().get_mut(&widget_id)
-                                && let MouseButton::Left = self.cursor.state.button
-                                && let Some(callback) = callbacks.get_mut(WidgetEvent::LeftClick)
-                            {
-                                callback();
-                            }
-                        })
-                    },
-                    Event::Render => {},
-                }
+            .update_untracked(|vec| {
+                vec
+                    .drain(..)
+                    .for_each(|event| {
+                        match event {
+                            Event::Callback(widget_id) => {
+                                CALLBACKS.with(|cb| {
+                                    if let Some(callbacks) = cb.borrow_mut().get_mut(&widget_id)
+                                        && let MouseButton::Left = self.cursor.state.button
+                                        && let Some(callback) = callbacks.get_mut(WidgetEvent::LeftClick)
+                                    {
+                                        callback();
+                                    }
+                                })
+                            },
+                            Event::Layout => {
+                                if let Some(current) = self.current
+                                    && let Some(view) = self.view_storage.get(&current) {
+                                        // FIXME: improve dynamic layouting
+                                        view.calculate_size(None);
+                                        let window_widget = WindowWidget::new(Rect::from_size(size));
+                                        let mut cx = LayoutCx::new(&window_widget);
+                                        view.calculate_layout(&mut cx);
+                                    }
+                            },
+                            _ => {},
+                        }
+
+                        self.toggle_dirty();
+                    });
             });
+
+        self.current = prev;
     }
 }
 
@@ -136,7 +160,7 @@ impl Context {
                 self.cursor.click.offset = self.cursor.click.pos - pos;
             },
             EmittedClickEvent::TriggerCallback(widget_id) => {
-                self.pending_event.push(Event::Callback(widget_id));
+                self.pending_event.update(|vec| vec.push(Event::Callback(widget_id)));
             },
             _ => {}
         }

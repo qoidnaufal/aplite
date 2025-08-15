@@ -13,7 +13,7 @@ use aplite_types::{
 };
 
 use crate::layout::{AlignV, AlignH, Orientation, Padding};
-use crate::context::DIRTY;
+use crate::context::{Event, PENDING_EVENT};
 
 #[derive(Debug, Clone, Copy)]
 pub enum AspectRatio {
@@ -126,8 +126,8 @@ impl ViewNode {
     }
 
     pub fn node_ref(&self) -> ViewNodeRef {
-        let dirty = DIRTY.get().unwrap();
-        ViewNodeRef(Rc::downgrade(&self.0), dirty.write_only())
+        let pending_event = PENDING_EVENT.get().unwrap();
+        ViewNodeRef(Rc::downgrade(&self.0), *pending_event)
     }
 
     #[inline(always)]
@@ -236,7 +236,7 @@ impl ViewNode {
 }
 
 #[derive(Clone, Debug)]
-pub struct ViewNodeRef(Weak<RefCell<WidgetState>>, SignalWrite<bool>);
+pub struct ViewNodeRef(Weak<RefCell<WidgetState>>, SignalWrite<Vec<Event>>);
 
 impl ViewNodeRef {
     pub(crate) fn upgrade(&self) -> Option<ViewNode> {
@@ -246,14 +246,14 @@ impl ViewNodeRef {
     pub fn set_color(&self, color: Rgba<u8>) {
         if let Some(node) = self.upgrade() {
             node.0.borrow_mut().background_paint = color.into();
-            self.1.set(true);
+            self.1.update_untracked(|vec| vec.push(Event::Paint));
         }
     }
 
     pub fn set_shape(&self, shape: Shape) {
         if let Some(node) = self.upgrade() {
             node.0.borrow_mut().shape = shape;
-            self.1.set(true);
+            self.1.update_untracked(|vec| vec.push(Event::Render));
         }
     }
 
@@ -264,21 +264,24 @@ impl ViewNodeRef {
     pub fn set_rotation_rad(&self, rad: f32) {
         if let Some(node) = self.upgrade() {
             node.0.borrow_mut().rotation = rad;
-            self.1.set(true);
+            self.1.update_untracked(|vec| vec.push(Event::Render));
         }
     }
 
     pub fn set_spacing(&self, val: f32) {
         if let Some(node) = self.upgrade() {
             node.0.borrow_mut().spacing = val;
-            self.1.set(true);
+            self.1.update_untracked(|vec| vec.push(Event::Render));
         }
     }
 
     pub fn hide(&self, val: bool) {
         if let Some(node) = self.upgrade() {
+            let prev = node.0.borrow().hide;
             node.0.borrow_mut().hide = val;
-            self.1.set(true);
+            if prev != val {
+                self.1.update_untracked(|vec| vec.push(Event::Layout));
+            }
         }
     }
 }

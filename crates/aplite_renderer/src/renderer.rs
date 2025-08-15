@@ -126,7 +126,7 @@ impl Renderer {
         self.screen.scale_factor = scale_factor;
     }
 
-    /// Corresponds to [`winit::dpi::LogicalSize<u32>`]
+    /// Corresponds to [`winit::dpi::LogicalSize<f32>`]
     /// This one will not be updated when the window is resized.
     /// Important to determine the transform of an [`Element`].
     pub fn screen_res(&self) -> Size {

@@ -95,8 +95,12 @@ pub(crate) trait Render: Widget + Sized {
             }
         }
     }
+}
 
-    // should include calculating the size too here
+impl<T: Widget + Sized> Layout for T {}
+
+pub(crate) trait Layout: Widget + Sized {
+    // TODO: include calculating the size too
     fn calculate_layout(&self, cx: &mut LayoutCx) {
         if self.layout(cx) {
             if let Some(children) = self.children_ref() {
@@ -109,6 +113,9 @@ pub(crate) trait Render: Widget + Sized {
 
     fn calculate_size(&self, parent: Option<Box<&dyn Widget>>) -> Size {
         let node = self.node();
+
+        if node.borrow().hide { return Size::default() }
+
         let state = node.borrow();
         let padding = state.padding;
         let orientation = state.orientation;
@@ -116,29 +123,35 @@ pub(crate) trait Render: Widget + Sized {
         let mut size = state.rect.size();
 
         if let Some(children) = self.children_ref() {
+            let mut expand = Size::default();
+
             children.iter().for_each(|child| {
                 let child_size = child.calculate_size(Some(Box::new(self)));
                 match orientation {
                     Orientation::Vertical => {
-                        size.height += child_size.height;
-                        size.width = size.width.max(child_size.width + padding.horizontal());
+                        expand.height += child_size.height;
+                        expand.width = expand.width.max(child_size.width + padding.horizontal());
                     }
                     Orientation::Horizontal => {
-                        size.height = size.height.max(child_size.height + padding.vertical());
-                        size.width += child_size.width;
+                        expand.height = expand.height.max(child_size.height + padding.vertical());
+                        expand.width += child_size.width;
                     }
                 }
             });
+
             let child_len = children.len() as f32;
             let stretch = spacing * (child_len - 1.);
+
             match orientation {
                 Orientation::Vertical => {
-                    size.height += padding.vertical() + stretch;
+                    expand.height += padding.vertical() + stretch;
                 },
                 Orientation::Horizontal => {
-                    size.width += padding.horizontal() + stretch;
+                    expand.width += padding.horizontal() + stretch;
                 },
             }
+
+            size = expand;
         }
 
         if let AspectRatio::Defined(tuple) = state.image_aspect_ratio {

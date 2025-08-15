@@ -19,7 +19,6 @@ fn first_row() -> impl IntoView {
         .padding(Padding::new(20., 20., 40., 40.))
         .corners(CornerRadius::splat(10.))
         .border_width(5.0)
-        .color(Rgba::LIGHT_GRAY)
         .border_color(Rgba::DARK_GRAY)
 }
 
@@ -56,15 +55,14 @@ fn button_stack(
                 .on(LeftClick, move || set_counter.set(0))
         )
         .child({
-            let button = Button::new().corners(CornerRadius::splat(70.));
+            let button = Button::new()
+                .color(Rgba::WHITE)
+                .border_color(Rgba::RED)
+                .corners(CornerRadius::splat(70.));
 
             let node = button.node_ref();
-
             Effect::new(move |_| {
-                counter.with(|num| {
-                    node.set_color(select_color(*num));
-                    node.set_rotation_deg(*num as f32 * 3.0);
-                })
+                counter.with(|num| node.set_rotation_deg(*num as f32 * 3.0))
             });
 
             button
@@ -133,11 +131,6 @@ fn root() -> impl IntoView {
         .child(circle)
         .align_h(AlignH::Center)
         .padding(Padding::splat(20.0))
-}
-
-fn select_color(val: i32) -> Rgba<u8> {
-    let val = val as u32;
-    Rgba::from_u32(val)
 }
 
 fn main() -> ApliteResult {

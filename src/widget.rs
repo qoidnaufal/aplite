@@ -108,7 +108,6 @@ pub trait Widget {
         if node.borrow().hide { return false }
 
         let size = node.borrow().rect.size();
-
         let mut this = node.borrow_mut();
 
         match cx.rules.orientation {

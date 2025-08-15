@@ -16,7 +16,7 @@ use crate::prelude::ApliteResult;
 use crate::context::{Context, ViewId};
 use crate::layout::LayoutCx;
 use crate::error::ApliteError;
-use crate::view::{IntoView, Render};
+use crate::view::{IntoView, Layout};
 use crate::widget::WindowWidget;
 
 pub(crate) const DEFAULT_SCREEN_SIZE: LogicalSize<u32> = LogicalSize::new(800, 600);
@@ -224,6 +224,11 @@ impl ApplicationHandler for Aplite {
             _ => {}
         }
 
-        self.cx.process_pending_update();
+        if let Some(renderer) = self.renderer.as_ref()
+            && let Some(handle) = self.window.get(&window_id)
+        {
+            let root_id = handle.root_id;
+            self.cx.process_pending_update(root_id, renderer.screen_res());
+        }
     }
 }
