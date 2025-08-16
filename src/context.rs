@@ -6,7 +6,7 @@ use aplite_types::{Vec2f, Size, Rect};
 use aplite_storage::{IndexMap, entity, Entity};
 
 use crate::view::{Render, View, Layout};
-use crate::widget::{CALLBACKS, Widget, WidgetEvent, WidgetId, WindowWidget};
+use crate::widget::{CALLBACKS, Widget, WidgetEvent, WindowWidget};
 use crate::cursor::{Cursor, MouseAction, MouseButton, EmittedClickEvent};
 use crate::layout::LayoutCx;
 
@@ -18,7 +18,7 @@ entity! { pub ViewId }
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Event {
     Layout,
-    Callback(WidgetId),
+    Callback(*const dyn Widget),
     Paint,
     Render,
 }
@@ -83,9 +83,10 @@ impl Context {
                     .drain(..)
                     .for_each(|event| {
                         match event {
-                            Event::Callback(widget_id) => {
+                            Event::Callback(widget) => {
+                                // let widget = unsafe { widget.as_ref().unwrap() };
                                 CALLBACKS.with(|cb| {
-                                    if let Some(callbacks) = cb.borrow_mut().get_mut(&widget_id)
+                                    if let Some(callbacks) = cb.borrow_mut().get_mut(&widget.id())
                                         && let MouseButton::Left = self.cursor.state.button
                                         && let Some(callback) = callbacks.get_mut(WidgetEvent::LeftClick)
                                     {
@@ -144,65 +145,48 @@ impl Context {
         self.cursor.hover.curr = hovered;
     }
 
-    pub(crate) fn handle_click(
-        &mut self,
-        id: &ViewId,
-        action: impl Into<MouseAction>,
-        button: impl Into<MouseButton>
-    ) {
-        match self.cursor.process_click_event(action.into(), button.into()) {
-            EmittedClickEvent::Captured(widget_id) => {
-                let view = self.view_storage.get(id).unwrap();
-                let widget = view.find(&widget_id).unwrap();
-                let node = widget.node();
-                let pos = node.borrow().rect.vec2f();
-
-                self.cursor.click.offset = self.cursor.click.pos - pos;
-            },
-            EmittedClickEvent::TriggerCallback(widget_id) => {
-                self.pending_event.update(|vec| vec.push(Event::Callback(widget_id)));
-            },
-            _ => {}
-        }
-    }
-
     pub(crate) fn handle_drag(&mut self) {
-        if let Some(view_id) = self.current
-            && let Some(captured) = self.cursor.click.captured
-        {
-            let dragable = self.view_storage
-                .get(&view_id)
-                .unwrap()
-                .find(&captured)
-                .unwrap()
-                .node()
-                .borrow()
-                .dragable;
+        if let Some(captured) = self.cursor.click.captured {
+            let node = captured.node();
+            let dragable = node.borrow().dragable;
 
             if self.cursor.is_dragging() && dragable {
                 self.cursor.is_dragging = true;
                 let pos = self.cursor.hover.pos - self.cursor.click.offset;
 
-                let current = self.view_storage
-                    .get_mut(&self.current.unwrap())
-                    .unwrap()
-                    .find_mut(&captured)
-                    .unwrap();
-
-                let node = current.node();
                 let mut state = node.borrow_mut();
                 state.rect.set_pos(pos.into());
 
                 drop(state);
 
-                if let Some(children) = current.children_ref() {
-                    let mut cx = LayoutCx::new(&current);
+                if let Some(children) = captured.children_ref() {
+                    let mut cx = LayoutCx::new(&captured);
                     children.iter()
                         .for_each(|child| child.calculate_layout(&mut cx));
                 }
 
                 self.toggle_dirty();
             }
+        }
+    }
+
+    pub(crate) fn handle_click(
+        &mut self,
+        action: impl Into<MouseAction>,
+        button: impl Into<MouseButton>
+    ) {
+        match self.cursor.process_click_event(action.into(), button.into()) {
+            EmittedClickEvent::Captured(widget) => {
+                let widget = unsafe { widget.as_ref().unwrap() };
+                let node = widget.node();
+                let pos = node.borrow().rect.vec2f();
+
+                self.cursor.click.offset = self.cursor.click.pos - pos;
+            },
+            EmittedClickEvent::TriggerCallback(widget) => {
+                self.pending_event.update(|vec| vec.push(Event::Callback(widget)));
+            },
+            _ => {}
         }
     }
 }

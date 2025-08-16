@@ -156,7 +156,7 @@ pub struct LayoutCx {
 }
 
 impl LayoutCx {
-    pub fn new(parent: &dyn Widget) -> Self {
+    pub fn new<T: Widget>(parent: &T) -> Self {
         let node = parent.node();
         let rules = Rules::new(&node.borrow());
 

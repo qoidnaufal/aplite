@@ -124,6 +124,10 @@ impl ViewNode {
         Self(state)
     }
 
+    pub(crate) fn id(&self) -> usize {
+        Rc::as_ptr(&self.0) as usize
+    }
+
     pub fn node_ref(&self) -> ViewNodeRef {
         let pending_event = PENDING_EVENT.get().unwrap();
         ViewNodeRef(Rc::downgrade(&self.0), *pending_event)

@@ -43,6 +43,7 @@ fn image_row(counter: SignalRead<i32>) -> impl IntoView {
             node3.hide(false);
         }
     });
+
     VStack::new()
         .child(image1)
         .child(image2)
@@ -62,9 +63,9 @@ fn button_stack(
         .child(
             Button::new()
                 .hover_color(Rgba::BLUE)
-                .border_width(5.0)
-                .corners(CornerRadius::new(80., 80., 0., 0.))
                 .click_color(Rgba::DARK_GRAY)
+                .border_width(5.0)
+                .corners(CornerRadius::splat(50.))
                 .on(LeftClick, dec)
         )
         .child(
@@ -81,16 +82,13 @@ fn button_stack(
                 .color(Rgba::BLUE)
                 .hover_color(Rgba::PURPLE)
                 .border_width(5.0)
-                .corners(CornerRadius::new(0., 69., 0., 69.))
+                .corners(CornerRadius::splat(50.))
                 .on(LeftClick, inc)
         )
         .border_color(Rgba::LIGHT_GRAY)
-        .shape(Shape::RoundedRect)
-        .corners(CornerRadius::splat(1.0))
-        .dragable()
-        .padding(Padding::splat(10.))
+        .padding(Padding::splat(7.))
         .spacing(5.)
-        .min_width(350.)
+        .min_width(430.)
         .align_h(AlignH::Center)
         .align_v(AlignV::Middle)
 }

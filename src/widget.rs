@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 
 use aplite_renderer::{Shape, Renderer};
 use aplite_types::{Rgba, CornerRadius, Size, Rect};
@@ -20,12 +19,11 @@ pub use {
 };
 
 #[derive(Clone, Copy, Eq, PartialOrd, Ord)]
-pub struct WidgetId(u64);
+pub struct WidgetId(usize);
 
 impl WidgetId {
-    pub(crate) fn new() -> Self {
-        static COUNTER: AtomicU64 = AtomicU64::new(0);
-        Self(COUNTER.fetch_add(1, Relaxed))
+    pub(crate) fn new(id: usize) -> Self {
+        Self(id)
     }
 }
 
@@ -49,15 +47,17 @@ impl std::fmt::Debug for WidgetId {
 
 impl std::hash::Hash for WidgetId {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_u64(self.0);
+        state.write_u64(self.0 as u64);
     }
 }
 
 /// main building block to create a renderable component
 pub trait Widget {
-    fn id(&self) -> WidgetId;
-
     fn node(&self) -> ViewNode;
+
+    fn id(&self) -> WidgetId {
+        WidgetId::new(self.node().id())
+    }
 
     fn node_ref(&self) -> ViewNodeRef {
         self.node().node_ref()
@@ -325,11 +325,9 @@ pub trait WidgetExt: Widget + Sized {
     }
 }
 
-impl Widget for Box<dyn Widget> {
-    fn id(&self) -> WidgetId {
-        self.as_ref().id()
-    }
+impl<T> WidgetExt for T where T: Widget + Sized {}
 
+impl Widget for Box<dyn Widget> {
     fn node(&self) -> ViewNode {
         self.as_ref().node()
     }
@@ -344,10 +342,6 @@ impl Widget for Box<dyn Widget> {
 }
 
 impl Widget for Box<&mut dyn Widget> {
-    fn id(&self) -> WidgetId {
-        self.as_ref().id()
-    }
-
     fn node(&self) -> ViewNode {
         self.as_ref().node()
     }
@@ -361,7 +355,28 @@ impl Widget for Box<&mut dyn Widget> {
     }
 }
 
-impl<T> WidgetExt for T where T: Widget + Sized {}
+impl Widget for *const dyn Widget {
+    fn node(&self) -> ViewNode {
+        unsafe {
+            let widget = self.as_ref().unwrap();
+            widget.node()
+        }
+    }
+
+    fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
+        unsafe {
+            let widget = self.as_ref().unwrap();
+            widget.children_ref()
+        }
+    }
+
+    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
+        unsafe {
+            let widget = self.cast_mut().as_mut().unwrap();
+            widget.children_mut()
+        }
+    }
+}
 
 // -------------------------------------
 
@@ -410,7 +425,6 @@ impl CallbackStore {
 // -------------------------------------
 
 pub(crate) struct WindowWidget {
-    id: WidgetId,
     node: ViewNode,
     children: Vec<Box<dyn Widget>>,
 }
@@ -418,7 +432,6 @@ pub(crate) struct WindowWidget {
 impl WindowWidget {
     pub(crate) fn new(rect: Rect) -> Self {
         Self {
-            id: WidgetId::new(),
             node: ViewNode::window(rect),
             children: Vec::new(),
         }
@@ -426,10 +439,6 @@ impl WindowWidget {
 }
 
 impl Widget for WindowWidget {
-    fn id(&self) -> WidgetId {
-        self.id
-    }
-
     fn node(&self) -> ViewNode {
         self.node.clone()
     }
@@ -446,14 +455,12 @@ impl Widget for WindowWidget {
 // -------------------------------------
 
 pub struct CircleWidget {
-    id: WidgetId,
     node: ViewNode,
 }
 
 impl CircleWidget {
     pub fn new() -> Self {
         Self {
-            id: WidgetId::new(),
             node: ViewNode::new()
                 .with_name("Circle")
                 .with_stroke_width(5.)
@@ -464,10 +471,6 @@ impl CircleWidget {
 }
 
 impl Widget for CircleWidget {
-    fn id(&self) -> WidgetId {
-        self.id
-    }
-
     fn node(&self) -> ViewNode {
         self.node.clone()
     }

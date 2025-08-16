@@ -4,7 +4,7 @@ use aplite_renderer::Shape;
 use aplite_types::ImageData;
 
 use super::ViewNode;
-use super::{Widget, WidgetId};
+use super::{Widget};
 
 pub fn image<F: Fn() -> ImageData + 'static>(image_fn: F) -> Image {
     Image::new(image_fn)
@@ -26,7 +26,6 @@ pub fn image_reader<P: AsRef<Path>>(path: P) -> ImageData {
 }
 
 pub struct Image {
-    id: WidgetId,
     node: ViewNode,
 }
 
@@ -39,17 +38,12 @@ impl Image {
             .with_shape(Shape::Rect);
 
         Self {
-            id: WidgetId::new(),
             node,
         }
     }
 }
 
 impl Widget for Image {
-    fn id(&self) -> WidgetId {
-        self.id
-    }
-
     fn node(&self) -> ViewNode {
         self.node.clone()
     }

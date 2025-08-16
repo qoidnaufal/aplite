@@ -162,10 +162,8 @@ impl Aplite {
         }
     }
 
-    fn handle_click(&mut self, window_id: &WindowId, state: ElementState, button: MouseButton) {
-        if let Some(WindowHandle { root_id, .. }) = self.window.get(window_id) {
-            self.cx.handle_click(root_id, state, button);
-        }
+    fn handle_click(&mut self, state: ElementState, button: MouseButton) {
+        self.cx.handle_click(state, button);
     }
 
     fn handle_close_request(&mut self, window_id: &WindowId, event_loop: &ActiveEventLoop) {
@@ -218,7 +216,7 @@ impl ApplicationHandler for Aplite {
             WindowEvent::CloseRequested => self.handle_close_request(&window_id, event_loop),
             WindowEvent::RedrawRequested => self.handle_redraw_request(&window_id, event_loop),
             WindowEvent::Resized(size) => self.handle_resize(size),
-            WindowEvent::MouseInput { state, button, .. } => self.handle_click(&window_id, state, button),
+            WindowEvent::MouseInput { state, button, .. } => self.handle_click(state, button),
             WindowEvent::CursorMoved { position, .. } => self.handle_mouse_move(&window_id, position),
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => self.set_scale_factor(scale_factor),
             _ => {}

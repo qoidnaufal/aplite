@@ -97,9 +97,9 @@ pub(crate) trait Render: Widget + Sized {
     }
 }
 
-impl<T: Widget + Sized> Layout for T {}
+impl<T: Widget + Sized + 'static> Layout for T {}
 
-pub(crate) trait Layout: Widget + Sized {
+pub(crate) trait Layout: Widget + Sized + 'static {
     // TODO: include calculating the size too
     fn calculate_layout(&self, cx: &mut LayoutCx) {
         if self.layout(cx) {
@@ -111,7 +111,7 @@ pub(crate) trait Layout: Widget + Sized {
         }
     }
 
-    fn calculate_size(&self, parent: Option<Box<&dyn Widget>>) -> Size {
+    fn calculate_size(&self, parent: Option<&dyn Widget>) -> Size {
         let node = self.node();
 
         if node.borrow().hide { return Size::default() }
@@ -126,7 +126,7 @@ pub(crate) trait Layout: Widget + Sized {
             let mut expand = Size::default();
 
             children.iter().for_each(|child| {
-                let child_size = child.calculate_size(Some(Box::new(self)));
+                let child_size = child.calculate_size(Some(self));
                 match orientation {
                     Orientation::Vertical => {
                         expand.height += child_size.height;
@@ -177,7 +177,7 @@ pub(crate) trait Layout: Widget + Sized {
         final_size
     }
 
-    fn mouse_hover(&self, cursor: &Cursor) -> Option<WidgetId> {
+    fn mouse_hover(&self, cursor: &Cursor) -> Option<*const dyn Widget> {
         if self.node().borrow().hide { return None }
 
         if let Some(children) = self.children_ref() {
@@ -189,68 +189,118 @@ pub(crate) trait Layout: Widget + Sized {
             }
         }
 
-        self.node().borrow()
+        self.node()
+            .borrow()
             .rect
             .contains(cursor.hover.pos)
-            .then_some(self.id())
+            .then_some(self as *const dyn Widget)
     }
 
-    fn find(&self, id: &WidgetId) -> Option<Box<&dyn Widget>> {
-        if self.id() == id {
-            return Some(Box::new(self))
-        }
+    // fn find(&self, id: &WidgetId) -> Option<Box<&dyn Widget>> {
+    //     if self.id() == id {
+    //         return Some(Box::new(self))
+    //     }
 
-        self.children_ref().and_then(|vec| {
-            vec.iter().find_map(|w| w.find(id))
-        })
-    }
+    //     self.children_ref().and_then(|vec| {
+    //         vec.iter().find_map(|w| w.find(id))
+    //     })
+    // }
 
-    fn find_mut(&mut self, id: &WidgetId) -> Option<Box<&mut dyn Widget>> {
-        if self.id() == id {
-            return Some(Box::new(self))
-        }
-        self.children_mut().and_then(|vec| {
-            vec.iter_mut().find_map(|w| w.find_mut(id))
-        })
-    }
+    // fn find_mut(&mut self, id: &WidgetId) -> Option<Box<&mut dyn Widget>> {
+    //     if self.id() == id {
+    //         return Some(Box::new(self))
+    //     }
+    //     self.children_mut().and_then(|vec| {
+    //         vec.iter_mut().find_map(|w| w.find_mut(id))
+    //     })
+    // }
 
-    #[allow(unused)]
-    fn parent_mut(&mut self, id: &WidgetId) -> Option<Box<&mut dyn Widget>> {
-        if let Some(children) = self.children_ref()
-            && children
-                .iter()
-                .any(|w| w.id() == id)
-        {
-            return Some(Box::new(self))
-        }
+    // fn parent_mut(&mut self, id: &WidgetId) -> Option<Box<&mut dyn Widget>> {
+    //     if let Some(children) = self.children_ref()
+    //         && children
+    //             .iter()
+    //             .any(|w| w.id() == id)
+    //     {
+    //         return Some(Box::new(self))
+    //     }
 
-        self.children_mut()
-            .and_then(|vec| {
-                vec.iter_mut()
-                    .find_map(|w| w.parent_mut(id))
-            })
-    }
+    //     self.children_mut()
+    //         .and_then(|vec| {
+    //             vec.iter_mut()
+    //                 .find_map(|w| w.parent_mut(id))
+    //         })
+    // }
 
-    #[allow(unused)]
-    fn remove(&mut self, id: &WidgetId) -> Option<Box<dyn Widget>> {
-        self.parent_mut(id)
-            .and_then(|mut parent| {
-                parent.children_mut()
-                    .and_then(|children| {
-                        children.iter()
-                            .position(|w| w.id() == id)
-                            .map(|index| children.remove(index))
-                    })
-            })
-    }
+    // fn remove(&mut self, id: &WidgetId) -> Option<Box<dyn Widget>> {
+    //     self.parent_mut(id)
+    //         .and_then(|mut parent| {
+    //             parent.children_mut()
+    //                 .and_then(|children| {
+    //                     children.iter()
+    //                         .position(|w| w.id() == id)
+    //                         .map(|index| children.remove(index))
+    //                 })
+    //         })
+    // }
 
-    #[allow(unused)]
-    fn insert<T: Widget + 'static>(&mut self, parent: &WidgetId, widget: T) {
-        if let Some(mut p) = self.find_mut(parent)
-            && let Some(vec) = p.children_mut()
-        {
-            vec.push(Box::new(widget));
-        }
-    }
+    // fn insert<T: Widget + 'static>(&mut self, parent: &WidgetId, widget: T) {
+    //     if let Some(mut p) = self.find_mut(parent)
+    //         && let Some(vec) = p.children_mut()
+    //     {
+    //         vec.push(Box::new(widget));
+    //     }
+    // }
 }
 
+#[cfg(test)]
+mod ptr_test {
+    struct PtrWrapper(*const dyn Name);
+
+    impl PtrWrapper {
+        fn name(&self) -> Option<&str> {
+            unsafe {
+                self.0.as_ref().map(|caster| caster.name())
+            }
+        }
+    }
+
+    trait Caster: Name + Sized + 'static {
+        fn get_ptr(&self) -> PtrWrapper {
+            PtrWrapper(self as *const dyn Name)
+        } 
+    }
+
+    impl<T: Name + 'static> Caster for T {}
+
+    trait Name {
+        fn name(&self) -> &str;
+    }
+
+    struct MyStruct {
+        name: String,
+    }
+
+    impl MyStruct {
+        fn new(name: impl Into<String>) -> Self {
+            Self {
+                name: name.into()
+            }
+        }
+    }
+
+    impl Name for MyStruct {
+        fn name(&self) -> &str {
+            &self.name
+        }
+    }
+
+    #[test]
+    fn ptr() {
+        let mystruct = MyStruct::new("one");
+        let wrapper = mystruct.get_ptr();
+
+        let name = wrapper.name();
+        assert!(name.is_some());
+        eprintln!("{}", name.unwrap());
+    }
+}

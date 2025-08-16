@@ -3,7 +3,7 @@ use aplite_renderer::Shape;
 
 use crate::layout::Orientation;
 
-use super::{ViewNode, Widget, WidgetId};
+use super::{ViewNode, Widget};
 
 pub fn v_stack<F>() -> VStack {
     VStack::new()
@@ -14,7 +14,6 @@ pub fn h_stack<F>() -> HStack {
 }
 
 pub struct VStack {
-    id: WidgetId,
     node: ViewNode,
     children: Vec<Box<dyn Widget>>,
 }
@@ -29,7 +28,6 @@ impl VStack {
             .with_shape(Shape::Rect);
 
         Self {
-            id: WidgetId::new(),
             node,
             children: Vec::new(),
         }
@@ -37,10 +35,6 @@ impl VStack {
 }
 
 impl Widget for VStack {
-    fn id(&self) -> WidgetId {
-        self.id
-    }
-
     fn node(&self) -> ViewNode {
         self.node.clone()
     }
@@ -55,7 +49,6 @@ impl Widget for VStack {
 }
 
 pub struct HStack {
-    id: WidgetId,
     node: ViewNode,
     children: Vec<Box<dyn Widget>>,
 }
@@ -71,7 +64,6 @@ impl HStack {
             .with_shape(Shape::Rect);
 
         Self {
-            id: WidgetId::new(),
             node,
             children: Vec::new(),
         }
@@ -79,10 +71,6 @@ impl HStack {
 }
 
 impl Widget for HStack {
-    fn id(&self) -> WidgetId {
-        self.id
-    }
-
     fn node(&self) -> ViewNode {
         self.node.clone()
     }
