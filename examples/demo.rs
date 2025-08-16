@@ -24,23 +24,9 @@ fn image_row(counter: SignalRead<i32>) -> impl IntoView {
     Effect::new(move |_| {
         let num = counter.get().abs();
 
-        if num == 0 {
-            node1.hide(false);
-            node2.hide(false);
-            node3.hide(false);
-        } else if num % 2 == 0 {
-            node1.hide(false);
-            node2.hide(true);
-            node3.hide(true);
-        } else if num % 3 == 0 {
-            node1.hide(true);
-            node2.hide(false);
-            node3.hide(true);
-        } else {
-            node1.hide(true);
-            node2.hide(true);
-            node3.hide(false);
-        }
+        node1.hide(num > 0 && num % 2 == 0);
+        node2.hide(num > 0 && num % 3 == 0);
+        node3.hide(num > 0 && num % 5 == 0);
     });
 
     VStack::new()
@@ -114,8 +100,6 @@ fn root() -> impl IntoView {
 
 fn main() -> ApliteResult {
     Aplite::new(root)
-        .set_window_attributes(|window| {
-            window.title = "Demo".into();
-        })
+        .set_window_attributes(|window| window.title = "Demo".into())
         .launch()
 }
