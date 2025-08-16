@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use winit::window::Window;
 use winit::dpi::PhysicalSize;
-use aplite_types::{Matrix3x2, Rgba, Size, PaintRef};
+use aplite_types::{Matrix3x2, Rgba, Size, PaintRef, CornerRadius};
 
 use super::RenderError;
 use super::InitiationError;
@@ -272,6 +272,7 @@ impl Scene<'_> {
         border_paint: PaintRef<'_>,
         border_width: f32,
         shape: Shape,
+        corner_radius: CornerRadius,
     ) {
         use aplite_storage::Entity;
 
@@ -280,6 +281,7 @@ impl Scene<'_> {
         let mut element = Element::new()
             .with_shape(shape)
             .with_rotation(rotation)
+            .with_corner_radius(corner_radius)
             .with_border_width(border_width);
 
         match border_paint {

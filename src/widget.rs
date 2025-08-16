@@ -4,7 +4,7 @@ use aplite_renderer::{Shape, Renderer};
 use aplite_types::{Rgba, CornerRadius, Size, Rect};
 use aplite_storage::U64Map;
 
-use crate::state::{ViewNode, ViewNodeRef, AspectRatio};
+use crate::state::{WidgetId, NodeRef, AspectRatio};
 use crate::layout::*;
 use crate::view::IntoView;
 
@@ -18,49 +18,12 @@ pub use {
     stack::*,
 };
 
-#[derive(Clone, Copy, Eq, PartialOrd, Ord)]
-pub struct WidgetId(usize);
-
-impl WidgetId {
-    pub(crate) fn new(id: usize) -> Self {
-        Self(id)
-    }
-}
-
-impl PartialEq<Self> for WidgetId {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-
-impl PartialEq<&Self> for WidgetId {
-    fn eq(&self, other: &&Self) -> bool {
-        self.0 == other.0
-    }
-}
-
-impl std::fmt::Debug for WidgetId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "WidgetId({})", self.0)
-    }
-}
-
-impl std::hash::Hash for WidgetId {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_u64(self.0 as u64);
-    }
-}
-
 /// main building block to create a renderable component
 pub trait Widget {
-    fn node(&self) -> ViewNode;
+    fn node_ref(&self) -> NodeRef;
 
     fn id(&self) -> WidgetId {
-        WidgetId::new(self.node().id())
-    }
-
-    fn node_ref(&self) -> ViewNodeRef {
-        self.node().node_ref()
+        self.node_ref().id()
     }
 
     fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
@@ -72,7 +35,7 @@ pub trait Widget {
     }
 
     fn draw(&self, renderer: &mut Renderer) -> bool {
-        let node = self.node();
+        let node = self.node_ref().upgrade();
         let hide = node.borrow().hide;
 
         if !hide {
@@ -82,6 +45,7 @@ pub trait Widget {
 
             let transform = state.get_transform(size);
             let rotation = state.rotation;
+            let corner_radius = state.corner_radius;
             let background_paint = state.background_paint.as_paint_ref();
             let border_paint = state.border_paint.as_paint_ref();
             let shape = state.shape;
@@ -95,7 +59,8 @@ pub trait Widget {
                 background_paint,
                 border_paint,
                 border_width,
-                shape
+                shape,
+                corner_radius,
             );
         }
 
@@ -103,8 +68,7 @@ pub trait Widget {
     }
 
     fn layout(&self, cx: &mut LayoutCx) -> bool {
-        let node = self.node();
-
+        let node = self.node_ref().upgrade();
         if node.borrow().hide { return false }
 
         let size = node.borrow().rect.size();
@@ -159,21 +123,34 @@ pub trait WidgetExt: Widget + Sized {
             let callbacks = storage.entry(self.id()).or_default();
             callbacks.insert(event, Box::new(f));
         });
+
         self
     }
 
     fn image_aspect_ratio(self, val: AspectRatio) -> Self {
-        self.node().borrow_mut().image_aspect_ratio = val;
+        self.node_ref()
+            .upgrade()
+            .borrow_mut()
+            .image_aspect_ratio = val;
+
         self
     }
 
     fn color(self, color: Rgba<u8>) -> Self {
-        self.node().borrow_mut().background_paint = color.into();
+        self.node_ref()
+            .upgrade()
+            .borrow_mut()
+            .background_paint = color.into();
+
         self
     }
 
     fn border_color(self, color: Rgba<u8>) -> Self {
-        self.node().borrow_mut().border_paint = color.into();
+        self.node_ref()
+            .upgrade()
+            .borrow_mut()
+            .border_paint = color.into();
+
         self
     }
 
@@ -188,27 +165,43 @@ pub trait WidgetExt: Widget + Sized {
     }
 
     fn border_width(self, val: f32) -> Self {
-        self.node().borrow_mut().border_width = val;
+        self.node_ref()
+            .upgrade()
+            .borrow_mut()
+            .border_width = val;
+
         self
     }
 
-    fn corners(self, corners: CornerRadius) -> Self {
-        self.node().borrow_mut().corner_radius = corners;
+    fn corner_radius(self, corner_radius: CornerRadius) -> Self {
+        self.node_ref()
+            .upgrade()
+            .borrow_mut()
+            .corner_radius = corner_radius;
+
         self
     }
 
     fn shape(self, shape: Shape) -> Self {
-        self.node().borrow_mut().shape = shape;
+        self.node_ref()
+            .upgrade()
+            .borrow_mut()
+            .shape = shape;
+
         self
     }
 
     fn size(self, size: impl Into<Size>) -> Self {
-        self.node().borrow_mut().rect.set_size(size.into());
+        self.node_ref()
+            .upgrade()
+            .borrow_mut()
+            .rect.set_size(size.into());
+
         self
     }
 
     fn dragable(self) -> Self {
-        let node = self.node();
+        let node = self.node_ref().upgrade();
         let mut node = node.borrow_mut();
         node.dragable = true;
         node.hoverable = true;
@@ -217,110 +210,72 @@ pub trait WidgetExt: Widget + Sized {
     }
 
     fn spacing(self, val: f32) -> Self {
-        self.node().borrow_mut().spacing = val;
+        self.node_ref()
+            .upgrade()
+            .borrow_mut()
+            .spacing = val;
+
         self
     }
 
     fn padding(self, padding: Padding) -> Self {
-        self.node().borrow_mut().padding = padding;
+        self.node_ref()
+            .upgrade()
+            .borrow_mut()
+            .padding = padding;
+
         self
     }
 
     fn min_width(self, val: f32) -> Self {
-        let node = self.node();
-        node.borrow_mut().min_width = Some(val);
-
-        let state = node.borrow();
-        let min_width = state.min_width;
-        let min_height = state.min_height;
-        let max_width = state.max_width;
-        let max_height = state.max_height;
-        let current_size = state.rect.size();
-
-        drop(state);
-
-        let new_size = current_size
-            .adjust_on_min_constraints(min_width, min_height)
-            .adjust_on_max_constraints(max_width, max_height);
-
-        node.borrow_mut().rect.set_size(new_size);
+        self.node_ref()
+            .upgrade()
+            .borrow_mut()
+            .min_width = Some(val);
 
         self
     }
 
     fn min_height(self, val: f32) -> Self {
-        let node = self.node();
-        node.borrow_mut().min_height = Some(val);
-
-        let state = node.borrow();
-        let min_width = state.min_width;
-        let min_height = state.min_height;
-        let max_width = state.max_width;
-        let max_height = state.max_height;
-        let current_size = state.rect.size();
-
-        drop(state);
-
-        let new_size = current_size
-            .adjust_on_min_constraints(min_width, min_height)
-            .adjust_on_max_constraints(max_width, max_height);
-
-        node.borrow_mut().rect.set_size(new_size);
+        self.node_ref()
+            .upgrade()
+            .borrow_mut()
+            .min_height = Some(val);
 
         self
     }
 
     fn max_width(self, val: f32) -> Self {
-        let node = self.node();
-        node.borrow_mut().max_width = Some(val);
-
-        let state = node.borrow();
-        let min_width = state.min_width;
-        let min_height = state.min_height;
-        let max_width = state.max_width;
-        let max_height = state.max_height;
-        let current_size = state.rect.size();
-
-        drop(state);
-
-        let new_size = current_size
-            .adjust_on_min_constraints(min_width, min_height)
-            .adjust_on_max_constraints(max_width, max_height);
-
-        node.borrow_mut().rect.set_size(new_size);
+        self.node_ref()
+            .upgrade()
+            .borrow_mut()
+            .max_width = Some(val);
 
         self
     }
 
     fn max_height(self, val: f32) -> Self {
-        let node = self.node();
-        node.borrow_mut().max_height = Some(val);
-
-        let state = node.borrow();
-        let min_width = state.min_width;
-        let min_height = state.min_height;
-        let max_width = state.max_width;
-        let max_height = state.max_height;
-        let current_size = state.rect.size();
-
-        drop(state);
-
-        let new_size = current_size
-            .adjust_on_min_constraints(min_width, min_height)
-            .adjust_on_max_constraints(max_width, max_height);
-
-        node.borrow_mut().rect.set_size(new_size);
+        self.node_ref()
+            .upgrade()
+            .borrow_mut()
+            .max_height = Some(val);
 
         self
     }
 
     fn align_h(self, align_h: AlignH) -> Self {
-        self.node().borrow_mut().align_h = align_h;
+        self.node_ref()
+            .upgrade()
+            .borrow_mut()
+            .align_h = align_h;
         self
     }
 
     fn align_v(self, align_v: AlignV) -> Self {
-        self.node().borrow_mut().align_v = align_v;
+        self.node_ref()
+            .upgrade()
+            .borrow_mut()
+            .align_v = align_v;
         self
     }
 }
@@ -328,8 +283,8 @@ pub trait WidgetExt: Widget + Sized {
 impl<T> WidgetExt for T where T: Widget + Sized {}
 
 impl Widget for Box<dyn Widget> {
-    fn node(&self) -> ViewNode {
-        self.as_ref().node()
+    fn node_ref(&self) -> NodeRef {
+        self.as_ref().node_ref()
     }
 
     fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
@@ -342,8 +297,8 @@ impl Widget for Box<dyn Widget> {
 }
 
 impl Widget for Box<&mut dyn Widget> {
-    fn node(&self) -> ViewNode {
-        self.as_ref().node()
+    fn node_ref(&self) -> NodeRef {
+        self.as_ref().node_ref()
     }
 
     fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
@@ -356,24 +311,23 @@ impl Widget for Box<&mut dyn Widget> {
 }
 
 impl Widget for *const dyn Widget {
-    fn node(&self) -> ViewNode {
+    fn node_ref(&self) -> NodeRef {
         unsafe {
-            let widget = self.as_ref().unwrap();
-            widget.node()
+            self.as_ref().unwrap().node_ref()
         }
     }
 
     fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
         unsafe {
-            let widget = self.as_ref().unwrap();
-            widget.children_ref()
+            self.as_ref().and_then(|w| w.children_ref())
         }
     }
 
     fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
         unsafe {
-            let widget = self.cast_mut().as_mut().unwrap();
-            widget.children_mut()
+            self.cast_mut()
+                .as_mut()
+                .and_then(|w| w.children_mut())
         }
     }
 }
@@ -425,21 +379,21 @@ impl CallbackStore {
 // -------------------------------------
 
 pub(crate) struct WindowWidget {
-    node: ViewNode,
+    node: NodeRef,
     children: Vec<Box<dyn Widget>>,
 }
 
 impl WindowWidget {
     pub(crate) fn new(rect: Rect) -> Self {
         Self {
-            node: ViewNode::window(rect),
+            node: NodeRef::window(rect),
             children: Vec::new(),
         }
     }
 }
 
 impl Widget for WindowWidget {
-    fn node(&self) -> ViewNode {
+    fn node_ref(&self) -> NodeRef {
         self.node.clone()
     }
 
@@ -455,13 +409,13 @@ impl Widget for WindowWidget {
 // -------------------------------------
 
 pub struct CircleWidget {
-    node: ViewNode,
+    node: NodeRef,
 }
 
 impl CircleWidget {
     pub fn new() -> Self {
         Self {
-            node: ViewNode::new()
+            node: NodeRef::new()
                 .with_name("Circle")
                 .with_stroke_width(5.)
                 .with_shape(Shape::Circle)
@@ -471,7 +425,7 @@ impl CircleWidget {
 }
 
 impl Widget for CircleWidget {
-    fn node(&self) -> ViewNode {
+    fn node_ref(&self) -> NodeRef {
         self.node.clone()
     }
 }

@@ -1,5 +1,4 @@
 use aplite::prelude::*;
-use AspectRatio::Defined;
 
 const IMAGE_1: &str = "../../Wallpaper/milky-way-over-mountains-4k-fl-1680x1050-2045764561.jpg";
 const IMAGE_2: &str = "../../Wallpaper/1352909.jpeg";
@@ -8,15 +7,15 @@ const IMAGE_3: &str = "../../Wallpaper/pexels-daejeung-2734512.jpg";
 fn image_row(counter: SignalRead<i32>) -> impl IntoView {
     let image1 = Image::new(|| image_reader(IMAGE_1))
         .min_width(350.)
-        .image_aspect_ratio(Defined((16, 9)));
+        .image_aspect_ratio(AspectRatio::Defined(16, 9));
 
     let image2 = Image::new(|| image_reader(IMAGE_2))
         .min_width(350.)
-        .image_aspect_ratio(Defined((16, 9)));
+        .image_aspect_ratio(AspectRatio::Defined(16, 9));
 
     let image3 = Image::new(|| image_reader(IMAGE_3))
         .min_width(350.)
-        .image_aspect_ratio(Defined((16, 9)));
+        .image_aspect_ratio(AspectRatio::Defined(16, 9));
 
     let node1 = image1.node_ref();
     let node2 = image2.node_ref();
@@ -49,6 +48,8 @@ fn image_row(counter: SignalRead<i32>) -> impl IntoView {
         .child(image2)
         .child(image3)
         .spacing(20.)
+        .shape(Shape::RoundedRect)
+        .corner_radius(CornerRadius::splat(10.))
         .padding(Padding::new(20., 20., 40., 40.))
         .border_width(5.0)
         .border_color(Rgba::DARK_GRAY)
@@ -65,7 +66,7 @@ fn button_stack(
                 .hover_color(Rgba::BLUE)
                 .click_color(Rgba::DARK_GRAY)
                 .border_width(5.0)
-                .corners(CornerRadius::splat(50.))
+                .corner_radius(CornerRadius::splat(50.))
                 .on(LeftClick, dec)
         )
         .child(
@@ -74,7 +75,7 @@ fn button_stack(
                 .hover_color(Rgba::LIGHT_GRAY)
                 .click_color(Rgba::DARK_GREEN)
                 .border_width(5.0)
-                .corners(CornerRadius::splat(50.))
+                .corner_radius(CornerRadius::splat(50.))
                 .on(LeftClick, move || set_counter.set(0))
         )
         .child(
@@ -82,11 +83,13 @@ fn button_stack(
                 .color(Rgba::BLUE)
                 .hover_color(Rgba::PURPLE)
                 .border_width(5.0)
-                .corners(CornerRadius::splat(50.))
+                .corner_radius(CornerRadius::splat(50.))
                 .on(LeftClick, inc)
         )
-        .border_color(Rgba::LIGHT_GRAY)
+        .border_color(Rgba::DARK_GRAY)
         .padding(Padding::splat(7.))
+        .shape(Shape::RoundedRect)
+        .corner_radius(CornerRadius::splat(10.))
         .spacing(5.)
         .min_width(430.)
         .align_h(AlignH::Center)

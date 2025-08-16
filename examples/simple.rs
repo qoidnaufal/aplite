@@ -32,7 +32,7 @@ fn simple() -> impl IntoView {
         .color(rgba_hex("#104bcdbf"))
         .border_width(6.0)
         .dragable()
-        .corners(CornerRadius::splat(47.))
+        .corner_radius(CornerRadius::splat(47.))
         .size((200, 69))
         .on(LeftClick, click_count);
 

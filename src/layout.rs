@@ -150,6 +150,24 @@ impl Rules {
     }
 }
 
+/// Either pixel or percentage
+pub enum Value {
+    /// 0.0..f32::MAX
+    Px(f32),
+    /// 0.0..100.0
+    Pct(f32),
+}
+
+impl Value {
+    pub fn px(val: u32) -> Self {
+        Self::Px(val as f32)
+    }
+
+    pub fn pct(val: u32) -> Self {
+        Self::Pct(val as f32)
+    }
+}
+
 pub struct LayoutCx {
     pub(crate) next_pos: Vec2f,
     pub(crate) rules: Rules,
@@ -157,7 +175,7 @@ pub struct LayoutCx {
 
 impl LayoutCx {
     pub fn new<T: Widget>(parent: &T) -> Self {
-        let node = parent.node();
+        let node = parent.node_ref().upgrade();
         let rules = Rules::new(&node.borrow());
 
         let(total_size, len) = parent.children_ref()
@@ -165,7 +183,7 @@ impl LayoutCx {
                 (
                     children.iter()
                         .map(|child| {
-                            let rect = child.node().borrow().rect;
+                            let rect = child.node_ref().upgrade().borrow().rect;
                             match rules.orientation {
                                 Orientation::Vertical => rect.size().height,
                                 Orientation::Horizontal => rect.size().width,
@@ -182,5 +200,13 @@ impl LayoutCx {
             rules,
             next_pos,
         }
+    }
+
+    pub(crate) fn available_width(&self) -> f32 {
+        todo!()
+    }
+
+    pub(crate) fn available_height(&self) -> f32 {
+        todo!()
     }
 }

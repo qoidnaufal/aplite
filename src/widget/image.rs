@@ -3,7 +3,7 @@ use std::path::Path;
 use aplite_renderer::Shape;
 use aplite_types::ImageData;
 
-use super::ViewNode;
+use crate::state::NodeRef;
 use super::{Widget};
 
 pub fn image<F: Fn() -> ImageData + 'static>(image_fn: F) -> Image {
@@ -26,12 +26,12 @@ pub fn image_reader<P: AsRef<Path>>(path: P) -> ImageData {
 }
 
 pub struct Image {
-    node: ViewNode,
+    node: NodeRef,
 }
 
 impl Image {
     pub fn new<F: Fn() -> ImageData + 'static>(image_fn: F) -> Self {
-        let node = ViewNode::new()
+        let node = NodeRef::new()
             .with_name("Image")
             .with_size((100.0, 100.0))
             .with_background_paint(image_fn())
@@ -44,7 +44,7 @@ impl Image {
 }
 
 impl Widget for Image {
-    fn node(&self) -> ViewNode {
+    fn node_ref(&self) -> NodeRef {
         self.node.clone()
     }
 }

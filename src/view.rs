@@ -1,8 +1,8 @@
 use aplite_renderer::Renderer;
 use aplite_types::Size;
 
-use crate::widget::{Widget, WidgetId};
-use crate::state::{ViewNode, AspectRatio};
+use crate::widget::Widget;
+use crate::state::{NodeRef, AspectRatio};
 use crate::layout::*;
 use crate::cursor::Cursor;
 
@@ -30,12 +30,8 @@ impl View {
 }
 
 impl Widget for View {
-    fn node(&self) -> ViewNode {
-        self.inner.node()
-    }
-
-    fn id(&self) -> WidgetId {
-        self.inner.id()
+    fn node_ref(&self) -> NodeRef {
+        self.inner.node_ref()
     }
 
     fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
@@ -48,12 +44,8 @@ impl Widget for View {
 }
 
 impl Widget for Box<dyn IntoView> {
-    fn node(&self) -> ViewNode {
-        self.as_ref().node()
-    }
-
-    fn id(&self) -> WidgetId {
-        self.as_ref().id()
+    fn node_ref(&self) -> NodeRef {
+        self.as_ref().node_ref()
     }
 
     fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
@@ -73,7 +65,21 @@ impl std::fmt::Debug for Box<dyn Widget> {
 
 impl std::fmt::Debug for &dyn Widget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = self.node().borrow().name;
+        let name = self.node_ref().upgrade().borrow().name;
+        let name = name.is_empty()
+            .then_some(std::any::type_name::<Self>())
+            .unwrap_or(name);
+
+        f.debug_struct(name)
+            .field("id", &self.id())
+            .field("children", &self.children_ref().unwrap_or(&vec![]))
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for Box<dyn IntoView> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = self.node_ref().upgrade().borrow().name;
         let name = name.is_empty()
             .then_some(std::any::type_name::<Self>())
             .unwrap_or(name);
@@ -112,8 +118,7 @@ pub(crate) trait Layout: Widget + Sized + 'static {
     }
 
     fn calculate_size(&self, parent: Option<&dyn Widget>) -> Size {
-        let node = self.node();
-
+        let node = self.node_ref().upgrade();
         if node.borrow().hide { return Size::default() }
 
         let state = node.borrow();
@@ -125,60 +130,72 @@ pub(crate) trait Layout: Widget + Sized + 'static {
         if let Some(children) = self.children_ref() {
             let mut expand = Size::default();
 
-            children.iter().for_each(|child| {
-                let child_size = child.calculate_size(Some(self));
-                match orientation {
-                    Orientation::Vertical => {
-                        expand.height += child_size.height;
-                        expand.width = expand.width.max(child_size.width + padding.horizontal());
-                    }
-                    Orientation::Horizontal => {
-                        expand.height = expand.height.max(child_size.height + padding.vertical());
-                        expand.width += child_size.width;
-                    }
-                }
-            });
+            children
+                .iter()
+                .filter(|child| !child.node_ref().upgrade().borrow().hide)
+                .enumerate()
+                .for_each(|(i, child)| {
+                    let child_size = child.calculate_size(Some(self));
+                    let stretch = spacing * i.clamp(0, 1) as f32;
 
-            let child_len = children.len() as f32;
-            let stretch = spacing * (child_len - 1.);
+                    match orientation {
+                        Orientation::Vertical => {
+                            expand.height += child_size.height + stretch;
+                            expand.width = expand.width.max(child_size.width + padding.horizontal());
+                        }
+                        Orientation::Horizontal => {
+                            expand.height = expand.height.max(child_size.height + padding.vertical());
+                            expand.width += child_size.width + stretch;
+                        }
+                    }
+                });
 
             match orientation {
                 Orientation::Vertical => {
-                    expand.height += padding.vertical() + stretch;
+                    expand.height += padding.vertical();
                 },
                 Orientation::Horizontal => {
-                    expand.width += padding.horizontal() + stretch;
+                    expand.width += padding.horizontal();
                 },
             }
 
             size = expand;
         }
 
-        if let AspectRatio::Defined(tuple) = state.image_aspect_ratio {
-            match parent {
-                Some(parent) if parent
-                    .node()
-                    .borrow()
-                    .orientation
-                    .is_vertical() => size.adjust_height_aspect_ratio(tuple.into()),
-                _ => size.adjust_width_aspect_ratio(tuple.into()),
-            }
-        }
-
-        let final_size = size
+        let mut size = size
             .adjust_on_min_constraints(state.min_width, state.min_height)
             .adjust_on_max_constraints(state.max_width, state.max_height);
+
+        let aspect_ratio = match state.image_aspect_ratio {
+            AspectRatio::Defined(n, d) => Some((n, d).into()),
+            AspectRatio::Source => node.borrow()
+                .background_paint
+                .aspect_ratio(),
+            AspectRatio::Undefined => None,
+        };
+
+        if let Some(fraction) = aspect_ratio {
+            match parent {
+                Some(parent) if parent
+                    .node_ref()
+                    .upgrade()
+                    .borrow()
+                    .orientation
+                    .is_vertical() => size.adjust_height_aspect_ratio(fraction),
+                _ => size.adjust_width_aspect_ratio(fraction),
+            }
+        }
 
         drop(state);
 
         let mut state = node.borrow_mut();
-        state.rect.set_size(final_size);
+        state.rect.set_size(size);
 
-        final_size
+        size
     }
 
     fn mouse_hover(&self, cursor: &Cursor) -> Option<*const dyn Widget> {
-        if self.node().borrow().hide { return None }
+        if self.node_ref().upgrade().borrow().hide { return None }
 
         if let Some(children) = self.children_ref() {
             let hovered = children.iter()
@@ -189,7 +206,8 @@ pub(crate) trait Layout: Widget + Sized + 'static {
             }
         }
 
-        self.node()
+        self.node_ref()
+            .upgrade()
             .borrow()
             .rect
             .contains(cursor.hover.pos)

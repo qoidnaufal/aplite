@@ -1,8 +1,10 @@
-pub(crate) mod color;
-pub(crate) mod image_data;
-
 use color::Rgba;
 use image_data::{ImageData, ImageRef};
+
+use crate::fraction::Fraction;
+
+pub(crate) mod color;
+pub(crate) mod image_data;
 
 pub enum Paint {
     Color(Rgba<u8>),
@@ -28,6 +30,13 @@ impl Paint {
         match self {
             Paint::Color(rgba) => PaintRef::Color(rgba),
             Paint::Image(image_data) => PaintRef::Image(image_data.downgrade()),
+        }
+    }
+
+    pub fn aspect_ratio(&self) -> Option<Fraction> {
+        match self {
+            Paint::Color(_) => None,
+            Paint::Image(image_data) => Some(image_data.aspect_ratio()),
         }
     }
 }

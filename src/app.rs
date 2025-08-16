@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use winit::dpi::{PhysicalPosition, PhysicalSize, LogicalSize};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
@@ -102,12 +102,12 @@ impl Aplite {
         let root_id = {
             if let Some(view_fn) = self.pending_views.take() {
                 let view = view_fn(window_id);
+                let mut cx = LayoutCx::new(&window_widget);
 
                 view.calculate_size(None);
-                let mut cx = LayoutCx::new(&window_widget);
                 view.calculate_layout(&mut cx);
 
-                #[cfg(feature = "debug_tree")] eprintln!("{:?}", view);
+                #[cfg(feature = "debug_tree")] eprintln!("{:#?}", view);
 
                 self.cx.insert_view(view.into_view())
             } else {
@@ -115,25 +115,29 @@ impl Aplite {
             }
         };
 
-        let window_handle = WindowHandle {
-            window: Arc::clone(&window),
-            root_id,
-        };
-
         let renderer = block_on(async { Renderer::new(Arc::clone(&window)).await })?;
 
         self.renderer = Some(renderer);
+        self.track_window(Arc::downgrade(&window));
+
+        let window_handle = WindowHandle {
+            window,
+            root_id,
+        };
         self.window.insert(window_id, window_handle);
-        self.track_window(window);
 
         Ok(())
     }
 
     /// Track the [`Window`] with the associated root [`ViewId`] for rendering
-    fn track_window(&mut self, window: Arc<Window>) {
+    fn track_window(&mut self, window: Weak<Window>) {
         let dirty = self.cx.dirty();
 
-        Effect::new(move |_| if dirty.get() { window.request_redraw() });
+        Effect::new(move |_| {
+            if dirty.get() && let Some(window) = window.upgrade() {
+                window.request_redraw();
+            }
+        });
     }
 }
 

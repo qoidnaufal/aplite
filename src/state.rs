@@ -1,7 +1,8 @@
 use std::rc::{Rc, Weak};
-use std::cell::{RefCell, Ref, RefMut};
+use std::cell::RefCell;
 
 use aplite_renderer::Shape;
+use aplite_storage::{IndexMap, Entity, entity};
 use aplite_reactive::*;
 use aplite_types::{
     Matrix3x2,
@@ -15,9 +16,18 @@ use aplite_types::{
 use crate::layout::{AlignV, AlignH, Orientation, Padding};
 use crate::context::{Event, PENDING_EVENT};
 
+entity! {
+    pub WidgetId
+}
+
+thread_local! {
+    pub(crate) static NODE_STORAGE: RefCell<IndexMap<WidgetId, Rc<RefCell<WidgetState>>>> =
+        RefCell::new(IndexMap::with_capacity(1024));
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum AspectRatio {
-    Defined((u32, u32)),
+    Defined(u32, u32),
     Source,
     Undefined,
 }
@@ -109,42 +119,48 @@ impl WidgetState {
 }
 
 #[derive(Clone, Debug)]
-pub struct ViewNode(pub(crate) Rc<RefCell<WidgetState>>);
+pub struct NodeRef {
+    node: Weak<RefCell<WidgetState>>,
+    signal: SignalWrite<Vec<Event>>,
+    id: WidgetId,
+}
 
-impl ViewNode {
+impl NodeRef {
     pub fn new() -> Self {
         let state = Rc::new(RefCell::new(WidgetState::default()));
+        let node = Rc::downgrade(&state);
+        let id = NODE_STORAGE.with_borrow_mut(|s| s.insert(state));
+        let signal = PENDING_EVENT.get().unwrap().write_only();
 
-        Self(state)
+        Self { node, signal, id }
     }
 
     pub(crate) fn window(rect: Rect) -> Self {
         let state = Rc::new(RefCell::new(WidgetState::window(rect)));
+        let node = Rc::downgrade(&state);
+        let id = NODE_STORAGE.with_borrow_mut(|s| s.insert(state));
+        let signal = PENDING_EVENT.get().unwrap().write_only();
 
-        Self(state)
+        Self { node, signal, id }
     }
 
-    pub(crate) fn id(&self) -> usize {
-        Rc::as_ptr(&self.0) as usize
-    }
-
-    pub fn node_ref(&self) -> ViewNodeRef {
-        let pending_event = PENDING_EVENT.get().unwrap();
-        ViewNodeRef(Rc::downgrade(&self.0), *pending_event)
-    }
-
-    #[inline(always)]
-    pub(crate) fn borrow(&self) -> Ref<'_, WidgetState> {
-        self.0.borrow()
+    pub(crate) fn id(&self) -> WidgetId {
+        self.id
     }
 
     #[inline(always)]
-    pub(crate) fn borrow_mut(&self) -> RefMut<'_, WidgetState> {
-        self.0.borrow_mut()
+    pub(crate) fn try_upgrade(&self) -> Option<Rc<RefCell<WidgetState>>> {
+        self.node.upgrade()
+    }
+
+    pub(crate) fn upgrade(&self) -> Rc<RefCell<WidgetState>> {
+        self.try_upgrade().unwrap()
     }
 
     pub fn with_name(self, name: &'static str) -> Self {
-        self.0.borrow_mut().name = name;
+        if let Some(state) = self.try_upgrade() {
+            state.borrow_mut().name = name;
+        }
         self
     }
 
@@ -153,27 +169,37 @@ impl ViewNode {
     /// - (f32, f32)
     /// - [`Size`](aplite_types::Size)
     pub fn with_size(self, size: impl Into<Size>) -> Self {
-        self.0.borrow_mut().rect.set_size(size.into());
+        if let Some(state) = self.try_upgrade() {
+            state.borrow_mut().rect.set_size(size.into());
+        }
         self
     }
 
     pub fn with_min_width(self, val: f32) -> Self {
-        self.0.borrow_mut().min_width = Some(val);
+        if let Some(state) = self.try_upgrade() {
+            state.borrow_mut().min_width = Some(val);
+        }
         self
     }
 
     pub fn with_max_width(self, val: f32) -> Self {
-        self.0.borrow_mut().max_width = Some(val);
+        if let Some(state) = self.try_upgrade() {
+            state.borrow_mut().max_width = Some(val);
+        }
         self
     }
 
     pub fn with_min_height(self, val: f32) -> Self {
-        self.0.borrow_mut().min_height = Some(val);
+        if let Some(state) = self.try_upgrade() {
+            state.borrow_mut().min_height = Some(val);
+        }
         self
     }
 
     pub fn with_max_height(self, val: f32) -> Self {
-        self.0.borrow_mut().max_height = Some(val);
+        if let Some(state) = self.try_upgrade() {
+            state.borrow_mut().max_height = Some(val);
+        }
         self
     }
 
@@ -181,7 +207,9 @@ impl ViewNode {
     /// - [`ImageData`](aplite_types::ImageData)
     /// - [`Rgba`](aplite_types::Rgba)
     pub fn with_background_paint(self, paint: impl Into<Paint>) -> Self {
-        self.0.borrow_mut().background_paint = paint.into();
+        if let Some(state) = self.try_upgrade() {
+            state.borrow_mut().background_paint = paint.into();
+        }
         self
     }
 
@@ -189,17 +217,23 @@ impl ViewNode {
     /// - [`ImageData`](aplite_types::ImageData)
     /// - [`Rgba`](aplite_types::Rgba)
     pub fn with_border_paint(self, color: impl Into<Paint>) -> Self {
-        self.0.borrow_mut().border_paint = color.into();
+        if let Some(state) = self.try_upgrade() {
+            state.borrow_mut().border_paint = color.into();
+        }
         self
     }
 
     pub fn with_stroke_width(self, val: f32) -> Self {
-        self.0.borrow_mut().border_width = val;
+        if let Some(state) = self.try_upgrade() {
+            state.borrow_mut().border_width = val;
+        }
         self
     }
 
     pub fn with_shape(self, shape: Shape) -> Self {
-        self.0.borrow_mut().shape = shape;
+        if let Some(state) = self.try_upgrade() {
+            state.borrow_mut().shape = shape;
+        }
         self
     }
 
@@ -208,55 +242,79 @@ impl ViewNode {
     }
 
     pub fn with_rotation_rad(self, rad: f32) -> Self {
-        self.0.borrow_mut().rotation = rad;
+        if let Some(state) = self.try_upgrade() {
+            state.borrow_mut().rotation = rad;
+        }
         self
     }
 
     pub fn with_corner_radius(self, val: CornerRadius) -> Self {
-        self.0.borrow_mut().corner_radius = val;
+        if let Some(state) = self.try_upgrade() {
+            state.borrow_mut().corner_radius = val;
+        }
         self
     }
 
     pub fn with_horizontal_align(self, align_h: AlignH) -> Self {
-        self.0.borrow_mut().align_h = align_h;
+        if let Some(state) = self.try_upgrade() {
+            state.borrow_mut().align_h = align_h;
+        }
         self
     }
 
     pub fn with_vertical_align(self, align_v: AlignV) -> Self {
-        self.0.borrow_mut().align_v = align_v;
+        if let Some(state) = self.try_upgrade() {
+            state.borrow_mut().align_v = align_v;
+        }
         self
     }
 
     pub fn with_orientation(self, orientation: Orientation) -> Self {
-        self.0.borrow_mut().orientation = orientation;
+        if let Some(state) = self.try_upgrade() {
+            state.borrow_mut().orientation = orientation;
+        }
         self
     }
 
     pub fn hoverable(self) -> Self {
-        self.0.borrow_mut().hoverable = true;
+        if let Some(state) = self.try_upgrade() {
+            state.borrow_mut().hoverable = true;
+        }
         self
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct ViewNodeRef(Weak<RefCell<WidgetState>>, SignalWrite<Vec<Event>>);
-
-impl ViewNodeRef {
-    pub(crate) fn upgrade(&self) -> Option<ViewNode> {
-        self.0.upgrade().map(|rc| ViewNode(rc))
     }
 
     pub fn set_color(&self, color: Rgba<u8>) {
-        if let Some(node) = self.upgrade() {
-            node.0.borrow_mut().background_paint = color.into();
-            self.1.update_untracked(|vec| vec.push(Event::Paint));
+        if let Some(node) = self.try_upgrade() {
+            node.borrow_mut().background_paint = color.into();
+            self.signal.update_untracked(|vec| vec.push(Event::Paint));
+        }
+    }
+
+    pub fn set_border_color(&self, border_color: Rgba<u8>) {
+        if let Some(node) = self.try_upgrade() {
+            node.borrow_mut().background_paint = border_color.into();
+            self.signal.update_untracked(|vec| vec.push(Event::Paint));
+        }
+    }
+
+    pub fn set_border_width(&self, val: f32) {
+        if let Some(node) = self.try_upgrade() {
+            node.borrow_mut().border_width = val;
+            self.signal.update_untracked(|vec| vec.push(Event::Paint));
+        }
+    }
+
+    pub fn set_corner_radius(&self, corner_radius: CornerRadius) {
+        if let Some(node) = self.try_upgrade() {
+            node.borrow_mut().corner_radius = corner_radius;
+            self.signal.update_untracked(|vec| vec.push(Event::Paint));
         }
     }
 
     pub fn set_shape(&self, shape: Shape) {
-        if let Some(node) = self.upgrade() {
-            node.0.borrow_mut().shape = shape;
-            self.1.update_untracked(|vec| vec.push(Event::Render));
+        if let Some(node) = self.try_upgrade() {
+            node.borrow_mut().shape = shape;
+            self.signal.update_untracked(|vec| vec.push(Event::Paint));
         }
     }
 
@@ -265,26 +323,33 @@ impl ViewNodeRef {
     }
 
     pub fn set_rotation_rad(&self, rad: f32) {
-        if let Some(node) = self.upgrade() {
-            node.0.borrow_mut().rotation = rad;
-            self.1.update_untracked(|vec| vec.push(Event::Render));
+        if let Some(node) = self.try_upgrade() {
+            node.borrow_mut().rotation = rad;
+            self.signal.update_untracked(|vec| vec.push(Event::Paint));
         }
     }
 
     pub fn set_spacing(&self, val: f32) {
-        if let Some(node) = self.upgrade() {
-            node.0.borrow_mut().spacing = val;
-            self.1.update_untracked(|vec| vec.push(Event::Render));
+        if let Some(node) = self.try_upgrade() {
+            node.borrow_mut().spacing = val;
+            self.signal.update_untracked(|vec| vec.push(Event::Layout));
         }
     }
 
     pub fn hide(&self, val: bool) {
-        if let Some(node) = self.upgrade() {
-            let prev = node.0.borrow().hide;
-            node.0.borrow_mut().hide = val;
+        if let Some(node) = self.try_upgrade() {
+            let prev = node.borrow().hide;
+            node.borrow_mut().hide = val;
             if prev != val {
-                self.1.update_untracked(|vec| vec.push(Event::Layout));
+                self.signal.update_untracked(|vec| vec.push(Event::Layout));
             }
+        }
+    }
+
+    pub fn set_image_aspect_ratio(&self, val: AspectRatio) {
+        if let Some(node) = self.try_upgrade() {
+            node.borrow_mut().image_aspect_ratio = val;
+            self.signal.update_untracked(|vec| vec.push(Event::Layout));
         }
     }
 }
