@@ -1,6 +1,6 @@
 pub struct Stats {
     counter: u32,
-    render_time: std::time::Duration,
+    fps: usize,
     startup_time: std::time::Duration,
     longest: std::time::Duration,
     shortest: std::time::Duration,
@@ -10,7 +10,7 @@ impl Stats {
     pub fn new() -> Self {
         Self {
             counter: 0,
-            render_time: std::time::Duration::from_nanos(0),
+            fps: 0,
             startup_time: std::time::Duration::from_nanos(0),
             longest: std::time::Duration::from_nanos(0),
             shortest: std::time::Duration::from_nanos(0),
@@ -23,11 +23,16 @@ impl Stats {
         } else if self.counter == 1 {
             self.longest = d;
             self.shortest = d;
-            self.render_time += d;
         } else {
             self.longest = self.longest.max(d);
             self.shortest = self.shortest.min(d);
-            self.render_time += d;
+        }
+
+        let fps = (0.1_f64 / d.as_secs_f64()).round() as usize;
+        eprint!("fps: {fps}      \r");
+
+        if self.counter > 0 {
+            self.fps += fps;
         }
         self.counter += 1;
     }
@@ -40,17 +45,15 @@ impl Drop for Stats {
             eprintln!("startup time: {startup:?}");
         } else {
             let startup = self.startup_time;
-            let counter = self.counter - 1;
-            let average = self.render_time / counter;
-            let fps = counter as f64 / self.render_time.as_secs_f64();
+            let count = self.counter - 1;
+            let fps = self.fps / self.counter as usize;
+
             eprintln!();
-            eprintln!(" > startup:             {startup:?}");
-            eprintln!(" > average:             {average:?}");
-            eprintln!("   - hi:                {:?}", self.longest);
-            eprintln!("   + lo:                {:?}", self.shortest);
-            eprintln!(" > frames rendered:     {counter}");
-            eprintln!(" > total time spent:    {:?}", self.render_time);
-            eprintln!(" > fps:                 {:?}", fps.round() as usize);
+            eprintln!(" > startup:            {startup:?}");
+            eprintln!(" > frames rendered:    {count}");
+            eprintln!(" > avg fps:            {fps}");
+            eprintln!("   - hi:               {:?}", self.longest);
+            eprintln!("   + lo:               {:?}", self.shortest);
         }
     }
 }

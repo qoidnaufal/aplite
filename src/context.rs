@@ -5,7 +5,7 @@ use aplite_renderer::Renderer;
 use aplite_types::{Vec2f, Size, Rect};
 use aplite_storage::{IndexMap, entity, Entity};
 
-use crate::view::{Render, View, Layout};
+use crate::view::{View, Layout};
 use crate::widget::{CALLBACKS, Widget, WidgetEvent, WindowWidget};
 use crate::cursor::{Cursor, MouseAction, MouseButton, EmittedClickEvent};
 use crate::layout::LayoutCx;
@@ -180,9 +180,9 @@ impl Context {
 // #########################################################
 
 impl Context {
-    pub(crate) fn render(&self, root_id: ViewId, renderer: &mut Renderer) {
-        if let Some(view) = self.view_storage.get(&root_id) {
-            view.render(renderer);
+    pub(crate) fn render(&self, root_id: &ViewId, renderer: &mut Renderer) {
+        if let Some(view) = self.view_storage.get(root_id) {
+            view.draw(renderer);
         }
     }
 }

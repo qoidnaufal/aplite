@@ -36,9 +36,9 @@ pub trait Widget {
 
     fn draw(&self, renderer: &mut Renderer) -> bool {
         let node = self.node_ref().upgrade();
-        let hide = node.borrow().hide;
+        let show = !node.borrow().hide;
 
-        if !hide {
+        if show {
             let state = node.borrow();
             let scene = renderer.scene();
             let size = scene.size();
@@ -62,9 +62,17 @@ pub trait Widget {
                 shape,
                 corner_radius,
             );
+
+            if let Some(children) = self.children_ref() {
+                children
+                    .iter()
+                    .for_each(|child| {
+                        child.draw(renderer);
+                    });
+            }
         }
 
-        !hide
+        show
     }
 
     fn layout(&self, cx: &mut LayoutCx) -> bool {
@@ -366,10 +374,10 @@ impl CallbackStore {
         self.0[event as usize].replace(callback)
     }
 
-    #[allow(unused)]
-    pub(crate) fn get(&self, event: WidgetEvent) -> Option<&Box<dyn FnMut()>> {
-        self.0[event as usize].as_ref()
-    }
+    // #[allow(unused)]
+    // pub(crate) fn get(&self, event: WidgetEvent) -> Option<&Box<dyn FnMut()>> {
+    //     self.0[event as usize].as_ref()
+    // }
 
     pub(crate) fn get_mut(&mut self, event: WidgetEvent) -> Option<&mut Box<dyn FnMut()>> {
         self.0[event as usize].as_mut()

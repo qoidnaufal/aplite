@@ -88,7 +88,7 @@ fn root() -> impl IntoView {
     let inc = move || set_counter.update(|num| *num += 1);
     let dec = move || set_counter.update(|num| *num -= 1);
 
-    Effect::new(move |_| eprint!("{:?}   \r", counter.get()));
+    // Effect::new(move |_| eprint!("{:?}   \r", counter.get()));
 
     VStack::new()
         .child(button_stack(inc, dec, set_counter))

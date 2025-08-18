@@ -47,17 +47,23 @@ impl Atlas {
         }
     }
 
-    pub(crate) fn append(&mut self, data: ImageData) -> Option<AtlasId> {
-        if let Some(id) = self.processed.get(&data.downgrade()) {
+    pub(crate) fn append(&mut self, data: ImageRef) -> Option<AtlasId> {
+        if let Some(id) = self.processed.get(&data) {
             return Some(*id)
         }
-        let size = Size::new(data.width as _, data.height as _);
-        if let Some(id) = self.allocator.alloc(size) {
-            self.pending_data.insert(id, data);
 
-            Some(id)
-        } else {
-            None
+        match data.upgrade() {
+            Some(data) => {
+                let size = Size::new(data.width as _, data.height as _);
+                let allocated = self.allocator.alloc(size);
+
+                if let Some(id) = allocated {
+                    self.pending_data.insert(id, data);
+                }
+
+                allocated
+            },
+            None => None,
         }
     }
 

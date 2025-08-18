@@ -178,26 +178,15 @@ impl Aplite {
     }
 
     // WARN: not sure if retained mode works like this
-    fn handle_redraw_request(&mut self, window_id: &WindowId, event_loop: &ActiveEventLoop) {
+    fn handle_redraw_request(&mut self, window_id: &WindowId, _: &ActiveEventLoop) {
         if let Some(window_handle) = self.window.get(window_id)
             && let Some(renderer) = self.renderer.as_mut()
         {
             #[cfg(feature = "render_stats")] let start = std::time::Instant::now();
 
-            match renderer.begin() {
-                Ok(_) => {
-                    self.cx.render(window_handle.root_id, renderer);
-                    renderer.encode();
-                    window_handle.window.pre_present_notify();
-                    renderer.finish();
-                },
-                Err(err) => match err {
-                    aplite_renderer::RenderError::ShouldResize => renderer
-                        .resize(window_handle.window.inner_size()),
-                    aplite_renderer::RenderError::ShouldExit => event_loop.exit(),
-                    _ => {}
-                },
-            }
+            renderer.begin();
+            self.cx.render(&window_handle.root_id, renderer);
+            renderer.finish(&window_handle.window);
 
             #[cfg(feature = "render_stats")] self.stats.inc(start.elapsed());
         }

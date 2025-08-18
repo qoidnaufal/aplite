@@ -1,4 +1,3 @@
-use aplite_renderer::Renderer;
 use aplite_types::Size;
 
 use crate::widget::Widget;
@@ -88,18 +87,6 @@ impl std::fmt::Debug for Box<dyn IntoView> {
             .field("id", &self.id())
             .field("children", &self.children_ref().unwrap_or(&vec![]))
             .finish()
-    }
-}
-
-impl<T: Widget + Sized> Render for T {}
-
-pub(crate) trait Render: Widget + Sized {
-    fn render(&self, renderer: &mut Renderer) {
-        if self.draw(renderer) {
-            if let Some(children) = self.children_ref() {
-                children.iter().for_each(|w| w.render(renderer));
-            }
-        }
     }
 }
 

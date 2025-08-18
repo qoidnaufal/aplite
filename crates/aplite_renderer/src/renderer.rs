@@ -3,7 +3,7 @@ use winit::window::Window;
 use winit::dpi::PhysicalSize;
 use aplite_types::{Matrix3x2, Rgba, Size, PaintRef, CornerRadius};
 
-use super::RenderError;
+// use super::RenderError;
 use super::InitiationError;
 
 use crate::atlas::Atlas;
@@ -20,9 +20,6 @@ pub struct Renderer {
     // FIXME: maybe separating these was good?
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
-
-    encoder: Option<wgpu::CommandEncoder>,
-    target_texture: Option<wgpu::SurfaceTexture>,
 
     // FIXME: not needed?
     screen: Screen,
@@ -105,8 +102,6 @@ impl Renderer {
             queue,
             surface,
             config,
-            encoder: None,
-            target_texture: None,
             storage,
             sampler,
             atlas,
@@ -149,21 +144,9 @@ impl Renderer {
         self.screen.write(&self.device, &self.queue, matrix);
     }
 
-    pub fn begin(&mut self) -> Result<(), RenderError> {
-        let label = Some("render encoder");
-        let encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label });
-
-        let target_texture = self.surface.get_current_texture()?;
-
-        self.encoder = Some(encoder);
-        self.target_texture = Some(target_texture);
-
+    pub fn begin(&mut self) {
         self.current = (self.current + 1) % 3;
         self.mesh[self.current].offset = 0;
-
-        Ok(())
     }
 
     #[inline(always)]
@@ -179,16 +162,14 @@ impl Renderer {
         }
     }
 
-    pub fn encode(&mut self) {
+    pub fn finish(&mut self, window: &Arc<Window>) {
         if self.mesh[self.current].offset == 0 { return }
 
-        let view = &self.target_texture
-            .as_ref()
-            .map(|tt| tt.texture.create_view(&wgpu::TextureViewDescriptor::default()))
-            .unwrap();
+        let surface = self.surface.get_current_texture().unwrap();
+        let view = surface.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let desc = wgpu::RenderPassColorAttachment {
-            view,
+            view: &view,
             resolve_target: None,
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Clear(
@@ -204,9 +185,13 @@ impl Renderer {
             depth_slice: None,
         };
 
-        let encoder = self.encoder.as_mut().unwrap();
+        let mut encoder = self
+            .device
+            .create_command_encoder(
+                &wgpu::CommandEncoderDescriptor { label: Some("encoder") }
+            );
 
-        self.atlas.update(&self.device, encoder);
+        self.atlas.update(&self.device, &mut encoder);
 
         let buffers = &[MeshBuffer::vertice_layout()];
 
@@ -241,15 +226,18 @@ impl Renderer {
         pass.set_bind_group(3, &self.sampler.bind_group, &[]);
 
         pass.draw_indexed(0..self.mesh[self.current].offset as u32 * 6, 0, 0..1);
-    }
 
-    pub fn finish(&mut self) {
-        let surface = self.target_texture.take().unwrap();
-        let encoder = self.encoder.take().unwrap();
-        let id = self.queue.submit([encoder.finish()]);
-        let _ = self.device.poll(wgpu::PollType::WaitForSubmissionIndex(id));
+        drop(pass);
+
+        window.pre_present_notify();
+        self.queue.submit([encoder.finish()]);
         surface.present();
     }
+
+    // pub fn finish(&mut self, encoder: wgpu::CommandEncoder, surface: wgpu::SurfaceTexture) {
+        // let id = self.queue.submit([encoder.finish()]);
+        // let _ = self.device.poll(wgpu::PollType::WaitForSubmissionIndex(id));
+    // }
 }
 
 pub struct Scene<'a> {
@@ -296,12 +284,8 @@ impl Scene<'_> {
                 element.background = rgba.f32();
                 None
             },
-            PaintRef::Image(image_ref) => image_ref
-                .upgrade()
-                .and_then(|image| self.atlas.append(image)),
+            PaintRef::Image(image_ref) => self.atlas.append(image_ref)
         };
-
-        let indices = Indices::new().with_offset(offset as _, true);
 
         let vertices = atlas_id.and_then(|id| {
             element.set_atlas_id(id.index() as i32);
@@ -314,6 +298,8 @@ impl Scene<'_> {
                 )
         })
         .unwrap_or(Vertices::new().with_id(offset as _));
+
+        let indices = Indices::new().with_offset(offset as _, true);
 
         self.mesh
             .indices
