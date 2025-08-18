@@ -36,8 +36,8 @@ pub enum AspectRatio {
 pub struct WidgetState {
     pub(crate) name: &'static str,
     pub(crate) rect: Rect,
-    pub(crate) rotation: f32, // in radians
-    // pub(crate) transform: Matrix3x2,
+    // pub(crate) rotation: f32, // in radians
+    pub(crate) transform: Matrix3x2,
     pub(crate) min_width: Option<f32>,
     pub(crate) min_height: Option<f32>,
     pub(crate) max_width: Option<f32>,
@@ -70,8 +70,8 @@ impl Default for WidgetState {
         Self {
             name: "",
             rect: Rect::new(0.0, 0.0, 1.0, 1.0),
-            rotation: 0.0,
-            // transform: Matrix3x2::identity(),
+            // rotation: 0.0,
+            transform: Matrix3x2::identity(),
             min_width: Some(1.),
             min_height: Some(1.),
             max_width: None,
@@ -105,16 +105,6 @@ impl WidgetState {
             border_paint: Paint::Color(Rgba::TRANSPARENT),
             ..Default::default()
         }
-    }
-
-    pub(crate) fn get_transform(&self, screen: Size) -> Matrix3x2 {
-        let rect = self.rect;
-        let tx = rect.center_x() / screen.width * 2.0 - 1.0;
-        let ty = 1.0 - rect.center_y() / screen.height * 2.0;
-        let sx = rect.width / screen.width;
-        let sy = rect.height / screen.height;
-
-        Matrix3x2::from_scale_translate(sx, sy, tx, ty)
     }
 }
 
@@ -243,7 +233,8 @@ impl NodeRef {
 
     pub fn with_rotation_rad(self, rad: f32) -> Self {
         if let Some(state) = self.try_upgrade() {
-            state.borrow_mut().rotation = rad;
+            state.borrow_mut().transform.set_rotate_rad(rad);
+            // state.borrow_mut().rotation = rad;
         }
         self
     }
@@ -324,7 +315,7 @@ impl NodeRef {
 
     pub fn set_rotation_rad(&self, rad: f32) {
         if let Some(node) = self.try_upgrade() {
-            node.borrow_mut().rotation = rad;
+            node.borrow_mut().transform.set_rotate_rad(rad);
             self.signal.update_untracked(|vec| vec.push(Event::Paint));
         }
     }

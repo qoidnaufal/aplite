@@ -12,8 +12,8 @@ pub(crate) struct StorageBuffers {
 impl StorageBuffers {
     pub(crate) fn new(device: &wgpu::Device) -> Self {
         let storage = wgpu::BufferUsages::STORAGE;
-        let elements = Buffer::<Element>::new(device, 1024, storage, "element");
-        let transforms = Buffer::<Matrix3x2>::new(device, 1024, storage, "transforms");
+        let elements = Buffer::<Element>::new(device, 1024, storage);
+        let transforms = Buffer::<Matrix3x2>::new(device, 1024, storage);
 
         let bind_group = Self::bind_group(device, &[
             elements.bind_group_entry(0),

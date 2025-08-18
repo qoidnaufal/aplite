@@ -30,42 +30,35 @@ struct Element {
     background: vec4<f32>,
     border: vec4<f32>,
     radius: Radius,
+    size: vec2<f32>,
     shape: u32,
-    rotation: f32,
     border_width: f32,
-    atlas_id: i32,
 }
 
 @group(1) @binding(0) var<storage> elements: array<Element>;
 @group(1) @binding(1) var<storage> transforms: array<mat3x2<f32>>;
 
 // scale -> rotate -> translate
-fn transform_point(tx: mat3x2<f32>, rotation: f32, pos: vec2<f32>) -> vec2f {
-    let sin = sin(rotation);
-    let cos = cos(rotation);
+fn transform_point(tx: mat3x2<f32>, pos: vec2<f32>) -> vec2f {
+    let r = mat2x2<f32>(tx[0], tx[1]);
 
-    let r = mat2x2<f32>(
-        cos, -sin,
-        sin,  cos,
-    );
+    let s = mat2x2<f32>(screen_t[0], screen_t[1]);
 
-    let t = mat2x2<f32>(tx[0], tx[1]);
-
-    let s_mat = mat2x2<f32>(screen_t[0], screen_t[1]);
-
-    return s_mat * (r * t * pos + tx[2]) + screen_t[2];
+    return s * r * pos + tx[2] + screen_t[2];
 }
 
 struct VertexInput {
     @location(0) pos: vec2<f32>,
     @location(1) uv: vec2<f32>,
     @location(2) id: u32,
+    @location(3) atlas: i32,
 }
 
 struct FragmentPayload {
     @builtin(position) position: vec4<f32>,
-    @location(0) @interpolate(flat) index: u32,
-    @location(1) uv: vec2<f32>,
+    @location(0) uv: vec2<f32>,
+    @location(1) @interpolate(flat) index: u32,
+    @location(2) @interpolate(flat) atlas: i32,
 }
 
 @vertex
@@ -73,12 +66,13 @@ fn vs_main(vertex: VertexInput) -> FragmentPayload {
     let element = elements[vertex.id];
     let transform = transforms[vertex.id];
 
-    let pos = transform_point(transform, element.rotation, vertex.pos);
+    let pos = transform_point(transform, vertex.pos);
 
     var out: FragmentPayload;
-    out.uv = select(vertex.uv * 2 - 1, vertex.uv, element.atlas_id > -1);
-    out.index = vertex.id;
     out.position = vec4f(pos, 0.0, 1.0);
+    out.uv = select(vertex.uv * 2 - 1, vertex.uv, vertex.atlas > -1);
+    out.index = vertex.id;
+    out.atlas = vertex.atlas;
     return out;
 }
 ";
@@ -111,10 +105,9 @@ fn sdSegment(p: vec2f, a: vec2f, b: vec2f) -> f32 {
 }
 
 // should use uv - center here
-fn sdf(uv: vec2<f32>, index: u32, element: Element) -> f32 {
-    let transform = transforms[index];
-    let size = vec2f(transform[0].x, transform[1].y);
+fn sdf(uv: vec2<f32>, element: Element) -> f32 {
     let border_width = element.border_width;
+    let size = element.size;
 
     switch element.shape {
         case 0u: {
@@ -123,7 +116,7 @@ fn sdf(uv: vec2<f32>, index: u32, element: Element) -> f32 {
             return sdCircle(p, r);
         }
         case 1u: {
-            let p = uv * size;
+            let p = uv * size.x;
             let b = size - border_width;
             return sdRect(p, b);
         }
@@ -148,9 +141,9 @@ pub const FRAGMENT: &str = r"
 fn fs_main(in: FragmentPayload) -> @location(0) vec4<f32> {
     let element = elements[in.index];
 
-    if element.atlas_id > -1 { return textureSample(t, s, in.uv); }
+    if in.atlas > -1 { return textureSample(t, s, in.uv); }
 
-    let sdf = sdf(in.uv, in.index, element);
+    let sdf = sdf(in.uv, element);
     let blend = 1.0 - smoothstep(0.0, element.border_width, abs(sdf));
 
     let color = select(vec4f(0.0), element.background, sdf < 0.0);

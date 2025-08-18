@@ -150,23 +150,23 @@ impl Rules {
     }
 }
 
-/// Either pixel or percentage
-pub enum Value {
-    /// 0.0..f32::MAX
-    Px(f32),
-    /// 0.0..100.0
-    Pct(f32),
-}
+// /// Either pixel or percentage
+// pub enum Value {
+//     /// 0.0..f32::MAX
+//     Px(f32),
+//     /// 0.0..100.0
+//     Pct(f32),
+// }
 
-impl Value {
-    pub fn px(val: u32) -> Self {
-        Self::Px(val as f32)
-    }
+// impl Value {
+//     pub fn px(val: u32) -> Self {
+//         Self::Px(val as f32)
+//     }
 
-    pub fn pct(val: u32) -> Self {
-        Self::Pct(val as f32)
-    }
-}
+//     pub fn pct(val: u32) -> Self {
+//         Self::Pct(val as f32)
+//     }
+// }
 
 pub struct LayoutCx {
     pub(crate) next_pos: Vec2f,
@@ -200,13 +200,5 @@ impl LayoutCx {
             rules,
             next_pos,
         }
-    }
-
-    pub(crate) fn available_width(&self) -> f32 {
-        todo!()
-    }
-
-    pub(crate) fn available_height(&self) -> f32 {
-        todo!()
     }
 }

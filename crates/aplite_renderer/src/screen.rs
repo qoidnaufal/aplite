@@ -18,7 +18,7 @@ impl Screen {
         scale_factor: f64,
     ) -> Self {
         let usage = wgpu::BufferUsages::UNIFORM;
-        let transform = Buffer::<Matrix3x2>::new(device, 1, usage, "screen transform");
+        let transform = Buffer::<Matrix3x2>::new(device, 1, usage);
         let bind_group = Self::bind_group(device, &[
             transform.bind_group_entry(0),
         ]);

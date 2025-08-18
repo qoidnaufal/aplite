@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use aplite_renderer::{Shape, Renderer};
+use aplite_renderer::{Shape, Scene};
 use aplite_types::{Rgba, CornerRadius, Size, Rect};
 use aplite_storage::U64Map;
 
@@ -34,45 +34,28 @@ pub trait Widget {
         None
     }
 
-    fn draw(&self, renderer: &mut Renderer) -> bool {
+    fn draw(&self, scene: &mut Scene) {
         let node = self.node_ref().upgrade();
-        let show = !node.borrow().hide;
 
-        if show {
+        if !node.borrow().hide {
             let state = node.borrow();
-            let scene = renderer.scene();
-            let size = scene.size();
-
-            let transform = state.get_transform(size);
-            let rotation = state.rotation;
-            let corner_radius = state.corner_radius;
-            let background_paint = state.background_paint.as_paint_ref();
-            let border_paint = state.border_paint.as_paint_ref();
-            let shape = state.shape;
-            let border_width = (state.border_width == 0.0)
-                .then_some(5.0 / size.width)
-                .unwrap_or(state.border_width / size.width);
 
             scene.draw(
-                transform,
-                rotation,
-                background_paint,
-                border_paint,
-                border_width,
-                shape,
-                corner_radius,
+                &state.rect,
+                state.transform,
+                state.background_paint.as_paint_ref(),
+                state.border_paint.as_paint_ref(),
+                state.border_width.max(5.0),
+                state.shape,
+                &state.corner_radius,
             );
 
             if let Some(children) = self.children_ref() {
                 children
                     .iter()
-                    .for_each(|child| {
-                        child.draw(renderer);
-                    });
+                    .for_each(|child| child.draw(scene));
             }
         }
-
-        show
     }
 
     fn layout(&self, cx: &mut LayoutCx) -> bool {

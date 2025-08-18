@@ -5,9 +5,6 @@ fn cast_slice<SRC: Sized, DST: Sized>(src: &[SRC]) -> &[DST] {
 
 pub(crate) struct Buffer<T> {
     buffer: wgpu::Buffer,
-    capacity: u64,
-    usage: wgpu::BufferUsages,
-    label: &'static str,
     _phantom: std::marker::PhantomData<T>,
 }
 
@@ -16,21 +13,19 @@ impl<T> Buffer<T> {
         device: &wgpu::Device,
         capacity: u64,
         usage: wgpu::BufferUsages,
-        label: &'static str
     ) -> Self {
         let size = size_of::<T>() as u64 * capacity;
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some(label),
+            label: Some(std::any::type_name::<T>()),
             size,
-            usage: usage | wgpu::BufferUsages::COPY_DST,
+            usage: usage
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
 
         Self {
             buffer,
-            capacity,
-            usage,
-            label,
             _phantom: Default::default(),
         }
     }
@@ -42,17 +37,27 @@ impl<T> Buffer<T> {
         offset: u64,
         data: &[T],
     ) -> bool {
-        let len = data.len() as u64;
-        let realloc = offset + len > self.capacity;
+        let current_size = self.buffer.size();
+        let realloc = (offset + data.len() as u64) * size_of::<T>() as u64 > current_size;
 
         if realloc {
-            self.buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some(self.label),
-                size: size_of::<T>() as u64 * len,
-                usage: self.usage | wgpu::BufferUsages::COPY_DST,
+            let new_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(std::any::type_name::<T>()),
+                size: current_size * 2,
+                usage: self.buffer.usage(),
                 mapped_at_creation: false,
             });
-            self.capacity = len;
+
+            let mut encoder = device.create_command_encoder(
+                &wgpu::CommandEncoderDescriptor {
+                    label: Some("buffer realoc")
+                }
+            );
+
+            encoder.copy_buffer_to_buffer(&self.buffer, 0, &new_buffer, 0, None);
+            encoder.finish();
+
+            self.buffer = new_buffer;
         }
 
         let offset = offset * size_of::<T>() as u64;

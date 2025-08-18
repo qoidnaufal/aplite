@@ -1,4 +1,4 @@
-use aplite_types::{Rect, Vec2f};
+use aplite_types::{Rect, Size, Vec2f};
 
 use crate::buffer::Buffer;
 
@@ -11,8 +11,8 @@ pub(crate) struct MeshBuffer {
 impl MeshBuffer {
     pub(crate) fn new(device: &wgpu::Device) -> Self {
         Self {
-            indices: Buffer::new(device, 1024 * 6, wgpu::BufferUsages::INDEX, "index"),
-            vertices: Buffer::new(device, 1024 * 4, wgpu::BufferUsages::VERTEX, "vertex"),
+            indices: Buffer::new(device, 1024 * 6, wgpu::BufferUsages::INDEX),
+            vertices: Buffer::new(device, 1024 * 4, wgpu::BufferUsages::VERTEX),
             offset: 0,
         }
     }
@@ -44,6 +44,11 @@ impl MeshBuffer {
                     format: wgpu::VertexFormat::Uint32,
                     offset: size_of::<Vec2f>() as u64 * 2,
                     shader_location: 2,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Sint32,
+                    offset: 4 + size_of::<Vec2f>() as u64 * 2,
+                    shader_location: 3,
                 }
             ],
         }
@@ -59,23 +64,23 @@ pub struct Vertices([Vertex; 4]);
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Vertex {
-    _pos: Vec2f,
+    pos: Vec2f,
     uv: Vec2f,
     id: u32,
+    atlas: i32,
 }
 
 impl Indices {
     #[inline(always)]
-    pub(crate) const fn new() -> Self {
-        Self([0, 1, 2, 2, 3, 0])
-    }
-
-    /// if need_adjust, the offset will be add by 4
-    /// otherwise, each index will be add_assigned directly with the offset
-    pub(crate) fn with_offset(mut self, mut offset: u32, need_adjust: bool) -> Self {
-        if need_adjust { offset *= 4 }
-        self.iter_mut().for_each(|i| *i += offset);
-        self
+    pub(crate) const fn new(offset: u32) -> Self {
+        Self([
+            0 + offset * 4,
+            1 + offset * 4,
+            2 + offset * 4,
+            2 + offset * 4,
+            3 + offset * 4,
+            0 + offset * 4,
+        ])
     }
 
     pub(crate) const fn as_slice(&self) -> &[u32] {
@@ -83,54 +88,40 @@ impl Indices {
     }
 }
 
-impl std::ops::Deref for Indices {
-    type Target = [u32];
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl std::ops::DerefMut for Indices {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+impl Default for Vertices {
+    fn default() -> Self {
+        Self::VERTICES
     }
 }
 
 impl Vertices {
-    const VERTICES: Self = Self ([
-        Vertex { _pos: Vec2f::new(-1.0,  1.0), uv: Vec2f::new(0.0, 0.0), id: 0 },
-        Vertex { _pos: Vec2f::new(-1.0, -1.0), uv: Vec2f::new(0.0, 1.0), id: 0 },
-        Vertex { _pos: Vec2f::new( 1.0, -1.0), uv: Vec2f::new(1.0, 1.0), id: 0 },
-        Vertex { _pos: Vec2f::new( 1.0,  1.0), uv: Vec2f::new(1.0, 0.0), id: 0 },
+    const VERTICES: Self = Self([
+        Vertex { pos: Vec2f::new(-1.0,  1.0), uv: Vec2f::new(0.0, 0.0), id: 0, atlas: -1 },
+        Vertex { pos: Vec2f::new(-1.0, -1.0), uv: Vec2f::new(0.0, 1.0), id: 0, atlas: -1 },
+        Vertex { pos: Vec2f::new( 1.0, -1.0), uv: Vec2f::new(1.0, 1.0), id: 0, atlas: -1 },
+        Vertex { pos: Vec2f::new( 1.0,  1.0), uv: Vec2f::new(1.0, 0.0), id: 0, atlas: -1 },
     ]);
 
-    #[inline(always)]
-    pub const fn new() -> Self { Self::VERTICES }
+    pub fn new(rect: &Rect, uv: Rect, screen: Size, id: u32, atlas: i32) -> Self {
+        let sx = screen.width;
+        let sy = screen.height;
 
-    pub fn with_uv(mut self, uv: Rect) -> Self {
-        self.set_uv(uv);
-        self
-    }
+        let min_x = (rect.x / sx) * 2.0 - 1.0;
+        let min_y = 1.0 - (rect.y / sy) * 2.0;
+        let max_x = (rect.max_x() / sx) * 2.0 - 1.0;
+        let max_y = 1.0 - (rect.max_y() / sy) * 2.0;
 
-    pub fn set_uv(&mut self, uv: Rect) {
         let l = uv.x;
         let r = uv.max_x();
         let t = uv.y;
         let b = uv.max_y();
 
-        self.iter_mut().for_each(|v| {
-            if v.uv.x == 0.0 { v.uv.x = l } else { v.uv.x = r }
-            if v.uv.y == 0.0 { v.uv.y = t } else { v.uv.y = b }
-        });
-    }
-
-    pub fn with_id(mut self, id: u32) -> Self {
-        self.set_id(id);
-        self
-    }
-
-    pub fn set_id(&mut self, id: u32) {
-        self.iter_mut().for_each(|v| v.id = id);
+        Self([
+            Vertex { pos: Vec2f::new(min_x, min_y), uv: Vec2f::new(l, t), id, atlas },
+            Vertex { pos: Vec2f::new(min_x, max_y), uv: Vec2f::new(l, b), id, atlas },
+            Vertex { pos: Vec2f::new(max_x, max_y), uv: Vec2f::new(r, b), id, atlas },
+            Vertex { pos: Vec2f::new(max_x, min_y), uv: Vec2f::new(r, t), id, atlas },
+        ])
     }
 
     #[inline(always)]
@@ -144,7 +135,7 @@ impl std::fmt::Debug for Vertices {
         let mut s = String::new();
         let len = self.0.len();
         for i in 0..len {
-            let pos = self.0[i]._pos;
+            let pos = self.0[i].pos;
             let uv = self.0[i].uv;
             if i == len - 1 {
                 s.push_str(format!("{i}: {pos:?} | {uv:?}").as_str());
@@ -155,30 +146,3 @@ impl std::fmt::Debug for Vertices {
         write!(f, "{s}")
     }
 }
-
-impl std::ops::Deref for Vertices {
-    type Target = [Vertex];
-    fn deref(&self) -> &Self::Target {
-        self.as_slice()
-    }
-}
-
-impl std::ops::DerefMut for Vertices {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.0.as_mut_slice()
-    }
-}
-
-// struct Indx {
-//     i: Vec<u32>,
-// }
-
-// struct Vrtx {
-//     v: Vec<Vertex>,
-// }
-
-// struct Mesh {
-//     indices: Vec<Indx>,
-//     vertices: Vec<Vrtx>,
-//     indices_count: u64,
-// }

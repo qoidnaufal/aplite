@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use winit::window::Window;
 use winit::dpi::PhysicalSize;
-use aplite_types::{Matrix3x2, Rgba, Size, PaintRef, CornerRadius};
+use aplite_types::{Rect, Matrix3x2, Size, PaintRef, CornerRadius};
 
 // use super::RenderError;
 use super::InitiationError;
@@ -31,7 +31,6 @@ pub struct Renderer {
     atlas: Atlas,
     sampler: Sampler,
     current: usize,
-    clear_color: Rgba<f32>,
 }
 
 impl Renderer {
@@ -108,7 +107,6 @@ impl Renderer {
             mesh,
             screen,
             current: 0,
-            clear_color: Rgba::new(0.0, 0.0, 0.0, 0.0),
         })
     }
 
@@ -152,13 +150,12 @@ impl Renderer {
     #[inline(always)]
     pub fn scene(&mut self) -> Scene<'_> {
         Scene {
-            screen_res: self.screen_res(),
+            size: self.screen_res(),
             device: &self.device,
             queue: &self.queue,
             storage: &mut self.storage[self.current],
             mesh: &mut self.mesh[self.current],
             atlas: &mut self.atlas,
-            clear_color: &mut self.clear_color,
         }
     }
 
@@ -174,10 +171,10 @@ impl Renderer {
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Clear(
                     wgpu::Color {
-                        r: self.clear_color.r as f64,
-                        g: self.clear_color.g as f64,
-                        b: self.clear_color.b as f64,
-                        a: self.clear_color.a as f64,
+                        r: 0.0,
+                        g: 0.0,
+                        b: 0.0,
+                        a: 0.0,
                     }
                 ),
                 store: wgpu::StoreOp::Store,
@@ -225,6 +222,9 @@ impl Renderer {
         pass.set_bind_group(2, &self.atlas.bind_group, &[]);
         pass.set_bind_group(3, &self.sampler.bind_group, &[]);
 
+        // let size = window.inner_size();
+        // pass.set_scissor_rect(0, 0, size.width, size.height);
+
         pass.draw_indexed(0..self.mesh[self.current].offset as u32 * 6, 0, 0..1);
 
         drop(pass);
@@ -233,11 +233,6 @@ impl Renderer {
         self.queue.submit([encoder.finish()]);
         surface.present();
     }
-
-    // pub fn finish(&mut self, encoder: wgpu::CommandEncoder, surface: wgpu::SurfaceTexture) {
-        // let id = self.queue.submit([encoder.finish()]);
-        // let _ = self.device.poll(wgpu::PollType::WaitForSubmissionIndex(id));
-    // }
 }
 
 pub struct Scene<'a> {
@@ -246,31 +241,27 @@ pub struct Scene<'a> {
     storage: &'a mut StorageBuffers,
     mesh: &'a mut MeshBuffer,
     atlas: &'a mut Atlas,
-    screen_res: Size,
-    clear_color: &'a mut Rgba<f32>,
+    size: Size,
 }
 
 // FIXME: this feels immediate mode to me, idk
 impl Scene<'_> {
     pub fn draw(
-        self,
+        &mut self,
+        rect: &Rect,
         transform: Matrix3x2,
-        rotation: f32,
         background_paint: PaintRef<'_>,
         border_paint: PaintRef<'_>,
         border_width: f32,
         shape: Shape,
-        corner_radius: CornerRadius,
+        corner_radius: &CornerRadius,
     ) {
-        use aplite_storage::Entity;
-
         let offset = self.mesh.offset;
 
-        let mut element = Element::new()
+        let mut element = Element::new(rect.size() / self.size)
             .with_shape(shape)
-            .with_rotation(rotation)
             .with_corner_radius(corner_radius)
-            .with_border_width(border_width);
+            .with_border_width(border_width / self.size.width);
 
         match border_paint {
             PaintRef::Color(rgba) => {
@@ -288,18 +279,25 @@ impl Scene<'_> {
         };
 
         let vertices = atlas_id.and_then(|id| {
-            element.set_atlas_id(id.index() as i32);
-
             self.atlas
                 .get_uv(&id)
-                .map(|uv| Vertices::new()
-                    .with_uv(uv)
-                    .with_id(offset as _)
-                )
+                .map(|uv| Vertices::new(
+                    rect,
+                    uv,
+                    self.size,
+                    offset as _,
+                    0,
+                ))
         })
-        .unwrap_or(Vertices::new().with_id(offset as _));
+        .unwrap_or(Vertices::new(
+            rect,
+            Rect::new(0.0, 0.0, 1.0, 1.0),
+            self.size,
+            offset as _,
+            -1,
+        ));
 
-        let indices = Indices::new().with_offset(offset as _, true);
+        let indices = Indices::new(offset as _);
 
         self.mesh
             .indices
@@ -318,11 +316,7 @@ impl Scene<'_> {
     }
 
     pub fn size(&self) -> Size {
-        self.screen_res
-    }
-
-    pub fn set_clear_color(&mut self, color: Rgba<f32>) {
-        *self.clear_color = color;
+        self.size
     }
 }
 
@@ -406,9 +400,9 @@ impl Pipeline {
 
 #[inline]
 const fn backend() -> wgpu::Backends {
-    #[cfg(all(unix, not(target_os = "macos")))]
-    return wgpu::Backends::GL;
-
-    #[cfg(target_os = "macos")]
-    return wgpu::Backends::METAL;
+    if cfg!(target_os = "macos") {
+        wgpu::Backends::METAL
+    } else {
+        wgpu::Backends::GL
+    }
 }

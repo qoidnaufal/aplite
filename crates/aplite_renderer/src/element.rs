@@ -1,4 +1,4 @@
-use aplite_types::{CornerRadius, Rgba};
+use aplite_types::{CornerRadius, Rgba, Size};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -6,10 +6,9 @@ pub struct Element {
     pub(crate) background: Rgba<f32>,
     pub(crate) border: Rgba<f32>,
     pub(crate) corners: CornerRadius,
+    pub(crate) size: Size,
     pub(crate) shape: Shape,
-    pub(crate) rotation: f32, // FIXME: this is temporary
     pub(crate) border_width: f32,
-    pub(crate) atlas_id: i32,
 }
 
 #[repr(u32)]
@@ -22,15 +21,14 @@ pub enum Shape {
 }
 
 impl Element {
-    pub const fn new() -> Self {
+    pub const fn new(size: Size) -> Self {
         Self {
+            size,
             background: Rgba::new(1., 0., 0., 1.),
             border: Rgba::new(1., 1., 1., 1.),
             corners: CornerRadius::splat(25.),
             shape: Shape::RoundedRect,
-            rotation: 0.0,
             border_width: 0.0,
-            atlas_id: -1,
         }
     }
 
@@ -44,8 +42,11 @@ impl Element {
         self
     }
 
-    pub fn with_corner_radius(mut self, corner_radius: CornerRadius) -> Self {
-        self.corners = corner_radius;
+    pub fn with_corner_radius(mut self, corner_radius: &CornerRadius) -> Self {
+        self.corners.tl = corner_radius.tl;
+        self.corners.bl = corner_radius.bl;
+        self.corners.br = corner_radius.br;
+        self.corners.tr = corner_radius.tr;
         self
     }
 
@@ -57,44 +58,6 @@ impl Element {
     pub fn with_shape(mut self, shape: Shape) -> Self {
         self.shape = shape;
         self
-    }
-
-    pub fn with_rotation(mut self, val: f32) -> Self {
-        self.rotation = val;
-        self
-    }
-
-    // pub(crate) fn with_atlas_id(mut self, id: i32) -> Self {
-    //     self.atlas_id = id;
-    //     self
-    // }
-
-    // pub fn set_background(&mut self, color: Rgba<u8>) {
-    //     self.background = color.into();
-    // }
-
-    // pub fn set_stroke_color(&mut self, color: Rgba<u8>) {
-    //     self.border = color.into();
-    // }
-
-    // pub fn set_stroke_width(&mut self, val: u32) {
-    //     self.border_width = val as _;
-    // }
-
-    // pub fn set_rotation(&mut self, val: f32) {
-    //     self.rotation = val;
-    // }
-
-    // pub fn set_corner_radius(&mut self, val: CornerRadius) {
-    //     self.corners = val;
-    // }
-
-    // pub fn set_shape(&mut self, shape: Shape) {
-    //     self.shape = shape;
-    // }
-
-    pub fn set_atlas_id(&mut self, id: i32) {
-        self.atlas_id = id;
     }
 
     pub fn fill_color(&self) -> Rgba<u8> {

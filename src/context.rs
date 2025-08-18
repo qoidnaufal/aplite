@@ -182,7 +182,8 @@ impl Context {
 impl Context {
     pub(crate) fn render(&self, root_id: &ViewId, renderer: &mut Renderer) {
         if let Some(view) = self.view_storage.get(root_id) {
-            view.draw(renderer);
+            let mut scene = renderer.scene();
+            view.draw(&mut scene);
         }
     }
 }
