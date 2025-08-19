@@ -23,7 +23,6 @@ fn image_row(counter: SignalRead<i32>) -> impl IntoView {
 
     Effect::new(move |_| {
         let num = counter.get().abs();
-
         node1.hide(num > 0 && num % 2 == 0);
         node2.hide(num > 0 && num % 3 == 0);
         node3.hide(num > 0 && num % 5 == 0);
@@ -33,10 +32,10 @@ fn image_row(counter: SignalRead<i32>) -> impl IntoView {
         .child(image1)
         .child(image2)
         .child(image3)
-        .spacing(20.)
+        .spacing(20)
         .shape(Shape::RoundedRect)
         .corner_radius(CornerRadius::splat(10))
-        .padding(Padding::new(20., 20., 40., 40.))
+        .padding(Padding::new(20, 20, 40, 40))
         .border_width(5.0)
         .border_color(Rgba::DARK_GRAY)
 }
@@ -73,10 +72,10 @@ fn button_stack(
                 .on(LeftClick, inc)
         )
         .border_color(Rgba::DARK_GRAY)
-        .padding(Padding::splat(7.))
+        .padding(Padding::splat(7))
         .shape(Shape::RoundedRect)
         .corner_radius(CornerRadius::splat(10))
-        .spacing(10.)
+        .spacing(10)
         .min_width(430.)
         .align_h(AlignH::Center)
         .align_v(AlignV::Middle)
@@ -94,8 +93,8 @@ fn root() -> impl IntoView {
         .child(button_stack(inc, dec, set_counter))
         .child(image_row(counter))
         .align_h(AlignH::Left)
-        .padding(Padding::splat(20.0))
-        .spacing(8.)
+        .padding(Padding::splat(20))
+        .spacing(8)
 }
 
 fn main() -> ApliteResult {

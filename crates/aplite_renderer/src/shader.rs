@@ -67,14 +67,14 @@ struct VertexInput {
     @location(0) pos: vec2<f32>,
     @location(1) uv: vec2<f32>,
     @location(2) id: u32,
-    @location(3) atlas: i32,
+    @location(3) atlas: u32,
 }
 
 struct FragmentPayload {
     @builtin(position) position: vec4<f32>,
     @location(0) uv: vec2<f32>,
     @location(1) @interpolate(flat) index: u32,
-    @location(2) @interpolate(flat) atlas: i32,
+    @location(2) @interpolate(flat) atlas: u32,
 }
 
 @vertex
@@ -86,7 +86,7 @@ fn vs_main(vertex: VertexInput) -> FragmentPayload {
 
     var out: FragmentPayload;
     out.position = vec4f(pos, 0.0, 1.0);
-    out.uv = select(vertex.uv * 2 - 1, vertex.uv, vertex.atlas > -1);
+    out.uv = select(vertex.uv * 2 - 1, vertex.uv, vertex.atlas == 1);
     out.index = vertex.id;
     out.atlas = vertex.atlas;
     return out;
@@ -157,7 +157,7 @@ pub const FRAGMENT: &str = r"
 fn fs_main(in: FragmentPayload) -> @location(0) vec4<f32> {
     let element = elements[in.index];
 
-    if in.atlas > -1 { return textureSample(t, s, in.uv); }
+    if in.atlas == 1 { return textureSample(t, s, in.uv); }
 
     let sdf = sdf(in.uv, element);
     let blend = 1.0 - smoothstep(0.0, element.border_width, abs(sdf));

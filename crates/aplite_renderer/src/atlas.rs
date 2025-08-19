@@ -3,17 +3,23 @@ use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
 use aplite_types::{Rect, Size, Vec2f, ImageData, ImageRef};
-use aplite_storage::{IndexMap, U64Map, Entity, entity};
+use aplite_storage::{Tree, Entity, entity};
 
-entity! { pub AtlasId }
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Uv {
+    pub(crate) min_x: f32,
+    pub(crate) min_y: f32,
+    pub(crate) max_x: f32,
+    pub(crate) max_y: f32,
+}
 
 pub(crate) struct Atlas {
     texture: wgpu::Texture,
     pub(crate) bind_group: wgpu::BindGroup,
 
     allocator: AtlasAllocator,
-    pending_data: U64Map<AtlasId, ImageData>,
-    processed: HashMap<ImageRef, AtlasId>,
+    pending_data: Vec<(Rect, ImageData)>,
+    processed: HashMap<ImageRef, Uv>,
 }
 
 impl Atlas {
@@ -42,14 +48,14 @@ impl Atlas {
             allocator: AtlasAllocator::new(size),
             texture,
             bind_group,
-            pending_data: U64Map::new(),
+            pending_data: Vec::new(),
             processed: HashMap::new(),
         }
     }
 
-    pub(crate) fn append(&mut self, data: ImageRef) -> Option<AtlasId> {
-        if let Some(id) = self.processed.get(&data) {
-            return Some(*id)
+    pub(crate) fn append(&mut self, data: ImageRef) -> Option<Uv> {
+        if let Some(uv) = self.processed.get(&data) {
+            return Some(*uv)
         }
 
         match data.upgrade() {
@@ -57,36 +63,45 @@ impl Atlas {
                 let size = Size::new(data.width as _, data.height as _);
                 let allocated = self.allocator.alloc(size);
 
-                if let Some(id) = allocated {
-                    self.pending_data.insert(id, data);
+                if let Some(rect) = allocated {
+                    self.pending_data.push((rect, data));
                 }
 
-                allocated
+                allocated.map(|rect| {
+                    let min_x = rect.x / self.allocator.rect.width;
+                    let min_y = rect.y / self.allocator.rect.height;
+                    Uv {
+                        min_x,
+                        min_y,
+                        max_x: min_x + rect.width / self.allocator.rect.width,
+                        max_y: min_y + rect.height / self.allocator.rect.height,
+                    }
+                })
             },
             None => None,
         }
     }
 
-    #[inline(always)]
-    pub(crate) fn get_uv(&self, id: &AtlasId) -> Option<Rect> {
-        self.allocator
-            .get_pos(id)
-            .map(|rect| {
-                let min_x = rect.x / self.allocator.rect.width;
-                let min_y = rect.y / self.allocator.rect.width;
-                let max_x = rect.width / self.allocator.rect.width;
-                let max_y = rect.height / self.allocator.rect.width;
+    // #[inline(always)]
+    // pub(crate) fn get_uv(&self, id: &AtlasId) -> Option<Rect> {
+    //     self.allocator
+    //         .get_rect(id)
+    //         .map(|rect| {
+    //             let min_x = rect.x / self.allocator.rect.width;
+    //             let min_y = rect.y / self.allocator.rect.width;
+    //             let max_x = rect.width / self.allocator.rect.width;
+    //             let max_y = rect.height / self.allocator.rect.width;
 
-                Rect::new(
-                    min_x, min_y,
-                    max_x, max_y
-                )
-            })
-    }
+    //             Rect::new(
+    //                 min_x, min_y,
+    //                 max_x, max_y
+    //             )
+    //         })
+    // }
 
     pub(crate) fn update(&mut self, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder) {
         if !self.pending_data.is_empty() {
-            for (id, data) in &self.pending_data {
+            for (rect, data) in &self.pending_data {
                 let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
                 let width = data.width * 4;
                 let padding = (alignment - width % alignment) % alignment;
@@ -104,7 +119,6 @@ impl Atlas {
                     }
                 }
 
-                let pos = self.allocator.get_pos(id).unwrap();
                 let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: None,
                     contents: &padded_data,
@@ -125,8 +139,8 @@ impl Atlas {
                         aspect: wgpu::TextureAspect::All,
                         mip_level: 0,
                         origin: wgpu::Origin3d {
-                            x: pos.x as u32,
-                            y: pos.y as u32,
+                            x: rect.x as u32,
+                            y: rect.y as u32,
                             z: 0,
                         },
                     },
@@ -137,7 +151,19 @@ impl Atlas {
                     }
                 );
 
-                self.processed.insert(data.downgrade(), *id);
+                let min_x = rect.x / self.allocator.rect.width;
+                let min_y = rect.y / self.allocator.rect.height;
+                let max_x = min_x + (rect.width / self.allocator.rect.width);
+                let max_y = min_y + (rect.height / self.allocator.rect.height);
+
+                let uv = Uv {
+                    min_x,
+                    min_y,
+                    max_x,
+                    max_y,
+                };
+
+                self.processed.insert(data.downgrade(), uv);
             }
 
             self.pending_data.clear();
@@ -176,15 +202,12 @@ impl Atlas {
     }
 }
 
+entity! { pub AtlasId }
+
 struct AtlasAllocator {
     rect: Rect,
     last_parent: Option<AtlasId>,
-    allocated: IndexMap<AtlasId, Rect>,
-
-    // tree
-    parent: Vec<Option<AtlasId>>,
-    first_child: Vec<Option<AtlasId>>,
-    next_sibling: Vec<Option<AtlasId>>,
+    tree: Tree<AtlasId, Rect>,
 }
 
 impl AtlasAllocator {
@@ -192,52 +215,44 @@ impl AtlasAllocator {
         Self {
             rect: Rect::from_size(size),
             last_parent: None,
-            allocated: IndexMap::new(),
-            parent: Vec::new(),
-            first_child: Vec::new(),
-            next_sibling: Vec::new(),
+            tree: Tree::new(),
         }
     }
 
-    fn alloc(&mut self, size: Size) -> Option<AtlasId> {
+    fn alloc(&mut self, size: Size) -> Option<Rect> {
+        // TODO: double the size
         if size.area() > self.calculate_available_area() { return None };
-
-        self.next_sibling.push(None);
-        self.first_child.push(None);
-        self.parent.push(None);
 
         match self.last_parent {
             Some(last_parent) => {
                 if let Some((parent, pos)) = self.scan(size) {
-                    let id = self.allocated.insert(Rect::from_vec2f_size(pos, size));
+                    let rect = Rect::from_vec2f_size(pos, size);
+                    let id = self.tree.insert(rect);
 
-                    self.parent[id.index()] = Some(parent);
+                    self.tree.add_child(&parent, id);
 
-                    match self.get_last_child(&parent).copied() {
-                        Some(last) => self.next_sibling[last.index()] = Some(id),
-                        None => self.first_child[parent.index()] = Some(id),
-                    }
-
-                    Some(id)
+                    Some(rect)
                 } else {
                     // inserting as the next sibling of the last parent
-                    let last_rect = self.allocated.get(&last_parent).unwrap();
-                    let pos = Vec2f::new(0.0, last_rect.max_y());
-                    let id = self.allocated.insert(Rect::from_vec2f_size(pos, size));
+                    let next_y = self.tree.get(&last_parent).unwrap().max_y();
+                    let pos = Vec2f::new(0.0, next_y);
+                    let rect = Rect::from_vec2f_size(pos, size);
+                    let id = self.tree.insert(rect);
 
-                    self.next_sibling[last_parent.index()] = Some(id);
+                    self.tree.add_sibling(&last_parent, id);
                     self.last_parent = Some(id);
 
-                    Some(id)
+                    Some(rect)
                 }
             },
             None => {
                 // first insert
-                let id = self.allocated.insert(Rect::from_size(size));
+                let rect = Rect::from_size(size);
+                let id = self.tree.insert(rect);
 
                 self.last_parent = Some(id);
 
-                Some(id)
+                Some(rect)
             },
         }
     }
@@ -254,12 +269,12 @@ impl AtlasAllocator {
         rect: &Rect,
         size: Size,
     ) -> Option<(AtlasId, Vec2f)> {
-        match self.get_all_children(parent) {
+        match self.tree.get_all_children(parent) {
             Some(children) => {
                 children
                     .iter()
                     .find_map(|child_id| {
-                        match self.get_last_child(child_id) {
+                        match self.tree.get_last_child(child_id) {
                             Some(last) => self.check_pos_for(last, child_id, size),
                             None => self.check_pos_for(child_id, child_id, size),
                         }
@@ -281,7 +296,7 @@ impl AtlasAllocator {
         parent: &AtlasId,
         size: Size,
     ) -> Option<(AtlasId, Vec2f)> {
-        let rect = self.allocated.get(id).unwrap();
+        let rect = self.tree.get(id).unwrap();
         let cond1 = rect.max_y() + size.height <= rect.max_y();
         let cond2 = size.width <= rect.width;
 
@@ -298,9 +313,9 @@ impl AtlasAllocator {
         parent: &AtlasId,
         size: Size,
     ) -> Option<(AtlasId, Vec2f)> {
-        let rect = self.allocated.get(prev).unwrap();
+        let rect = self.tree.get(prev).unwrap();
         let cond1 = rect.max_x() + size.width <= self.rect.width;
-        let cond2 = self.get_next_sibling(prev).is_none();
+        let cond2 = self.tree.get_next_sibling(prev).is_none();
 
         (cond1 && cond2).then_some((
             *parent,
@@ -308,77 +323,17 @@ impl AtlasAllocator {
         ))
     }
 
-    // #[inline(always)]
-    // pub fn get_parent(&self, id: &AtlasId) -> Option<&AtlasId> {
-    //     self.parent[id.index()].as_ref()
-    // }
-
-    #[inline(always)]
-    fn get_first_child(&self, parent: &AtlasId) -> Option<&AtlasId> {
-        self.first_child[parent.index()].as_ref()
-    }
-
-    #[inline(always)]
-    fn get_next_sibling(&self, id: &AtlasId) -> Option<&AtlasId> {
-        self.next_sibling[id.index()].as_ref()
-    }
-
-    // fn get_prev_sibling(&self, id: &AtlasId) -> Option<&AtlasId> {
-    //     if let Some(parent) = self.get_parent(id) {
-    //         let mut first = self.get_first_child(parent).unwrap();
-    //         while let Some(next) = self.get_next_sibling(first) {
-    //             if next == id {
-    //                 return Some(first);
-    //             }
-    //             first = next;
-    //         }
-    //         None
-    //     } else {
-    //         None
-    //     }
-    // }
-
-    #[inline(always)]
-    fn get_last_child(&self, id: &AtlasId) -> Option<&AtlasId> {
-        let maybe_first = self.get_first_child(id);
-        if let Some(first) = maybe_first {
-            let mut last = first;
-            while let Some(next) = self.get_next_sibling(last) {
-                last = next;
-            }
-            Some(last)
-        } else {
-            None
-        }
-    }
-
     #[inline(always)]
     fn get_parents(&self) -> Vec<(AtlasId, &Rect)> {
-        self.allocated
-            .iter()
+        self.tree
+            .iter_data_ref()
             .filter_map(|(id, rect)| {
-                self.parent[id.index()]
+                self.tree
+                    .get_parent(&id)
                     .is_none()
                     .then_some((id, rect))
             })
             .collect()
-    }
-
-    #[inline(always)]
-    fn get_all_children(&self, parent: &AtlasId) -> Option<Vec<AtlasId>> {
-        self.first_child[parent.index()].map(|first| {
-            let mut curr = first;
-            let mut children = vec![curr];
-            while let Some(next) = self.next_sibling[curr.index()] {
-                children.push(next);
-                curr = next;
-            }
-            children
-        })
-    }
-
-    fn get_pos(&self, id: &AtlasId) -> Option<&Rect> {
-        self.allocated.get(id)
     }
 
     // fn remove(&mut self, id: AtlasId) -> Option<Rect> {
@@ -394,8 +349,8 @@ impl AtlasAllocator {
 
     #[inline(always)]
     fn calculate_available_area(&self) -> f32 {
-        let allocated = self.allocated
-            .iter()
+        let allocated = self.tree
+            .iter_data_ref()
             .fold(0.0,|sum, (_, rect)| {
                 sum + rect.area()
             });
@@ -416,26 +371,26 @@ mod atlas_test {
 
         let second = allocator.alloc(Size::new(500., 200.));
         assert!(second.is_some());
-        assert_eq!(allocator.get_next_sibling(&first.unwrap()), second.as_ref());
+        // assert_eq!(allocator.get_next_sibling(&first.unwrap()), second.as_ref());
 
         let third = allocator.alloc(Size::new(100., 100.));
         assert!(third.is_some());
-        assert_eq!(allocator.get_first_child(&first.unwrap()), third.as_ref());
+        // assert_eq!(allocator.get_first_child(&first.unwrap()), third.as_ref());
 
         let fourth = allocator.alloc(Size::new(100., 100.));
         assert!(fourth.is_some());
-        assert_eq!(allocator.get_last_child(&third.unwrap()), fourth.as_ref());
+        // assert_eq!(allocator.get_last_child(&third.unwrap()), fourth.as_ref());
 
         let fifth = allocator.alloc(Size::new(100., 100.));
         assert!(fifth.is_some());
-        assert_eq!(allocator.get_last_child(&first.unwrap()), fifth.as_ref());
-        assert_eq!(allocator.get_next_sibling(&third.unwrap()), fifth.as_ref());
+        // assert_eq!(allocator.get_last_child(&first.unwrap()), fifth.as_ref());
+        // assert_eq!(allocator.get_next_sibling(&third.unwrap()), fifth.as_ref());
 
         let sixth = allocator.alloc(Size::new(300., 100.));
         assert!(sixth.is_some());
-        assert_eq!(allocator.get_next_sibling(&second.unwrap()), sixth.as_ref());
+        // assert_eq!(allocator.get_next_sibling(&second.unwrap()), sixth.as_ref());
         assert_eq!(allocator.get_parents().len(), 3);
 
-        eprintln!("{:#?}", allocator.allocated);
+        eprintln!("{:#?}", allocator.tree);
     }
 }

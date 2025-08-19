@@ -40,6 +40,15 @@ impl From<(u32, u32)> for Fraction {
     }
 }
 
+impl From<(u8, u8)> for Fraction {
+    fn from(value: (u8, u8)) -> Self {
+        Self {
+            numerator: value.0 as f32,
+            denominator: value.1 as f32,
+        }
+    }
+}
+
 impl std::ops::Mul<Size> for Fraction {
     type Output = Size;
     fn mul(self, rhs: Size) -> Self::Output {

@@ -27,42 +27,6 @@ impl StorageBuffers {
         }
     }
 
-    // pub(crate) fn write_data(
-    //     &mut self,
-    //     device: &wgpu::Device,
-    //     queue: &wgpu::Queue,
-    //     elements: &[Element],
-    //     transforms: &[Matrix3x2],
-    // ) -> bool {
-    //     let mut realloc = false;
-    //     realloc |= self.elements.write(device, queue, 0, elements);
-    //     realloc |= self.transforms.write(device, queue, 0, transforms);
-
-    //     if realloc {
-    //         self.bind_group = Self::bind_group(device, &[
-    //             self.elements.bind_group_entry(0),
-    //             self.transforms.bind_group_entry(1),
-    //         ]);
-    //     }
-
-    //     realloc
-    // }
-
-    // pub(crate) fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> bool {
-    //     let mut realloc = false;
-    //     realloc |= self.elements.write(device, queue, 0, &self.element_data);
-    //     realloc |= self.transforms.write(device, queue, 0, &self.transform_data);
-
-    //     if realloc {
-    //         self.bind_group = Self::bind_group(device, &[
-    //             self.elements.bind_group_entry(0),
-    //             self.transforms.bind_group_entry(1),
-    //         ]);
-    //     }
-
-    //     realloc
-    // }
-
     pub(crate) fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
         let binding_type = wgpu::BufferBindingType::Storage { read_only: true };
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

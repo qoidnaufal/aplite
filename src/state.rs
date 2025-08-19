@@ -27,7 +27,7 @@ thread_local! {
 
 #[derive(Debug, Clone, Copy)]
 pub enum AspectRatio {
-    Defined(u32, u32),
+    Defined(u8, u8),
     Source,
     Undefined,
 }
@@ -46,7 +46,7 @@ pub struct WidgetState {
     pub(crate) align_h: AlignH,
     pub(crate) orientation: Orientation,
     pub(crate) padding: Padding,
-    pub(crate) spacing: f32,
+    pub(crate) spacing: u8,
     // pub(crate) z_index: u32,
     pub(crate) image_aspect_ratio: AspectRatio,
     pub(crate) shape: Shape,
@@ -77,7 +77,7 @@ impl Default for WidgetState {
             align_v: AlignV::Top,
             align_h: AlignH::Left,
             orientation: Orientation::Vertical,
-            spacing: 0.,
+            spacing: 0,
             // z_index: 0,
             padding: Padding::default(),
             image_aspect_ratio: AspectRatio::Undefined,
@@ -115,7 +115,7 @@ impl WidgetState {
 
     #[inline(always)]
     pub(crate) fn is_hidden(&self) -> bool {
-        self.hover_drag_hide & 0b001 == 1
+        self.hover_drag_hide & 0b1 == 1
     }
 
     #[inline(always)]
@@ -124,7 +124,7 @@ impl WidgetState {
             self.hover_drag_hide |= 1 << 2;
         } else {
             self.hover_drag_hide = 0 << 2
-                | (self.hover_drag_hide >> 1 & 0b001) << 1
+                | (self.hover_drag_hide >> 1 & 0b1) << 1
                 | (self.hover_drag_hide & 0b1);
         }
     }
@@ -136,7 +136,7 @@ impl WidgetState {
         } else {
             self.hover_drag_hide = (self.hover_drag_hide >> 2) << 2
                 | 0 << 1
-                | self.hover_drag_hide & 0b001;
+                | self.hover_drag_hide & 0b1;
         }
     }
 
@@ -145,27 +145,29 @@ impl WidgetState {
         if hidden {
             self.hover_drag_hide |= 1;
         } else {
-            self.hover_drag_hide = (self.hover_drag_hide >> 1) << 1 | 0b0;
+            self.hover_drag_hide = (self.hover_drag_hide >> 1) << 1 | 0;
         }
     }
 
     #[inline(always)]
     pub(crate) fn toggle_hoverable(&mut self) {
-        self.hover_drag_hide = (!(self.hover_drag_hide >> 2) & 0b1) << 2
-            | (self.hover_drag_hide >> 1 & 0b001) << 1
+        self.hover_drag_hide = !(self.hover_drag_hide >> 2 & 0b1) << 2
+            | (self.hover_drag_hide >> 1 & 0b1) << 1
             | (self.hover_drag_hide & 0b1);
     }
 
     #[inline(always)]
     pub(crate) fn toggle_draggable(&mut self) {
         self.hover_drag_hide = (self.hover_drag_hide >> 2) << 2
-            | (!(self.hover_drag_hide >> 1) & 0b1) << 1
+            | !(self.hover_drag_hide >> 1 & 0b1) << 1
             | self.hover_drag_hide & 0b001;
     }
 
     #[inline(always)]
     pub(crate) fn toggle_hidden(&mut self) {
-        self.hover_drag_hide &= !(self.hover_drag_hide & 0b1);
+        // WARN: not sure if this is correct
+        self.hover_drag_hide = (self.hover_drag_hide >> 1) << 1
+            | !(self.hover_drag_hide & 0b1);
     }
 }
 
@@ -381,7 +383,7 @@ impl NodeRef {
         }
     }
 
-    pub fn set_spacing(&self, val: f32) {
+    pub fn set_spacing(&self, val: u8) {
         if let Some(node) = self.try_upgrade() {
             node.borrow_mut().spacing = val;
             self.signal.update_untracked(|vec| vec.push(Event::Layout));
@@ -412,11 +414,11 @@ impl NodeRef {
 
     pub fn toggle_hidden(&self) {
         if let Some(node) = self.try_upgrade() {
-            let prev = node.borrow().is_hidden();
+            // let prev = node.borrow().is_hidden();
             node.borrow_mut().toggle_hidden();
-            if prev != node.borrow().is_hidden() {
-                self.signal.update_untracked(|vec| vec.push(Event::Layout));
-            }
+            self.signal.update_untracked(|vec| vec.push(Event::Layout));
+            // if prev != node.borrow().is_hidden() {
+            // }
         }
     }
 

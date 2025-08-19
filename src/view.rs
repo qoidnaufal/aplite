@@ -111,7 +111,7 @@ pub(crate) trait Layout: Widget + Sized + 'static {
         let state = node.borrow();
         let padding = state.padding;
         let orientation = state.orientation;
-        let spacing = state.spacing;
+        let spacing = state.spacing as f32;
         let mut size = state.rect.size();
 
         if let Some(children) = self.children_ref() {
@@ -128,10 +128,10 @@ pub(crate) trait Layout: Widget + Sized + 'static {
                     match orientation {
                         Orientation::Vertical => {
                             expand.height += child_size.height + stretch;
-                            expand.width = expand.width.max(child_size.width + padding.horizontal());
+                            expand.width = expand.width.max(child_size.width + padding.horizontal() as f32);
                         }
                         Orientation::Horizontal => {
-                            expand.height = expand.height.max(child_size.height + padding.vertical());
+                            expand.height = expand.height.max(child_size.height + padding.vertical() as f32);
                             expand.width += child_size.width + stretch;
                         }
                     }
@@ -139,10 +139,10 @@ pub(crate) trait Layout: Widget + Sized + 'static {
 
             match orientation {
                 Orientation::Vertical => {
-                    expand.height += padding.vertical();
+                    expand.height += padding.vertical() as f32;
                 },
                 Orientation::Horizontal => {
-                    expand.width += padding.horizontal();
+                    expand.width += padding.horizontal() as f32;
                 },
             }
 

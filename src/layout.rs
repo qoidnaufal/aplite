@@ -28,10 +28,10 @@ pub enum Orientation {
 
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Padding {
-    pub top: f32,
-    pub bottom: f32,
-    pub left: f32,
-    pub right: f32,
+    pub top: u8,
+    pub bottom: u8,
+    pub left: u8,
+    pub right: u8,
 }
 
 #[derive(Debug)]
@@ -41,7 +41,7 @@ pub(crate) struct Rules {
     pub(crate) align_h: AlignH,
     pub(crate) align_v: AlignV,
     pub(crate) padding: Padding,
-    pub(crate) spacing: f32,
+    pub(crate) spacing: u8,
 }
 
 impl Orientation {
@@ -55,7 +55,7 @@ impl Orientation {
 }
 
 impl Padding {
-    pub const fn new(top: f32, bottom: f32, left: f32, right: f32) -> Self {
+    pub const fn new(top: u8, bottom: u8, left: u8, right: u8) -> Self {
         Self {
             top,
             bottom,
@@ -64,7 +64,7 @@ impl Padding {
         }
     }
 
-    pub const fn splat(value: f32) -> Self {
+    pub const fn splat(value: u8) -> Self {
         Self {
             top: value,
             bottom: value,
@@ -73,11 +73,11 @@ impl Padding {
         }
     }
 
-    pub(crate) fn vertical(&self) -> f32 { self.top + self.bottom }
+    pub(crate) fn vertical(&self) -> u8 { self.top + self.bottom }
 
-    pub(crate) fn horizontal(&self) -> f32 { self.left + self.right }
+    pub(crate) fn horizontal(&self) -> u8 { self.left + self.right }
 
-    pub fn set_all(&mut self, value: f32) {
+    pub fn set_all(&mut self, value: u8) {
         self.top = value;
         self.bottom = value;
         self.left = value;
@@ -98,8 +98,8 @@ impl Rules {
     }
 
     fn offset_x(&self) -> f32 {
-        let pl = self.padding.left;
-        let pr = self.padding.right;
+        let pl = self.padding.left as f32;
+        let pr = self.padding.right as f32;
 
         match self.align_h {
             AlignH::Left => self.rect.x + pl,
@@ -111,8 +111,8 @@ impl Rules {
     }
 
     fn offset_y(&self) -> f32 {
-        let pt = self.padding.top;
-        let pb = self.padding.bottom;
+        let pt = self.padding.top as f32;
+        let pb = self.padding.bottom as f32;
 
         match self.align_v {
             AlignV::Top => self.rect.y + pt,
@@ -126,7 +126,7 @@ impl Rules {
     fn start_pos(&self, child_total_size: f32, len: f32) -> Vec2f {
         let offset_x = self.offset_x();
         let offset_y = self.offset_y();
-        let stretch_factor = self.spacing * (len - 1.);
+        let stretch_factor = self.spacing as f32 * (len - 1.);
         let stretch = child_total_size + stretch_factor;
 
         match self.orientation {

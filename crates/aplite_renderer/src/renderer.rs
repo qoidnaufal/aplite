@@ -6,7 +6,7 @@ use aplite_types::{Rect, Matrix3x2, Size, PaintRef, CornerRadius};
 // use super::RenderError;
 use super::InitiationError;
 
-use crate::atlas::Atlas;
+use crate::atlas::{Atlas, Uv};
 use crate::element::{Element, Shape};
 use crate::screen::Screen;
 use crate::storage::StorageBuffers;
@@ -222,11 +222,12 @@ impl Renderer {
         pass.set_bind_group(2, &self.atlas.bind_group, &[]);
         pass.set_bind_group(3, &self.sampler.bind_group, &[]);
 
-        pass.draw_indexed(0..self.mesh[self.current].offset as u32 * 4, 0, 0..1);
+        pass.draw_indexed(0..self.mesh[self.current].offset as u32 * Indices::COUNT as u32, 0, 0..1);
 
         drop(pass);
 
         window.pre_present_notify();
+
         self.queue.submit([encoder.finish()]);
         surface.present();
     }
@@ -269,41 +270,36 @@ impl Scene<'_> {
             },
         }
 
-        let atlas_id = match background_paint {
+        let vertices = match background_paint {
             PaintRef::Color(rgba) => {
                 element.background = rgba.pack_u32();
-                None
-            },
-            PaintRef::Image(image_ref) => self.atlas.append(image_ref)
-        };
-
-        let vertices = atlas_id.and_then(|id| {
-            self.atlas
-                .get_uv(&id)
-                .map(|uv| Vertices::new(
+                Vertices::new(
                     rect,
-                    uv,
+                    Uv {
+                        min_x: 0.,
+                        min_y: 0.,
+                        max_x: 1.,
+                        max_y: 1.,
+                    },
                     self.size,
                     offset as _,
                     0,
-                ))
-        })
-        .unwrap_or(Vertices::new(
-            rect,
-            Rect::new(0.0, 0.0, 1.0, 1.0),
-            self.size,
-            offset as _,
-            -1,
-        ));
+                )
+            },
+            PaintRef::Image(image_ref) => {
+                let uv = self.atlas.append(image_ref).unwrap();
+                Vertices::new(rect, uv, self.size, offset as _, 1)
+            }
+        };
 
         let indices = Indices::new(offset as _);
 
         self.mesh
             .indices
-            .write(self.device, self.queue, offset * 4, indices.as_slice());
+            .write(self.device, self.queue, offset * Indices::COUNT, indices.as_slice());
         self.mesh
             .vertices
-            .write(self.device, self.queue, offset * 4, vertices.as_slice());
+            .write(self.device, self.queue, offset * Vertices::COUNT, vertices.as_slice());
         self.storage
             .elements
             .write(self.device, self.queue, offset, &[element]);
@@ -357,16 +353,10 @@ impl Pipeline {
                 buffers,
             },
             primitive: wgpu::PrimitiveState {
-                // WARN: this enable more efficient use of data,
-                // but there's a drawback when two vertices' end point are "connected"
-                // there are two solution to this:
-                // - sort, but surely this is slow
-                // - fix matrix transformation
-                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                topology: wgpu::PrimitiveTopology::TriangleList,
                 front_face: wgpu::FrontFace::Ccw,
                 cull_mode: Some(wgpu::Face::Back),
                 polygon_mode: wgpu::PolygonMode::Fill,
-                strip_index_format: Some(wgpu::IndexFormat::Uint32),
                 ..Default::default()
             },
             multisample: wgpu::MultisampleState {
@@ -409,5 +399,70 @@ const fn backend() -> wgpu::Backends {
         wgpu::Backends::METAL
     } else {
         wgpu::Backends::GL
+    }
+}
+
+pub struct Scene2<'a> {
+    indices: Vec<u32>,
+    vertices: Vec<crate::mesh::Vertex>,
+    elements: Vec<Element>,
+    transforms: Vec<Matrix3x2>,
+    size: Size,
+    atlas: &'a mut Atlas,
+}
+
+impl<'a> Scene2<'a> {
+    pub fn draw(
+        &mut self,
+        rect: &Rect,
+        transform: Matrix3x2,
+        background_paint: PaintRef<'_>,
+        border_paint: PaintRef<'_>,
+        border_width: f32,
+        shape: Shape,
+        corner_radius: &CornerRadius,
+    ) {
+        let mut element = Element::new(rect.size() / self.size)
+            .with_shape(shape)
+            .with_corner_radius(corner_radius)
+            .with_border_width(border_width / self.size.width);
+
+        match border_paint {
+            PaintRef::Color(rgba) => {
+                element.border = rgba.pack_u32();
+            },
+            PaintRef::Image(_image_ref) => {
+                todo!("not implemented yet")
+            },
+        }
+
+        let vertices = match background_paint {
+            PaintRef::Color(rgba) => {
+                element.background = rgba.pack_u32();
+                Vertices::new(
+                    rect,
+                    Uv {
+                        min_x: 0.,
+                        min_y: 0.,
+                        max_x: 1.,
+                        max_y: 1.,
+                    },
+                    self.size,
+                    self.elements.len() as _,
+                    0,
+                )
+            },
+            PaintRef::Image(image_ref) => {
+                let uv = self.atlas.append(image_ref).unwrap();
+                Vertices::new(rect, uv, self.size, self.elements.len() as _, 1)
+            }
+        };
+
+        let indices = Indices::new(self.elements.len() as _);
+
+        self.indices.extend_from_slice(indices.as_slice());
+        self.vertices.extend_from_slice(vertices.as_slice());
+        self.transforms.push(transform);
+        self.elements.push(element);
     }
 }

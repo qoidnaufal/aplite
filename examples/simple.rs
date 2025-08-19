@@ -56,7 +56,7 @@ fn simple() -> impl IntoView {
         .child(button)
         .child(circle)
         .align_h(AlignH::Center)
-        .padding(Padding::splat(20.0))
+        .padding(Padding::splat(20))
 }
 
 fn main() -> ApliteResult {

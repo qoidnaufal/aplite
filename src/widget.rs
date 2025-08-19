@@ -73,7 +73,7 @@ pub trait Widget {
                 }
 
                 this.rect.y = cx.next_pos.y;
-                cx.next_pos.y += cx.rules.spacing + size.height;
+                cx.next_pos.y += cx.rules.spacing as f32 + size.height;
             },
             Orientation::Horizontal => {
                 match cx.rules.align_v {
@@ -82,7 +82,7 @@ pub trait Widget {
                 }
 
                 this.rect.x = cx.next_pos.x;
-                cx.next_pos.x += cx.rules.spacing + size.width;
+                cx.next_pos.x += cx.rules.spacing as f32 + size.width;
             },
         }
 
@@ -200,7 +200,7 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn spacing(self, val: f32) -> Self {
+    fn spacing(self, val: u8) -> Self {
         self.node_ref()
             .upgrade()
             .borrow_mut()
