@@ -7,18 +7,18 @@ pub(crate) mod color;
 pub(crate) mod image_data;
 
 pub enum Paint {
-    Color(Rgba<u8>),
+    Color(Rgba),
     Image(ImageData),
     // TODO: Gradient,
 }
 
 pub enum PaintRef<'a> {
-    Color(&'a Rgba<u8>),
+    Color(&'a Rgba),
     Image(ImageRef),
 }
 
 impl Paint {
-    pub fn from_color(color: Rgba<u8>) -> Self {
+    pub fn from_color(color: Rgba) -> Self {
         Self::Color(color)
     }
 
@@ -60,8 +60,8 @@ impl PartialEq for Paint {
     }
 }
 
-impl From<Rgba<u8>> for Paint {
-    fn from(rgba: Rgba<u8>) -> Self {
+impl From<Rgba> for Paint {
+    fn from(rgba: Rgba) -> Self {
         Self::Color(rgba)
     }
 }

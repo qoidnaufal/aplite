@@ -18,7 +18,7 @@ pub use vector::{vec2f, vec2u};
 pub use shapes::{Rect, Circle, RoundedRect};
 
 pub use paint::color::Rgba;
-pub use paint::color::{rgba_u8, rgba_f32, rgba_hex};
+pub use paint::color::{rgba8, rgba32, rgba_hex};
 
 pub use paint::{Paint, PaintRef};
 pub use paint::image_data::{ImageData, ImageRef};

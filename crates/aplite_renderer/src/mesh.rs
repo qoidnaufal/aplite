@@ -11,7 +11,7 @@ pub(crate) struct MeshBuffer {
 impl MeshBuffer {
     pub(crate) fn new(device: &wgpu::Device) -> Self {
         Self {
-            indices: Buffer::new(device, 1024 * 6, wgpu::BufferUsages::INDEX),
+            indices: Buffer::new(device, 1024 * 4, wgpu::BufferUsages::INDEX),
             vertices: Buffer::new(device, 1024 * 4, wgpu::BufferUsages::VERTEX),
             offset: 0,
         }
@@ -56,7 +56,7 @@ impl MeshBuffer {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Indices([u32; 6]);
+pub(crate) struct Indices([u32; 4]);
 
 #[derive(Clone, Copy)]
 pub struct Vertices([Vertex; 4]);
@@ -74,12 +74,10 @@ impl Indices {
     #[inline(always)]
     pub(crate) const fn new(offset: u32) -> Self {
         Self([
-            0 + offset * 4,
             1 + offset * 4,
             2 + offset * 4,
-            2 + offset * 4,
-            3 + offset * 4,
             0 + offset * 4,
+            3 + offset * 4,
         ])
     }
 

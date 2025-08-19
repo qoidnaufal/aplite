@@ -37,7 +37,7 @@ pub trait Widget {
     fn draw(&self, scene: &mut Scene) {
         let node = self.node_ref().upgrade();
 
-        if !node.borrow().hide {
+        if !node.borrow().is_hidden() {
             let state = node.borrow();
 
             scene.draw(
@@ -60,7 +60,7 @@ pub trait Widget {
 
     fn layout(&self, cx: &mut LayoutCx) -> bool {
         let node = self.node_ref().upgrade();
-        if node.borrow().hide { return false }
+        if node.borrow().is_hidden() { return false }
 
         let size = node.borrow().rect.size();
         let mut this = node.borrow_mut();
@@ -127,7 +127,7 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn color(self, color: Rgba<u8>) -> Self {
+    fn color(self, color: Rgba) -> Self {
         self.node_ref()
             .upgrade()
             .borrow_mut()
@@ -136,7 +136,7 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn border_color(self, color: Rgba<u8>) -> Self {
+    fn border_color(self, color: Rgba) -> Self {
         self.node_ref()
             .upgrade()
             .borrow_mut()
@@ -145,12 +145,12 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn hover_color(self, color: Rgba<u8>) -> Self {
+    fn hover_color(self, color: Rgba) -> Self {
         let _ = color;
         self
     }
 
-    fn click_color(self, color: Rgba<u8>) -> Self {
+    fn click_color(self, color: Rgba) -> Self {
         let _ = color;
         self
     }
@@ -194,8 +194,8 @@ pub trait WidgetExt: Widget + Sized {
     fn dragable(self) -> Self {
         let node = self.node_ref().upgrade();
         let mut node = node.borrow_mut();
-        node.dragable = true;
-        node.hoverable = true;
+        node.set_dragable(true);
+        node.set_hoverable(true);
 
         self
     }

@@ -106,7 +106,7 @@ pub(crate) trait Layout: Widget + Sized + 'static {
 
     fn calculate_size(&self, parent: Option<&dyn Widget>) -> Size {
         let node = self.node_ref().upgrade();
-        if node.borrow().hide { return Size::default() }
+        if node.borrow().is_hidden() { return Size::default() }
 
         let state = node.borrow();
         let padding = state.padding;
@@ -119,7 +119,7 @@ pub(crate) trait Layout: Widget + Sized + 'static {
 
             children
                 .iter()
-                .filter(|child| !child.node_ref().upgrade().borrow().hide)
+                .filter(|child| !child.node_ref().upgrade().borrow().is_hidden())
                 .enumerate()
                 .for_each(|(i, child)| {
                     let child_size = child.calculate_size(Some(self));
@@ -182,7 +182,10 @@ pub(crate) trait Layout: Widget + Sized + 'static {
     }
 
     fn mouse_hover(&self, cursor: &Cursor) -> Option<*const dyn Widget> {
-        if self.node_ref().upgrade().borrow().hide { return None }
+        let node = self.node_ref().upgrade();
+
+        let is_hidden = node.borrow().is_hidden();
+        if is_hidden { return None }
 
         if let Some(children) = self.children_ref() {
             let hovered = children.iter()
@@ -193,9 +196,8 @@ pub(crate) trait Layout: Widget + Sized + 'static {
             }
         }
 
-        self.node_ref()
-            .upgrade()
-            .borrow()
+        if !node.borrow().is_hoverable() { return None }
+        node.borrow()
             .rect
             .contains(cursor.hover.pos)
             .then_some(self as *const dyn Widget)

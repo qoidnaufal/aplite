@@ -32,7 +32,7 @@ impl RoundedRect {
     }
 
     #[inline(always)]
-    pub const fn from_rect_radius_splat(rect: Rect, radius: f32) -> Self {
+    pub const fn from_rect_radius_splat(rect: Rect, radius: u8) -> Self {
         Self::from_rect_radius(rect, CornerRadius::splat(radius))
     }
 
@@ -75,13 +75,13 @@ impl RoundedRect {
     }
 
     #[inline(always)]
-    pub const fn set_radius_all(&mut self, val: f32) {
+    pub const fn set_radius_all(&mut self, val: u8) {
         self.radius.set_all(val)
     }
 
     /// set each corner radius in counter clockwise direction starting from top left
     #[inline(always)]
-    pub const fn set_radius_each(&mut self, tl: f32, bl: f32, br: f32, tr: f32) {
+    pub const fn set_radius_each(&mut self, tl: u8, bl: u8, br: u8, tr: u8) {
         self.radius.set_each(tl, bl, br, tr)
     }
 }

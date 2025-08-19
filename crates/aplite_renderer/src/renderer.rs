@@ -222,10 +222,7 @@ impl Renderer {
         pass.set_bind_group(2, &self.atlas.bind_group, &[]);
         pass.set_bind_group(3, &self.sampler.bind_group, &[]);
 
-        // let size = window.inner_size();
-        // pass.set_scissor_rect(0, 0, size.width, size.height);
-
-        pass.draw_indexed(0..self.mesh[self.current].offset as u32 * 6, 0, 0..1);
+        pass.draw_indexed(0..self.mesh[self.current].offset as u32 * 4, 0, 0..1);
 
         drop(pass);
 
@@ -265,14 +262,16 @@ impl Scene<'_> {
 
         match border_paint {
             PaintRef::Color(rgba) => {
-                element.border = rgba.f32();
+                element.border = rgba.pack_u32();
             },
-            PaintRef::Image(_image_ref) => {},
+            PaintRef::Image(_image_ref) => {
+                todo!("not implemented yet")
+            },
         }
 
         let atlas_id = match background_paint {
             PaintRef::Color(rgba) => {
-                element.background = rgba.f32();
+                element.background = rgba.pack_u32();
                 None
             },
             PaintRef::Image(image_ref) => self.atlas.append(image_ref)
@@ -301,7 +300,7 @@ impl Scene<'_> {
 
         self.mesh
             .indices
-            .write(self.device, self.queue, offset * 6, indices.as_slice());
+            .write(self.device, self.queue, offset * 4, indices.as_slice());
         self.mesh
             .vertices
             .write(self.device, self.queue, offset * 4, vertices.as_slice());
@@ -358,10 +357,16 @@ impl Pipeline {
                 buffers,
             },
             primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
+                // WARN: this enable more efficient use of data,
+                // but there's a drawback when two vertices' end point are "connected"
+                // there are two solution to this:
+                // - sort, but surely this is slow
+                // - fix matrix transformation
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
                 front_face: wgpu::FrontFace::Ccw,
                 cull_mode: Some(wgpu::Face::Back),
                 polygon_mode: wgpu::PolygonMode::Fill,
+                strip_index_format: Some(wgpu::IndexFormat::Uint32),
                 ..Default::default()
             },
             multisample: wgpu::MultisampleState {

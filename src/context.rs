@@ -129,7 +129,7 @@ impl Context {
     pub(crate) fn handle_drag(&mut self) {
         if let Some(captured) = self.cursor.click.captured {
             let node = captured.node_ref().upgrade();
-            let dragable = node.borrow().dragable;
+            let dragable = node.borrow().is_dragable();
 
             if self.cursor.is_dragging() && dragable {
                 self.cursor.is_dragging = true;

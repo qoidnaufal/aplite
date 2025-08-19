@@ -54,9 +54,7 @@ pub struct WidgetState {
     pub(crate) border_width: f32,
     pub(crate) background_paint: Paint,
     pub(crate) border_paint: Paint,
-    pub(crate) dragable: bool,
-    pub(crate) hoverable: bool,
-    pub(crate) hide: bool,
+    hover_drag_hide: u8,
 }
 
 impl std::fmt::Debug for WidgetState {
@@ -83,14 +81,12 @@ impl Default for WidgetState {
             // z_index: 0,
             padding: Padding::default(),
             image_aspect_ratio: AspectRatio::Undefined,
-            dragable: false,
-            hoverable: false,
             shape: Shape::Rect,
-            corner_radius: CornerRadius::splat(0.0),
+            corner_radius: CornerRadius::splat(0),
             background_paint: Paint::Color(Rgba::RED),
             border_paint: Paint::Color(Rgba::WHITE),
             border_width: 0.0,
-            hide: false,
+            hover_drag_hide: 0,
         }
     }
 }
@@ -105,6 +101,71 @@ impl WidgetState {
             border_paint: Paint::Color(Rgba::TRANSPARENT),
             ..Default::default()
         }
+    }
+
+    #[inline(always)]
+    pub(crate) fn is_hoverable(&self) -> bool {
+        self.hover_drag_hide >> 2 == 1
+    }
+
+    #[inline(always)]
+    pub(crate) fn is_dragable(&self) -> bool {
+        self.hover_drag_hide >> 1 & 0b1 == 1
+    }
+
+    #[inline(always)]
+    pub(crate) fn is_hidden(&self) -> bool {
+        self.hover_drag_hide & 0b001 == 1
+    }
+
+    #[inline(always)]
+    pub(crate) fn set_hoverable(&mut self, hoverable: bool) {
+        if hoverable {
+            self.hover_drag_hide |= 1 << 2;
+        } else {
+            self.hover_drag_hide = 0 << 2
+                | (self.hover_drag_hide >> 1 & 0b001) << 1
+                | (self.hover_drag_hide & 0b1);
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn set_dragable(&mut self, dragable: bool) {
+        if dragable {
+            self.hover_drag_hide |= 1 << 1;
+        } else {
+            self.hover_drag_hide = (self.hover_drag_hide >> 2) << 2
+                | 0 << 1
+                | self.hover_drag_hide & 0b001;
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn set_hidden(&mut self, hidden: bool) {
+        if hidden {
+            self.hover_drag_hide |= 1;
+        } else {
+            self.hover_drag_hide = (self.hover_drag_hide >> 1) << 1 | 0b0;
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn toggle_hoverable(&mut self) {
+        self.hover_drag_hide = (!(self.hover_drag_hide >> 2) & 0b1) << 2
+            | (self.hover_drag_hide >> 1 & 0b001) << 1
+            | (self.hover_drag_hide & 0b1);
+    }
+
+    #[inline(always)]
+    pub(crate) fn toggle_draggable(&mut self) {
+        self.hover_drag_hide = (self.hover_drag_hide >> 2) << 2
+            | (!(self.hover_drag_hide >> 1) & 0b1) << 1
+            | self.hover_drag_hide & 0b001;
+    }
+
+    #[inline(always)]
+    pub(crate) fn toggle_hidden(&mut self) {
+        self.hover_drag_hide &= !(self.hover_drag_hide & 0b1);
     }
 }
 
@@ -269,19 +330,19 @@ impl NodeRef {
 
     pub fn hoverable(self) -> Self {
         if let Some(state) = self.try_upgrade() {
-            state.borrow_mut().hoverable = true;
+            state.borrow_mut().set_hoverable(true);
         }
         self
     }
 
-    pub fn set_color(&self, color: Rgba<u8>) {
+    pub fn set_color(&self, color: Rgba) {
         if let Some(node) = self.try_upgrade() {
             node.borrow_mut().background_paint = color.into();
             self.signal.update_untracked(|vec| vec.push(Event::Paint));
         }
     }
 
-    pub fn set_border_color(&self, border_color: Rgba<u8>) {
+    pub fn set_border_color(&self, border_color: Rgba) {
         if let Some(node) = self.try_upgrade() {
             node.borrow_mut().background_paint = border_color.into();
             self.signal.update_untracked(|vec| vec.push(Event::Paint));
@@ -327,11 +388,33 @@ impl NodeRef {
         }
     }
 
+    pub fn toggle_hoverable(&self) {
+        if let Some(node) = self.try_upgrade() {
+            node.borrow_mut().toggle_hoverable();
+        }
+    }
+
+    pub fn toggle_dragable(&self) {
+        if let Some(node) = self.try_upgrade() {
+            node.borrow_mut().toggle_draggable();
+        }
+    }
+
     pub fn hide(&self, val: bool) {
         if let Some(node) = self.try_upgrade() {
-            let prev = node.borrow().hide;
-            node.borrow_mut().hide = val;
+            let prev = node.borrow().is_hidden();
+            node.borrow_mut().set_hidden(val);
             if prev != val {
+                self.signal.update_untracked(|vec| vec.push(Event::Layout));
+            }
+        }
+    }
+
+    pub fn toggle_hidden(&self) {
+        if let Some(node) = self.try_upgrade() {
+            let prev = node.borrow().is_hidden();
+            node.borrow_mut().toggle_hidden();
+            if prev != node.borrow().is_hidden() {
                 self.signal.update_untracked(|vec| vec.push(Event::Layout));
             }
         }

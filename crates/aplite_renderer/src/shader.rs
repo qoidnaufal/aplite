@@ -10,27 +10,43 @@ pub(crate) fn render<'a>() -> std::borrow::Cow<'a, str> {
 pub const VERTEX: &str = r"
 @group(0) @binding(0) var<uniform> screen_t: mat3x2f;
 
-struct Radius {
+struct Corners {
     top_left: f32,
     bot_left: f32,
     bot_right: f32,
     top_right: f32,
 }
 
-fn scale_radius(r: Radius, ew: f32) -> Radius {
-    var ret: Radius;
-    ret.top_left = (r.top_left * ew / (100.0 * 2.0));
-    ret.bot_left = (r.bot_left * ew / (100.0 * 2.0));
-    ret.bot_right = (r.bot_right * ew / (100.0 * 2.0));
-    ret.top_right = (r.top_right * ew / (100.0 * 2.0));
+fn unpack_corners(val: u32, ew: f32) -> Corners {
+    var ret: Corners;
+
+    let top_left = f32(val >> 24);
+    let bot_left = f32((val >> 16) & 0xFF);
+    let bot_right = f32((val >> 8) & 0xFF);
+    let top_right = f32(val & 0xFF);
+
+    ret.top_left = (top_left * ew / (100.0 * 2.0));
+    ret.bot_left = (bot_left * ew / (100.0 * 2.0));
+    ret.bot_right = (bot_right * ew / (100.0 * 2.0));
+    ret.top_right = (top_right * ew / (100.0 * 2.0));
+
     return ret;
 }
 
+fn unpack_color(val: u32) -> vec4<f32> {
+    let r = f32(val >> 24) / 255.0;
+    let g = f32((val >> 16) & 0xFF) / 255.0;
+    let b = f32((val >> 8) & 0xFF) / 255.0;
+    let a = f32(val & 0xFF) / 255.0;
+
+    return vec4f(r, g, b, a);
+}
+
 struct Element {
-    background: vec4<f32>,
-    border: vec4<f32>,
-    radius: Radius,
     size: vec2<f32>,
+    background: u32,
+    border: u32,
+    corners: u32,
     shape: u32,
     border_width: f32,
 }
@@ -87,7 +103,7 @@ fn sdRect(p: vec2f, b: vec2f) -> f32 {
     return length(max(d, vec2f(0.))) + min(max(d.x, d.y), 0.);
 }
 
-fn sdRoundedRect(p: vec2<f32>, b: vec2<f32>, r: Radius) -> f32 {
+fn sdRoundedRect(p: vec2<f32>, b: vec2<f32>, r: Corners) -> f32 {
     var x = r.top_left;
     var y = r.bot_left;
     x = select(r.bot_left, r.bot_right, p.x > 0.);
@@ -123,7 +139,7 @@ fn sdf(uv: vec2<f32>, element: Element) -> f32 {
         case 2u: {
             let p = uv * size;
             let b = size - border_width;
-            let r = scale_radius(element.radius, size.x);
+            let r = unpack_corners(element.corners, size.x);
             return sdRoundedRect(p, b, r);
         }
         default: { return -1.0; }
@@ -146,8 +162,10 @@ fn fs_main(in: FragmentPayload) -> @location(0) vec4<f32> {
     let sdf = sdf(in.uv, element);
     let blend = 1.0 - smoothstep(0.0, element.border_width, abs(sdf));
 
-    let color = select(vec4f(0.0), element.background, sdf < 0.0);
-    return mix(color, element.border, blend);
+    let background_color = unpack_color(element.background);
+    let border_color = unpack_color(element.border);
+    let color = select(vec4f(0.0), background_color, sdf < 0.0);
+    return mix(color, border_color, blend);
 }
 ";
 
