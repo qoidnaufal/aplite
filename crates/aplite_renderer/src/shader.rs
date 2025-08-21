@@ -40,6 +40,7 @@ fn unpack_color(val: u32) -> vec4<f32> {
     let a = f32(val & 0xFF) / 255.0;
 
     return vec4f(r, g, b, a);
+    // return unpack4x8unorm(val);
 }
 
 struct Element {

@@ -156,8 +156,6 @@ impl Renderer {
         if self.mesh.offset == 0 { return }
 
         if self.bundle.is_none() || self.mesh.offset != self.offset {
-            let buffers = &[MeshBuffer::vertice_layout()];
-
             let bind_group_layouts = &[
                 &Screen::bind_group_layout(&self.device),
                 &StorageBuffers::bind_group_layout(&self.device),
@@ -168,17 +166,12 @@ impl Renderer {
             let pipeline = Pipeline::new_render_pipeline(
                 &self.device,
                 self.config.format,
-                buffers,
+                &[MeshBuffer::vertice_layout()],
                 bind_group_layouts
             );
 
-            let bundle_encoder = self.encode(pipeline.get_render_pipeline());
-
-            let bundle_desc = wgpu::RenderBundleDescriptor {
-                label: Some("render bundle"),
-            };
-
-            let render_bundle = bundle_encoder.finish(&bundle_desc);
+            let bundle_encoder = self.encode(&pipeline);
+            let render_bundle = bundle_encoder.finish(&Default::default());
             self.bundle = Some(render_bundle);
         }
 
@@ -187,26 +180,15 @@ impl Renderer {
 
         let desc = wgpu::RenderPassColorAttachment {
             view: &view,
-            resolve_target: None,
             ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(
-                    wgpu::Color {
-                        r: 0.0,
-                        g: 0.0,
-                        b: 0.0,
-                        a: 0.0,
-                    }
-                ),
+                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                 store: wgpu::StoreOp::Store,
             },
+            resolve_target: None,
             depth_slice: None,
         };
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(
-                &wgpu::CommandEncoderDescriptor { label: Some("encoder") }
-            );
+        let mut encoder = self.device.create_command_encoder(&Default::default());
 
         self.atlas.update(&self.device, &mut encoder);
 
@@ -333,17 +315,22 @@ impl Scene<'_> {
         self.mesh.offset += 1;
     }
 
+    pub fn skip(&mut self) {
+        self.mesh.offset += 1;
+    }
+
     pub fn size(&self) -> Size {
         self.size
     }
 }
 
-pub(crate) enum Pipeline {
-    Render(wgpu::RenderPipeline),
-    #[allow(unused)]
-    // TODO: this is deep & complex topic, but nevertheless an interesting one to study
-    Compute(wgpu::ComputePipeline),
-}
+// pub(crate) enum Pipeline {
+//     Render(wgpu::RenderPipeline),
+//     // TODO: this is deep & complex topic, but nevertheless an interesting one to study
+//     Compute(wgpu::ComputePipeline),
+// }
+
+struct Pipeline;
 
 impl Pipeline {
     pub(crate) fn new_render_pipeline(
@@ -351,7 +338,7 @@ impl Pipeline {
         format: wgpu::TextureFormat,
         buffers: &[wgpu::VertexBufferLayout<'_>],
         bind_group_layouts: &[&wgpu::BindGroupLayout],
-    ) -> Self {
+    ) -> wgpu::RenderPipeline {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("shader"), source: wgpu::ShaderSource::Wgsl(crate::shader::render())
         });
@@ -405,15 +392,15 @@ impl Pipeline {
             cache: None,
         });
 
-        Self::Render(pipeline)
+        pipeline
     }
 
-    pub(crate) fn get_render_pipeline(&self) -> &wgpu::RenderPipeline {
-        match self {
-            Pipeline::Render(render_pipeline) => render_pipeline,
-            Pipeline::Compute(_) => panic!("expected render pipeline, get a compute instead"),
-        }
-    }
+    // pub(crate) fn get_render_pipeline(&self) -> &wgpu::RenderPipeline {
+    //     match self {
+    //         Pipeline::Render(render_pipeline) => render_pipeline,
+    //         Pipeline::Compute(_) => panic!("expected render pipeline, get a compute instead"),
+    //     }
+    // }
 }
 
 #[inline]

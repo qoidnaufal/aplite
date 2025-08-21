@@ -29,7 +29,7 @@ pub(crate) struct WindowHandle {
 pub struct Aplite {
     cx: Context,
     renderer: Option<Renderer>,
-    window: HashMap<WindowId, WindowHandle>,
+    window_handle: HashMap<WindowId, WindowHandle>,
     pending_views: Option<Box<dyn FnOnce(WindowId) -> Box<dyn IntoView>>>,
     window_attributes_fn: Option<fn(&mut WindowAttributes)>,
 
@@ -49,7 +49,7 @@ impl Aplite {
         Self {
             renderer: None,
             cx: Context::default(),
-            window: HashMap::with_capacity(4),
+            window_handle: HashMap::with_capacity(4),
             window_attributes_fn: None,
             pending_views: None,
 
@@ -124,7 +124,7 @@ impl Aplite {
             window,
             root_id,
         };
-        self.window.insert(window_id, window_handle);
+        self.window_handle.insert(window_id, window_handle);
 
         Ok(())
     }
@@ -159,7 +159,7 @@ impl Aplite {
 
     fn handle_mouse_move(&mut self, window_id: &WindowId, pos: PhysicalPosition<f64>) {
         if let Some(renderer) = self.renderer.as_mut()
-            && let Some(WindowHandle { root_id, .. }) = self.window.get(window_id)
+            && let Some(WindowHandle { root_id, .. }) = self.window_handle.get(window_id)
         {
             let logical_pos = pos.to_logical::<f32>(renderer.scale_factor());
             self.cx.handle_mouse_move(root_id, (logical_pos.x, logical_pos.y));
@@ -171,7 +171,7 @@ impl Aplite {
     }
 
     fn handle_close_request(&mut self, window_id: &WindowId, event_loop: &ActiveEventLoop) {
-        if let Some(window) = self.window.remove(window_id) {
+        if let Some(window) = self.window_handle.remove(window_id) {
             drop(window);
             event_loop.exit();
         }
@@ -179,7 +179,7 @@ impl Aplite {
 
     // WARN: not sure if retained mode works like this
     fn handle_redraw_request(&mut self, window_id: &WindowId, _: &ActiveEventLoop) {
-        if let Some(window_handle) = self.window.get(window_id)
+        if let Some(window_handle) = self.window_handle.get(window_id)
             && let Some(renderer) = self.renderer.as_mut()
         {
             #[cfg(feature = "render_stats")] let start = std::time::Instant::now();
@@ -215,11 +215,8 @@ impl ApplicationHandler for Aplite {
             _ => {}
         }
 
-        if let Some(renderer) = self.renderer.as_ref()
-            && let Some(handle) = self.window.get(&window_id)
-        {
-            let root_id = handle.root_id;
-            self.cx.process_pending_update(root_id, renderer.screen_res());
+        if let Some(handle) = self.window_handle.get(&window_id) {
+            self.cx.process_pending_update(&handle.root_id);
         }
     }
 }

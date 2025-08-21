@@ -39,12 +39,12 @@ impl Widget for VStack {
         self.node.clone()
     }
 
-    fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
-        Some(&self.children)
+    fn children_ref(&self) -> Option<super::ChildrenRef<'_>> {
+        Some((&self.children).into())
     }
 
-    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
-        Some(&mut self.children)
+    fn children_mut(&mut self) -> Option<super::ChildrenMut<'_>> {
+        Some((&mut self.children).into())
     }
 }
 
@@ -75,11 +75,11 @@ impl Widget for HStack {
         self.node.clone()
     }
 
-    fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
-        Some(&self.children)
+    fn children_ref(&self) -> Option<super::ChildrenRef<'_>> {
+        Some((&self.children).into())
     }
 
-    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
-        Some(&mut self.children)
+    fn children_mut(&mut self) -> Option<super::ChildrenMut<'_>> {
+        Some((&mut self.children).into())
     }
 }

@@ -1,7 +1,7 @@
 use aplite_types::Size;
 
-use crate::widget::Widget;
-use crate::state::{NodeRef, AspectRatio};
+use crate::widget::{Widget, ChildrenRef, ChildrenMut};
+use crate::state::{NodeRef, WidgetId, AspectRatio};
 use crate::layout::*;
 use crate::cursor::Cursor;
 
@@ -26,6 +26,61 @@ impl View {
             inner: Box::new(widget),
         }
     }
+
+    pub(crate) fn find_parent(&self, id: &WidgetId) -> Option<*const dyn Widget> {
+        if let Some(children) = self.inner.children_ref()
+            && children
+                .iter()
+                .any(|w| w.id() == id)
+        {
+            return Some(self)
+        }
+
+        let mut current: *const dyn Widget = self;
+
+        while let Some(children) = current.children_ref() {
+            if children.iter().any(|child| child.id() == id) { break }
+            for child in children
+                .iter()
+                .map(|child| child.as_ref() as *const dyn Widget)
+                .collect::<Vec<_>>()
+            {
+                current = child;
+            }
+        }
+
+        Some(current)
+    }
+
+    // fn find(&self, id: &WidgetId) -> Option<*const dyn Widget> {
+    //     if self.id() == id {
+    //         return Some(self)
+    //     }
+
+    //     self.children_ref().and_then(|vec| {
+    //         vec.iter().find_map(|w| w.find(id))
+    //     })
+    // }
+
+    // fn insert<T: Widget + 'static>(&mut self, parent: &WidgetId, widget: T) {
+    //     if let Some(mut p) = self.find_mut(parent)
+    //         && let Some(vec) = p.children_mut()
+    //     {
+    //         vec.push(Box::new(widget));
+    //     }
+    // }
+
+    // fn remove(&mut self, id: &WidgetId) -> Option<Box<dyn Widget>> {
+    //     self.parent_mut(id)
+    //         .and_then(|mut parent| {
+    //             parent.children_mut()
+    //                 .and_then(|children| {
+    //                     children.iter()
+    //                         .position(|w| w.id() == id)
+    //                         .map(|index| children.remove(index))
+    //                 })
+    //         })
+    // }
 }
 
 impl Widget for View {
@@ -33,11 +88,11 @@ impl Widget for View {
         self.inner.node_ref()
     }
 
-    fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
+    fn children_ref(&self) -> Option<ChildrenRef<'_>> {
         self.inner.children_ref()
     }
 
-    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
+    fn children_mut(&mut self) -> Option<ChildrenMut<'_>> {
         self.inner.children_mut()
     }
 }
@@ -47,11 +102,11 @@ impl Widget for Box<dyn IntoView> {
         self.as_ref().node_ref()
     }
 
-    fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
+    fn children_ref(&self) -> Option<ChildrenRef<'_>> {
         self.as_ref().children_ref()
     }
 
-    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
+    fn children_mut(&mut self) -> Option<ChildrenMut<'_>> {
         self.as_mut().children_mut()
     }
 }
@@ -71,7 +126,7 @@ impl std::fmt::Debug for &dyn Widget {
 
         f.debug_struct(name)
             .field("id", &self.id())
-            .field("children", &self.children_ref().unwrap_or(&vec![]))
+            .field("children", &self.children_ref().unwrap_or(ChildrenRef::from(&vec![])))
             .finish()
     }
 }
@@ -85,7 +140,7 @@ impl std::fmt::Debug for Box<dyn IntoView> {
 
         f.debug_struct(name)
             .field("id", &self.id())
-            .field("children", &self.children_ref().unwrap_or(&vec![]))
+            .field("children", &self.children_ref().unwrap_or(ChildrenRef::from(&vec![])))
             .finish()
     }
 }
@@ -106,7 +161,7 @@ pub(crate) trait Layout: Widget + Sized + 'static {
 
     fn calculate_size(&self, parent: Option<&dyn Widget>) -> Size {
         let node = self.node_ref().upgrade();
-        if node.borrow().is_hidden() { return Size::default() }
+        if node.borrow().flag.is_hidden() { return Size::default() }
 
         let state = node.borrow();
         let padding = state.padding;
@@ -119,7 +174,7 @@ pub(crate) trait Layout: Widget + Sized + 'static {
 
             children
                 .iter()
-                .filter(|child| !child.node_ref().upgrade().borrow().is_hidden())
+                .filter(|child| !child.node_ref().upgrade().borrow().flag.is_hidden())
                 .enumerate()
                 .for_each(|(i, child)| {
                     let child_size = child.calculate_size(Some(self));
@@ -173,10 +228,13 @@ pub(crate) trait Layout: Widget + Sized + 'static {
             }
         }
 
+        if state.rect.size() == size { return size }
+
         drop(state);
 
         let mut state = node.borrow_mut();
         state.rect.set_size(size);
+        state.flag.set_dirty(true);
 
         size
     }
@@ -184,7 +242,7 @@ pub(crate) trait Layout: Widget + Sized + 'static {
     fn mouse_hover(&self, cursor: &Cursor) -> Option<*const dyn Widget> {
         let node = self.node_ref().upgrade();
 
-        let is_hidden = node.borrow().is_hidden();
+        let is_hidden = node.borrow().flag.is_hidden();
         if is_hidden { return None }
 
         if let Some(children) = self.children_ref() {
@@ -196,67 +254,12 @@ pub(crate) trait Layout: Widget + Sized + 'static {
             }
         }
 
-        if !node.borrow().is_hoverable() { return None }
+        if !node.borrow().flag.is_hoverable() { return None }
         node.borrow()
             .rect
             .contains(cursor.hover.pos)
             .then_some(self as *const dyn Widget)
     }
-
-    // fn find(&self, id: &WidgetId) -> Option<Box<&dyn Widget>> {
-    //     if self.id() == id {
-    //         return Some(Box::new(self))
-    //     }
-
-    //     self.children_ref().and_then(|vec| {
-    //         vec.iter().find_map(|w| w.find(id))
-    //     })
-    // }
-
-    // fn find_mut(&mut self, id: &WidgetId) -> Option<Box<&mut dyn Widget>> {
-    //     if self.id() == id {
-    //         return Some(Box::new(self))
-    //     }
-    //     self.children_mut().and_then(|vec| {
-    //         vec.iter_mut().find_map(|w| w.find_mut(id))
-    //     })
-    // }
-
-    // fn parent_mut(&mut self, id: &WidgetId) -> Option<Box<&mut dyn Widget>> {
-    //     if let Some(children) = self.children_ref()
-    //         && children
-    //             .iter()
-    //             .any(|w| w.id() == id)
-    //     {
-    //         return Some(Box::new(self))
-    //     }
-
-    //     self.children_mut()
-    //         .and_then(|vec| {
-    //             vec.iter_mut()
-    //                 .find_map(|w| w.parent_mut(id))
-    //         })
-    // }
-
-    // fn remove(&mut self, id: &WidgetId) -> Option<Box<dyn Widget>> {
-    //     self.parent_mut(id)
-    //         .and_then(|mut parent| {
-    //             parent.children_mut()
-    //                 .and_then(|children| {
-    //                     children.iter()
-    //                         .position(|w| w.id() == id)
-    //                         .map(|index| children.remove(index))
-    //                 })
-    //         })
-    // }
-
-    // fn insert<T: Widget + 'static>(&mut self, parent: &WidgetId, widget: T) {
-    //     if let Some(mut p) = self.find_mut(parent)
-    //         && let Some(vec) = p.children_mut()
-    //     {
-    //         vec.push(Box::new(widget));
-    //     }
-    // }
 }
 
 #[cfg(test)]

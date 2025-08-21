@@ -22,7 +22,6 @@ macro_rules! entity {
         $vis struct $name(u32, u32);
 
         impl Entity for $name {
-            // not sure if this is a good idea to do this
             fn new(index: u32, version: u32) -> Self {
                 Self(index, version)
             }
@@ -50,8 +49,13 @@ macro_rules! entity {
 
         impl std::hash::Hash for $name {
             fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-                // state.write_u64(((self.1 as u64) << 32) | self.0 as u64);
                 state.write_u64(self.0 as u64);
+            }
+        }
+
+        impl PartialEq<&Self> for $name {
+            fn eq(&self, other: &&Self) -> bool {
+                self.0 == other.0 && self.1 == other.1
             }
         }
     };

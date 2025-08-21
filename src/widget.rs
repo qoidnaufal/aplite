@@ -18,6 +18,58 @@ pub use {
     stack::*,
 };
 
+pub struct ChildrenRef<'a>(&'a Vec<Box<dyn Widget>>);
+
+impl<'a> From<&'a Vec<Box<dyn Widget>>> for ChildrenRef<'a> {
+    fn from(value: &'a Vec<Box<dyn Widget>>) -> Self {
+        Self(value)
+    }
+}
+
+impl std::ops::Deref for ChildrenRef<'_> {
+    type Target = Vec<Box<dyn Widget>>;
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+impl std::fmt::Debug for ChildrenRef<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list()
+            .entry(self.0)
+            .finish()
+    }
+}
+
+pub struct ChildrenMut<'a>(&'a mut Vec<Box<dyn Widget>>);
+
+impl<'a> From<&'a mut Vec<Box<dyn Widget>>> for ChildrenMut<'a> {
+    fn from(value: &'a mut Vec<Box<dyn Widget>>) -> Self {
+        Self(value)
+    }
+}
+
+impl std::ops::Deref for ChildrenMut<'_> {
+    type Target = Vec<Box<dyn Widget>>;
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+impl std::ops::DerefMut for ChildrenMut<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0
+    }
+}
+
+impl std::fmt::Debug for ChildrenMut<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list()
+            .entry(self.0)
+            .finish()
+    }
+}
+
 /// main building block to create a renderable component
 pub trait Widget {
     fn node_ref(&self) -> NodeRef;
@@ -26,29 +78,34 @@ pub trait Widget {
         self.node_ref().id()
     }
 
-    fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
+    fn children_ref(&self) -> Option<ChildrenRef<'_>> {
         None
     }
 
-    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
+    fn children_mut(&mut self) -> Option<ChildrenMut<'_>> {
         None
     }
 
     fn draw(&self, scene: &mut Scene) {
         let node = self.node_ref().upgrade();
 
-        if !node.borrow().is_hidden() {
-            let state = node.borrow();
-
-            scene.draw(
-                &state.rect,
-                state.transform,
-                state.background_paint.as_paint_ref(),
-                state.border_paint.as_paint_ref(),
-                state.border_width.max(5.0),
-                state.shape,
-                &state.corner_radius,
-            );
+        if !node.borrow().flag.is_hidden() {
+            if node.borrow().flag.is_dirty() {
+                let state = node.borrow();
+                scene.draw(
+                    &state.rect,
+                    state.transform,
+                    state.background_paint.as_paint_ref(),
+                    state.border_paint.as_paint_ref(),
+                    state.border_width.max(5.0),
+                    state.shape,
+                    &state.corner_radius,
+                );
+                drop(state);
+                node.borrow_mut().flag.set_dirty(false);
+            } else {
+                scene.skip();
+            }
 
             if let Some(children) = self.children_ref() {
                 children
@@ -60,7 +117,7 @@ pub trait Widget {
 
     fn layout(&self, cx: &mut LayoutCx) -> bool {
         let node = self.node_ref().upgrade();
-        if node.borrow().is_hidden() { return false }
+        if node.borrow().flag.is_hidden() { return false }
 
         let size = node.borrow().rect.size();
         let mut this = node.borrow_mut();
@@ -86,6 +143,8 @@ pub trait Widget {
             },
         }
 
+        this.flag.set_dirty(true);
+
         true
     }
 }
@@ -93,7 +152,7 @@ pub trait Widget {
 // TODO: is immediately calculate the size here a good idea?
 pub trait WidgetExt: Widget + Sized {
     fn child(mut self, child: impl IntoView + 'static) -> Self {
-        if let Some(children) = self.children_mut() {
+        if let Some(mut children) = self.children_mut() {
             // let child_size = child.node().borrow().rect.size();
             children.push(Box::new(child));
         }
@@ -194,8 +253,8 @@ pub trait WidgetExt: Widget + Sized {
     fn dragable(self) -> Self {
         let node = self.node_ref().upgrade();
         let mut node = node.borrow_mut();
-        node.set_dragable(true);
-        node.set_hoverable(true);
+        node.flag.set_dragable(true);
+        node.flag.set_hoverable(true);
 
         self
     }
@@ -278,11 +337,11 @@ impl Widget for Box<dyn Widget> {
         self.as_ref().node_ref()
     }
 
-    fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
+    fn children_ref(&self) -> Option<ChildrenRef<'_>> {
         self.as_ref().children_ref()
     }
 
-    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
+    fn children_mut(&mut self) -> Option<ChildrenMut<'_>> {
         self.as_mut().children_mut()
     }
 }
@@ -292,11 +351,11 @@ impl Widget for Box<&mut dyn Widget> {
         self.as_ref().node_ref()
     }
 
-    fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
+    fn children_ref(&self) -> Option<ChildrenRef<'_>> {
         self.as_ref().children_ref()
     }
 
-    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
+    fn children_mut(&mut self) -> Option<ChildrenMut<'_>> {
         self.as_mut().children_mut()
     }
 }
@@ -308,13 +367,13 @@ impl Widget for *const dyn Widget {
         }
     }
 
-    fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
+    fn children_ref(&self) -> Option<ChildrenRef<'_>> {
         unsafe {
             self.as_ref().and_then(|w| w.children_ref())
         }
     }
 
-    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
+    fn children_mut(&mut self) -> Option<ChildrenMut<'_>> {
         unsafe {
             self.cast_mut()
                 .as_mut()
@@ -357,11 +416,6 @@ impl CallbackStore {
         self.0[event as usize].replace(callback)
     }
 
-    // #[allow(unused)]
-    // pub(crate) fn get(&self, event: WidgetEvent) -> Option<&Box<dyn FnMut()>> {
-    //     self.0[event as usize].as_ref()
-    // }
-
     pub(crate) fn get_mut(&mut self, event: WidgetEvent) -> Option<&mut Box<dyn FnMut()>> {
         self.0[event as usize].as_mut()
     }
@@ -388,12 +442,12 @@ impl Widget for WindowWidget {
         self.node.clone()
     }
 
-    fn children_ref(&self) -> Option<&Vec<Box<dyn Widget>>> {
-        Some(&self.children)
+    fn children_ref(&self) -> Option<ChildrenRef<'_>> {
+        Some((&self.children).into())
     }
 
-    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Widget>>> {
-        Some(&mut self.children)
+    fn children_mut(&mut self) -> Option<ChildrenMut<'_>> {
+        Some((&mut self.children).into())
     }
 }
 

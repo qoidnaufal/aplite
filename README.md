@@ -11,8 +11,15 @@ Most of the stuffs in here are written from scratch, which took a lot of inspira
 - [`kludgine`](https://github.com/khonsulabs/kludgine),
 - and many more.
 
-### Architecture
-WIP
+### Basic Architecture & Performance
+So far seems good, capable of rendering at 120 fps, with the help of `RenderBundle` and some (over?) complicated dirty state management.
+Not gonna lie, there are some usage of raw pointer to bypass `rustc`'s borrow checker though.
+Progress so far:
+- Font rendering is WIP.
+- Still learning about compute pass.
+- Not sure if rasterization is correct, seems like a mess to me, will find out when I work on font rendering.
+- Also not sure how to integrate dynamic texture (eg: video).
+- Transform is also a mess.
 
 ### Example
 Check the others on the [`examples`](./examples) folder.
@@ -33,7 +40,7 @@ fn simple() -> impl IntoView {
         .border_color(Rgba::WHITE)
         .color(rgba_hex("#104bcdbf"))
         .border_width(6.0)
-        .corner_radius(CornerRadius::splat(47.))
+        .corner_radius(CornerRadius::splat(47))
         .dragable()
         .size((200, 69))
         .on(LeftClick, click_count);
@@ -58,7 +65,7 @@ fn simple() -> impl IntoView {
         .child(button)
         .child(circle)
         .align_h(AlignH::Center)
-        .padding(Padding::splat(20.0))
+        .padding(Padding::splat(20))
 }
 
 fn get_color(val: u32) -> Rgba<u8> { /* ... */ }

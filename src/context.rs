@@ -1,43 +1,30 @@
-use std::sync::OnceLock;
-
 use aplite_reactive::*;
 use aplite_renderer::Renderer;
-use aplite_types::{Vec2f, Size, Rect};
+use aplite_types::Vec2f;
 use aplite_storage::{IndexMap, entity, Entity};
 
 use crate::view::{View, Layout};
-use crate::widget::{CALLBACKS, Widget, WidgetEvent, WindowWidget};
+use crate::widget::{CALLBACKS, Widget, WidgetEvent};
 use crate::cursor::{Cursor, MouseAction, MouseButton, EmittedClickEvent};
 use crate::layout::LayoutCx;
-
-pub(crate) static PENDING_EVENT: OnceLock<Signal<Vec<Event>>> = OnceLock::new();
+use crate::state::{WidgetId, NODE_STORAGE};
 
 entity! { pub ViewId }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum Event {
-    Layout,
-    Callback(*const dyn Widget),
-    Paint,
-}
-
-// FIXME: use this as the main building block to build the widget
 pub struct Context {
     view_storage: IndexMap<ViewId, View>,
     cursor: Cursor,
     dirty: Signal<bool>,
+    needs_layout: Vec<WidgetId>,
 }
 
 impl Default for Context {
     fn default() -> Self {
-        PENDING_EVENT
-            .set(Signal::new(Vec::with_capacity(16)))
-            .expect("Should only be initialized once");
-
         Self {
             view_storage: IndexMap::with_capacity(1024),
             cursor: Cursor::default(),
             dirty: Signal::new(false),
+            needs_layout: Vec::new(),
         }
     }
 }
@@ -65,38 +52,34 @@ impl Context {
         self.dirty.set(true);
     }
 
-    pub(crate) fn process_pending_update(&mut self, view_id: ViewId, size: Size) {
-        let pending_event = *PENDING_EVENT.get().expect("Pending event should have been initialized");
-        if pending_event.with_untracked(|vec| vec.is_empty()) { return }
-
-        pending_event.update_untracked(|vec| {
-            vec.drain(..).for_each(|event| {
-                match event {
-                    Event::Callback(widget) => {
-                        // let widget = unsafe { widget.as_ref().unwrap() };
-                        CALLBACKS.with(|cb| {
-                            if let Some(callbacks) = cb.borrow_mut().get_mut(&widget.id())
-                                && let MouseButton::Left = self.cursor.state.button
-                                && let Some(callback) = callbacks.get_mut(WidgetEvent::LeftClick)
-                            {
-                                callback();
-                            }
-                        })
-                    },
-                    Event::Layout => {
-                        if let Some(view) = self.view_storage.get(&view_id) {
-                                view.calculate_size(None);
-                                let window_widget = WindowWidget::new(Rect::from_size(size));
-                                let mut cx = LayoutCx::new(&window_widget);
-                                view.calculate_layout(&mut cx);
-                            }
-                    },
-                    _ => {},
-                }
-
-                self.toggle_dirty();
+    pub(crate) fn process_pending_update(&mut self, view_id: &ViewId) {
+        if let Some(view) = self.view_storage.get(view_id) {
+            NODE_STORAGE.with_borrow(|s| {
+                s.iter()
+                    .filter_map(|(id, state)| {
+                        let id = state.borrow().flag.needs_layout().then_some(id);
+                        state.borrow_mut().flag.set_needs_layout(false);
+                        id
+                    })
+                    .for_each(|id| self.needs_layout.push(id));
             });
-        });
+
+            if !self.needs_layout.is_empty() {
+                self.needs_layout
+                    .drain(..)
+                    .for_each(|id| {
+                        if let Some(widget) = view.find_parent(&id)
+                            && let Some(children) = widget.children_ref()
+                        {
+                            widget.calculate_size(None);
+                            let mut cx = LayoutCx::new(&widget);
+                            children.iter()
+                                .for_each(|child| child.calculate_layout(&mut cx));
+                        }
+                    });
+                self.toggle_dirty();
+            }
+        }
     }
 }
 
@@ -129,7 +112,7 @@ impl Context {
     pub(crate) fn handle_drag(&mut self) {
         if let Some(captured) = self.cursor.click.captured {
             let node = captured.node_ref().upgrade();
-            let dragable = node.borrow().is_dragable();
+            let dragable = node.borrow().flag.is_dragable();
 
             if self.cursor.is_dragging() && dragable {
                 self.cursor.is_dragging = true;
@@ -137,6 +120,7 @@ impl Context {
 
                 let mut state = node.borrow_mut();
                 state.rect.set_pos(pos.into());
+                state.flag.set_dirty(true);
 
                 drop(state);
 
@@ -164,9 +148,15 @@ impl Context {
                 self.cursor.click.offset = self.cursor.click.pos - pos;
             },
             EmittedClickEvent::TriggerCallback(widget) => {
-                let pending_event = *PENDING_EVENT.get()
-                    .expect("Pending event should have been initialized");
-                pending_event.update(|vec| vec.push(Event::Callback(widget)));
+                CALLBACKS.with_borrow_mut(|cb| {
+                    if let Some(callbacks) = cb.get_mut(&widget.id())
+                        && let MouseButton::Left = self.cursor.state.button
+                        && let Some(callback) = callbacks.get_mut(WidgetEvent::LeftClick)
+                    {
+                        callback();
+                        self.toggle_dirty();
+                    }
+                });
             },
             _ => {}
         }

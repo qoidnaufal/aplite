@@ -3,7 +3,6 @@ use std::cell::RefCell;
 
 use aplite_renderer::Shape;
 use aplite_storage::{IndexMap, Entity, entity};
-use aplite_reactive::*;
 use aplite_types::{
     Matrix3x2,
     Rect,
@@ -14,7 +13,6 @@ use aplite_types::{
 };
 
 use crate::layout::{AlignV, AlignH, Orientation, Padding};
-use crate::context::{Event, PENDING_EVENT};
 
 entity! {
     pub WidgetId
@@ -32,6 +30,108 @@ pub enum AspectRatio {
     Undefined,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct Flag(u8);
+
+impl Default for Flag {
+    fn default() -> Self {
+        Self(Self::DIRTY)
+    }
+}
+
+impl Flag {
+    const HIDE: u8 = 1;
+    const DRAGABLE: u8 = 2;
+    const HOVERABLE: u8 = 4;
+    const DIRTY: u8 = 8;
+    const NEEDS_LAYOUT: u8 = 16;
+
+    #[inline(always)]
+    pub(crate) fn is_hidden(&self) -> bool {
+        self.0 & Self::HIDE == Self::HIDE
+    }
+
+    #[inline(always)]
+    pub(crate) fn is_dragable(&self) -> bool {
+        self.0 & Self::DRAGABLE == Self::DRAGABLE
+    }
+
+    #[inline(always)]
+    pub(crate) fn is_hoverable(&self) -> bool {
+        self.0 & Self::HOVERABLE == Self::HOVERABLE
+    }
+
+    #[inline(always)]
+    pub(crate) fn is_dirty(&self) -> bool {
+        self.0 & Self::DIRTY == Self::DIRTY
+    }
+
+    #[inline(always)]
+    pub(crate) fn needs_layout(&self) -> bool {
+        self.0 & Self::NEEDS_LAYOUT == Self::NEEDS_LAYOUT
+    }
+
+    #[inline(always)]
+    pub(crate) fn toggle_hidden(&mut self) {
+        self.0 ^= Self::HIDE;
+    }
+
+    #[inline(always)]
+    pub(crate) fn toggle_draggable(&mut self) {
+        self.0 ^= Self::DRAGABLE;
+    }
+
+    #[inline(always)]
+    pub(crate) fn toggle_hoverable(&mut self) {
+        self.0 ^= Self::HOVERABLE;
+    }
+
+    #[inline(always)]
+    pub(crate) fn toggle_dirty(&mut self) {
+        self.0 ^= Self::DIRTY;
+    }
+
+    #[inline(always)]
+    pub(crate) fn toggle_needs_layout(&mut self) {
+        self.0 ^= Self::NEEDS_LAYOUT
+    }
+
+    #[inline(always)]
+    pub(crate) fn set_hidden(&mut self, hidden: bool) {
+        if self.is_hidden() ^ hidden {
+            self.toggle_hidden();
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn set_dragable(&mut self, dragable: bool) {
+        if self.is_dragable() ^ dragable {
+            self.toggle_draggable();
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn set_hoverable(&mut self, hoverable: bool) {
+        if self.is_hoverable() ^ hoverable {
+            self.toggle_hoverable();
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn set_dirty(&mut self, dirty: bool) {
+        if self.is_dirty() ^ dirty {
+            self.toggle_dirty();
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn set_needs_layout(&mut self, needs_layout: bool) {
+        if self.needs_layout() ^ needs_layout {
+            self.toggle_needs_layout();
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct WidgetState {
     pub(crate) name: &'static str,
@@ -47,14 +147,15 @@ pub struct WidgetState {
     pub(crate) orientation: Orientation,
     pub(crate) padding: Padding,
     pub(crate) spacing: u8,
-    // pub(crate) z_index: u32,
+    // pub(crate) z_index: u8,
     pub(crate) image_aspect_ratio: AspectRatio,
     pub(crate) shape: Shape,
     pub(crate) corner_radius: CornerRadius,
     pub(crate) border_width: f32,
     pub(crate) background_paint: Paint,
     pub(crate) border_paint: Paint,
-    hover_drag_hide: u8,
+    pub(crate) flag: Flag,
+    // pub(crate) update: Option<UpdateEvent>,
 }
 
 impl std::fmt::Debug for WidgetState {
@@ -86,7 +187,8 @@ impl Default for WidgetState {
             background_paint: Paint::Color(Rgba::RED),
             border_paint: Paint::Color(Rgba::WHITE),
             border_width: 0.0,
-            hover_drag_hide: 0,
+            flag: Flag::default(),
+            // update: None,
         }
     }
 }
@@ -102,79 +204,11 @@ impl WidgetState {
             ..Default::default()
         }
     }
-
-    #[inline(always)]
-    pub(crate) fn is_hoverable(&self) -> bool {
-        self.hover_drag_hide >> 2 == 1
-    }
-
-    #[inline(always)]
-    pub(crate) fn is_dragable(&self) -> bool {
-        self.hover_drag_hide >> 1 & 0b1 == 1
-    }
-
-    #[inline(always)]
-    pub(crate) fn is_hidden(&self) -> bool {
-        self.hover_drag_hide & 0b1 == 1
-    }
-
-    #[inline(always)]
-    pub(crate) fn set_hoverable(&mut self, hoverable: bool) {
-        if hoverable {
-            self.hover_drag_hide |= 1 << 2;
-        } else {
-            self.hover_drag_hide = 0 << 2
-                | (self.hover_drag_hide >> 1 & 0b1) << 1
-                | (self.hover_drag_hide & 0b1);
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) fn set_dragable(&mut self, dragable: bool) {
-        if dragable {
-            self.hover_drag_hide |= 1 << 1;
-        } else {
-            self.hover_drag_hide = (self.hover_drag_hide >> 2) << 2
-                | 0 << 1
-                | self.hover_drag_hide & 0b1;
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) fn set_hidden(&mut self, hidden: bool) {
-        if hidden {
-            self.hover_drag_hide |= 1;
-        } else {
-            self.hover_drag_hide = (self.hover_drag_hide >> 1) << 1 | 0;
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) fn toggle_hoverable(&mut self) {
-        self.hover_drag_hide = !(self.hover_drag_hide >> 2 & 0b1) << 2
-            | (self.hover_drag_hide >> 1 & 0b1) << 1
-            | (self.hover_drag_hide & 0b1);
-    }
-
-    #[inline(always)]
-    pub(crate) fn toggle_draggable(&mut self) {
-        self.hover_drag_hide = (self.hover_drag_hide >> 2) << 2
-            | !(self.hover_drag_hide >> 1 & 0b1) << 1
-            | self.hover_drag_hide & 0b001;
-    }
-
-    #[inline(always)]
-    pub(crate) fn toggle_hidden(&mut self) {
-        // WARN: not sure if this is correct
-        self.hover_drag_hide = (self.hover_drag_hide >> 1) << 1
-            | !(self.hover_drag_hide & 0b1);
-    }
 }
 
 #[derive(Clone, Debug)]
 pub struct NodeRef {
     node: Weak<RefCell<WidgetState>>,
-    signal: SignalWrite<Vec<Event>>,
     id: WidgetId,
 }
 
@@ -183,18 +217,16 @@ impl NodeRef {
         let state = Rc::new(RefCell::new(WidgetState::default()));
         let node = Rc::downgrade(&state);
         let id = NODE_STORAGE.with_borrow_mut(|s| s.insert(state));
-        let signal = PENDING_EVENT.get().unwrap().write_only();
 
-        Self { node, signal, id }
+        Self { node, id }
     }
 
     pub(crate) fn window(rect: Rect) -> Self {
         let state = Rc::new(RefCell::new(WidgetState::window(rect)));
         let node = Rc::downgrade(&state);
         let id = NODE_STORAGE.with_borrow_mut(|s| s.insert(state));
-        let signal = PENDING_EVENT.get().unwrap().write_only();
 
-        Self { node, signal, id }
+        Self { node, id }
     }
 
     pub(crate) fn id(&self) -> WidgetId {
@@ -297,7 +329,6 @@ impl NodeRef {
     pub fn with_rotation_rad(self, rad: f32) -> Self {
         if let Some(state) = self.try_upgrade() {
             state.borrow_mut().transform.set_rotate_rad(rad);
-            // state.borrow_mut().rotation = rad;
         }
         self
     }
@@ -332,7 +363,7 @@ impl NodeRef {
 
     pub fn hoverable(self) -> Self {
         if let Some(state) = self.try_upgrade() {
-            state.borrow_mut().set_hoverable(true);
+            state.borrow_mut().flag.set_hoverable(true);
         }
         self
     }
@@ -340,35 +371,35 @@ impl NodeRef {
     pub fn set_color(&self, color: Rgba) {
         if let Some(node) = self.try_upgrade() {
             node.borrow_mut().background_paint = color.into();
-            self.signal.update_untracked(|vec| vec.push(Event::Paint));
+            node.borrow_mut().flag.set_dirty(true);
         }
     }
 
     pub fn set_border_color(&self, border_color: Rgba) {
         if let Some(node) = self.try_upgrade() {
             node.borrow_mut().background_paint = border_color.into();
-            self.signal.update_untracked(|vec| vec.push(Event::Paint));
+            node.borrow_mut().flag.set_dirty(true);
         }
     }
 
     pub fn set_border_width(&self, val: f32) {
         if let Some(node) = self.try_upgrade() {
             node.borrow_mut().border_width = val;
-            self.signal.update_untracked(|vec| vec.push(Event::Paint));
+            node.borrow_mut().flag.set_dirty(true);
         }
     }
 
     pub fn set_corner_radius(&self, corner_radius: CornerRadius) {
         if let Some(node) = self.try_upgrade() {
             node.borrow_mut().corner_radius = corner_radius;
-            self.signal.update_untracked(|vec| vec.push(Event::Paint));
+            node.borrow_mut().flag.set_dirty(true);
         }
     }
 
     pub fn set_shape(&self, shape: Shape) {
         if let Some(node) = self.try_upgrade() {
             node.borrow_mut().shape = shape;
-            self.signal.update_untracked(|vec| vec.push(Event::Paint));
+            node.borrow_mut().flag.set_dirty(true);
         }
     }
 
@@ -379,53 +410,43 @@ impl NodeRef {
     pub fn set_rotation_rad(&self, rad: f32) {
         if let Some(node) = self.try_upgrade() {
             node.borrow_mut().transform.set_rotate_rad(rad);
-            self.signal.update_untracked(|vec| vec.push(Event::Paint));
+            node.borrow_mut().flag.set_dirty(true);
         }
     }
 
     pub fn set_spacing(&self, val: u8) {
         if let Some(node) = self.try_upgrade() {
             node.borrow_mut().spacing = val;
-            self.signal.update_untracked(|vec| vec.push(Event::Layout));
+            node.borrow_mut().flag.set_needs_layout(true);
         }
     }
 
     pub fn toggle_hoverable(&self) {
         if let Some(node) = self.try_upgrade() {
-            node.borrow_mut().toggle_hoverable();
+            node.borrow_mut().flag.toggle_hoverable();
         }
     }
 
     pub fn toggle_dragable(&self) {
         if let Some(node) = self.try_upgrade() {
-            node.borrow_mut().toggle_draggable();
+            node.borrow_mut().flag.toggle_draggable();
         }
     }
 
     pub fn hide(&self, val: bool) {
         if let Some(node) = self.try_upgrade() {
-            let prev = node.borrow().is_hidden();
-            node.borrow_mut().set_hidden(val);
+            let prev = node.borrow().flag.is_hidden();
+            node.borrow_mut().flag.set_hidden(val);
             if prev != val {
-                self.signal.update_untracked(|vec| vec.push(Event::Layout));
+                node.borrow_mut().flag.set_needs_layout(true);
             }
-        }
-    }
-
-    pub fn toggle_hidden(&self) {
-        if let Some(node) = self.try_upgrade() {
-            // let prev = node.borrow().is_hidden();
-            node.borrow_mut().toggle_hidden();
-            self.signal.update_untracked(|vec| vec.push(Event::Layout));
-            // if prev != node.borrow().is_hidden() {
-            // }
         }
     }
 
     pub fn set_image_aspect_ratio(&self, val: AspectRatio) {
         if let Some(node) = self.try_upgrade() {
             node.borrow_mut().image_aspect_ratio = val;
-            self.signal.update_untracked(|vec| vec.push(Event::Layout));
+            node.borrow_mut().flag.set_dirty(true);
         }
     }
 }
