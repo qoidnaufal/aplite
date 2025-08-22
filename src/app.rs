@@ -30,8 +30,8 @@ pub struct Aplite {
     cx: Context,
     renderer: Option<Renderer>,
     window_handle: HashMap<WindowId, WindowHandle>,
-    pending_views: Option<Box<dyn FnOnce(WindowId) -> Box<dyn IntoView>>>,
     window_attributes_fn: Option<fn(&mut WindowAttributes)>,
+    current_view: Option<ViewId>,
 
     #[cfg(feature = "render_stats")]
     stats: aplite_stats::Stats,
@@ -41,17 +41,20 @@ pub struct Aplite {
 impl Aplite {
     pub fn new<IV: IntoView + 'static>(view_fn: impl FnOnce() -> IV + 'static) -> Self {
         let mut app = Self::new_empty();
-        app.pending_views = Some(Box::new(|_| Box::new(view_fn())));
+        let view = view_fn().into_view();
+        let view_id = app.cx.insert_view(view);
+        app.current_view = Some(view_id);
         app
     }
 
     pub fn new_empty() -> Self {
+        Executor::init();
         Self {
             renderer: None,
             cx: Context::default(),
             window_handle: HashMap::with_capacity(4),
             window_attributes_fn: None,
-            pending_views: None,
+            current_view: None,
 
             #[cfg(feature = "render_stats")]
             stats: aplite_stats::Stats::new(),
@@ -59,7 +62,6 @@ impl Aplite {
     }
 
     pub fn launch(mut self) -> ApliteResult {
-        Executor::init();
         let event_loop = EventLoop::new()?;
         event_loop.run_app(&mut self)?;
 
@@ -100,8 +102,9 @@ impl Aplite {
         let window_widget = WindowWidget::new(bound);
 
         let root_id = {
-            if let Some(view_fn) = self.pending_views.take() {
-                let view = view_fn(window_id);
+            if let Some(view_id) = self.current_view.as_ref()
+                && let Some(view) = self.cx.get_view_ref(view_id)
+            {
                 let mut cx = LayoutCx::new(&window_widget);
 
                 view.calculate_size(None);
@@ -109,7 +112,7 @@ impl Aplite {
 
                 #[cfg(feature = "debug_tree")] eprintln!("{:#?}", view);
 
-                self.cx.insert_view(view.into_view())
+                *view_id
             } else {
                 self.cx.insert_view(window_widget.into_view())
             }

@@ -52,7 +52,7 @@ impl Executor {
 
     pub fn spawn(future: impl Future<Output = ()> + 'static) {
         let spawner = SPAWNER.get().expect("Executor should has been initialized once");
-        let task = Arc::new(Task::new(spawner.clone(), future));
+        let task = Arc::new(Task::new(future));
         let _ = spawner.send(task);
     }
 }

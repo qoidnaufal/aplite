@@ -104,7 +104,7 @@ pub trait Widget {
                 drop(state);
                 node.borrow_mut().flag.set_dirty(false);
             } else {
-                scene.skip();
+                scene.next_frame();
             }
 
             if let Some(children) = self.children_ref() {
@@ -156,11 +156,6 @@ pub trait WidgetExt: Widget + Sized {
             // let child_size = child.node().borrow().rect.size();
             children.push(Box::new(child));
         }
-        self
-    }
-
-    fn and(self, sibling: impl IntoView + 'static) -> Self {
-        let _ = sibling;
         self
     }
 

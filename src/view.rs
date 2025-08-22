@@ -148,7 +148,7 @@ impl std::fmt::Debug for Box<dyn IntoView> {
 impl<T: Widget + Sized + 'static> Layout for T {}
 
 pub(crate) trait Layout: Widget + Sized + 'static {
-    // TODO: include calculating the size too
+    // FIXME: deconstruct the recursion into loop
     fn calculate_layout(&self, cx: &mut LayoutCx) {
         if self.layout(cx) {
             if let Some(children) = self.children_ref() {
@@ -174,7 +174,7 @@ pub(crate) trait Layout: Widget + Sized + 'static {
 
             children
                 .iter()
-                .filter(|child| !child.node_ref().upgrade().borrow().flag.is_hidden())
+                .filter(|child| child.node_ref().is_not_hidden())
                 .enumerate()
                 .for_each(|(i, child)| {
                     let child_size = child.calculate_size(Some(self));
@@ -204,7 +204,7 @@ pub(crate) trait Layout: Widget + Sized + 'static {
             size = expand;
         }
 
-        let mut size = size
+        size = size
             .adjust_on_min_constraints(state.min_width, state.min_height)
             .adjust_on_max_constraints(state.max_width, state.max_height);
 
@@ -223,8 +223,8 @@ pub(crate) trait Layout: Widget + Sized + 'static {
                     .upgrade()
                     .borrow()
                     .orientation
-                    .is_vertical() => size.adjust_height_aspect_ratio(fraction),
-                _ => size.adjust_width_aspect_ratio(fraction),
+                    .is_vertical() => size.adjust_height_with_fraction(fraction),
+                _ => size.adjust_width_with_fraction(fraction),
             }
         }
 
@@ -242,8 +242,7 @@ pub(crate) trait Layout: Widget + Sized + 'static {
     fn mouse_hover(&self, cursor: &Cursor) -> Option<*const dyn Widget> {
         let node = self.node_ref().upgrade();
 
-        let is_hidden = node.borrow().flag.is_hidden();
-        if is_hidden { return None }
+        if node.borrow().flag.is_hidden() { return None }
 
         if let Some(children) = self.children_ref() {
             let hovered = children.iter()
@@ -255,6 +254,7 @@ pub(crate) trait Layout: Widget + Sized + 'static {
         }
 
         if !node.borrow().flag.is_hoverable() { return None }
+
         node.borrow()
             .rect
             .contains(cursor.hover.pos)

@@ -22,26 +22,26 @@ impl Size {
         (self.width.powi(2) + self.height.powi(2)).sqrt()
     }
 
-    #[inline(always)]
-    pub const fn min(self, other: Self) -> Self {
-        Self::new(
-            self.width.min(other.width),
-            self.height.min(other.height)
-        )
-    }
+    // #[inline(always)]
+    // pub const fn min(self, other: Self) -> Self {
+    //     Self::new(
+    //         self.width.min(other.width),
+    //         self.height.min(other.height)
+    //     )
+    // }
 
-    #[inline(always)]
-    pub const fn max(self, other: Self) -> Self {
-        Self::new(
-            self.width.max(other.width),
-            self.height.max(other.height)
-        )
-    }
+    // #[inline(always)]
+    // pub const fn max(self, other: Self) -> Self {
+    //     Self::new(
+    //         self.width.max(other.width),
+    //         self.height.max(other.height)
+    //     )
+    // }
 
-    #[inline(always)]
-    pub const fn clamp(self, start: Self, end: Self) -> Self {
-        self.max(start).min(end)
-    }
+    // #[inline(always)]
+    // pub const fn clamp(self, start: Self, end: Self) -> Self {
+    //     self.max(start).min(end)
+    // }
 
     pub fn adjust_on_min_constraints(self, min_width: Option<f32>, min_height: Option<f32>) -> Self {
         let width = min_width.map(|w| self.width.max(w)).unwrap_or(self.width);
@@ -55,11 +55,11 @@ impl Size {
         Self::new(width, height)
     }
     
-    pub fn adjust_width_aspect_ratio(&mut self, aspect_ratio: Fraction) {
+    pub fn adjust_width_with_fraction(&mut self, aspect_ratio: Fraction) {
         self.width = self.height * aspect_ratio
     }
 
-    pub fn adjust_height_aspect_ratio(&mut self, aspect_ratio: Fraction) {
+    pub fn adjust_height_with_fraction(&mut self, aspect_ratio: Fraction) {
         self.height = self.width / aspect_ratio
     }
 
@@ -122,6 +122,33 @@ impl PartialOrd for Size {
 impl Ord for Size {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.area().total_cmp(&other.area())
+    }
+
+    fn max(self, other: Self) -> Self
+    where
+        Self: Sized,
+    {
+        Self::new(
+            self.width.max(other.width),
+            self.height.max(other.height)
+        )
+    }
+
+    fn min(self, other: Self) -> Self
+    where
+        Self: Sized,
+    {
+        Self::new(
+            self.width.min(other.width),
+            self.height.min(other.height)
+        )
+    }
+
+    fn clamp(self, min: Self, max: Self) -> Self
+    where
+        Self: Sized,
+    {
+        self.max(min).min(max)
     }
 }
 

@@ -41,7 +41,7 @@ impl Drop for Stats {
         if self.counter == 1 {
             let startup = self.startup_time;
             eprintln!("startup time: {startup:?}");
-        } else {
+        } else if self.counter > 1 {
             let startup = self.startup_time;
             let count = self.counter - 1;
             let fps = self.fps / self.counter as usize;

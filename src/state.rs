@@ -242,6 +242,13 @@ impl NodeRef {
         self.try_upgrade().unwrap()
     }
 
+    pub(crate) fn is_not_hidden(&self) -> bool {
+        self.try_upgrade()
+            .is_some_and(|state| {
+                !state.borrow().flag.is_hidden()
+            })
+    }
+
     pub fn with_name(self, name: &'static str) -> Self {
         if let Some(state) = self.try_upgrade() {
             state.borrow_mut().name = name;

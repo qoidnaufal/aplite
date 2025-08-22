@@ -315,7 +315,7 @@ impl Scene<'_> {
         self.mesh.offset += 1;
     }
 
-    pub fn skip(&mut self) {
+    pub fn next_frame(&mut self) {
         self.mesh.offset += 1;
     }
 
