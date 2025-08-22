@@ -31,7 +31,7 @@ impl<E: Entity, T: PartialEq> IndexMap<E, T> {
                 slot.get_content()
                     .is_some_and(|content| content == &data)
             }) {
-            return Ok(E::new(idx as u32, slot.version))
+            Ok(E::new(idx as u32, slot.version))
         } else {
             self.try_insert(data)
         }
@@ -86,7 +86,7 @@ impl<E: Entity, T> IndexMap<E, T> {
         match self.inner.get_mut(self.next as usize) {
             // first time or after removal
             Some(slot) => match slot.content {
-                Content::Occupied(_) => return Err(Error::InternalCollision),
+                Content::Occupied(_) => Err(Error::InternalCollision),
                 Content::Vacant(idx) => {
                     let entity = E::new(self.next, slot.version);
                     self.next = idx;

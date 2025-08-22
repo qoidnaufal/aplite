@@ -20,6 +20,7 @@ struct Inner {
 pub struct Channel;
 
 impl Channel {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new() -> (Sender, Receiver) {
         let inner = Arc::new(Inner::default());
         let rx = Receiver(Arc::downgrade(&inner));

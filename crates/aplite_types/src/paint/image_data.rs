@@ -92,6 +92,16 @@ impl ImageRef {
     }
 }
 
+impl Clone for ImageRef {
+    fn clone(&self) -> Self {
+        Self {
+            width: self.width,
+            height: self.height,
+            bytes: Weak::clone(&self.bytes),
+        }
+    }
+}
+
 impl PartialEq<ImageData> for ImageRef {
     fn eq(&self, other: &ImageData) -> bool {
         self

@@ -115,7 +115,7 @@ impl Eq for Size {}
 
 impl PartialOrd for Size {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.area().partial_cmp(&other.area())
+        Some(self.cmp(other))
     }
 }
 

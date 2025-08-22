@@ -46,7 +46,7 @@ impl Effect {
         let scope = scope.to_any_subscriber();
 
         Executor::spawn(async move {
-            let value = Arc::new(RwLock::new(None::<R>));
+            let mut value = None::<R>;
 
             while rx.recv().await.is_some() {
                 #[cfg(test)] eprintln!("\n[NOTIFIED]      : {:?}", node);
@@ -55,10 +55,9 @@ impl Effect {
 
                 scope.clear_source();
 
-                let mut lock = value.write().unwrap();
-                let prev_value = lock.take();
+                let prev_value = value.take();
                 let new_val = f(prev_value);
-                *lock = Some(new_val);
+                value = Some(new_val);
 
                 Graph::set_scope(prev_scope);
             }

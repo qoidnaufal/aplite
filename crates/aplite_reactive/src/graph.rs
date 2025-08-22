@@ -1,5 +1,5 @@
 use std::marker::PhantomData;
-use std::sync::{Arc, RwLock, OnceLock};
+use std::sync::{RwLock, OnceLock};
 use std::any::Any;
 
 use aplite_storage::{IndexMap, Entity, entity};
@@ -7,7 +7,7 @@ use aplite_storage::{IndexMap, Entity, entity};
 use crate::subscriber::AnySubscriber;
 use crate::reactive_traits::*;
 
-static GRAPH: OnceLock<Arc<RwLock<ReactiveGraph>>> = OnceLock::new();
+static GRAPH: OnceLock<RwLock<ReactiveGraph>> = OnceLock::new();
 
 type Storage = IndexMap<ReactiveId, Box<dyn Any + Send + Sync>>;
 
@@ -53,7 +53,7 @@ impl Graph {
             .get(&node.id)
             .and_then(|any| any.downcast_ref::<R>())
             .unwrap();
-        f(&r)
+        f(r)
     }
 
     pub(crate) fn try_with_downcast<R, F, U>(node: &Node<R>, f: F) -> Option<U>
@@ -103,10 +103,7 @@ pub(crate) struct Node<R> {
 
 impl<R> Clone for Node<R> {
     fn clone(&self) -> Self {
-        Self {
-            id: self.id,
-            marker: PhantomData,
-        }
+        *self
     }
 }
 
@@ -118,7 +115,7 @@ impl<R> PartialEq for Node<R> {
 
 impl<R> PartialOrd for Node<R> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.id.partial_cmp(&other.id)
+        Some(self.cmp(other))
     }
 }
 

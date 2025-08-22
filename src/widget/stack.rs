@@ -20,7 +20,7 @@ pub struct VStack {
 
 impl VStack {
     pub fn new() -> Self {
-        let node = NodeRef::new()
+        let node = NodeRef::default()
             .with_name("VStack")
             .with_size((1, 1))
             .with_background_paint(Rgba::TRANSPARENT)
@@ -55,7 +55,7 @@ pub struct HStack {
 
 impl HStack {
     pub fn new() -> Self {
-        let node = NodeRef::new()
+        let node = NodeRef::default()
             .with_name("HStack")
             .with_orientation(Orientation::Horizontal)
             .with_size((1, 1))

@@ -27,14 +27,34 @@ impl View {
         }
     }
 
-    pub(crate) fn find_parent(&self, id: &WidgetId) -> Option<*const dyn Widget> {
-        if let Some(children) = self.inner.children_ref()
-            && children
-                .iter()
-                .any(|w| w.id() == id)
-        {
-            return Some(self)
+    pub(crate) fn detect_hover(&self, cursor: &Cursor) -> Option<*const dyn Widget> {
+        let mut current: *const dyn Widget = self;
+
+        while let Some(children) = current.children_ref() {
+            if let Some(hovered) = children.iter()
+                .find_map(|child| {
+                    let node = child.node_ref().upgrade();
+
+                    (!node.borrow().flag.is_hidden()
+                        && node.borrow().rect.contains(cursor.hover.pos))
+                            .then_some(child.as_ref() as *const dyn Widget)
+                })
+            {
+                current = hovered
+            } else {
+                break
+            }
         }
+
+        let node = current.node_ref().upgrade();
+        node.borrow()
+            .flag
+            .is_hoverable()
+            .then_some(current)
+    }
+
+    pub(crate) fn find_parent(&self, id: &WidgetId) -> Option<*const dyn Widget> {
+        if self.inner.id() == id { return None }
 
         let mut current: *const dyn Widget = self;
 
@@ -49,7 +69,7 @@ impl View {
             }
         }
 
-        Some(current)
+        current.id().ne(id).then_some(current)
     }
 
     // fn find(&self, id: &WidgetId) -> Option<*const dyn Widget> {
@@ -120,9 +140,7 @@ impl std::fmt::Debug for Box<dyn Widget> {
 impl std::fmt::Debug for &dyn Widget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = self.node_ref().upgrade().borrow().name;
-        let name = name.is_empty()
-            .then_some(std::any::type_name::<Self>())
-            .unwrap_or(name);
+        let name = if name.is_empty() { std::any::type_name::<Self>() } else { name };
 
         f.debug_struct(name)
             .field("id", &self.id())
@@ -134,9 +152,7 @@ impl std::fmt::Debug for &dyn Widget {
 impl std::fmt::Debug for Box<dyn IntoView> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = self.node_ref().upgrade().borrow().name;
-        let name = name.is_empty()
-            .then_some(std::any::type_name::<Self>())
-            .unwrap_or(name);
+        let name = if name.is_empty() { std::any::type_name::<Self>() } else { name };
 
         f.debug_struct(name)
             .field("id", &self.id())
@@ -150,12 +166,12 @@ impl<T: Widget + Sized + 'static> Layout for T {}
 pub(crate) trait Layout: Widget + Sized + 'static {
     // FIXME: deconstruct the recursion into loop
     fn calculate_layout(&self, cx: &mut LayoutCx) {
-        if self.layout(cx) {
-            if let Some(children) = self.children_ref() {
-                let mut this_cx = LayoutCx::new(self);
-                children.iter()
-                    .for_each(|child| child.calculate_layout(&mut this_cx));
-            }
+        if self.layout(cx)
+            && let Some(children) = self.children_ref()
+        {
+            let mut this_cx = LayoutCx::new(self);
+            children.iter()
+                .for_each(|child| child.calculate_layout(&mut this_cx));
         }
     }
 
@@ -174,7 +190,7 @@ pub(crate) trait Layout: Widget + Sized + 'static {
 
             children
                 .iter()
-                .filter(|child| child.node_ref().is_not_hidden())
+                .filter(|child| child.node_ref().is_visible())
                 .enumerate()
                 .for_each(|(i, child)| {
                     let child_size = child.calculate_size(Some(self));
@@ -238,38 +254,16 @@ pub(crate) trait Layout: Widget + Sized + 'static {
 
         size
     }
-
-    fn mouse_hover(&self, cursor: &Cursor) -> Option<*const dyn Widget> {
-        let node = self.node_ref().upgrade();
-
-        if node.borrow().flag.is_hidden() { return None }
-
-        if let Some(children) = self.children_ref() {
-            let hovered = children.iter()
-                .find_map(|child| child.mouse_hover(cursor));
-
-            if hovered.is_some() {
-                return hovered;
-            }
-        }
-
-        if !node.borrow().flag.is_hoverable() { return None }
-
-        node.borrow()
-            .rect
-            .contains(cursor.hover.pos)
-            .then_some(self as *const dyn Widget)
-    }
 }
 
 #[cfg(test)]
 mod ptr_test {
     struct PtrWrapper(*const dyn Name);
 
-    impl PtrWrapper {
-        fn name(&self) -> Option<&str> {
+    impl Name for PtrWrapper {
+        fn name(&self) -> &str {
             unsafe {
-                self.0.as_ref().map(|caster| caster.name())
+                self.0.as_ref().unwrap().name()
             }
         }
     }
@@ -280,7 +274,13 @@ mod ptr_test {
         } 
     }
 
-    impl<T: Name + 'static> Caster for T {}
+    impl Name for Box<dyn Name> {
+        fn name(&self) -> &str {
+            self.as_ref().name()
+        }
+    }
+
+    impl Caster for Box<dyn Name> {}
 
     trait Name {
         fn name(&self) -> &str;
@@ -304,13 +304,17 @@ mod ptr_test {
         }
     }
 
+    struct TraitContainer {
+        inner: Box<dyn Name>
+    }
+
     #[test]
     fn ptr() {
         let mystruct = MyStruct::new("one");
-        let wrapper = mystruct.get_ptr();
+        let container = TraitContainer { inner: Box::new(mystruct) };
+        let wrapper = container.inner.get_ptr();
 
         let name = wrapper.name();
-        assert!(name.is_some());
-        eprintln!("{}", name.unwrap());
+        assert_eq!(name, "one");
     }
 }

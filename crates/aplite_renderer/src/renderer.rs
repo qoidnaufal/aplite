@@ -247,22 +247,37 @@ pub struct Scene<'a> {
     size: Size,
 }
 
+pub struct DrawArgs<'a> {
+    pub rect: Rect,
+    pub transform: Matrix3x2,
+    pub background_paint: PaintRef<'a>,
+    pub border_paint: PaintRef<'a>,
+    pub border_width: f32,
+    pub shape: Shape,
+    pub corner_radius: CornerRadius,
+}
+
 // FIXME: this feels immediate mode to me, idk
 impl Scene<'_> {
+    #[allow(clippy::too_many_arguments)]
     pub fn draw(
         &mut self,
-        rect: &Rect,
-        transform: Matrix3x2,
-        background_paint: PaintRef<'_>,
-        border_paint: PaintRef<'_>,
-        border_width: f32,
-        shape: Shape,
-        corner_radius: &CornerRadius,
+        args: &DrawArgs<'_>,
     ) {
+        let DrawArgs {
+            rect,
+            transform,
+            background_paint,
+            border_paint,
+            border_width,
+            shape,
+            corner_radius
+        } = args;
+
         let offset = self.mesh.offset;
 
         let mut element = Element::new(rect.size() / self.size)
-            .with_shape(shape)
+            .with_shape(*shape)
             .with_corner_radius(corner_radius)
             .with_border_width(border_width / self.size.width);
 
@@ -279,7 +294,7 @@ impl Scene<'_> {
             PaintRef::Color(rgba) => {
                 element.background = rgba.pack_u32();
                 Vertices::new(
-                    rect,
+                    &rect,
                     Uv {
                         min_x: 0.,
                         min_y: 0.,
@@ -293,7 +308,7 @@ impl Scene<'_> {
             },
             PaintRef::Image(image_ref) => {
                 let uv = self.atlas.append(image_ref).unwrap();
-                Vertices::new(rect, uv, self.size, offset as _, 1)
+                Vertices::new(&rect, uv, self.size, offset as _, 1)
             }
         };
 
@@ -310,7 +325,7 @@ impl Scene<'_> {
             .write(self.device, self.queue, offset, &[element]);
         self.storage
             .transforms
-            .write(self.device, self.queue, offset, &[transform]);
+            .write(self.device, self.queue, offset, &[*transform]);
 
         self.mesh.offset += 1;
     }
@@ -353,7 +368,7 @@ impl Pipeline {
             dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
         };
 
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("render pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
@@ -390,9 +405,7 @@ impl Pipeline {
             depth_stencil: None,
             multiview: None,
             cache: None,
-        });
-
-        pipeline
+        })
     }
 
     // pub(crate) fn get_render_pipeline(&self) -> &wgpu::RenderPipeline {

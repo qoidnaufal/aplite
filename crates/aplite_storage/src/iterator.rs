@@ -139,7 +139,7 @@ impl<'a, E: Entity, T> DoubleEndedIterator for TreeIter<'a, E, T> {
 #########################################################
 */
 
-fn filter_map<'a, E, T>((i, slot): (usize, &'a Slot<T>)) -> Option<(E, Option<&'a T>)>
+fn filter_map<E, T>((i, slot): (usize, &Slot<T>)) -> Option<(E, Option<&T>)>
 where
     E: Entity
 {
@@ -171,6 +171,7 @@ where
 }
 
 pub struct IndexMapIter<'a, E: Entity, T> {
+    #[allow(clippy::type_complexity)]
     inner: FilterMap<
         Enumerate<Iter<'a, Slot<T>>>,
         fn((usize, &'a Slot<T>)) -> Option<(E, Option<&'a T>)>
@@ -208,7 +209,7 @@ where
 #########################################################
 */
 
-fn filter_mut<'a, E, T>((i, slot): (usize, &'a mut Slot<T>)) -> Option<(E, Option<&'a mut T>)>
+fn filter_mut<E, T>((i, slot): (usize, &mut Slot<T>)) -> Option<(E, Option<&mut T>)>
 where
     E: Entity
 {
@@ -235,6 +236,7 @@ impl<'a, E: Entity, T> IntoIterator for &'a mut IndexMap<E, T> {
 }
 
 pub struct IndexMapIterMut<'a, E: Entity, T> {
+    #[allow(clippy::type_complexity)]
     inner: FilterMap<
         Enumerate<IterMut<'a, Slot<T>>>,
         fn((usize, &'a mut Slot<T>)) -> Option<(E, Option<&'a mut T>)>

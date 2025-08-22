@@ -13,7 +13,7 @@ pub struct SignalRead<T> {
 }
 
 impl<T> Clone for SignalRead<T> {
-    fn clone(&self) -> Self { Self { node: self.node } }
+    fn clone(&self) -> Self { *self }
 }
 
 impl<T> Copy for SignalRead<T> {}
@@ -91,7 +91,7 @@ impl<T: Clone + 'static> Get for SignalRead<T> {
     }
 
     fn try_get_untracked(&self) -> Option<Self::Value> {
-        self.try_read(|v| v.map(Clone::clone))
+        self.try_read(|v| v.cloned())
     }
 }
 

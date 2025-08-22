@@ -212,15 +212,17 @@ pub struct NodeRef {
     id: WidgetId,
 }
 
-impl NodeRef {
-    pub fn new() -> Self {
+impl Default for NodeRef {
+    fn default() -> Self {
         let state = Rc::new(RefCell::new(WidgetState::default()));
         let node = Rc::downgrade(&state);
         let id = NODE_STORAGE.with_borrow_mut(|s| s.insert(state));
 
         Self { node, id }
     }
+}
 
+impl NodeRef {
     pub(crate) fn window(rect: Rect) -> Self {
         let state = Rc::new(RefCell::new(WidgetState::window(rect)));
         let node = Rc::downgrade(&state);
@@ -242,11 +244,16 @@ impl NodeRef {
         self.try_upgrade().unwrap()
     }
 
-    pub(crate) fn is_not_hidden(&self) -> bool {
+    pub(crate) fn is_visible(&self) -> bool {
         self.try_upgrade()
             .is_some_and(|state| {
                 !state.borrow().flag.is_hidden()
             })
+    }
+
+    pub fn is_hoverable(&self) -> bool {
+        self.try_upgrade()
+            .is_some_and(|state| state.borrow().flag.is_hoverable())
     }
 
     pub fn with_name(self, name: &'static str) -> Self {

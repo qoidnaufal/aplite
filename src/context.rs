@@ -104,7 +104,7 @@ impl Context {
 
     fn detect_hover(&mut self, id: &ViewId) {
         let view = self.get_view_ref(id).unwrap();
-        let hovered = view.mouse_hover(&self.cursor);
+        let hovered = view.detect_hover(&self.cursor);
 
         self.cursor.hover.curr = hovered;
     }
@@ -119,7 +119,7 @@ impl Context {
                 let pos = self.cursor.hover.pos - self.cursor.click.offset;
 
                 let mut state = node.borrow_mut();
-                state.rect.set_pos(pos.into());
+                state.rect.set_pos(pos);
                 state.flag.set_dirty(true);
 
                 drop(state);

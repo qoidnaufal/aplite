@@ -92,16 +92,19 @@ pub trait Widget {
         if !node.borrow().flag.is_hidden() {
             if node.borrow().flag.is_dirty() {
                 let state = node.borrow();
-                scene.draw(
-                    &state.rect,
-                    state.transform,
-                    state.background_paint.as_paint_ref(),
-                    state.border_paint.as_paint_ref(),
-                    state.border_width.max(5.0),
-                    state.shape,
-                    &state.corner_radius,
-                );
+
+                scene.draw(&aplite_renderer::DrawArgs {
+                    rect: state.rect,
+                    transform: state.transform,
+                    background_paint: state.background_paint.as_paint_ref(),
+                    border_paint: state.border_paint.as_paint_ref(),
+                    border_width: state.border_width.max(5.0),
+                    shape: state.shape,
+                    corner_radius: state.corner_radius,
+                });
+
                 drop(state);
+
                 node.borrow_mut().flag.set_dirty(false);
             } else {
                 scene.next_frame();
@@ -394,13 +397,8 @@ pub enum WidgetEvent {
     Input,
 }
 
-pub(crate) struct CallbackStore(Box<[Option<Box<dyn FnMut()>>; 5]>);
-
-impl Default for CallbackStore {
-    fn default() -> Self {
-        Self(Box::new([None, None, None, None, None]))
-    }
-}
+#[derive(Default)]
+pub(crate) struct CallbackStore([Option<Box<dyn FnMut()>>; 5]);
 
 impl CallbackStore {
     pub(crate) fn insert(
@@ -455,7 +453,7 @@ pub struct CircleWidget {
 impl CircleWidget {
     pub fn new() -> Self {
         Self {
-            node: NodeRef::new()
+            node: NodeRef::default()
                 .with_name("Circle")
                 .with_stroke_width(5.)
                 .with_shape(Shape::Circle)

@@ -11,7 +11,7 @@ pub struct SignalWrite<T> {
 }
 
 impl<T> Clone for SignalWrite<T> {
-    fn clone(&self) -> Self { Self { node: self.node } }
+    fn clone(&self) -> Self { *self }
 }
 
 impl<T> Copy for SignalWrite<T> {}

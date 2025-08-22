@@ -31,7 +31,7 @@ pub struct Image {
 
 impl Image {
     pub fn new<F: Fn() -> ImageData + 'static>(image_fn: F) -> Self {
-        let node = NodeRef::new()
+        let node = NodeRef::default()
             .with_name("Image")
             .with_size((100.0, 100.0))
             .with_background_paint(image_fn())

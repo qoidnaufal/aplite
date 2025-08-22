@@ -62,6 +62,7 @@ fn transform_point(tx: mat3x2<f32>, pos: vec2<f32>) -> vec2f {
     let s = mat2x2<f32>(screen_t[0], screen_t[1]);
 
     return s * r * pos + tx[2] + screen_t[2];
+    // return s * pos + screen_t[2];
 }
 
 struct VertexInput {

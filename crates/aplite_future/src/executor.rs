@@ -14,22 +14,18 @@ struct Worker {
 impl Worker {
     pub fn work(&self) {
         while let Ok(task) = self.rx.recv() {
-            if let Ok(mut lock) = task.future.write()
-                && let Some(mut future) = lock.take()
-            {
+            if let Ok(mut future) = task.future.write() {
                 let waker = Waker::from(Arc::clone(&task));
                 let cx = &mut Context::from_waker(&waker);
 
                 match future.as_mut().poll(cx) {
                     Poll::Ready(_) => drop(future),
-                    Poll::Pending => {
-                        *lock = Some(future);
-                        continue;
-                    },
+                    Poll::Pending => continue,
                 }
             }
 
-            drop(task);
+            // not sure if these drops are needed, just in case
+            drop(task)
         };
     }
 }

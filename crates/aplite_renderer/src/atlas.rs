@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use wgpu::util::DeviceExt;
 
-use aplite_types::{Rect, Size, Vec2f, ImageData, ImageRef};
+use aplite_types::{Rect, Size, Vec2f, ImageRef};
 use aplite_storage::{Tree, Entity, entity};
 
 #[derive(Debug, Clone, Copy)]
@@ -18,7 +18,7 @@ pub(crate) struct Atlas {
     pub(crate) bind_group: wgpu::BindGroup,
 
     allocator: AtlasAllocator,
-    pending_data: Vec<(Rect, ImageData)>,
+    pending_data: Vec<(Rect, ImageRef)>,
     processed: HashMap<ImageRef, Uv>,
 }
 
@@ -53,33 +53,28 @@ impl Atlas {
         }
     }
 
-    pub(crate) fn append(&mut self, data: ImageRef) -> Option<Uv> {
-        if let Some(uv) = self.processed.get(&data) {
+    pub(crate) fn append(&mut self, data: &ImageRef) -> Option<Uv> {
+        if let Some(uv) = self.processed.get(data) {
             return Some(*uv)
         }
 
-        match data.upgrade() {
-            Some(data) => {
-                let size = Size::new(data.width as _, data.height as _);
-                let allocated = self.allocator.alloc(size);
+        let size = Size::new(data.width as _, data.height as _);
+        let allocated = self.allocator.alloc(size);
 
-                if let Some(rect) = allocated {
-                    self.pending_data.push((rect, data));
-                }
-
-                allocated.map(|rect| {
-                    let min_x = rect.x / self.allocator.rect.width;
-                    let min_y = rect.y / self.allocator.rect.height;
-                    Uv {
-                        min_x,
-                        min_y,
-                        max_x: min_x + rect.width / self.allocator.rect.width,
-                        max_y: min_y + rect.height / self.allocator.rect.height,
-                    }
-                })
-            },
-            None => None,
+        if let Some(rect) = allocated {
+            self.pending_data.push((rect, data.clone()));
         }
+
+        allocated.map(|rect| {
+            let min_x = rect.x / self.allocator.rect.width;
+            let min_y = rect.y / self.allocator.rect.height;
+            Uv {
+                min_x,
+                min_y,
+                max_x: min_x + rect.width / self.allocator.rect.width,
+                max_y: min_y + rect.height / self.allocator.rect.height,
+            }
+        })
     }
 
     // #[inline(always)]
@@ -101,72 +96,73 @@ impl Atlas {
 
     pub(crate) fn update(&mut self, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder) {
         if !self.pending_data.is_empty() {
-            for (rect, data) in &self.pending_data {
-                let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-                let width = data.width * 4;
-                let padding = (alignment - width % alignment) % alignment;
-                let padded_width = width + padding;
-                let mut padded_data = Vec::with_capacity((padded_width * data.height) as usize);
+            self.pending_data
+                .drain(..)
+                .for_each(|(rect, data)| {
+                    let data = data.upgrade().unwrap();
+                    let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+                    let width = data.width * 4;
+                    let padding = (alignment - width % alignment) % alignment;
+                    let padded_width = width + padding;
+                    let mut padded_data = Vec::with_capacity((padded_width * data.height) as usize);
 
-                let mut i = 0;
-                for _ in 0..data.height {
-                    for _ in 0..width {
-                        padded_data.push(data.bytes[i]);
-                        i += 1;
+                    let mut i = 0;
+                    for _ in 0..data.height {
+                        for _ in 0..width {
+                            padded_data.push(data.bytes[i]);
+                            i += 1;
+                        }
+                        while (padded_data.len() % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize) != 0 {
+                            padded_data.push(0);
+                        }
                     }
-                    while (padded_data.len() % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize) != 0 {
-                        padded_data.push(0);
-                    }
-                }
 
-                let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: None,
-                    contents: &padded_data,
-                    usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_WRITE,
+                    let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: None,
+                        contents: &padded_data,
+                        usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_WRITE,
+                    });
+
+                    encoder.copy_buffer_to_texture(
+                        wgpu::TexelCopyBufferInfo {
+                            buffer: &buffer,
+                            layout: wgpu::TexelCopyBufferLayout {
+                                offset: 0,
+                                bytes_per_row: Some(padded_width),
+                                rows_per_image: None,
+                            },
+                        },
+                        wgpu::TexelCopyTextureInfo {
+                            texture: &self.texture,
+                            aspect: wgpu::TextureAspect::All,
+                            mip_level: 0,
+                            origin: wgpu::Origin3d {
+                                x: rect.x as u32,
+                                y: rect.y as u32,
+                                z: 0,
+                            },
+                        },
+                        wgpu::Extent3d {
+                            width: data.width,
+                            height: data.height,
+                            depth_or_array_layers: 1,
+                        }
+                    );
+
+                    let min_x = rect.x / self.allocator.rect.width;
+                    let min_y = rect.y / self.allocator.rect.height;
+                    let max_x = min_x + (rect.width / self.allocator.rect.width);
+                    let max_y = min_y + (rect.height / self.allocator.rect.height);
+
+                    let uv = Uv {
+                        min_x,
+                        min_y,
+                        max_x,
+                        max_y,
+                    };
+
+                    self.processed.insert(data.downgrade(), uv);
                 });
-
-                encoder.copy_buffer_to_texture(
-                    wgpu::TexelCopyBufferInfo {
-                        buffer: &buffer,
-                        layout: wgpu::TexelCopyBufferLayout {
-                            offset: 0,
-                            bytes_per_row: Some(padded_width),
-                            rows_per_image: None,
-                        },
-                    },
-                    wgpu::TexelCopyTextureInfo {
-                        texture: &self.texture,
-                        aspect: wgpu::TextureAspect::All,
-                        mip_level: 0,
-                        origin: wgpu::Origin3d {
-                            x: rect.x as u32,
-                            y: rect.y as u32,
-                            z: 0,
-                        },
-                    },
-                    wgpu::Extent3d {
-                        width: data.width,
-                        height: data.height,
-                        depth_or_array_layers: 1,
-                    }
-                );
-
-                let min_x = rect.x / self.allocator.rect.width;
-                let min_y = rect.y / self.allocator.rect.height;
-                let max_x = min_x + (rect.width / self.allocator.rect.width);
-                let max_y = min_y + (rect.height / self.allocator.rect.height);
-
-                let uv = Uv {
-                    min_x,
-                    min_y,
-                    max_x,
-                    max_y,
-                };
-
-                self.processed.insert(data.downgrade(), uv);
-            }
-
-            self.pending_data.clear();
         }
     }
 
@@ -260,7 +256,7 @@ impl AtlasAllocator {
     fn scan(&self, size: Size) -> Option<(AtlasId, Vec2f)> {
         self.get_parents()
             .iter()
-            .find_map(|(id, rect)| self.identify_children(id, *rect, size))
+            .find_map(|(id, rect)| self.identify_children(id, rect, size))
     }
 
     fn identify_children(

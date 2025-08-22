@@ -74,12 +74,12 @@ impl Indices {
     #[inline(always)]
     pub(crate) const fn new(offset: u32) -> Self {
         Self([
-            0 + offset * Vertices::COUNT as u32,
-            1 + offset * Vertices::COUNT as u32,
-            2 + offset * Vertices::COUNT as u32,
-            0 + offset * Vertices::COUNT as u32,
-            2 + offset * Vertices::COUNT as u32,
-            3 + offset * Vertices::COUNT as u32,
+            offset * Vertices::COUNT as u32,
+            offset * Vertices::COUNT as u32 + 1,
+            offset * Vertices::COUNT as u32 + 2,
+            offset * Vertices::COUNT as u32,
+            offset * Vertices::COUNT as u32 + 2,
+            offset * Vertices::COUNT as u32 + 3,
 
             // 1 + offset * Vertices::COUNT as u32,
             // 2 + offset * Vertices::COUNT as u32,

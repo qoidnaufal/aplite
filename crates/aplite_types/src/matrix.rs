@@ -8,13 +8,13 @@ use crate::vector::{Vec2u, Vec2f};
 /// x1 , y1        │ 
 /// x2 , y2        │ 
 #[derive(Clone, Copy)]
-pub struct Matrix3x2([[f32; 2]; 3]);
+pub struct Matrix3x2([f32; 6]);
 
 impl Matrix3x2 {
     pub const IDENTITY: Self = Self([
-        [1.0, 0.0],
-        [0.0, 1.0],
-        [0.0, 0.0],
+        1.0, 0.0,
+        0.0, 1.0,
+        0.0, 0.0,
     ]);
 
     #[inline(always)]
@@ -22,32 +22,45 @@ impl Matrix3x2 {
         Self::IDENTITY
     }
 
+    pub const fn as_slice(&self) -> [f32; 6] {
+        self.0
+    }
+
     #[inline(always)]
     pub const fn scale(&self) -> [f32; 2] {
-        [self.0[0][0], self.0[1][1]]
+        [self.0[0], self.0[3]]
     }
 
     #[inline(always)]
     pub const fn translate(&self) -> Vec2f {
-        Vec2f::from_array(self.0[2])
+        Vec2f::new(self.0[4], self.0[5])
     }
 
     #[inline(always)]
     pub const fn x_axis(&self) -> Vec2f {
-        Vec2f::new(self.0[0][0], self.0[1][0])
+        Vec2f::new(self.0[0], self.0[2])
     }
 
     #[inline(always)]
     pub const fn y_axis(&self) -> Vec2f {
-        Vec2f::new(self.0[0][1], self.0[1][1])
+        Vec2f::new(self.0[1], self.0[3])
     }
 
     #[inline(always)]
     pub const fn from_scale(sx: f32, sy: f32) -> Self {
         Self([
-            [sx, 0.],
-            [0., sy],
-            [0., 0.],
+            sx, 0.,
+            0., sy,
+            0., 0.,
+        ])
+    }
+
+    pub fn from_scale_rotate_rad(sx: f32, sy: f32, rad: f32) -> Self {
+        let (sin, cos) = rad.sin_cos();
+        Self([
+            sx * cos, sx * -sin,
+            sy * sin, sy *  cos,
+            0., 0.,
         ])
     }
 
@@ -60,27 +73,27 @@ impl Matrix3x2 {
     #[inline(always)]
     pub fn from_rotate_rad(rad: f32) -> Self {
         Self([
-            [rad.cos(), -rad.sin()],
-            [rad.sin(),  rad.cos()],
-            [0., 0.],
+            rad.cos(), -rad.sin(),
+            rad.sin(),  rad.cos(),
+            0., 0.,
         ])
     }
 
     #[inline(always)]
     pub const fn from_translate(tx: f32, ty: f32) -> Self {
         Self([
-            [0., 0.],
-            [0., 0.],
-            [tx, ty],
+            0., 0.,
+            0., 0.,
+            tx, ty,
         ])
     }
 
     #[inline(always)]
     pub const fn from_scale_translate(sx: f32, sy: f32, tx: f32, ty: f32) -> Self {
         Self([
-            [sx, 0.],
-            [0., sy],
-            [tx, ty],
+            sx, 0.,
+            0., sy,
+            tx, ty,
         ])
     }
 
@@ -95,9 +108,9 @@ impl Matrix3x2 {
     pub fn from_scale_rad_translate(sx: f32, sy: f32, rad: f32, tx: f32, ty: f32) -> Self {
         let (sin, cos) = rad.sin_cos();
         Self([
-            [sx * cos, sx * -sin],
-            [sy * sin, sy *  cos],
-            [tx, ty],
+            sx * cos, sx * -sin,
+            sy * sin, sy *  cos,
+            tx, ty,
         ])
     }
 
@@ -127,17 +140,22 @@ impl Matrix3x2 {
 
     #[inline(always)]
     pub fn set_scale(&mut self, sx: f32, sy: f32) {
-        self[0][0] = sx;
-        self[1][1] = sy;
+        self[0] = sx;
+        self[3] = sy;
+    }
+
+    pub fn adjust_scale(&mut self, sx: f32, sy: f32) {
+        self[0] *= sx;
+        self[3] *= sy;
     }
 
     #[inline(always)]
     pub fn set_rotate_rad(&mut self, rad: f32) {
         let (sin, cos) = rad.sin_cos();
-        self[0][0] = cos;
-        self[0][1] = -sin;
-        self[1][0] = sin;
-        self[1][1] = cos;
+        self[0] =  cos;
+        self[1] = -sin;
+        self[2] =  sin;
+        self[3] =  cos;
     }
 
     #[inline(always)]
@@ -147,8 +165,8 @@ impl Matrix3x2 {
 
     #[inline(always)]
     pub fn set_translate(&mut self, tx: f32, ty: f32) {
-        self[2][0] = tx;
-        self[2][1] = ty;
+        self[4] = tx;
+        self[5] = ty;
     }
 
     #[inline(always)]
@@ -162,7 +180,7 @@ impl Matrix3x2 {
     pub fn transform_vec2f(&self, vec2f: Vec2f) -> Vec2f {
         let x = self.x_axis().dot(vec2f);
         let y = self.y_axis().dot(vec2f);
-        Vec2f::new(x, y) + self[2]
+        Vec2f::new(x, y) + self.translate()
     }
 }
 
@@ -173,7 +191,7 @@ impl PartialEq for Matrix3x2 {
 }
 
 impl std::ops::Index<usize> for Matrix3x2 {
-    type Output = [f32; 2];
+    type Output = f32;
     fn index(&self, index: usize) -> &Self::Output {
         &self.0[index]
     }
@@ -198,7 +216,7 @@ impl std::fmt::Debug for Matrix3x2 {
             };
             s.push_str(prefix);
             for m in 0..3 {
-                let num = self[m][n];
+                let num = self[n + m * 2];
                 if num.is_sign_negative() {
                     s.push_str(format!("{num:0.2} ").as_str());
                 } else {

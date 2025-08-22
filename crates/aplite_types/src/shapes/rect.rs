@@ -135,7 +135,7 @@ impl Eq for Rect {}
 
 impl PartialOrd for Rect {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.size().partial_cmp(&other.size())
+        Some(self.cmp(other))
     }
 }
 

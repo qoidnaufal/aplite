@@ -8,7 +8,7 @@ mod screen;
 mod renderer;
 mod mesh;
 
-pub use renderer::{Renderer, Scene};
+pub use renderer::{Renderer, Scene, DrawArgs};
 pub use element::{Element, Shape};
 pub use mesh::Vertices;
 
