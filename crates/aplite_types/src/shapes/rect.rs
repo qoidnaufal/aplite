@@ -2,6 +2,7 @@ use crate::fraction::Fraction;
 use crate::size::Size;
 use crate::vector::Vec2f;
 
+#[repr(C)]
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Rect {
     pub x: f32,

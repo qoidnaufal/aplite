@@ -1,6 +1,6 @@
 use aplite_types::Vec2f;
 
-use crate::widget::Widget;
+use crate::state::WidgetId;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseAction {
@@ -48,20 +48,20 @@ pub struct MouseState {
     pub(crate) button: MouseButton,
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[derive(Default, Debug)]
 pub struct MouseHover {
     pub(crate) pos: Vec2f,
-    pub(crate) curr: Option<*const dyn Widget>,
+    pub(crate) curr: Option<WidgetId>,
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[derive(Default, Debug)]
 pub struct MouseClick {
     pub(crate) pos: Vec2f,
     pub(crate) offset: Vec2f,
-    pub(crate) captured: Option<*const dyn Widget>,
+    pub(crate) captured: Option<WidgetId>,
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[derive(Default, Debug)]
 pub struct Cursor {
     pub(crate) state: MouseState,
     pub(crate) hover: MouseHover,
@@ -71,8 +71,8 @@ pub struct Cursor {
 
 pub enum EmittedClickEvent {
     NoOp,
-    Captured(*const dyn Widget),
-    TriggerCallback(*const dyn Widget),
+    Captured(WidgetId),
+    TriggerCallback(WidgetId),
 }
 
 impl Cursor {
@@ -125,7 +125,7 @@ impl Cursor {
                 self.is_dragging = false;
 
                 if let Some(captured) = captured
-                    && self.hover.curr.is_some_and(|hovered| std::ptr::addr_eq(hovered, captured))
+                    && self.hover.curr.is_some_and(|hovered| hovered == captured)
                     && !was_dragging
                 {
                     EmittedClickEvent::TriggerCallback(captured)

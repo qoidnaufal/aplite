@@ -23,6 +23,69 @@ thread_local! {
         RefCell::new(IndexMap::with_capacity(1024));
 }
 
+pub struct WidgetState {
+    pub(crate) rect: Rect,
+    // pub(crate) rotation: f32, // in radians
+    pub(crate) transform: Matrix3x2,
+    pub(crate) min_width: Option<f32>,
+    pub(crate) min_height: Option<f32>,
+    pub(crate) max_width: Option<f32>,
+    pub(crate) max_height: Option<f32>,
+    pub(crate) align_v: AlignV,
+    pub(crate) align_h: AlignH,
+    pub(crate) orientation: Orientation,
+    pub(crate) padding: Padding,
+    pub(crate) spacing: u8,
+    // pub(crate) z_index: u8,
+    pub(crate) image_aspect_ratio: AspectRatio,
+    pub(crate) shape: Shape,
+    pub(crate) corner_radius: CornerRadius,
+    pub(crate) border_width: f32,
+    pub(crate) background_paint: Paint,
+    pub(crate) border_paint: Paint,
+    pub(crate) flag: Flag,
+}
+
+impl Default for WidgetState {
+    fn default() -> Self {
+        Self {
+            rect: Rect::new(0.0, 0.0, 1.0, 1.0),
+            // rotation: 0.0,
+            transform: Matrix3x2::identity(),
+            min_width: Some(1.),
+            min_height: Some(1.),
+            max_width: None,
+            max_height: None,
+            align_v: AlignV::Top,
+            align_h: AlignH::Left,
+            orientation: Orientation::Vertical,
+            spacing: 0,
+            // z_index: 0,
+            padding: Padding::default(),
+            image_aspect_ratio: AspectRatio::Undefined,
+            shape: Shape::Rect,
+            corner_radius: CornerRadius::splat(0),
+            background_paint: Paint::Color(Rgba::RED),
+            border_paint: Paint::Color(Rgba::WHITE),
+            border_width: 0.0,
+            flag: Flag::default(),
+            // update: None,
+        }
+    }
+}
+
+// internal data management
+impl WidgetState {
+    pub(crate) fn window(rect: Rect) -> Self {
+        Self {
+            rect,
+            background_paint: Paint::Color(Rgba::TRANSPARENT),
+            border_paint: Paint::Color(Rgba::TRANSPARENT),
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum AspectRatio {
     Defined(u8, u8),
@@ -132,80 +195,6 @@ impl Flag {
     }
 }
 
-#[derive(Clone)]
-pub struct WidgetState {
-    pub(crate) name: &'static str,
-    pub(crate) rect: Rect,
-    // pub(crate) rotation: f32, // in radians
-    pub(crate) transform: Matrix3x2,
-    pub(crate) min_width: Option<f32>,
-    pub(crate) min_height: Option<f32>,
-    pub(crate) max_width: Option<f32>,
-    pub(crate) max_height: Option<f32>,
-    pub(crate) align_v: AlignV,
-    pub(crate) align_h: AlignH,
-    pub(crate) orientation: Orientation,
-    pub(crate) padding: Padding,
-    pub(crate) spacing: u8,
-    // pub(crate) z_index: u8,
-    pub(crate) image_aspect_ratio: AspectRatio,
-    pub(crate) shape: Shape,
-    pub(crate) corner_radius: CornerRadius,
-    pub(crate) border_width: f32,
-    pub(crate) background_paint: Paint,
-    pub(crate) border_paint: Paint,
-    pub(crate) flag: Flag,
-    // pub(crate) update: Option<UpdateEvent>,
-}
-
-impl std::fmt::Debug for WidgetState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.name)
-    }
-}
-
-impl Default for WidgetState {
-    fn default() -> Self {
-        Self {
-            name: "",
-            rect: Rect::new(0.0, 0.0, 1.0, 1.0),
-            // rotation: 0.0,
-            transform: Matrix3x2::identity(),
-            min_width: Some(1.),
-            min_height: Some(1.),
-            max_width: None,
-            max_height: None,
-            align_v: AlignV::Top,
-            align_h: AlignH::Left,
-            orientation: Orientation::Vertical,
-            spacing: 0,
-            // z_index: 0,
-            padding: Padding::default(),
-            image_aspect_ratio: AspectRatio::Undefined,
-            shape: Shape::Rect,
-            corner_radius: CornerRadius::splat(0),
-            background_paint: Paint::Color(Rgba::RED),
-            border_paint: Paint::Color(Rgba::WHITE),
-            border_width: 0.0,
-            flag: Flag::default(),
-            // update: None,
-        }
-    }
-}
-
-// internal data management
-impl WidgetState {
-    pub(crate) fn window(rect: Rect) -> Self {
-        Self {
-            name: "Root",
-            rect,
-            background_paint: Paint::Color(Rgba::TRANSPARENT),
-            border_paint: Paint::Color(Rgba::TRANSPARENT),
-            ..Default::default()
-        }
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct NodeRef {
     node: Weak<RefCell<WidgetState>>,
@@ -251,16 +240,9 @@ impl NodeRef {
             })
     }
 
-    pub fn is_hoverable(&self) -> bool {
+    pub(crate) fn is_hoverable(&self) -> bool {
         self.try_upgrade()
             .is_some_and(|state| state.borrow().flag.is_hoverable())
-    }
-
-    pub fn with_name(self, name: &'static str) -> Self {
-        if let Some(state) = self.try_upgrade() {
-            state.borrow_mut().name = name;
-        }
-        self
     }
 
     /// Types which implement [`Into<Size>`] are:

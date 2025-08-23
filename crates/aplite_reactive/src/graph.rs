@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 use std::sync::{RwLock, OnceLock};
 use std::any::Any;
+use std::sync::Arc;
 
 use aplite_storage::{IndexMap, Entity, entity};
 
@@ -9,7 +10,7 @@ use crate::reactive_traits::*;
 
 static GRAPH: OnceLock<RwLock<ReactiveGraph>> = OnceLock::new();
 
-type Storage = IndexMap<ReactiveId, Box<dyn Any + Send + Sync>>;
+type Storage = IndexMap<ReactiveId, Arc<dyn Any>>;
 
 #[derive(Default)]
 pub(crate) struct ReactiveGraph {
@@ -31,9 +32,9 @@ unsafe impl Sync for ReactiveGraph {}
 pub(crate) struct Graph;
 
 impl Graph {
-    pub(crate) fn insert<R: Reactive + Send + Sync + 'static>(r: R) -> Node<R> {
+    pub(crate) fn insert<R: Reactive + 'static>(r: Arc<R>) -> Node<R> {
         let mut graph = GRAPH.get_or_init(Default::default).write().unwrap();
-        let id = graph.storage.insert(Box::new(r));
+        let id = graph.storage.insert(r);
         Node { id, marker: PhantomData }
     }
 
@@ -44,28 +45,28 @@ impl Graph {
 
     pub(crate) fn with_downcast<R, F, U>(node: &Node<R>, f: F) -> U
     where
-        R: Reactive + Send + Sync + 'static,
+        R: Reactive + 'static,
         F: FnOnce(&R) -> U,
     {
         let graph = GRAPH.get_or_init(Default::default).read().unwrap();
         let r = graph
             .storage
             .get(&node.id)
-            .and_then(|any| any.downcast_ref::<R>())
+            .and_then(|any| any.as_ref().downcast_ref::<R>())
             .unwrap();
         f(r)
     }
 
     pub(crate) fn try_with_downcast<R, F, U>(node: &Node<R>, f: F) -> Option<U>
     where
-        R: Reactive + Send + Sync + 'static,
+        R: Reactive + 'static,
         F: FnOnce(Option<&R>) -> Option<U>,
     {
         let graph = GRAPH.get_or_init(Default::default).read().unwrap();
         graph
             .storage
             .get(&node.id)
-            .and_then(|any| f(any.downcast_ref::<R>()))
+            .and_then(|any| f(any.as_ref().downcast_ref::<R>()))
     }
 
     pub(crate) fn set_scope(subscriber: Option<AnySubscriber>) -> Option<AnySubscriber> {
@@ -75,12 +76,12 @@ impl Graph {
         prev
     }
 
-    pub(crate) fn remove<R: Reactive + Send + Sync>(node: &Node<R>) -> Option<Box<dyn Any + Send + Sync>> {
+    pub(crate) fn remove<R: Reactive>(node: &Node<R>) -> Option<Arc<dyn Any>> {
         let mut graph = GRAPH.get_or_init(Default::default).write().unwrap();
         graph.storage.remove(&node.id)
     }
 
-    pub(crate) fn is_removed<R: Reactive + Send + Sync>(node: &Node<R>) -> bool {
+    pub(crate) fn is_removed<R: Reactive>(node: &Node<R>) -> bool {
         let graph = GRAPH.get_or_init(Default::default).read().unwrap();
         graph.storage.get(&node.id).is_none()
     }

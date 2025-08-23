@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::Weak;
 use winit::window::Window;
 use winit::dpi::PhysicalSize;
 use aplite_types::{Rect, Matrix3x2, Size, PaintRef, CornerRadius};
@@ -35,13 +35,17 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub async fn new(window: Arc<Window>) -> Result<Self, InitiationError> {
+    pub async fn new(window: Weak<Window>) -> Result<Self, InitiationError> {
+        let window = window.upgrade().unwrap();
+        let size = window.inner_size();
+        let scale_factor = window.scale_factor();
+
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: backend(),
             ..Default::default()
         });
 
-        let surface = instance.create_surface(Arc::clone(&window))?;
+        let surface = instance.create_surface(window)?;
 
         let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions {
             compatible_surface: Some(&surface),
@@ -57,7 +61,6 @@ impl Renderer {
             .copied()
             .unwrap_or(surface_capabilites.formats[0]);
 
-        let size = window.inner_size();
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
@@ -77,7 +80,6 @@ impl Renderer {
 
         surface.configure(&device, &config);
 
-        let scale_factor = window.scale_factor();
         let logical: winit::dpi::LogicalSize<f32> = size.to_logical(scale_factor);
         let screen_size = Size::new(logical.width, logical.height);
 
@@ -152,7 +154,7 @@ impl Renderer {
         }
     }
 
-    pub fn finish(&mut self, window: &Arc<Window>) {
+    pub fn finish(&mut self, window: &Window) {
         if self.mesh.offset == 0 { return }
 
         if self.bundle.is_none() || self.mesh.offset != self.offset {
@@ -248,10 +250,10 @@ pub struct Scene<'a> {
 }
 
 pub struct DrawArgs<'a> {
-    pub rect: Rect,
-    pub transform: Matrix3x2,
-    pub background_paint: PaintRef<'a>,
-    pub border_paint: PaintRef<'a>,
+    pub rect: &'a Rect,
+    pub transform: &'a Matrix3x2,
+    pub background_paint: &'a PaintRef<'a>,
+    pub border_paint: &'a PaintRef<'a>,
     pub border_width: f32,
     pub shape: Shape,
     pub corner_radius: CornerRadius,
@@ -259,21 +261,18 @@ pub struct DrawArgs<'a> {
 
 // FIXME: this feels immediate mode to me, idk
 impl Scene<'_> {
-    #[allow(clippy::too_many_arguments)]
     pub fn draw(
         &mut self,
-        args: &DrawArgs<'_>,
-    ) {
-        let DrawArgs {
+        DrawArgs {
             rect,
             transform,
             background_paint,
             border_paint,
             border_width,
             shape,
-            corner_radius
-        } = args;
-
+            corner_radius,
+        }: &DrawArgs<'_>,
+    ) {
         let offset = self.mesh.offset;
 
         let mut element = Element::new(rect.size() / self.size)
@@ -325,7 +324,7 @@ impl Scene<'_> {
             .write(self.device, self.queue, offset, &[element]);
         self.storage
             .transforms
-            .write(self.device, self.queue, offset, &[*transform]);
+            .write(self.device, self.queue, offset, &[transform.as_slice()]);
 
         self.mesh.offset += 1;
     }

@@ -38,16 +38,6 @@ impl From<Rgba> for ImageData {
     }
 }
 
-impl Clone for ImageData {
-    fn clone(&self) -> Self {
-        Self {
-            width: self.width,
-            height: self.height,
-            bytes: Arc::clone(&self.bytes),
-        }
-    }
-}
-
 impl std::hash::Hash for ImageData {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         state.write_usize(Arc::as_ptr(&self.bytes) as usize);

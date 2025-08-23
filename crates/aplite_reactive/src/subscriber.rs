@@ -1,18 +1,18 @@
 use std::sync::{Arc, Weak};
 
 use crate::reactive_traits::*;
-use crate::source::AnySource;
+// use crate::source::AnySource;
 
 pub(crate) struct AnySubscriber(pub(crate) Weak<dyn Subscriber>);
 
 pub(crate) trait Subscriber: Notify {
-    fn add_source(&self, source: AnySource);
-    fn clear_source(&self);
+    // fn add_source(&self, source: AnySource);
+    // fn clear_source(&self);
 }
 
 impl AnySubscriber {
-    pub(crate) fn new(inner: Arc<dyn Subscriber>) -> Self {
-        Self(Arc::downgrade(&inner))
+    pub(crate) fn new<T: Subscriber + 'static>(inner: Weak<T>) -> Self {
+        Self(inner)
     }
 
     pub(crate) fn upgrade(&self) -> Option<Arc<dyn Subscriber>> {
@@ -21,17 +21,17 @@ impl AnySubscriber {
 }
 
 impl Subscriber for AnySubscriber {
-    fn add_source(&self, source: AnySource) {
-        if let Some(subscriber) = self.upgrade() {
-            subscriber.add_source(source);
-        }
-    }
+    // fn add_source(&self, source: AnySource) {
+    //     if let Some(subscriber) = self.upgrade() {
+    //         subscriber.add_source(source);
+    //     }
+    // }
 
-    fn clear_source(&self) {
-        if let Some(subscriber) = self.upgrade() {
-            subscriber.clear_source();
-        }
-    }
+    // fn clear_source(&self) {
+    //     if let Some(subscriber) = self.upgrade() {
+    //         subscriber.clear_source();
+    //     }
+    // }
 }
 
 impl Notify for AnySubscriber {
@@ -78,11 +78,11 @@ impl std::fmt::Debug for AnySubscriber {
 }
 
 pub(crate) trait ToAnySubscriber: Subscriber {
-    fn to_any_subscriber(self) -> AnySubscriber;
+    fn to_any_subscriber(&self) -> AnySubscriber;
 }
 
 impl ToAnySubscriber for AnySubscriber {
-    fn to_any_subscriber(self) -> AnySubscriber {
+    fn to_any_subscriber(&self) -> AnySubscriber {
         self.clone()
     }
 }

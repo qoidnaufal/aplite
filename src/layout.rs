@@ -3,35 +3,39 @@ use aplite_types::{Rect, Vec2f};
 use crate::state::WidgetState;
 use crate::widget::Widget;
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AlignH {
-    #[default]
-    Left,
-    Center,
-    Right,
+pub struct LayoutCx {
+    pub(crate) next_pos: Vec2f,
+    pub(crate) rules: Rules,
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AlignV {
-    #[default]
-    Top,
-    Middle,
-    Bottom,
-}
+impl LayoutCx {
+    pub fn new(parent: &dyn Widget) -> Self {
+        let node = parent.node_ref().upgrade();
+        let rules = Rules::new(&node.borrow());
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Orientation {
-    #[default]
-    Vertical,
-    Horizontal,
-}
+        let(total_size, len) = parent.children_ref()
+            .map(|children| {
+                (
+                    children.iter()
+                        .map(|child| {
+                            let rect = child.node_ref().upgrade().borrow().rect;
+                            match rules.orientation {
+                                Orientation::Vertical => rect.size().height,
+                                Orientation::Horizontal => rect.size().width,
+                            }
+                        })
+                        .sum::<f32>(),
+                    children.len() as f32
+                )
+            }).unwrap_or_default();
 
-#[derive(Default, Debug, Clone, Copy)]
-pub struct Padding {
-    pub top: u8,
-    pub bottom: u8,
-    pub left: u8,
-    pub right: u8,
+        let next_pos = rules.start_pos(total_size, len);
+
+        Self {
+            rules,
+            next_pos,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -42,47 +46,6 @@ pub(crate) struct Rules {
     pub(crate) align_v: AlignV,
     pub(crate) padding: Padding,
     pub(crate) spacing: u8,
-}
-
-impl Orientation {
-    pub fn is_vertical(&self) -> bool {
-        matches!(self, Self::Vertical)
-    }
-
-    pub fn is_horizontal(&self) -> bool {
-        matches!(self, Self::Horizontal)
-    }
-}
-
-impl Padding {
-    pub const fn new(top: u8, bottom: u8, left: u8, right: u8) -> Self {
-        Self {
-            top,
-            bottom,
-            left,
-            right,
-        }
-    }
-
-    pub const fn splat(value: u8) -> Self {
-        Self {
-            top: value,
-            bottom: value,
-            left: value,
-            right: value,
-        }
-    }
-
-    pub(crate) fn vertical(&self) -> u8 { self.top + self.bottom }
-
-    pub(crate) fn horizontal(&self) -> u8 { self.left + self.right }
-
-    pub fn set_all(&mut self, value: u8) {
-        self.top = value;
-        self.bottom = value;
-        self.left = value;
-        self.right = value;
-    }
 }
 
 impl Rules {
@@ -150,6 +113,78 @@ impl Rules {
     }
 }
 
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AlignH {
+    #[default]
+    Left,
+    Center,
+    Right,
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AlignV {
+    #[default]
+    Top,
+    Middle,
+    Bottom,
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Orientation {
+    #[default]
+    Vertical,
+    Horizontal,
+}
+
+#[derive(Default, Debug, Clone, Copy)]
+pub struct Padding {
+    pub top: u8,
+    pub bottom: u8,
+    pub left: u8,
+    pub right: u8,
+}
+
+impl Orientation {
+    pub fn is_vertical(&self) -> bool {
+        matches!(self, Self::Vertical)
+    }
+
+    pub fn is_horizontal(&self) -> bool {
+        matches!(self, Self::Horizontal)
+    }
+}
+
+impl Padding {
+    pub const fn new(top: u8, bottom: u8, left: u8, right: u8) -> Self {
+        Self {
+            top,
+            bottom,
+            left,
+            right,
+        }
+    }
+
+    pub const fn splat(value: u8) -> Self {
+        Self {
+            top: value,
+            bottom: value,
+            left: value,
+            right: value,
+        }
+    }
+
+    pub(crate) fn vertical(&self) -> u8 { self.top + self.bottom }
+
+    pub(crate) fn horizontal(&self) -> u8 { self.left + self.right }
+
+    pub fn set_all(&mut self, value: u8) {
+        self.top = value;
+        self.bottom = value;
+        self.left = value;
+        self.right = value;
+    }
+}
+
 // /// Either pixel or percentage
 // pub enum Value {
 //     /// 0.0..f32::MAX
@@ -167,38 +202,3 @@ impl Rules {
 //         Self::Pct(val as f32)
 //     }
 // }
-
-pub struct LayoutCx {
-    pub(crate) next_pos: Vec2f,
-    pub(crate) rules: Rules,
-}
-
-impl LayoutCx {
-    pub fn new<T: Widget>(parent: &T) -> Self {
-        let node = parent.node_ref().upgrade();
-        let rules = Rules::new(&node.borrow());
-
-        let(total_size, len) = parent.children_ref()
-            .map(|children| {
-                (
-                    children.iter()
-                        .map(|child| {
-                            let rect = child.node_ref().upgrade().borrow().rect;
-                            match rules.orientation {
-                                Orientation::Vertical => rect.size().height,
-                                Orientation::Horizontal => rect.size().width,
-                            }
-                        })
-                        .sum::<f32>(),
-                    children.len() as f32
-                )
-            }).unwrap_or_default();
-
-        let next_pos = rules.start_pos(total_size, len);
-
-        Self {
-            rules,
-            next_pos,
-        }
-    }
-}

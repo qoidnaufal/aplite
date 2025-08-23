@@ -1,3 +1,4 @@
+#[repr(C)]
 #[derive(Debug, Default, Clone, Copy)]
 pub struct CornerRadius {
     pub tl: u8,

@@ -44,7 +44,8 @@ fn unpack_color(val: u32) -> vec4<f32> {
 }
 
 struct Element {
-    size: vec2<f32>,
+    width: f32,
+    height: f32,
     background: u32,
     border: u32,
     corners: u32,
@@ -125,7 +126,7 @@ fn sdSegment(p: vec2f, a: vec2f, b: vec2f) -> f32 {
 // should use uv - center here
 fn sdf(uv: vec2<f32>, element: Element) -> f32 {
     let border_width = element.border_width;
-    let size = element.size;
+    let size = vec2f(element.width, element.height);
 
     switch element.shape {
         case 0u: {

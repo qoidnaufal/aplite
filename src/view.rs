@@ -1,86 +1,94 @@
 use aplite_types::Size;
 
-use crate::widget::{Widget, ChildrenRef, ChildrenMut};
-use crate::state::{NodeRef, WidgetId, AspectRatio};
+use crate::widget::Widget;
+use crate::state::{WidgetId, AspectRatio};
 use crate::layout::*;
 use crate::cursor::Cursor;
 
-pub trait IntoView: Widget {
-    fn into_view(self) -> View;
-}
-
-impl<T: Widget + 'static> IntoView for T {
-    fn into_view(self) -> View {
-        View::new(self)
-    }
-}
-
 /// wrapper over [`Widget`] trait to be stored inside [`ViewStorage`]
 pub struct View {
-    inner: Box<dyn Widget>
+    pub(crate) widget: Box<dyn Widget>,
 }
 
 impl View {
     fn new(widget: impl IntoView + 'static) -> Self {
         Self {
-            inner: Box::new(widget),
+            widget: Box::new(widget),
         }
     }
 
-    pub(crate) fn detect_hover(&self, cursor: &Cursor) -> Option<*const dyn Widget> {
-        let mut current: *const dyn Widget = self;
+    pub(crate) fn detect_hover(&self, cursor: &Cursor) -> Option<&Box<dyn Widget>> {
+        let mut current = &self.widget;
 
         while let Some(children) = current.children_ref() {
-            if let Some(hovered) = children.iter()
+            if let Some(hovered) = children.visible_boxed()
                 .find_map(|child| {
-                    let node = child.node_ref().upgrade();
-
-                    (!node.borrow().flag.is_hidden()
-                        && node.borrow().rect.contains(cursor.hover.pos))
-                            .then_some(child.as_ref() as *const dyn Widget)
-                })
-            {
+                    child.node_ref()
+                        .upgrade()
+                        .borrow()
+                        .rect
+                        .contains(cursor.hover.pos)
+                        .then_some(child)
+                }) {
                 current = hovered
             } else {
                 break
             }
         }
 
-        let node = current.node_ref().upgrade();
-        node.borrow()
-            .flag
+        current
+            .node_ref()
             .is_hoverable()
             .then_some(current)
     }
 
-    pub(crate) fn find_parent(&self, id: &WidgetId) -> Option<*const dyn Widget> {
-        if self.inner.id() == id { return None }
+    pub(crate) fn calculate_layout(&self, bound: aplite_types::Rect) {
+        let window_widget = crate::widget::WindowWidget::new(bound);
+        let mut cx = LayoutCx::new(&window_widget);
+        self.widget.layout(&mut cx);
 
-        let mut current: *const dyn Widget = self;
+        let mut current = self.widget.as_ref();
+
+        while let Some(children) = current.children_ref() {
+            let mut cx = LayoutCx::new(current);
+
+            for child in children.visible_ref() {
+                child.layout(&mut cx);
+            }
+
+            for child in children.visible_ref() {
+                current = child;
+            }
+        }
+    }
+
+    pub(crate) fn find_parent(&self, id: &WidgetId) -> Option<&Box<dyn Widget>> {
+        if self.widget.as_ref().id() == id { return None }
+
+        let mut current = &self.widget;
 
         while let Some(children) = current.children_ref() {
             if children.iter().any(|child| child.id() == id) { break }
-            for child in children
-                .iter()
-                .map(|child| child.as_ref() as *const dyn Widget)
-                .collect::<Vec<_>>()
-            {
-                current = child;
-            }
+
+            children.all_boxed().for_each(|child| current = child);
         }
 
         current.id().ne(id).then_some(current)
     }
 
-    // fn find(&self, id: &WidgetId) -> Option<*const dyn Widget> {
-    //     if self.id() == id {
-    //         return Some(self)
-    //     }
+    pub(crate) fn find_visible(&self, id: &WidgetId) -> Option<&dyn Widget> {
+        let mut current = self.widget.as_ref();
 
-    //     self.children_ref().and_then(|vec| {
-    //         vec.iter().find_map(|w| w.find(id))
-    //     })
-    // }
+        while let Some(children) = current.children_ref() {
+            if current.id() == id { break }
+
+            children
+                .visible_ref()
+                .for_each(|child| current = child);
+        }
+
+        Some(current)
+    }
 
     // fn insert<T: Widget + 'static>(&mut self, parent: &WidgetId, widget: T) {
     //     if let Some(mut p) = self.find_mut(parent)
@@ -103,69 +111,32 @@ impl View {
     // }
 }
 
-impl Widget for View {
-    fn node_ref(&self) -> NodeRef {
-        self.inner.node_ref()
-    }
-
-    fn children_ref(&self) -> Option<ChildrenRef<'_>> {
-        self.inner.children_ref()
-    }
-
-    fn children_mut(&mut self) -> Option<ChildrenMut<'_>> {
-        self.inner.children_mut()
-    }
+pub trait IntoView: Widget {
+    fn into_view(self) -> View;
 }
 
-impl Widget for Box<dyn IntoView> {
-    fn node_ref(&self) -> NodeRef {
-        self.as_ref().node_ref()
-    }
-
-    fn children_ref(&self) -> Option<ChildrenRef<'_>> {
-        self.as_ref().children_ref()
-    }
-
-    fn children_mut(&mut self) -> Option<ChildrenMut<'_>> {
-        self.as_mut().children_mut()
-    }
-}
-
-impl std::fmt::Debug for Box<dyn Widget> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.as_ref().fmt(f)
-    }
-}
-
-impl std::fmt::Debug for &dyn Widget {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = self.node_ref().upgrade().borrow().name;
-        let name = if name.is_empty() { std::any::type_name::<Self>() } else { name };
-
-        f.debug_struct(name)
-            .field("id", &self.id())
-            .field("children", &self.children_ref().unwrap_or(ChildrenRef::from(&vec![])))
-            .finish()
-    }
-}
-
-impl std::fmt::Debug for Box<dyn IntoView> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = self.node_ref().upgrade().borrow().name;
-        let name = if name.is_empty() { std::any::type_name::<Self>() } else { name };
-
-        f.debug_struct(name)
-            .field("id", &self.id())
-            .field("children", &self.children_ref().unwrap_or(ChildrenRef::from(&vec![])))
-            .finish()
+impl<T: Widget + 'static> IntoView for T {
+    fn into_view(self) -> View {
+        View::new(self)
     }
 }
 
 impl<T: Widget + Sized + 'static> Layout for T {}
 
 pub(crate) trait Layout: Widget + Sized + 'static {
-    // FIXME: deconstruct the recursion into loop
     fn calculate_layout(&self, cx: &mut LayoutCx) {
+        // self.layout(cx);
+
+        // let mut current = self as &dyn Widget;
+
+        // while let Some(children) = current.children_ref() {
+        //     for child in children.visible_ref() {
+        //         let mut new_cx = LayoutCx::new(current);
+        //         child.layout(&mut new_cx);
+        //         current = child;
+        //     }
+        // }
+
         if self.layout(cx)
             && let Some(children) = self.children_ref()
         {

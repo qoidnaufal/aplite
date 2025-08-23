@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use aplite_future::{
     Channel,
     Sender,
@@ -8,7 +8,7 @@ use aplite_future::{
 
 use crate::graph::{Node, Graph};
 use crate::subscriber::{Subscriber, ToAnySubscriber, AnySubscriber};
-use crate::source::AnySource;
+// use crate::source::AnySource;
 use crate::reactive_traits::*;
 
 /// [`Effect`] is a scope to synchronize the reactive node (eg: [`Signal`](crate::signal::Signal)) with anything.
@@ -22,7 +22,7 @@ use crate::reactive_traits::*;
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Effect {
-    node: Node<Arc<Scope>>,
+    node: Node<Scope>,
 }
 
 impl Effect {
@@ -42,24 +42,25 @@ impl Effect {
     {
         scope.sender.notify();
         let scope = Arc::new(scope);
-        let node = Graph::insert(Arc::clone(&scope));
-        let scope = scope.to_any_subscriber();
+        let any_subscriber = scope.to_any_subscriber();
+        let node = Graph::insert(scope);
 
         Executor::spawn(async move {
             let mut value = None::<R>;
+            let mut scope = Some(any_subscriber);
 
             while rx.recv().await.is_some() {
                 #[cfg(test)] eprintln!("\n[NOTIFIED]      : {:?}", node);
 
-                let prev_scope = Graph::set_scope(Some(scope.clone()));
+                let prev_scope = Graph::set_scope(scope);
 
-                scope.clear_source();
+                // scope.clear_source();
 
                 let prev_value = value.take();
                 let new_val = f(prev_value);
                 value = Some(new_val);
 
-                Graph::set_scope(prev_scope);
+                scope = Graph::set_scope(prev_scope);
             }
         });
 
@@ -69,7 +70,7 @@ impl Effect {
 
 pub struct Scope {
     pub(crate) sender: Sender,
-    pub(crate) source: RwLock<Vec<AnySource>>,
+    // pub(crate) source: RwLock<Vec<AnySource>>,
 }
 
 unsafe impl Send for Scope {}
@@ -79,35 +80,35 @@ impl Scope {
     pub fn new(sender: Sender) -> Self {
         Self {
             sender,
-            source: RwLock::new(Vec::new()),
+            // source: RwLock::new(Vec::new()),
         }
     }
 }
 
 impl Subscriber for Scope {
-    fn add_source(&self, source: AnySource) {
-        let mut sources = self.source.write().unwrap();
-        if !sources.contains(&source) {
-            sources.push(source);
-        }
-    }
+    // fn add_source(&self, _source: AnySource) {
+        // let mut sources = self.source.write().unwrap();
+        // if !sources.contains(&source) {
+        //     sources.push(source);
+        // }
+    // }
 
-    fn clear_source(&self) {
-        let mut sources = self.source.write().unwrap();
-        sources.clear();
+    // fn clear_source(&self) {
+        // let mut sources = self.source.write().unwrap();
+        // sources.clear();
         // let drained_sources = sources.drain(..);
         // drained_sources.into_iter().for_each(|source| source.untrack())
-    }
+    // }
 }
 
 impl Subscriber for Arc<Scope> {
-    fn add_source(&self, source: AnySource) {
-        self.as_ref().add_source(source);
-    }
+    // fn add_source(&self, source: AnySource) {
+    //     self.as_ref().add_source(source);
+    // }
 
-    fn clear_source(&self) {
-        self.as_ref().clear_source();
-    }
+    // fn clear_source(&self) {
+    //     self.as_ref().clear_source();
+    // }
 }
 
 impl Notify for Scope {
@@ -123,8 +124,8 @@ impl Notify for Arc<Scope> {
 }
 
 impl ToAnySubscriber for Arc<Scope> {
-    fn to_any_subscriber(self) -> AnySubscriber {
-        AnySubscriber::new(self)
+    fn to_any_subscriber(&self) -> AnySubscriber {
+        AnySubscriber::new(Arc::downgrade(self))
     }
 }
 
@@ -138,13 +139,13 @@ impl Track for Arc<Scope> {
     fn untrack(&self) {}
 }
 
-impl std::fmt::Debug for Scope {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Scope")
-            .field("source_count", &self.source.read().map(|s| s.len()).unwrap_or_default())
-            .finish()
-    }
-}
+// impl std::fmt::Debug for Scope {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         f.debug_struct("Scope")
+//             .field("source_count", &self.source.read().map(|s| s.len()).unwrap_or_default())
+//             .finish()
+//     }
+// }
 
 #[cfg(test)]
 mod effect_test {

@@ -19,9 +19,6 @@ pub struct Rgba {
 }
 
 impl Rgba {
-}
-
-impl Rgba {
     pub const TRANSPARENT: Self = Self::new(0, 0, 0, 0);
     pub const BLACK: Self = Self::new(0, 0, 0, 255);
     pub const RED: Self = Self::new(255, 0, 0, 255);

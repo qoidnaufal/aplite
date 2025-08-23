@@ -10,7 +10,6 @@ pub struct Button {
 impl Button {
     pub fn new() -> Self {
         let node = NodeRef::default()
-            .with_name("Button")
             .with_shape(Shape::RoundedRect)
             .hoverable()
             .with_size((80, 30));

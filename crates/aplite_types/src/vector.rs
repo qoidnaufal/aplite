@@ -1,4 +1,3 @@
-#[repr(C, align(8))]
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Vec2f {
     pub x: f32,

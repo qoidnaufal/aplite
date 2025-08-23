@@ -18,58 +18,6 @@ pub use {
     stack::*,
 };
 
-pub struct ChildrenRef<'a>(&'a Vec<Box<dyn Widget>>);
-
-impl<'a> From<&'a Vec<Box<dyn Widget>>> for ChildrenRef<'a> {
-    fn from(value: &'a Vec<Box<dyn Widget>>) -> Self {
-        Self(value)
-    }
-}
-
-impl std::ops::Deref for ChildrenRef<'_> {
-    type Target = Vec<Box<dyn Widget>>;
-    fn deref(&self) -> &Self::Target {
-        self.0
-    }
-}
-
-impl std::fmt::Debug for ChildrenRef<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_list()
-            .entry(self.0)
-            .finish()
-    }
-}
-
-pub struct ChildrenMut<'a>(&'a mut Vec<Box<dyn Widget>>);
-
-impl<'a> From<&'a mut Vec<Box<dyn Widget>>> for ChildrenMut<'a> {
-    fn from(value: &'a mut Vec<Box<dyn Widget>>) -> Self {
-        Self(value)
-    }
-}
-
-impl std::ops::Deref for ChildrenMut<'_> {
-    type Target = Vec<Box<dyn Widget>>;
-    fn deref(&self) -> &Self::Target {
-        self.0
-    }
-}
-
-impl std::ops::DerefMut for ChildrenMut<'_> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.0
-    }
-}
-
-impl std::fmt::Debug for ChildrenMut<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_list()
-            .entry(self.0)
-            .finish()
-    }
-}
-
 /// main building block to create a renderable component
 pub trait Widget {
     fn node_ref(&self) -> NodeRef;
@@ -94,10 +42,10 @@ pub trait Widget {
                 let state = node.borrow();
 
                 scene.draw(&aplite_renderer::DrawArgs {
-                    rect: state.rect,
-                    transform: state.transform,
-                    background_paint: state.background_paint.as_paint_ref(),
-                    border_paint: state.border_paint.as_paint_ref(),
+                    rect: &state.rect,
+                    transform: &state.transform,
+                    background_paint: &state.background_paint.as_paint_ref(),
+                    border_paint: &state.border_paint.as_paint_ref(),
                     border_width: state.border_width.max(5.0),
                     shape: state.shape,
                     corner_radius: state.corner_radius,
@@ -152,12 +100,91 @@ pub trait Widget {
     }
 }
 
+pub struct ChildrenRef<'a>(&'a Vec<Box<dyn Widget>>);
+
+impl<'a> ChildrenRef<'a> {
+    pub fn all_ref(&self) -> impl Iterator<Item = &'a dyn Widget> {
+        self.0.iter().map(|child| child.as_ref())
+    }
+
+    pub fn all_boxed(&self) -> impl Iterator<Item = &'a Box<dyn Widget>> {
+        self.0.iter()
+    }
+
+    pub fn visible_ref(&self) -> impl Iterator<Item = &'a dyn Widget> {
+        self.0.iter()
+            .filter_map(|child| {
+                child.node_ref()
+                    .is_visible()
+                    .then_some(child.as_ref())
+            })
+    }
+
+    pub fn visible_boxed(&self) -> impl Iterator<Item = &'a Box<dyn Widget>> {
+        self.0.iter()
+            .filter_map(|child| {
+                child.node_ref()
+                    .is_visible()
+                    .then_some(child)
+            })
+    }
+}
+
+impl<'a> From<&'a Vec<Box<dyn Widget>>> for ChildrenRef<'a> {
+    fn from(value: &'a Vec<Box<dyn Widget>>) -> Self {
+        Self(value)
+    }
+}
+
+impl std::ops::Deref for ChildrenRef<'_> {
+    type Target = Vec<Box<dyn Widget>>;
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+impl std::fmt::Debug for ChildrenRef<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list()
+            .entry(self.0)
+            .finish()
+    }
+}
+
+pub struct ChildrenMut<'a>(&'a mut Vec<Box<dyn Widget>>);
+
+impl<'a> From<&'a mut Vec<Box<dyn Widget>>> for ChildrenMut<'a> {
+    fn from(value: &'a mut Vec<Box<dyn Widget>>) -> Self {
+        Self(value)
+    }
+}
+
+impl std::ops::Deref for ChildrenMut<'_> {
+    type Target = Vec<Box<dyn Widget>>;
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+impl std::ops::DerefMut for ChildrenMut<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0
+    }
+}
+
+impl std::fmt::Debug for ChildrenMut<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list()
+            .entry(self.0)
+            .finish()
+    }
+}
+
 // TODO: is immediately calculate the size here a good idea?
 pub trait WidgetExt: Widget + Sized {
     fn child(mut self, child: impl IntoView + 'static) -> Self {
-        if let Some(mut children) = self.children_mut() {
-            // let child_size = child.node().borrow().rect.size();
-            children.push(Box::new(child));
+        if let Some(children) = self.children_mut() {
+            children.0.push(Box::new(child));
         }
         self
     }
@@ -358,25 +385,18 @@ impl Widget for Box<&mut dyn Widget> {
     }
 }
 
-impl Widget for *const dyn Widget {
-    fn node_ref(&self) -> NodeRef {
-        unsafe {
-            self.as_ref().unwrap().node_ref()
-        }
+impl std::fmt::Debug for Box<dyn Widget> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.as_ref().fmt(f)
     }
+}
 
-    fn children_ref(&self) -> Option<ChildrenRef<'_>> {
-        unsafe {
-            self.as_ref().and_then(|w| w.children_ref())
-        }
-    }
-
-    fn children_mut(&mut self) -> Option<ChildrenMut<'_>> {
-        unsafe {
-            self.cast_mut()
-                .as_mut()
-                .and_then(|w| w.children_mut())
-        }
+impl std::fmt::Debug for &dyn Widget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct(std::any::type_name::<Self>())
+            .field("id", &self.id())
+            .field("children", &self.children_ref().unwrap_or(ChildrenRef::from(&vec![])))
+            .finish()
     }
 }
 
@@ -454,7 +474,6 @@ impl CircleWidget {
     pub fn new() -> Self {
         Self {
             node: NodeRef::default()
-                .with_name("Circle")
                 .with_stroke_width(5.)
                 .with_shape(Shape::Circle)
                 .with_size((100., 100.)),

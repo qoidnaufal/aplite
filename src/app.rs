@@ -13,7 +13,7 @@ use aplite_renderer::Renderer;
 use aplite_future::{block_on, Executor};
 
 use crate::prelude::ApliteResult;
-use crate::context::{Context, ViewId};
+use crate::context::Context;
 use crate::layout::LayoutCx;
 use crate::error::ApliteError;
 use crate::view::{IntoView, Layout};
@@ -23,7 +23,6 @@ pub(crate) const DEFAULT_SCREEN_SIZE: LogicalSize<u32> = LogicalSize::new(800, 6
 
 pub(crate) struct WindowHandle {
     pub(crate) window: Arc<Window>,
-    pub(crate) root_id: ViewId,
 }
 
 pub struct Aplite {
@@ -31,7 +30,6 @@ pub struct Aplite {
     renderer: Option<Renderer>,
     window_handle: HashMap<WindowId, WindowHandle>,
     window_attributes_fn: Option<fn(&mut WindowAttributes)>,
-    current_view: Option<ViewId>,
 
     #[cfg(feature = "render_stats")]
     stats: aplite_stats::Stats,
@@ -40,21 +38,12 @@ pub struct Aplite {
 // user API
 impl Aplite {
     pub fn new<IV: IntoView + 'static>(view_fn: impl FnOnce() -> IV + 'static) -> Self {
-        let mut app = Self::new_empty();
-        let view = view_fn().into_view();
-        let view_id = app.cx.insert_view(view);
-        app.current_view = Some(view_id);
-        app
-    }
-
-    pub fn new_empty() -> Self {
         Executor::init();
         Self {
             renderer: None,
-            cx: Context::default(),
+            cx: Context::new(view_fn().into_view()),
             window_handle: HashMap::with_capacity(4),
             window_attributes_fn: None,
-            current_view: None,
 
             #[cfg(feature = "render_stats")]
             stats: aplite_stats::Stats::new(),
@@ -77,10 +66,7 @@ impl Aplite {
     //     let _ = color;
     //     self
     // }
-}
 
-// initialization
-impl Aplite {
     fn initialize_window_and_renderer(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -95,38 +81,25 @@ impl Aplite {
         let window = event_loop.create_window(attributes)?;
         let window = Arc::new(window);
         let window_id = window.id();
+
         let size = window
             .inner_size()
             .to_logical::<f32>(window.scale_factor());
         let bound = Rect::from_size(Size::new(size.width, size.height));
         let window_widget = WindowWidget::new(bound);
+        let mut cx = LayoutCx::new(&window_widget);
 
-        let root_id = {
-            if let Some(view_id) = self.current_view.as_ref()
-                && let Some(view) = self.cx.get_view_ref(view_id)
-            {
-                let mut cx = LayoutCx::new(&window_widget);
+        self.cx.view.widget.calculate_size(None);
+        self.cx.view.widget.calculate_layout(&mut cx);
 
-                view.calculate_size(None);
-                view.calculate_layout(&mut cx);
+        #[cfg(feature = "debug_tree")] eprintln!("{:#?}", view);
 
-                #[cfg(feature = "debug_tree")] eprintln!("{:#?}", view);
-
-                *view_id
-            } else {
-                self.cx.insert_view(window_widget.into_view())
-            }
-        };
-
-        let renderer = block_on(async { Renderer::new(Arc::clone(&window)).await })?;
+        let renderer = block_on(async { Renderer::new(Arc::downgrade(&window)).await })?;
 
         self.renderer = Some(renderer);
         self.track_window(Arc::downgrade(&window));
 
-        let window_handle = WindowHandle {
-            window,
-            root_id,
-        };
+        let window_handle = WindowHandle { window };
         self.window_handle.insert(window_id, window_handle);
 
         Ok(())
@@ -134,7 +107,7 @@ impl Aplite {
 
     /// Track the [`Window`] with the associated root [`ViewId`] for rendering
     fn track_window(&mut self, window: Weak<Window>) {
-        let dirty = self.cx.dirty();
+        let dirty = self.cx.dirty;
 
         Effect::new(move |_| {
             if dirty.get() && let Some(window) = window.upgrade() {
@@ -142,10 +115,7 @@ impl Aplite {
             }
         });
     }
-}
 
-// window event
-impl Aplite {
     fn handle_resize(&mut self, size: PhysicalSize<u32>) {
         if let Some(renderer) = self.renderer.as_mut()
             && size.width > 0 && size.height > 0
@@ -160,12 +130,10 @@ impl Aplite {
         }
     }
 
-    fn handle_mouse_move(&mut self, window_id: &WindowId, pos: PhysicalPosition<f64>) {
-        if let Some(renderer) = self.renderer.as_mut()
-            && let Some(WindowHandle { root_id, .. }) = self.window_handle.get(window_id)
-        {
+    fn handle_mouse_move(&mut self, _window_id: &WindowId, pos: PhysicalPosition<f64>) {
+        if let Some(renderer) = self.renderer.as_mut() {
             let logical_pos = pos.to_logical::<f32>(renderer.scale_factor());
-            self.cx.handle_mouse_move(root_id, (logical_pos.x, logical_pos.y));
+            self.cx.handle_mouse_move((logical_pos.x, logical_pos.y));
         }
     }
 
@@ -188,8 +156,8 @@ impl Aplite {
             #[cfg(feature = "render_stats")] let start = std::time::Instant::now();
 
             renderer.begin();
-            self.cx.render(&window_handle.root_id, renderer);
-            renderer.finish(&window_handle.window);
+            self.cx.render(renderer);
+            renderer.finish(window_handle.window.as_ref());
 
             #[cfg(feature = "render_stats")] self.stats.inc(start.elapsed());
         }
@@ -218,8 +186,8 @@ impl ApplicationHandler for Aplite {
             _ => {}
         }
 
-        if let Some(handle) = self.window_handle.get(&window_id) {
-            self.cx.process_pending_update(&handle.root_id);
+        if let Some(_handle) = self.window_handle.get(&window_id) {
+            self.cx.process_pending_update();
         }
     }
 }

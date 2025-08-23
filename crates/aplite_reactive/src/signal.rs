@@ -9,7 +9,7 @@ use crate::source::*;
 use crate::subscriber::*;
 
 pub struct Signal<T> {
-    pub(crate) node: Node<Arc<RwLock<Value<T>>>>,
+    pub(crate) node: Node<RwLock<Value<T>>>,
 }
 
 impl<T> Clone for Signal<T> {
@@ -57,21 +57,21 @@ impl<T: 'static> Source for Signal<T> {
     }
 }
 
-impl<T: 'static> ToAnySource for Signal<T> {
-    fn to_any_source(self) -> AnySource {
-        Graph::with_downcast(&self.node, |node| node.clone().to_any_source())
-    }
-}
+// impl<T: 'static> ToAnySource for Signal<T> {
+//     fn to_any_source(self) -> AnySource {
+//         Graph::with_downcast(&self.node, |node| node.clone().to_any_source())
+//     }
+// }
 
 impl<T: 'static> Track for Signal<T> {
     fn track(&self) {
         #[cfg(test)] eprintln!(" └─ [TRACKING]  : {self:?}");
         Graph::with_downcast(&self.node, |node| node.track());
-        Graph::with(|graph| {
-            if let Some(current) = graph.current.as_ref() {
-                current.add_source(self.to_any_source());
-            }
-        });
+        // Graph::with(|graph| {
+        //     if let Some(current) = graph.current.as_ref() {
+        //         current.add_source(self.to_any_source());
+        //     }
+        // });
     }
 
     fn untrack(&self) {

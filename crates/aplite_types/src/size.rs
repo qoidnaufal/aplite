@@ -1,7 +1,7 @@
 use crate::fraction::Fraction;
 
 /// corresponds to [`winit::dpi::LogicalSize<T>`]
-#[repr(C, align(8))]
+#[repr(C)]
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Size {
     pub width: f32,

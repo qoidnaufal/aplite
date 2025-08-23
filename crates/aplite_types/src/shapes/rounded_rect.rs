@@ -4,7 +4,7 @@ use crate::Vec2f;
 
 use super::Rect;
 
-#[repr(C, align(16))]
+#[repr(C)]
 #[derive(Default, Debug, Clone, Copy)]
 pub struct RoundedRect {
     pub x: f32,

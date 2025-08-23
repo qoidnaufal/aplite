@@ -61,18 +61,23 @@ impl Atlas {
         let size = Size::new(data.width as _, data.height as _);
         let allocated = self.allocator.alloc(size);
 
-        if let Some(rect) = allocated {
-            self.pending_data.push((rect, data.clone()));
-        }
+        // if let Some(rect) = allocated {
+        //     self.pending_data.push((rect, data.clone()));
+        // }
 
         allocated.map(|rect| {
             let min_x = rect.x / self.allocator.rect.width;
             let min_y = rect.y / self.allocator.rect.height;
+            let max_x = min_x + rect.width / self.allocator.rect.width;
+            let max_y = min_y + rect.height / self.allocator.rect.height;
+
+            self.pending_data.push((rect, data.clone()));
+
             Uv {
                 min_x,
                 min_y,
-                max_x: min_x + rect.width / self.allocator.rect.width,
-                max_y: min_y + rect.height / self.allocator.rect.height,
+                max_x,
+                max_y,
             }
         })
     }
@@ -99,7 +104,7 @@ impl Atlas {
             self.pending_data
                 .drain(..)
                 .for_each(|(rect, data)| {
-                    let data = data.upgrade().unwrap();
+                    let data = data.upgrade().expect("Image Data shouldn't have been removed");
                     let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
                     let width = data.width * 4;
                     let padding = (alignment - width % alignment) % alignment;

@@ -41,15 +41,6 @@ impl Paint {
     }
 }
 
-impl Clone for Paint {
-    fn clone(&self) -> Self {
-        match self {
-            Paint::Color(rgba) => Paint::Color(*rgba),
-            Paint::Image(image_data) => Paint::Image(image_data.clone()),
-        }
-    }
-}
-
 impl PartialEq for Paint {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
