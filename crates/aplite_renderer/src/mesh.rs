@@ -110,7 +110,7 @@ impl Default for Vertices {
 impl Vertices {
     pub(crate) const COUNT: u64 = 4;
 
-    pub(crate) fn new(rect: &Rect, uv: Uv, screen: Size, id: u32, atlas: u8) -> Self {
+    pub(crate) fn new(rect: &Rect, uv: Uv, screen: &Size, id: u32, atlas: u8) -> Self {
         let sx = screen.width;
         let sy = screen.height;
 

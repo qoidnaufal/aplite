@@ -7,7 +7,7 @@ pub(crate) struct Screen {
     pub(crate) bind_group: wgpu::BindGroup,
 
     // FIXME: not needed
-    screen_resolution: Size,
+    pub(crate) screen_resolution: Size,
     pub(crate) scale_factor: f64,
 }
 

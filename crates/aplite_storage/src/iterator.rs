@@ -139,7 +139,7 @@ impl<'a, E: Entity, T> DoubleEndedIterator for TreeIter<'a, E, T> {
 #########################################################
 */
 
-fn filter_map<E, T>((i, slot): (usize, &Slot<T>)) -> Option<(E, Option<&T>)>
+fn filter_ref<E, T>((i, slot): (usize, &Slot<T>)) -> Option<(E, Option<&T>)>
 where
     E: Entity
 {
@@ -149,6 +149,8 @@ where
             slot.get_content()
         ))
 }
+
+type FilterRef<E, T> = fn((usize, &Slot<T>)) -> Option<(E, Option<&T>)>;
 
 impl<'a, E, T> IntoIterator for &'a IndexMap<E, T>
 where
@@ -162,7 +164,7 @@ where
             .inner
             .iter()
             .enumerate()
-            .filter_map(filter_map as fn((usize, &Slot<T>)) -> Option<(E, Option<&T>)>);
+            .filter_map(filter_ref as FilterRef<E, T>);
 
         IndexMapIter {
             inner,
@@ -220,6 +222,8 @@ where
         ))
 }
 
+type FilterMut<E, T> = fn((usize, &mut Slot<T>)) -> Option<(E, Option<&mut T>)>;
+
 impl<'a, E: Entity, T> IntoIterator for &'a mut IndexMap<E, T> {
     type Item = (E, &'a mut T);
     type IntoIter = IndexMapIterMut<'a, E, T>;
@@ -229,7 +233,7 @@ impl<'a, E: Entity, T> IntoIterator for &'a mut IndexMap<E, T> {
             .inner
             .iter_mut()
             .enumerate()
-            .filter_map(filter_mut as fn((usize, &mut Slot<T>)) -> Option<(E, Option<&mut T>)>);
+            .filter_map(filter_mut as FilterMut<E, T>);
 
         IndexMapIterMut { inner }
     }

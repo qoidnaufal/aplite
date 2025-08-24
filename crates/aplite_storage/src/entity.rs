@@ -1,4 +1,4 @@
-/// A trait that needs to be implemented for any type to be stored in the [`Tree`]
+/// A trait that needs to be implemented for any type to be stored in the [`Tree`](crate::tree::Tree) or [`IndexMap`](crate::index_map::IndexMap)
 pub trait Entity
 where
     Self : std::fmt::Debug + Copy + PartialEq + PartialOrd
@@ -16,10 +16,31 @@ where
 }
 
 #[macro_export]
+/// A macro to conveniently implement [`Entity`] trait.
+/// # Usage
+/// ```ignore
+/// entity! { pub(crate) UniqueId }
+///
+/// struct MyData {}
+///
+/// struct MyStorage {
+///     inner: IndexMap<UniqueId, MyData>
+/// }
+///
+/// let mut storage = MyStorage::new();
+/// let data = MyData {};
+/// let id = storage.inner.insert(data);
+/// ```
 macro_rules! entity {
     { $vis:vis $name:ident } => {
         #[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
         $vis struct $name(u32, u32);
+
+        impl $name {
+            $vis fn index(&self) -> usize {
+                self.0 as usize
+            }
+        }
 
         impl Entity for $name {
             fn new(index: u32, version: u32) -> Self {
@@ -27,7 +48,7 @@ macro_rules! entity {
             }
 
             fn index(&self) -> usize {
-                self.0 as usize
+                self.index()
             }
 
             fn version(&self) -> u32 {

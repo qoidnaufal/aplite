@@ -2,7 +2,7 @@ use std::rc::{Rc, Weak};
 use std::cell::RefCell;
 
 use aplite_renderer::Shape;
-use aplite_storage::{IndexMap, Entity, entity};
+use aplite_storage::IndexMap;
 use aplite_types::{
     Matrix3x2,
     Rect,
@@ -13,10 +13,7 @@ use aplite_types::{
 };
 
 use crate::layout::{AlignV, AlignH, Orientation, Padding};
-
-entity! {
-    pub WidgetId
-}
+use crate::widget::WidgetId;
 
 thread_local! {
     pub(crate) static NODE_STORAGE: RefCell<IndexMap<WidgetId, Rc<RefCell<WidgetState>>>> =

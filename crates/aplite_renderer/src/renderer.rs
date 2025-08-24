@@ -145,7 +145,7 @@ impl Renderer {
     #[inline(always)]
     pub fn scene(&mut self) -> Scene<'_> {
         Scene {
-            size: self.screen_res(),
+            size: &self.screen.screen_resolution,
             device: &self.device,
             queue: &self.queue,
             storage: &mut self.storage,
@@ -246,7 +246,7 @@ pub struct Scene<'a> {
     storage: &'a mut StorageBuffers,
     mesh: &'a mut MeshBuffer,
     atlas: &'a mut Atlas,
-    size: Size,
+    size: &'a Size,
 }
 
 pub struct DrawArgs<'a> {
@@ -293,7 +293,7 @@ impl Scene<'_> {
             PaintRef::Color(rgba) => {
                 element.background = rgba.pack_u32();
                 Vertices::new(
-                    &rect,
+                    rect,
                     Uv {
                         min_x: 0.,
                         min_y: 0.,
@@ -333,7 +333,7 @@ impl Scene<'_> {
         self.mesh.offset += 1;
     }
 
-    pub fn size(&self) -> Size {
+    pub fn size(&self) -> &Size {
         self.size
     }
 }

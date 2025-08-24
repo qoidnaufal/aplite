@@ -2,9 +2,9 @@ use std::cell::RefCell;
 
 use aplite_renderer::{Shape, Scene};
 use aplite_types::{Rgba, CornerRadius, Size, Rect};
-use aplite_storage::U64Map;
+use aplite_storage::{Entity, entity, U64Map};
 
-use crate::state::{WidgetId, NodeRef, AspectRatio};
+use crate::state::{NodeRef, AspectRatio};
 use crate::layout::*;
 use crate::view::IntoView;
 
@@ -17,6 +17,10 @@ pub use {
     image::*,
     stack::*,
 };
+
+entity! {
+    pub WidgetId
+}
 
 /// main building block to create a renderable component
 pub trait Widget {

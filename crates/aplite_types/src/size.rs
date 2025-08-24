@@ -102,6 +102,13 @@ impl std::ops::Div<Self> for Size {
     }
 }
 
+impl std::ops::Div<&Self> for Size {
+    type Output = Self;
+    fn div(self, rhs: &Self) -> Self::Output {
+        Self::new(self.width / rhs.width, self.height / rhs.height)
+    }
+}
+
 // logical operation
 
 impl PartialEq for Size {
