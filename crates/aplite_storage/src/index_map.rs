@@ -4,6 +4,8 @@ use crate::iterator::{IndexMapIter, IndexMapIterMut};
 use crate::slot::*;
 use crate::Error;
 
+/// Arena style data allocation which never shrink the Vec
+/// to preserve the spot after removal for new version
 pub struct IndexMap<E: Entity, T> {
     pub(crate) inner: Vec<Slot<T>>,
     next: u32,

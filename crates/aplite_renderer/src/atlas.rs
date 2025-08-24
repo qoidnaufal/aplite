@@ -260,34 +260,60 @@ impl AtlasAllocator {
 
     fn scan(&self, size: Size) -> Option<(AtlasId, Vec2f)> {
         self.get_parents()
-            .iter()
             .find_map(|(id, rect)| self.identify_children(id, rect, size))
     }
 
     fn identify_children(
         &self,
-        parent: &AtlasId,
+        parent: AtlasId,
         rect: &Rect,
         size: Size,
     ) -> Option<(AtlasId, Vec2f)> {
-        match self.tree.get_all_children(parent) {
-            Some(children) => {
-                children
-                    .iter()
-                    .find_map(|child_id| {
-                        match self.tree.get_last_child(child_id) {
-                            Some(last) => self.check_pos_for(last, child_id, size),
-                            None => self.check_pos_for(child_id, child_id, size),
-                        }
-                        .or(self.indentify_next_sibling(child_id, parent, size))
-                    })
-            },
-            None => (rect.max_x() + size.width <= self.rect.width)
+        if let Some(first) = self.tree.get_first_child(&parent) {
+            let mut current = first;
+
+            while let Some(sibling) = self.tree.get_next_sibling(current) {
+                let find = match self.tree.get_last_child(current) {
+                    Some(last) => self.check_pos_for(last, current, size),
+                    None => self.check_pos_for(current, current, size),
+                }
+                .or(self.indentify_next_sibling(current, &parent, size));
+
+                if find.is_some() {
+                    return find
+                } else {
+                    current = sibling;
+                }
+            }
+
+            None
+        } else {
+            (rect.max_x() + size.width <= self.rect.width)
                 .then_some((
-                    *parent,
+                    parent,
                     Vec2f::new(rect.max_x(), rect.y)
-                )),
+                ))
         }
+
+        // initial implementation which created unnecessary allocation on Tree::get_all_children
+        // match self.tree.get_all_children(&parent) {
+        //     Some(children) => {
+        //         children
+        //             .iter()
+        //             .find_map(|child_id| {
+        //                 match self.tree.get_last_child(child_id) {
+        //                     Some(last) => self.check_pos_for(last, child_id, size),
+        //                     None => self.check_pos_for(child_id, child_id, size),
+        //                 }
+        //                 .or(self.indentify_next_sibling(child_id, &parent, size))
+        //             })
+        //     },
+        //     None => (rect.max_x() + size.width <= self.rect.width)
+        //         .then_some((
+        //             parent,
+        //             Vec2f::new(rect.max_x(), rect.y)
+        //         )),
+        // }
     }
 
     #[inline(always)]
@@ -325,7 +351,7 @@ impl AtlasAllocator {
     }
 
     #[inline(always)]
-    fn get_parents(&self) -> Vec<(AtlasId, &Rect)> {
+    fn get_parents(&self) -> impl Iterator<Item = (AtlasId, &Rect)> {
         self.tree
             .iter_data_ref()
             .filter_map(|(id, rect)| {
@@ -334,7 +360,6 @@ impl AtlasAllocator {
                     .is_none()
                     .then_some((id, rect))
             })
-            .collect()
     }
 
     // fn remove(&mut self, id: AtlasId) -> Option<Rect> {
@@ -372,7 +397,7 @@ mod atlas_test {
 
         let second = allocator.alloc(Size::new(500., 200.));
         assert!(second.is_some());
-        // assert_eq!(allocator.get_next_sibling(&first.unwrap()), second.as_ref());
+        assert_eq!(second.unwrap().vec2f(), Vec2f::new(0., 200.));
 
         let third = allocator.alloc(Size::new(100., 100.));
         assert!(third.is_some());
@@ -390,7 +415,7 @@ mod atlas_test {
         let sixth = allocator.alloc(Size::new(300., 100.));
         assert!(sixth.is_some());
         // assert_eq!(allocator.get_next_sibling(&second.unwrap()), sixth.as_ref());
-        assert_eq!(allocator.get_parents().len(), 3);
+        assert_eq!(allocator.get_parents().count(), 3);
 
         eprintln!("{:#?}", allocator.tree);
     }

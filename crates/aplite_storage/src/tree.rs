@@ -70,12 +70,26 @@ impl<E: Entity, T> Tree<E, T> {
 
     pub fn remove(&mut self, entity: E) -> Vec<E> {
         let mut to_remove = vec![entity];
+
         let mut current = entity;
 
-        while let Some(children) = self.get_all_children(&current) {
-            children.iter().for_each(|child| current = *child);
-            to_remove.extend_from_slice(&children);
+        while let Some(first_child) = self.get_first_child(&current) {
+            to_remove.push(*first_child);
+
+            let mut child = first_child;
+            while let Some(next) = self.get_next_sibling(child) {
+                to_remove.push(*next);
+                child = next;
+            }
+
+            current = *first_child;
         }
+
+        // initial implementation which created unnecessary allocation on get_all_children
+        // while let Some(children) = self.get_all_children(&current) {
+        //     children.iter().for_each(|child| current = *child);
+        //     to_remove.extend_from_slice(&children);
+        // }
 
         // shifting
         if let Some(prev) = self.get_prev_sibling(&entity).copied() {
@@ -142,11 +156,10 @@ impl<E: Entity, T> Tree<E, T> {
         self.next_sibling[current.index()] = Some(next_sibling);
     }
 
-    pub fn get_all_entities(&self) -> Vec<E> {
+    pub fn get_all_entities(&self) -> impl Iterator<Item = E> {
         self.data
             .iter()
             .map(|(entity, _)| entity)
-            .collect()
     }
 
     /// get all the entities which has no parent
@@ -329,6 +342,7 @@ impl<E: Entity, T> Tree<E, T> {
     }
 }
 
+// FIXME: there are two spot which created unnecessary allocation on get_all_children + get_all_roots
 impl<E: Entity, T> std::fmt::Debug for Tree<E, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         fn get_frame<'a, E: Entity, T>(tree: &'a Tree<E, T>, entity: &'a E) -> &'a str {
@@ -423,8 +437,8 @@ mod tree_test {
     #[test]
     fn tree_test() {
         let tree = setup_tree();
-        eprintln!("{tree:?}");
-        eprintln!("{:?}", tree.data);
+        // eprintln!("{tree:?}");
+        // eprintln!("{:?}", tree.data);
 
         let root_id = TestId::new(9, 0);
         let ancestor = tree.get_root(&root_id);
@@ -481,6 +495,6 @@ mod tree_test {
         tree.add_child(&TestId::new(7, 0), reuse);
         assert_eq!(&TestId::new(7, 0), tree.get_parent(&reuse).unwrap());
 
-        eprintln!("{tree:?}");
+        // eprintln!("{tree:?}");
     }
 }
