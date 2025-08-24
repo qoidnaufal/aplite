@@ -30,10 +30,6 @@ impl Wake for Task {
     }
 }
 
-impl Drop for Task {
-    fn drop(&mut self) {}
-}
-
 unsafe impl Send for Task {}
 unsafe impl Sync for Task {}
 

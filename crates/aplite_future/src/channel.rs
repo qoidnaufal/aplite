@@ -38,13 +38,9 @@ impl Sender {
 
     pub fn close(&self) {
         unsafe {
-            let weak_count = Arc::weak_count(&self.0);
             let strong_count = Arc::strong_count(&self.0);
-            for _ in 0..weak_count {
-                Arc::decrement_strong_count(Arc::as_ptr(&self.0));
-            }
             for _ in 0..strong_count {
-                Arc::decrement_strong_count(Arc::as_ptr(&self.0));
+                Arc::decrement_strong_count(Arc::as_ptr(&self.0))
             }
         }
     }

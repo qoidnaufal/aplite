@@ -1,13 +1,10 @@
-use std::sync::RwLock;
-
-use crate::graph::{Node, Graph};
-use crate::stored_value::Value;
-use crate::signal::Signal;
+use crate::graph::Graph;
+use crate::signal::{Signal, SignalNode};
 use crate::signal_read::SignalRead;
 use crate::reactive_traits::*;
 
 pub struct SignalWrite<T> {
-    pub(crate) node: Node<RwLock<Value<T>>>,
+    pub(crate) node: SignalNode<T>,
 }
 
 impl<T> Clone for SignalWrite<T> {
@@ -17,7 +14,7 @@ impl<T> Clone for SignalWrite<T> {
 impl<T> Copy for SignalWrite<T> {}
 
 impl<T: 'static> SignalWrite<T> {
-    pub(crate) fn new(node: Node<RwLock<Value<T>>>) -> Self {
+    pub(crate) fn new(node: SignalNode<T>) -> Self {
         Self { node }
     }
 
@@ -28,7 +25,6 @@ impl<T: 'static> SignalWrite<T> {
 
 impl<T: 'static> Notify for SignalWrite<T> {
     fn notify(&self) {
-        #[cfg(test)] eprintln!("\n[NOTIFYING]     : {self:?}");
         Graph::with_downcast(&self.node, |node| node.notify())
     }
 }

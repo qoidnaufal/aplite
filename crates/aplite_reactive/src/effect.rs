@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use aplite_future::{
     Channel,
     Sender,
@@ -8,7 +8,7 @@ use aplite_future::{
 
 use crate::graph::{Node, Graph};
 use crate::subscriber::{Subscriber, ToAnySubscriber, AnySubscriber};
-// use crate::source::AnySource;
+use crate::source::AnySource;
 use crate::reactive_traits::*;
 
 /// [`Effect`] is a scope to synchronize the reactive node (eg: [`Signal`](crate::signal::Signal)) with anything.
@@ -22,7 +22,7 @@ use crate::reactive_traits::*;
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Effect {
-    node: Node<Scope>,
+    node: Node<Arc<Scope>>,
 }
 
 impl Effect {
@@ -47,21 +47,23 @@ impl Effect {
 
         Executor::spawn(async move {
             let mut value = None::<R>;
-            let mut scope = Some(any_subscriber);
+            let scope = any_subscriber;
 
             while rx.recv().await.is_some() {
-                #[cfg(test)] eprintln!("\n[NOTIFIED]      : {:?}", node);
+                let prev_scope = Graph::set_scope(Some(scope.clone()));
 
-                let prev_scope = Graph::set_scope(scope);
-
-                // scope.clear_source();
+                scope.clear_source();
 
                 let prev_value = value.take();
                 let new_val = f(prev_value);
                 value = Some(new_val);
 
-                scope = Graph::set_scope(prev_scope);
+                let _ = Graph::set_scope(prev_scope);
+
+                if scope.source_count() == 0 { break }
             }
+
+            Graph::with_mut(|graph| graph.storage.remove(&node.id));
         });
 
         Self { node }
@@ -70,7 +72,7 @@ impl Effect {
 
 pub struct Scope {
     pub(crate) sender: Sender,
-    // pub(crate) source: RwLock<Vec<AnySource>>,
+    pub(crate) source: RwLock<Vec<AnySource>>,
 }
 
 unsafe impl Send for Scope {}
@@ -80,35 +82,49 @@ impl Scope {
     pub fn new(sender: Sender) -> Self {
         Self {
             sender,
-            // source: RwLock::new(Vec::new()),
+            source: RwLock::new(Vec::new()),
         }
     }
 }
 
-impl Subscriber for Scope {
-    // fn add_source(&self, _source: AnySource) {
-        // let mut sources = self.source.write().unwrap();
-        // if !sources.contains(&source) {
-        //     sources.push(source);
-        // }
-    // }
+impl Drop for Scope {
+    fn drop(&mut self) {
+        self.sender.close();
+        self.source.write().unwrap().clear();
+    }
+}
 
-    // fn clear_source(&self) {
-        // let mut sources = self.source.write().unwrap();
-        // sources.clear();
+impl Subscriber for Scope {
+    fn add_source(&self, source: AnySource) {
+        let mut sources = self.source.write().unwrap();
+        if !sources.contains(&source) { sources.push(source) }
+    }
+
+    fn clear_source(&self) {
+        let mut sources = self.source.write().unwrap();
+        sources.clear();
         // let drained_sources = sources.drain(..);
         // drained_sources.into_iter().for_each(|source| source.untrack())
-    // }
+    }
+
+    fn source_count(&self) -> usize {
+        let source = self.source.read().unwrap();
+        source.len()
+    }
 }
 
 impl Subscriber for Arc<Scope> {
-    // fn add_source(&self, source: AnySource) {
-    //     self.as_ref().add_source(source);
-    // }
+    fn add_source(&self, source: AnySource) {
+        self.as_ref().add_source(source);
+    }
 
-    // fn clear_source(&self) {
-    //     self.as_ref().clear_source();
-    // }
+    fn clear_source(&self) {
+        self.as_ref().clear_source();
+    }
+
+    fn source_count(&self) -> usize {
+        self.as_ref().source_count()
+    }
 }
 
 impl Notify for Scope {

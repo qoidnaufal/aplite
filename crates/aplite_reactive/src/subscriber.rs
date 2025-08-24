@@ -1,13 +1,14 @@
 use std::sync::{Arc, Weak};
 
 use crate::reactive_traits::*;
-// use crate::source::AnySource;
+use crate::source::AnySource;
 
 pub(crate) struct AnySubscriber(pub(crate) Weak<dyn Subscriber>);
 
 pub(crate) trait Subscriber: Notify {
-    // fn add_source(&self, source: AnySource);
-    // fn clear_source(&self);
+    fn add_source(&self, source: AnySource);
+    fn clear_source(&self);
+    fn source_count(&self) -> usize;
 }
 
 impl AnySubscriber {
@@ -21,17 +22,23 @@ impl AnySubscriber {
 }
 
 impl Subscriber for AnySubscriber {
-    // fn add_source(&self, source: AnySource) {
-    //     if let Some(subscriber) = self.upgrade() {
-    //         subscriber.add_source(source);
-    //     }
-    // }
+    fn add_source(&self, source: AnySource) {
+        if let Some(subscriber) = self.upgrade() {
+            subscriber.add_source(source);
+        }
+    }
 
-    // fn clear_source(&self) {
-    //     if let Some(subscriber) = self.upgrade() {
-    //         subscriber.clear_source();
-    //     }
-    // }
+    fn clear_source(&self) {
+        if let Some(subscriber) = self.upgrade() {
+            subscriber.clear_source();
+        }
+    }
+
+    fn source_count(&self) -> usize {
+        self.upgrade()
+            .map(|any_subscriber| any_subscriber.source_count())
+            .unwrap_or_default()
+    }
 }
 
 impl Notify for AnySubscriber {

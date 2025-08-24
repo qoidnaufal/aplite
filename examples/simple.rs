@@ -25,7 +25,7 @@ fn simple() -> impl IntoView {
     let click_count = move || set_counter.update(|num| *num += 1);
     let click_rotate = move || set_rotate.update(|val| *val += 10.0);
 
-    Effect::new(move |_| counter.with(|val| eprint!("{val}        \r")));
+    Effect::new(move |_| counter.with_untracked(|val| eprintln!("\r{val}")));
 
     let button = Button::new()
         .border_color(Rgba::WHITE)

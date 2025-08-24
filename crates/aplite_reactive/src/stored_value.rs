@@ -2,13 +2,18 @@ use std::sync::{Arc, RwLock};
 
 use crate::reactive_traits::*;
 use crate::subscriber::AnySubscriber;
-use crate::source::Source;
-// use crate::source::{Source, ToAnySource, AnySource};
+use crate::source::{Source, ToAnySource, AnySource};
 use crate::graph::Graph;
 
 pub(crate) struct Value<T> {
     pub(crate) value: T,
     pub(crate) subscribers: Vec<AnySubscriber>,
+}
+
+impl<T> Drop for Value<T> {
+    fn drop(&mut self) {
+        self.subscribers.clear();
+    }
 }
 
 unsafe impl<T> Send for Value<T> {}
@@ -49,7 +54,6 @@ impl<T: 'static> Track for RwLock<Value<T>> {
     }
 
     fn untrack(&self) {
-        #[cfg(test)] eprintln!(" └─ [UNTRACKING]: {:?}", self.read().unwrap());
         self.clear_subscribers();
     }
 }
@@ -90,17 +94,11 @@ impl<T: 'static> Source for Arc<RwLock<Value<T>>> {
     }
 }
 
-// impl<T: 'static> ToAnySource for RwLock<Value<T>> {
-//     fn to_any_source(self) -> AnySource {
-//         AnySource::new(Arc::new(self))
-//     }
-// }
-
-// impl<T: 'static> ToAnySource for Arc<RwLock<Value<T>>> {
-//     fn to_any_source(self) -> AnySource {
-//         AnySource::new(self)
-//     }
-// }
+impl<T: 'static> ToAnySource for Arc<RwLock<Value<T>>> {
+    fn to_any_source(&self) -> AnySource {
+        AnySource::new(Arc::downgrade(self))
+    }
+}
 
 impl<T> std::fmt::Debug for Value<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

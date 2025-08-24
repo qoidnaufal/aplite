@@ -1,7 +1,11 @@
 use std::marker::PhantomData;
-use std::sync::{RwLock, OnceLock};
 use std::any::Any;
-use std::sync::Arc;
+use std::sync::{
+    RwLock,
+    RwLockReadGuard,
+    RwLockWriteGuard,
+    OnceLock
+};
 
 use aplite_storage::{IndexMap, Entity, entity};
 
@@ -10,7 +14,7 @@ use crate::reactive_traits::*;
 
 static GRAPH: OnceLock<RwLock<ReactiveGraph>> = OnceLock::new();
 
-type Storage = IndexMap<ReactiveId, Arc<dyn Any>>;
+type Storage = IndexMap<ReactiveId, Box<dyn Any + Send + Sync>>;
 
 #[derive(Default)]
 pub(crate) struct ReactiveGraph {
@@ -32,15 +36,30 @@ unsafe impl Sync for ReactiveGraph {}
 pub(crate) struct Graph;
 
 impl Graph {
-    pub(crate) fn insert<R: Reactive + 'static>(r: Arc<R>) -> Node<R> {
+    pub(crate) fn insert<R: Reactive + Send + Sync + 'static>(r: R) -> Node<R> {
         let mut graph = GRAPH.get_or_init(Default::default).write().unwrap();
-        let id = graph.storage.insert(r);
+        let id = graph.storage.insert(Box::new(r));
         Node { id, marker: PhantomData }
     }
 
     #[inline(always)]
+    fn read<'a>() -> RwLockReadGuard<'a, ReactiveGraph> {
+        GRAPH.get_or_init(Default::default).read().unwrap()
+    }
+
+    #[inline(always)]
+    fn write<'a>() -> RwLockWriteGuard<'a, ReactiveGraph> {
+        GRAPH.get_or_init(Default::default).write().unwrap()
+    }
+
+    #[inline(always)]
     pub(crate) fn with<U>(f: impl FnOnce(&ReactiveGraph) -> U) -> U {
-        f(&GRAPH.get_or_init(Default::default).read().unwrap())
+        f(&Self::read())
+    }
+
+    #[inline(always)]
+    pub(crate) fn with_mut<U>(f: impl FnOnce(&mut ReactiveGraph) -> U) -> U {
+        f(&mut Self::write())
     }
 
     pub(crate) fn with_downcast<R, F, U>(node: &Node<R>, f: F) -> U
@@ -48,7 +67,7 @@ impl Graph {
         R: Reactive + 'static,
         F: FnOnce(&R) -> U,
     {
-        let graph = GRAPH.get_or_init(Default::default).read().unwrap();
+        let graph = Self::read();
         let r = graph
             .storage
             .get(&node.id)
@@ -62,27 +81,26 @@ impl Graph {
         R: Reactive + 'static,
         F: FnOnce(Option<&R>) -> Option<U>,
     {
-        let graph = GRAPH.get_or_init(Default::default).read().unwrap();
-        graph
+        Self::read()
             .storage
             .get(&node.id)
             .and_then(|any| f(any.as_ref().downcast_ref::<R>()))
     }
 
     pub(crate) fn set_scope(subscriber: Option<AnySubscriber>) -> Option<AnySubscriber> {
-        let mut graph = GRAPH.get_or_init(Default::default).write().unwrap();
+        let mut graph = Self::write();
         let prev = graph.current.take();
         graph.current = subscriber;
         prev
     }
 
-    pub(crate) fn remove<R: Reactive>(node: &Node<R>) -> Option<Arc<dyn Any>> {
-        let mut graph = GRAPH.get_or_init(Default::default).write().unwrap();
+    pub(crate) fn remove<R: Reactive>(node: &Node<R>) -> Option<Box<dyn Any + Send + Sync>> {
+        let mut graph = Self::write();
         graph.storage.remove(&node.id)
     }
 
     pub(crate) fn is_removed<R: Reactive>(node: &Node<R>) -> bool {
-        let graph = GRAPH.get_or_init(Default::default).read().unwrap();
+        let graph = Self::read();
         graph.storage.get(&node.id).is_none()
     }
 }

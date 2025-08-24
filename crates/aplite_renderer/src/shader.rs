@@ -156,6 +156,12 @@ pub const FRAGMENT: &str = r"
 @group(2) @binding(0) var t: texture_2d<f32>;
 @group(3) @binding(0) var s: sampler;
 
+// fn discard_if_hidden(index: u32) {
+//     if index == 1 {
+//         discard;
+//     }
+// }
+
 @fragment
 fn fs_main(in: FragmentPayload) -> @location(0) vec4<f32> {
     let element = elements[in.index];

@@ -1,15 +1,12 @@
-use std::sync::RwLock;
-
-use crate::graph::{Node, Graph};
-use crate::stored_value::Value;
+use crate::graph::Graph;
 use crate::reactive_traits::*;
-use crate::signal::Signal;
+use crate::signal::{Signal, SignalNode};
 use crate::signal_write::SignalWrite;
 use crate::source::*;
 use crate::subscriber::*;
 
 pub struct SignalRead<T> {
-    pub(crate) node: Node<RwLock<Value<T>>>,
+    pub(crate) node: SignalNode<T>,
 }
 
 impl<T> Clone for SignalRead<T> {
@@ -19,7 +16,7 @@ impl<T> Clone for SignalRead<T> {
 impl<T> Copy for SignalRead<T> {}
 
 impl<T: 'static> SignalRead<T> {
-    pub(crate) fn new(node: Node<RwLock<Value<T>>>) -> Self {
+    pub(crate) fn new(node: SignalNode<T>) -> Self {
         Self { node }
     }
 
@@ -38,11 +35,11 @@ impl<T: 'static> Source for SignalRead<T> {
     }
 }
 
-// impl<T: 'static> ToAnySource for SignalRead<T> {
-//     fn to_any_source(self) -> AnySource {
-//         Graph::with_downcast(&self.node, |node| node.clone().to_any_source())
-//     }
-// }
+impl<T: 'static> ToAnySource for SignalRead<T> {
+    fn to_any_source(&self) -> AnySource {
+        Graph::with_downcast(&self.node, |node| node.to_any_source())
+    }
+}
 
 impl<T: 'static> Notify for SignalRead<T> {
     fn notify(&self) {}
@@ -50,8 +47,7 @@ impl<T: 'static> Notify for SignalRead<T> {
 
 impl<T: 'static> Track for SignalRead<T> {
     fn track(&self) {
-        #[cfg(test)] eprintln!(" └─ [TRACKING]  : {self:?}");
-        Graph::with_downcast(&self.node, |node| node.track());
+        self.as_signal().track();
     }
 
     fn untrack(&self) {

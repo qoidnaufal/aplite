@@ -1,11 +1,11 @@
 use std::sync::{Arc, OnceLock};
-use std::sync::mpsc::{Sender, Receiver, channel};
+use std::sync::mpsc::{SyncSender, Receiver, sync_channel};
 use std::task::{Waker, Context, Poll};
 use std::thread;
 
 use crate::task::Task;
 
-pub(crate) static SPAWNER: OnceLock<Sender<Arc<Task>>> = OnceLock::new();
+pub(crate) static SPAWNER: OnceLock<SyncSender<Arc<Task>>> = OnceLock::new();
 
 struct Worker {
     rx: Receiver<Arc<Task>>,
@@ -37,7 +37,7 @@ pub struct Executor;
 
 impl Executor {
     pub fn init() {
-        let (tx, rx) = channel();
+        let (tx, rx) = sync_channel(128);
         let worker = Worker { rx };
 
         SPAWNER.set(tx).expect("Executor can only be initiated once");

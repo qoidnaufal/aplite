@@ -13,7 +13,7 @@ use crate::state::{WidgetId, NODE_STORAGE};
 pub struct Context {
     pub(crate) view: View,
     pub(crate) dirty: Signal<bool>,
-    cursor: Cursor,
+    pub(crate) cursor: Cursor,
     pending_update: Vec<WidgetId>,
 }
 

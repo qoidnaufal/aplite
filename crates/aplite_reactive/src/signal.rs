@@ -8,8 +8,10 @@ use crate::reactive_traits::*;
 use crate::source::*;
 use crate::subscriber::*;
 
+pub(crate) type SignalNode<T> = Node<Arc<RwLock<Value<T>>>>;
+
 pub struct Signal<T> {
-    pub(crate) node: Node<RwLock<Value<T>>>,
+    pub(crate) node: SignalNode<T>,
 }
 
 impl<T> Clone for Signal<T> {
@@ -22,9 +24,7 @@ impl<T: 'static> Signal<T> {
     pub fn new(value: T) -> Self {
         let node = Graph::insert(Arc::new(RwLock::new(Value::new(value))));
 
-        Self {
-            node,
-        }
+        Self { node }
     }
 
     pub fn split(value: T) -> (SignalRead<T>, SignalWrite<T>) {
@@ -32,10 +32,7 @@ impl<T: 'static> Signal<T> {
     }
 
     pub fn into_split(self) -> (SignalRead<T>, SignalWrite<T>) {
-        (
-            SignalRead::new(self.node),
-            SignalWrite::new(self.node)
-        )
+        (SignalRead::new(self.node), SignalWrite::new(self.node))
     }
 
     pub fn read_only(&self) -> SignalRead<T> {
@@ -57,32 +54,29 @@ impl<T: 'static> Source for Signal<T> {
     }
 }
 
-// impl<T: 'static> ToAnySource for Signal<T> {
-//     fn to_any_source(self) -> AnySource {
-//         Graph::with_downcast(&self.node, |node| node.clone().to_any_source())
-//     }
-// }
+impl<T: 'static> ToAnySource for Signal<T> {
+    fn to_any_source(&self) -> AnySource {
+        Graph::with_downcast(&self.node, |node| node.to_any_source())
+    }
+}
 
 impl<T: 'static> Track for Signal<T> {
     fn track(&self) {
-        #[cfg(test)] eprintln!(" └─ [TRACKING]  : {self:?}");
         Graph::with_downcast(&self.node, |node| node.track());
-        // Graph::with(|graph| {
-        //     if let Some(current) = graph.current.as_ref() {
-        //         current.add_source(self.to_any_source());
-        //     }
-        // });
+        Graph::with(|graph| {
+            if let Some(any_subscriber) = graph.current.as_ref() {
+                any_subscriber.add_source(self.to_any_source());
+            }
+        })
     }
 
     fn untrack(&self) {
-        #[cfg(test)] eprintln!("[UNTRACKING]: {self:?}");
         Graph::with_downcast(&self.node, |node| node.untrack())
     }
 }
 
 impl<T: 'static> Notify for Signal<T> {
     fn notify(&self) {
-        #[cfg(test)] eprintln!("\n[NOTIFYING]     : {self:?}");
         Graph::with_downcast(&self.node, |node| node.notify())
     }
 }
