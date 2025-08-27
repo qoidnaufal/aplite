@@ -1,6 +1,6 @@
 use std::iter::FilterMap;
 use std::slice::{Iter, IterMut};
-use std::iter::Enumerate;
+use std::iter::{Enumerate, Map, Zip};
 
 use crate::entity::Entity;
 use crate::tree::Tree;
@@ -187,17 +187,17 @@ pub struct NodeMut<'a, E: Entity, T> {
     pub(crate) parent: Option<&'a mut E>,
     pub(crate) first_child: Option<&'a mut E>,
     pub(crate) next_sibling: Option<&'a mut E>,
-    pub(crate) data: Option<&'a mut T>,
+    pub(crate) data: &'a mut T,
 }
 
 impl<'a, E: Entity, T> NodeMut<'a, E, T> {
-    pub(crate) fn new(tree: &'a mut Tree<E, T>, entity: E) -> Self {
+    pub(crate) fn new(tree: &'a mut Tree<E, T>, entity: E, data: &'a mut T) -> Self {
         Self {
             id: entity,
             parent: tree.parent[entity.index()].as_mut(),
             first_child: tree.first_child[entity.index()].as_mut(),
             next_sibling: tree.next_sibling[entity.index()].as_mut(),
-            data: tree.data.inner[entity.index()].get_content_mut(),
+            data,
         }
     }
 
@@ -209,7 +209,7 @@ impl<'a, E: Entity, T> NodeMut<'a, E, T> {
 
     pub fn next_sibling(&'a mut self) -> Option<&'a mut E> { self.next_sibling.as_deref_mut() }
 
-    pub fn data(&'a mut self) -> Option<&'a mut T> { self.data.as_deref_mut() }
+    pub fn data(&'a mut self) -> &'a mut T { self.data }
 }
 
 /*
@@ -256,6 +256,59 @@ impl<'a, E: Entity, T> DoubleEndedIterator for TreeIter<'a, E, T> {
             .map(|(entity, data)| {
                 NodeRef::new(self.tree, entity, data)
             })
+    }
+}
+
+fn tree_iter_mut<'a, E, T>(
+    ((((id, data), parent), first_child), next_sibling):
+        ((((E, &'a mut T), &'a mut Option<E>), &'a mut Option<E>), &'a mut Option<E>)
+    ) -> NodeMut<'a, E, T>
+where
+    E: Entity
+{
+    NodeMut {
+        id,
+        parent: parent.as_mut(),
+        first_child: first_child.as_mut(),
+        next_sibling: next_sibling.as_mut(),
+        data,
+    }
+}
+
+type FnTreeMapIntoNodeMut<'a, E, T> =
+    fn(
+        ((((E, &'a mut T), &'a mut Option<E>), &'a mut Option<E>), &'a mut Option<E>)
+    ) -> NodeMut<'a, E, T>;
+
+impl<'a, E: Entity, T> IntoIterator for &'a mut Tree<E, T> {
+    type Item = NodeMut<'a, E, T>;
+    type IntoIter = TreeIterMut<'a, E, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        TreeIterMut {
+            inner: self
+                .data
+                .iter_mut()
+                .zip(&mut self.parent)
+                .zip(&mut self.first_child)
+                .zip(&mut self.next_sibling)
+                .map(tree_iter_mut as FnTreeMapIntoNodeMut<E, T>)
+        }
+    }
+}
+
+pub struct TreeIterMut<'a, E: Entity, T> {
+    inner: Map<Zip<Zip<Zip<IndexMapIterMut<'a, E, T>,
+            IterMut<'a, Option<E>>>,
+            IterMut<'a, Option<E>>>,
+            IterMut<'a, Option<E>>>,
+            FnTreeMapIntoNodeMut<'a, E, T>>,
+}
+
+impl<'a, E: Entity + 'a, T: 'a> Iterator for TreeIterMut<'a, E, T> {
+    type Item = NodeMut<'a, E, T>;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
     }
 }
 
@@ -323,17 +376,17 @@ impl<'a, E: Entity, T> Iterator for MemberIterator<'a, E, T> {
     type Item = &'a E;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let head = self.head.take();
-        match head {
-            Some(e) => {
-                self.next = Some(e);
-                self.head = self.tree.get_next_sibling(e);
-                return self.next;
-            },
-            None => {
-                todo!()
-            },
+        self.next = self.head.take();
+
+        if let Some(prev_head) = self.next {
+            self.head = self.tree.get_next_sibling(prev_head);
         }
+
+        let next = self.next.take();
+        if let Some(next) = next {
+            self.next = self.tree.get_first_child(next);
+        }
+        next
     }
 }
 
@@ -364,7 +417,7 @@ mod iterator_test {
     entity! { TestId }
 
     #[test]
-    fn tree() {
+    fn tree_iter() {
         let mut tree = Tree::<TestId, ()>::new();
         let mut ids = vec![];
         for _ in 0..10 {
@@ -373,6 +426,19 @@ mod iterator_test {
         }
 
         let len = tree.iter_node_ref().count();
+        assert_eq!(ids.len(), len)
+    }
+
+    #[test]
+    fn tree_iter_mut() {
+        let mut tree = Tree::<TestId, ()>::new();
+        let mut ids = vec![];
+        for _ in 0..10 {
+            let id = tree.insert(());
+            ids.push(id);
+        }
+
+        let len = tree.iter_node_mut().count();
         assert_eq!(ids.len(), len)
     }
 

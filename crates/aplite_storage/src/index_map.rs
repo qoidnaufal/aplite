@@ -145,7 +145,7 @@ impl<E: Entity, T> IndexMap<E, T> {
     }
 
     #[inline(always)]
-    pub fn get_mut(&mut self, entity: &E) -> Option<&mut T> {
+    pub fn get_mut<'a>(&'a mut self, entity: &'a E) -> Option<&'a mut T> {
         self.inner
             .get_mut(entity.index())
             .and_then(|slot| {
@@ -228,14 +228,14 @@ where
     }
 }
 
-impl<E, T> std::ops::IndexMut<&E> for IndexMap<E, T>
-where
-    E: Entity
-{
-    fn index_mut(&mut self, index: &E) -> &mut Self::Output {
-        self.get_mut(index).unwrap()
-    }
-}
+// impl<E, T> std::ops::IndexMut<&E> for IndexMap<E, T>
+// where
+//     E: Entity
+// {
+//     fn index_mut(&mut self, index: &E) -> &mut Self::Output {
+//         self.get_mut(index).unwrap()
+//     }
+// }
 
 impl<E: Entity, T: Clone> Clone for IndexMap<E, T> {
     fn clone(&self) -> Self {

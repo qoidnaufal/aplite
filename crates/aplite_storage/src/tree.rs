@@ -2,6 +2,7 @@ use crate::entity::Entity;
 use crate::index_map::IndexMap;
 use crate::iterator::{
     TreeIter,
+    TreeIterMut,
     IndexMapIter,
     IndexMapIterMut,
     ChildIterator,
@@ -79,7 +80,7 @@ impl<E: Entity, T> Tree<E, T> {
         self.data.get(entity)
     }
 
-    pub fn get_mut(&mut self, entity: &E) -> Option<&mut T> {
+    pub fn get_mut<'a>(&'a mut self, entity: &'a E) -> Option<&'a mut T> {
         self.data.get_mut(entity)
     }
 
@@ -224,19 +225,23 @@ impl<E: Entity, T> Tree<E, T> {
         loc
     }
 
-    pub fn get_parent(&self, entity: &E) -> Option<&E> {
+    pub fn get_parent<'a>(&'a self, entity: &'a E) -> Option<&'a E> {
         self.parent[entity.index()].as_ref()
     }
 
-    pub fn get_parent_mut(&mut self, entity: &E) -> Option<&mut E> {
+    pub fn get_parent_mut<'a>(&'a mut self, entity: &'a E) -> Option<&'a mut E> {
         self.parent[entity.index()].as_mut()
     }
 
-    pub fn get_first_child(&self, entity: &E) -> Option<&E> {
+    pub fn get_first_child<'a>(&'a self, entity: &'a E) -> Option<&'a E> {
         self.first_child[entity.index()].as_ref()
     }
 
-    pub fn get_last_child(&self, entity: &E) -> Option<&E> {
+    pub fn get_first_child_mut<'a>(&'a mut self, entity: &'a E) -> Option<&'a mut E> {
+        self.first_child[entity.index()].as_mut()
+    }
+
+    pub fn get_last_child<'a>(&'a self, entity: &'a E) -> Option<&'a E> {
         let maybe_first = self.get_first_child(entity);
         if let Some(first) = maybe_first {
             let mut last = first;
@@ -249,11 +254,15 @@ impl<E: Entity, T> Tree<E, T> {
         }
     }
 
-    pub fn get_next_sibling(&self, entity: &E) -> Option<&E> {
+    pub fn get_next_sibling<'a>(&'a self, entity: &'a E) -> Option<&'a E> {
         self.next_sibling[entity.index()].as_ref()
     }
 
-    pub fn get_prev_sibling(&self, entity: &E) -> Option<&E> {
+    pub fn get_next_sibling_mut<'a>(&'a mut self, entity: &'a E) -> Option<&'a mut E> {
+        self.next_sibling[entity.index()].as_mut()
+    }
+
+    pub fn get_prev_sibling<'a>(&'a self, entity: &'a E) -> Option<&'a E> {
         if let Some(parent) = self.get_parent(entity) {
             let mut first = self.get_first_child(parent).unwrap();
             while let Some(next) = self.get_next_sibling(first) {
@@ -285,7 +294,7 @@ impl<E: Entity, T> Tree<E, T> {
         members
     }
 
-    pub fn with_all_members_of<F>(&self, entity: &E, mut f: F)
+    pub fn with_all_members_ref<F>(&self, entity: &E, mut f: F)
     where
         F: FnMut(&T)
     {
@@ -334,11 +343,14 @@ impl<E: Entity, T> Tree<E, T> {
             })
     }
 
-    pub fn get_node_mut<'a>(&'a mut self, entity: &E) -> NodeMut<'a, E, T> {
-        NodeMut::new(self, *entity)
-    }
+    // pub fn get_node_mut<'a>(&'a mut self, entity: &'a E) -> Option<NodeMut<'a, E, T>> {
+    //     self.get_mut(entity)
+    //         .map(|data| NodeMut::new(self, *entity, data))
+    // }
 
     pub fn iter_node_ref(&self) -> TreeIter<'_, E, T> { self.into_iter() }
+
+    pub fn iter_node_mut(&mut self) -> TreeIterMut<'_, E, T> { self.into_iter() }
 
     pub fn iter_data_ref(&self) -> IndexMapIter<'_, E, T> {
         self.data.iter()
@@ -455,10 +467,14 @@ mod tree_test {
 
         let root_id = TestId::new(9, 0);
         let ancestor = tree.get_root(&root_id);
-        let parent = tree.get_parent(&TestId::new(6, 0));
+
+        let test_id_6 = TestId::new(6, 0);
+        let parent = tree.get_parent(&test_id_6);
         let four_is_mem_of_two = tree.is_member_of(&TestId::new(4, 0), &TestId::new(2, 0));
         let nine_is_mem_of_two = tree.is_member_of(&TestId::new(9, 0), &TestId::new(2, 0));
-        let next_sibling = tree.get_next_sibling(&TestId::new(4, 0));
+
+        let test_id_4 = TestId::new(4, 0);
+        let next_sibling = tree.get_next_sibling(&test_id_4);
 
         assert_eq!(ancestor, Some(&TestId::new(0, 0)));
         assert_eq!(parent, Some(&TestId::new(5, 0)));
