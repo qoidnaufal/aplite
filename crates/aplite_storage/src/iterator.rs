@@ -11,6 +11,134 @@ use crate::hash::U64Map;
 /*
 #########################################################
 #                                                       #
+#                       INDEX MAP                       #
+#                                                       #
+#########################################################
+*/
+
+fn filter_ref<E, T>((i, slot): (usize, &Slot<T>)) -> Option<(E, Option<&T>)>
+where
+    E: Entity
+{
+    matches!(slot.content, Content::Occupied(_))
+        .then_some((
+            E::new(i as u32, slot.version),
+            slot.get_content()
+        ))
+}
+
+type FnFilterRef<E, T> = fn((usize, &Slot<T>)) -> Option<(E, Option<&T>)>;
+
+impl<'a, E, T> IntoIterator for &'a IndexMap<E, T>
+where
+    E: Entity,
+{
+    type Item = (E, &'a T);
+    type IntoIter = IndexMapIter<'a, E, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let inner = self
+            .inner
+            .iter()
+            .enumerate()
+            .filter_map(filter_ref as FnFilterRef<E, T>);
+
+        IndexMapIter {
+            inner,
+        }
+    }
+}
+
+pub struct IndexMapIter<'a, E: Entity, T> {
+    #[allow(clippy::type_complexity)]
+    inner: FilterMap<Enumerate<Iter<'a, Slot<T>>>, FnFilterRef<E, T>>,
+}
+
+impl<'a, E, T> Iterator for IndexMapIter<'a, E, T>
+where
+    E: Entity,
+{
+    type Item = (E, &'a T);
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner
+            .next()
+            .map(|(e, val)| (e, val.unwrap()))
+    }
+}
+
+impl<'a, E, T> DoubleEndedIterator for IndexMapIter<'a, E, T>
+where
+    E: Entity
+{
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.inner
+            .next_back()
+            .map(|(e, val)| (e, val.unwrap()))
+    }
+}
+
+/*
+#########################################################
+#                                                       #
+#                    &mut INDEX MAP                     #
+#                                                       #
+#########################################################
+*/
+
+fn filter_mut<E, T>((i, slot): (usize, &mut Slot<T>)) -> Option<(E, Option<&mut T>)>
+where
+    E: Entity
+{
+    matches!(slot.content, Content::Occupied(_))
+        .then_some((
+            E::new(i as u32, slot.version),
+            slot.get_content_mut()
+        ))
+}
+
+type FnFilterMut<E, T> = fn((usize, &mut Slot<T>)) -> Option<(E, Option<&mut T>)>;
+
+impl<'a, E: Entity, T> IntoIterator for &'a mut IndexMap<E, T> {
+    type Item = (E, &'a mut T);
+    type IntoIter = IndexMapIterMut<'a, E, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let inner = self
+            .inner
+            .iter_mut()
+            .enumerate()
+            .filter_map(filter_mut as FnFilterMut<E, T>);
+
+        IndexMapIterMut { inner }
+    }
+}
+
+pub struct IndexMapIterMut<'a, E: Entity, T> {
+    #[allow(clippy::type_complexity)]
+    inner: FilterMap<Enumerate<IterMut<'a, Slot<T>>>, FnFilterMut<E, T>>,
+}
+
+impl<'a, E: Entity, T> Iterator for IndexMapIterMut<'a, E, T> {
+    type Item = (E, &'a mut T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner
+            .next()
+            .map(|(e, val)| (e, val.unwrap()))
+    }
+}
+
+impl<'a, E: Entity, T> DoubleEndedIterator for IndexMapIterMut<'a, E, T> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.inner
+            .next_back()
+            .map(|(e, val)| (e, val.unwrap()))
+    }
+}
+
+/*
+#########################################################
+#                                                       #
 #                        NodeRef                        #
 #                                                       #
 #########################################################
@@ -134,134 +262,78 @@ impl<'a, E: Entity, T> DoubleEndedIterator for TreeIter<'a, E, T> {
 /*
 #########################################################
 #                                                       #
-#                       INDEX MAP                       #
+#                  TREE::child_iterator                 #
 #                                                       #
 #########################################################
 */
 
-fn filter_ref<E, T>((i, slot): (usize, &Slot<T>)) -> Option<(E, Option<&T>)>
-where
-    E: Entity
-{
-    matches!(slot.content, Content::Occupied(_))
-        .then_some((
-            E::new(i as u32, slot.version),
-            slot.get_content()
-        ))
+pub struct ChildIterator<'a, E: Entity, T> {
+    tree: &'a Tree<E, T>,
+    current: Option<&'a E>,
 }
 
-type FilterRef<E, T> = fn((usize, &Slot<T>)) -> Option<(E, Option<&T>)>;
-
-impl<'a, E, T> IntoIterator for &'a IndexMap<E, T>
-where
-    E: Entity,
-{
-    type Item = (E, &'a T);
-    type IntoIter = IndexMapIter<'a, E, T>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        let inner = self
-            .inner
-            .iter()
-            .enumerate()
-            .filter_map(filter_ref as FilterRef<E, T>);
-
-        IndexMapIter {
-            inner,
+impl<'a, E: Entity, T> ChildIterator<'a, E, T> {
+    pub(crate) fn new(tree: &'a Tree<E, T>, entity: &'a E) -> Self {
+        let current = tree.get_first_child(entity);
+        Self {
+            tree,
+            current,
         }
     }
 }
 
-pub struct IndexMapIter<'a, E: Entity, T> {
-    #[allow(clippy::type_complexity)]
-    inner: FilterMap<
-        Enumerate<Iter<'a, Slot<T>>>,
-        fn((usize, &'a Slot<T>)) -> Option<(E, Option<&'a T>)>
-    >,
-}
+impl<'a, E: Entity, T> Iterator for ChildIterator<'a, E, T> {
+    type Item = &'a E;
 
-impl<'a, E, T> Iterator for IndexMapIter<'a, E, T>
-where
-    E: Entity,
-{
-    type Item = (E, &'a T);
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next()
-            .map(|(e, val)| (e, val.unwrap()))
-    }
-}
-
-impl<'a, E, T> DoubleEndedIterator for IndexMapIter<'a, E, T>
-where
-    E: Entity
-{
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next_back()
-            .map(|(e, val)| (e, val.unwrap()))
+        let current = self.current.take();
+        if let Some(e) = current {
+            self.current = self.tree.get_next_sibling(e)
+        }
+        current
     }
 }
 
 /*
 #########################################################
 #                                                       #
-#                    &mut INDEX MAP                     #
+#                 TREE::member_iterator                 #
 #                                                       #
 #########################################################
 */
 
-fn filter_mut<E, T>((i, slot): (usize, &mut Slot<T>)) -> Option<(E, Option<&mut T>)>
-where
-    E: Entity
-{
-    matches!(slot.content, Content::Occupied(_))
-        .then_some((
-            E::new(i as u32, slot.version),
-            slot.get_content_mut()
-        ))
+pub struct MemberIterator<'a, E: Entity, T> {
+    tree: &'a Tree<E, T>,
+    head: Option<&'a E>,
+    next: Option<&'a E>,
 }
 
-type FilterMut<E, T> = fn((usize, &mut Slot<T>)) -> Option<(E, Option<&mut T>)>;
-
-impl<'a, E: Entity, T> IntoIterator for &'a mut IndexMap<E, T> {
-    type Item = (E, &'a mut T);
-    type IntoIter = IndexMapIterMut<'a, E, T>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        let inner = self
-            .inner
-            .iter_mut()
-            .enumerate()
-            .filter_map(filter_mut as FilterMut<E, T>);
-
-        IndexMapIterMut { inner }
+impl<'a, E: Entity, T> MemberIterator<'a, E, T> {
+    pub(crate) fn new(tree: &'a Tree<E, T>, entity: &'a E) -> Self {
+        let head = tree.get_first_child(entity);
+        Self {
+            tree,
+            head,
+            next: None,
+        }
     }
 }
 
-pub struct IndexMapIterMut<'a, E: Entity, T> {
-    #[allow(clippy::type_complexity)]
-    inner: FilterMap<
-        Enumerate<IterMut<'a, Slot<T>>>,
-        fn((usize, &'a mut Slot<T>)) -> Option<(E, Option<&'a mut T>)>
-    >,
-}
-
-impl<'a, E: Entity, T> Iterator for IndexMapIterMut<'a, E, T> {
-    type Item = (E, &'a mut T);
+impl<'a, E: Entity, T> Iterator for MemberIterator<'a, E, T> {
+    type Item = &'a E;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next()
-            .map(|(e, val)| (e, val.unwrap()))
-    }
-}
-
-impl<'a, E: Entity, T> DoubleEndedIterator for IndexMapIterMut<'a, E, T> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next_back()
-            .map(|(e, val)| (e, val.unwrap()))
+        let head = self.head.take();
+        match head {
+            Some(e) => {
+                self.next = Some(e);
+                self.head = self.tree.get_next_sibling(e);
+                return self.next;
+            },
+            None => {
+                todo!()
+            },
+        }
     }
 }
 
@@ -300,7 +372,7 @@ mod iterator_test {
             ids.push(id);
         }
 
-        let len = tree.iter().count();
+        let len = tree.iter_node_ref().count();
         assert_eq!(ids.len(), len)
     }
 

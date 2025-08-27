@@ -1,4 +1,5 @@
 use std::sync::Weak;
+
 use winit::window::Window;
 use winit::dpi::PhysicalSize;
 use aplite_types::{Rect, Matrix3x2, Size, PaintRef, CornerRadius};
@@ -88,7 +89,6 @@ impl Renderer {
         let sampler = Sampler::new(&device);
 
         let storage = StorageBuffers::new(&device);
-
         let mesh = MeshBuffer::new(&device);
 
         Ok(Self {
@@ -115,20 +115,13 @@ impl Renderer {
         self.screen.scale_factor = scale_factor;
     }
 
-    /// Corresponds to [`winit::dpi::LogicalSize<f32>`]
-    /// This one will not be updated when the window is resized.
-    /// Important to determine the transform of an [`Element`].
-    pub fn screen_res(&self) -> Size {
-        self.screen.screen_size()
-    }
-
     pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
         self.config.width = new_size.width;
         self.config.height = new_size.height;
         self.surface.configure(&self.device, &self.config);
 
         let logical: winit::dpi::LogicalSize<f32> = new_size.to_logical(self.scale_factor());
-        let res = self.screen_res();
+        let res = self.screen.screen_resolution;
         let ns = Size::new(logical.width, logical.height);
         let scale = res / ns;
         let sx = scale.width;
@@ -141,6 +134,24 @@ impl Renderer {
     pub fn begin(&mut self) {
         self.mesh.offset = 0;
     }
+
+    // fn map(&mut self) -> bool {
+    //     let mut ready = false;
+
+    //     ready &= self.storage.transforms.map_buffer(&self.device);
+    //     ready &= self.storage.elements.map_buffer(&self.device);
+    //     ready &= self.mesh.vertices.map_buffer(&self.device);
+    //     ready &= self.mesh.indices.map_buffer(&self.device);
+
+    //     ready
+    // }
+
+    // fn unmap(&self) {
+    //     self.storage.elements.unmap();
+    //     self.storage.transforms.unmap();
+    //     self.mesh.vertices.unmap();
+    //     self.mesh.indices.unmap();
+    // }
 
     #[inline(always)]
     pub fn scene(&mut self) -> Scene<'_> {
@@ -190,7 +201,10 @@ impl Renderer {
             depth_slice: None,
         };
 
-        let mut encoder = self.device.create_command_encoder(&Default::default());
+        let mut encoder = self.device
+            .create_command_encoder(
+                &wgpu::CommandEncoderDescriptor { label: Some("render encoder") }
+            );
 
         self.atlas.update(&self.device, &mut encoder);
 
@@ -315,21 +329,44 @@ impl Scene<'_> {
 
         self.mesh
             .indices
-            .write(self.device, self.queue, offset * Indices::COUNT, indices.as_slice());
+            .write(
+                self.device,
+                self.queue,
+                offset * Indices::COUNT,
+                indices.as_slice(),
+            );
+
         self.mesh
             .vertices
-            .write(self.device, self.queue, offset * Vertices::COUNT, vertices.as_slice());
+            .write(
+                self.device,
+                self.queue,
+                offset * Vertices::COUNT,
+                vertices.as_slice(),
+            );
+
         self.storage
             .elements
-            .write(self.device, self.queue, offset, &[element]);
+            .write(
+                self.device,
+                self.queue,
+                offset,
+                &[element],
+            );
+
         self.storage
             .transforms
-            .write(self.device, self.queue, offset, &[transform.as_slice()]);
+            .write(
+                self.device,
+                self.queue,
+                offset,
+                &[transform.as_array()],
+            );
 
         self.mesh.offset += 1;
     }
 
-    pub fn next_frame(&mut self) {
+    pub fn next_draw(&mut self) {
         self.mesh.offset += 1;
     }
 

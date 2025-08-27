@@ -6,16 +6,15 @@ where
     /// If you created this manually, you also need to manually [`insert()`](crate::tree::Tree::insert) it to the [`Tree`](crate::tree::Tree).
     /// The [`Tree`](crate::tree::Tree) provides a hassle free [`create_entity()`](Tree::create_entity) method
     /// to create an [`Entity`] and automatically insert it.
-    fn new(index: u32, version: u32) -> Self;
+    fn new(index: u32, version: u8) -> Self;
 
     /// The index where this [`Entity`] is being stored inside the [`Tree`]
     fn index(&self) -> usize;
 
     /// The version of this [`Entity`]
-    fn version(&self) -> u32;
+    fn version(&self) -> u8;
 }
 
-#[macro_export]
 /// A macro to conveniently implement [`Entity`] trait.
 /// # Usage
 /// ```ignore
@@ -31,28 +30,23 @@ where
 /// let data = MyData {};
 /// let id = storage.inner.insert(data);
 /// ```
+#[macro_export]
 macro_rules! entity {
     { $vis:vis $name:ident } => {
         #[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-        $vis struct $name(u32, u32);
-
-        impl $name {
-            $vis fn index(&self) -> usize {
-                self.0 as usize
-            }
-        }
+        $vis struct $name(u32);
 
         impl Entity for $name {
-            fn new(index: u32, version: u32) -> Self {
-                Self(index, version)
+            fn new(index: u32, version: u8) -> Self {
+                Self((version as u32) << 24 | index)
             }
 
             fn index(&self) -> usize {
-                self.index()
+                (self.0 & ((1 << 24) - 1)) as usize
             }
 
-            fn version(&self) -> u32 {
-                self.1
+            fn version(&self) -> u8 {
+                ((self.0 >> 24) as u8) & 0xFF
             }
         }
 
@@ -70,13 +64,13 @@ macro_rules! entity {
 
         impl std::hash::Hash for $name {
             fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-                state.write_u64(self.0 as u64);
+                self.0.hash(state)
             }
         }
 
         impl PartialEq<&Self> for $name {
             fn eq(&self, other: &&Self) -> bool {
-                self.0 == other.0 && self.1 == other.1
+                self.0 == other.0
             }
         }
     };

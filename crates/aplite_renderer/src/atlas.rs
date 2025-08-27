@@ -168,6 +168,8 @@ impl Atlas {
 
                     self.processed.insert(data.downgrade(), uv);
                 });
+        } else if self.pending_data.capacity() > 0 {
+            self.pending_data.shrink_to(0);
         }
     }
 

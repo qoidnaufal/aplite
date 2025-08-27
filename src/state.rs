@@ -1,5 +1,6 @@
 use std::rc::{Rc, Weak};
 use std::cell::RefCell;
+use std::collections::{HashMap, VecDeque};
 
 use aplite_renderer::Shape;
 use aplite_storage::IndexMap;
@@ -18,6 +19,125 @@ use crate::widget::WidgetId;
 thread_local! {
     pub(crate) static NODE_STORAGE: RefCell<IndexMap<WidgetId, Rc<RefCell<WidgetState>>>> =
         RefCell::new(IndexMap::with_capacity(1024));
+}
+
+const VERSION_MASK: u8 = 0xFF;
+const INDEX_BITS: u8 = 24;
+const INDEX_MASK: u32 = (1 << INDEX_BITS) - 1;
+const MINIMUM_FREE_INDEX: usize = 1024;
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct EntityId(u32);
+
+impl EntityId {
+    fn new(id: u32, version: u8) -> Self {
+        Self((version as u32) << INDEX_BITS | id)
+    }
+
+    pub(crate) fn index(&self) -> usize {
+        (self.0 & INDEX_MASK) as usize
+    }
+
+    pub(crate) fn version(&self) -> u8 {
+        ((self.0 >> INDEX_BITS) as u8) & VERSION_MASK
+    }
+}
+
+impl std::fmt::Debug for EntityId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "EntityId({})", self.0)
+    }
+}
+
+struct Manager {
+    tree: IndexMap<WidgetId, Tree>
+}
+
+struct Tree {
+    parent: Option<WidgetId>,
+    children: Vec<WidgetId>,
+}
+
+#[derive(Debug)]
+pub(crate) struct EntityManager {
+    recycled: VecDeque<u32>,
+    version_manager: Vec<u8>,
+}
+
+impl Default for EntityManager {
+    fn default() -> Self {
+        Self {
+            recycled: VecDeque::with_capacity(MINIMUM_FREE_INDEX),
+            version_manager: Vec::with_capacity(MINIMUM_FREE_INDEX),
+        }
+    }
+}
+
+impl EntityManager {
+    pub(crate) fn create(&mut self) -> EntityId {
+        let id = if self.recycled.len() > MINIMUM_FREE_INDEX {
+            self.recycled.pop_front().unwrap()
+        } else {
+            self.version_manager.push(0);
+            let id = (self.version_manager.len() - 1) as u32;
+            assert!(id < (1 << INDEX_BITS));
+            id
+        };
+        EntityId::new(id, self.version_manager[id as usize])
+    }
+
+    fn alive(&self, id: &EntityId) -> bool {
+        self.version_manager[id.index()] == id.version()
+    }
+
+    fn destroy(&mut self, id: EntityId) {
+        let idx = id.index();
+        self.version_manager[idx] += 1;
+        self.recycled.push_back(idx as u32);
+    }
+}
+
+pub(crate) struct StateManager {
+    pub(crate) common: HashMap<EntityId, usize>,
+    pub(crate) layout: HashMap<EntityId, usize>,
+    pub(crate) paint: HashMap<EntityId, usize>,
+    pub(crate) border: HashMap<EntityId, usize>,
+}
+
+pub(crate) struct CommonState {
+    pub(crate) rect: Vec<Rect>,
+    pub(crate) transform: Vec<Matrix3x2>,
+    pub(crate) flag: Vec<Flag>,
+    pub(crate) shape: Vec<Shape>,
+    pub(crate) corner_radius: Vec<CornerRadius>,
+    // pub(crate) rotation: f32, // in radians
+}
+
+// I think it's okay not to pack this into vec since this will be used rarely
+pub(crate) struct SizeConstraint {
+    pub(crate) min_width: Vec<Option<f32>>,
+    pub(crate) min_height: Vec<Option<f32>>,
+    pub(crate) max_width: Vec<Option<f32>>,
+    pub(crate) max_height: Vec<Option<f32>>,
+}
+
+// I think it's okay not to pack this into vec since this will be used rarely
+pub(crate) struct LayoutRules {
+    pub(crate) padding: Padding,
+    pub(crate) align_v: AlignV,
+    pub(crate) align_h: AlignH,
+    pub(crate) orientation: Orientation,
+    pub(crate) spacing: u8,
+}
+
+pub(crate) struct PaintState {
+    pub(crate) background_paint: Vec<Paint>,
+    pub(crate) aspect_ratio: Vec<AspectRatio>,
+}
+
+pub(crate) struct BorderState {
+    pub(crate) border_paint: Vec<Rgba>,
+    pub(crate) border_width: Vec<u8>,
 }
 
 pub struct WidgetState {

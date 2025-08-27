@@ -22,7 +22,7 @@ impl Matrix3x2 {
         Self::IDENTITY
     }
 
-    pub const fn as_slice(&self) -> [f32; 6] {
+    pub const fn as_array(&self) -> [f32; 6] {
         self.0
     }
 

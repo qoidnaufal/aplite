@@ -91,6 +91,7 @@ impl Aplite {
 
         self.cx.view.widget.calculate_size(None);
         self.cx.view.widget.calculate_layout(&mut cx);
+        // self.cx.view.calculate_layout(bound);
 
         #[cfg(feature = "debug_tree")] eprintln!("{:#?}", view);
 

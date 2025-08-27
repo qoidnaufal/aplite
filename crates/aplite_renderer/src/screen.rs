@@ -6,7 +6,7 @@ pub(crate) struct Screen {
     pub(crate) transform: Buffer<Matrix3x2>,
     pub(crate) bind_group: wgpu::BindGroup,
 
-    // FIXME: not needed
+    // WARN: not needed?
     pub(crate) screen_resolution: Size,
     pub(crate) scale_factor: f64,
 }
@@ -30,8 +30,6 @@ impl Screen {
             scale_factor,
         }
     }
-
-    pub(crate) fn screen_size(&self) -> Size { self.screen_resolution }
 
     pub(crate) fn write(
         &mut self,

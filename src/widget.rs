@@ -1,8 +1,9 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 
 use aplite_renderer::{Shape, Scene};
 use aplite_types::{Rgba, CornerRadius, Size, Rect};
-use aplite_storage::{Entity, entity, U64Map};
+use aplite_storage::{Entity, entity};
 
 use crate::state::{NodeRef, AspectRatio};
 use crate::layout::*;
@@ -59,13 +60,15 @@ pub trait Widget {
 
                 node.borrow_mut().flag.set_dirty(false);
             } else {
-                scene.next_frame();
+                scene.next_draw();
             }
 
             if let Some(children) = self.children_ref() {
                 children
                     .iter()
-                    .for_each(|child| child.draw(scene));
+                    .for_each(|child| {
+                        child.draw(scene);
+                    });
             }
         }
     }
@@ -102,6 +105,7 @@ pub trait Widget {
 
         true
     }
+
 }
 
 pub struct ChildrenRef<'a>(&'a Vec<Box<dyn Widget>>);
@@ -407,7 +411,7 @@ impl std::fmt::Debug for &dyn Widget {
 // -------------------------------------
 
 thread_local! {
-    pub(crate) static CALLBACKS: RefCell<U64Map<WidgetId, CallbackStore>>
+    pub(crate) static CALLBACKS: RefCell<HashMap<WidgetId, CallbackStore>>
         = RefCell::new(Default::default());
 }
 
@@ -422,15 +426,15 @@ pub enum WidgetEvent {
 }
 
 #[derive(Default)]
-pub(crate) struct CallbackStore([Option<Box<dyn FnMut()>>; 5]);
+pub(crate) struct CallbackStore(Box<[Option<Box<dyn FnMut()>>]>);
 
 impl CallbackStore {
     pub(crate) fn insert(
         &mut self,
         event: WidgetEvent,
         callback: Box<dyn FnMut()>,
-    ) -> Option<Box<dyn FnMut()>> {
-        self.0[event as usize].replace(callback)
+    ) {
+        self.0[event as usize].replace(callback);
     }
 
     pub(crate) fn get_mut(&mut self, event: WidgetEvent) -> Option<&mut Box<dyn FnMut()>> {
