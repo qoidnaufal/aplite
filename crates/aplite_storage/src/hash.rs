@@ -184,7 +184,7 @@ mod hash_test {
 
         let now = std::time::Instant::now();
         for i in 0..REPEAT {
-            let _ = indexmap.get(&TestId::new(i as _, 0));
+            let _ = indexmap.get(TestId::new(i as _, 0));
         }
         let time_get_indexmap = now.elapsed();
 

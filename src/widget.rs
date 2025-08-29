@@ -3,11 +3,17 @@ use std::collections::HashMap;
 
 use aplite_renderer::{Shape, Scene};
 use aplite_types::{Rgba, CornerRadius, Size, Rect};
-use aplite_storage::{Entity, entity};
 
-use crate::state::{NodeRef, AspectRatio};
 use crate::layout::*;
 use crate::view::IntoView;
+use crate::state::{
+    NODE_STORAGE,
+    ENTITY_MANAGER,
+    WidgetId,
+    ViewNode,
+    NodeRef,
+    AspectRatio,
+};
 
 mod button;
 mod image;
@@ -19,16 +25,16 @@ pub use {
     stack::*,
 };
 
-entity! {
-    pub WidgetId
-}
-
 /// main building block to create a renderable component
 pub trait Widget {
-    fn node_ref(&self) -> NodeRef;
+    fn node(&self) -> ViewNode;
+
+    fn node_ref(&self) -> Option<NodeRef> {
+        self.node().node_ref()
+    }
 
     fn id(&self) -> WidgetId {
-        self.node_ref().id()
+        self.node().id()
     }
 
     fn children_ref(&self) -> Option<ChildrenRef<'_>> {
@@ -40,7 +46,7 @@ pub trait Widget {
     }
 
     fn draw(&self, scene: &mut Scene) {
-        let node = self.node_ref().upgrade();
+        let node = self.node_ref().unwrap().upgrade();
 
         if !node.borrow().flag.is_hidden() {
             if node.borrow().flag.is_dirty() {
@@ -74,7 +80,7 @@ pub trait Widget {
     }
 
     fn layout(&self, cx: &mut LayoutCx) -> bool {
-        let node = self.node_ref().upgrade();
+        let node = self.node_ref().unwrap().upgrade();
         if node.borrow().flag.is_hidden() { return false }
 
         let size = node.borrow().rect.size();
@@ -122,7 +128,7 @@ impl<'a> ChildrenRef<'a> {
     pub fn visible_ref(&self) -> impl Iterator<Item = &'a dyn Widget> {
         self.0.iter()
             .filter_map(|child| {
-                child.node_ref()
+                child.node()
                     .is_visible()
                     .then_some(child.as_ref())
             })
@@ -131,7 +137,7 @@ impl<'a> ChildrenRef<'a> {
     pub fn visible_boxed(&self) -> impl Iterator<Item = &'a Box<dyn Widget>> {
         self.0.iter()
             .filter_map(|child| {
-                child.node_ref()
+                child.node()
                     .is_visible()
                     .then_some(child)
             })
@@ -212,6 +218,7 @@ pub trait WidgetExt: Widget + Sized {
 
     fn image_aspect_ratio(self, val: AspectRatio) -> Self {
         self.node_ref()
+            .unwrap()
             .upgrade()
             .borrow_mut()
             .image_aspect_ratio = val;
@@ -221,6 +228,7 @@ pub trait WidgetExt: Widget + Sized {
 
     fn color(self, color: Rgba) -> Self {
         self.node_ref()
+            .unwrap()
             .upgrade()
             .borrow_mut()
             .background_paint = color.into();
@@ -230,6 +238,7 @@ pub trait WidgetExt: Widget + Sized {
 
     fn border_color(self, color: Rgba) -> Self {
         self.node_ref()
+            .unwrap()
             .upgrade()
             .borrow_mut()
             .border_paint = color.into();
@@ -249,6 +258,7 @@ pub trait WidgetExt: Widget + Sized {
 
     fn border_width(self, val: f32) -> Self {
         self.node_ref()
+            .unwrap()
             .upgrade()
             .borrow_mut()
             .border_width = val;
@@ -258,6 +268,7 @@ pub trait WidgetExt: Widget + Sized {
 
     fn corner_radius(self, corner_radius: CornerRadius) -> Self {
         self.node_ref()
+            .unwrap()
             .upgrade()
             .borrow_mut()
             .corner_radius = corner_radius;
@@ -267,6 +278,7 @@ pub trait WidgetExt: Widget + Sized {
 
     fn shape(self, shape: Shape) -> Self {
         self.node_ref()
+            .unwrap()
             .upgrade()
             .borrow_mut()
             .shape = shape;
@@ -276,6 +288,7 @@ pub trait WidgetExt: Widget + Sized {
 
     fn size(self, size: impl Into<Size>) -> Self {
         self.node_ref()
+            .unwrap()
             .upgrade()
             .borrow_mut()
             .rect.set_size(size.into());
@@ -284,7 +297,7 @@ pub trait WidgetExt: Widget + Sized {
     }
 
     fn dragable(self) -> Self {
-        let node = self.node_ref().upgrade();
+        let node = self.node_ref().unwrap().upgrade();
         let mut node = node.borrow_mut();
         node.flag.set_dragable(true);
         node.flag.set_hoverable(true);
@@ -294,6 +307,7 @@ pub trait WidgetExt: Widget + Sized {
 
     fn spacing(self, val: u8) -> Self {
         self.node_ref()
+            .unwrap()
             .upgrade()
             .borrow_mut()
             .spacing = val;
@@ -303,6 +317,7 @@ pub trait WidgetExt: Widget + Sized {
 
     fn padding(self, padding: Padding) -> Self {
         self.node_ref()
+            .unwrap()
             .upgrade()
             .borrow_mut()
             .padding = padding;
@@ -312,6 +327,7 @@ pub trait WidgetExt: Widget + Sized {
 
     fn min_width(self, val: f32) -> Self {
         self.node_ref()
+            .unwrap()
             .upgrade()
             .borrow_mut()
             .min_width = Some(val);
@@ -321,6 +337,7 @@ pub trait WidgetExt: Widget + Sized {
 
     fn min_height(self, val: f32) -> Self {
         self.node_ref()
+            .unwrap()
             .upgrade()
             .borrow_mut()
             .min_height = Some(val);
@@ -330,6 +347,7 @@ pub trait WidgetExt: Widget + Sized {
 
     fn max_width(self, val: f32) -> Self {
         self.node_ref()
+            .unwrap()
             .upgrade()
             .borrow_mut()
             .max_width = Some(val);
@@ -339,6 +357,7 @@ pub trait WidgetExt: Widget + Sized {
 
     fn max_height(self, val: f32) -> Self {
         self.node_ref()
+            .unwrap()
             .upgrade()
             .borrow_mut()
             .max_height = Some(val);
@@ -348,6 +367,7 @@ pub trait WidgetExt: Widget + Sized {
 
     fn align_h(self, align_h: AlignH) -> Self {
         self.node_ref()
+            .unwrap()
             .upgrade()
             .borrow_mut()
             .align_h = align_h;
@@ -356,6 +376,7 @@ pub trait WidgetExt: Widget + Sized {
 
     fn align_v(self, align_v: AlignV) -> Self {
         self.node_ref()
+            .unwrap()
             .upgrade()
             .borrow_mut()
             .align_v = align_v;
@@ -366,8 +387,8 @@ pub trait WidgetExt: Widget + Sized {
 impl<T> WidgetExt for T where T: Widget + Sized {}
 
 impl Widget for Box<dyn Widget> {
-    fn node_ref(&self) -> NodeRef {
-        self.as_ref().node_ref()
+    fn node(&self) -> ViewNode {
+        self.as_ref().node()
     }
 
     fn children_ref(&self) -> Option<ChildrenRef<'_>> {
@@ -380,8 +401,8 @@ impl Widget for Box<dyn Widget> {
 }
 
 impl Widget for Box<&mut dyn Widget> {
-    fn node_ref(&self) -> NodeRef {
-        self.as_ref().node_ref()
+    fn node(&self) -> ViewNode {
+        self.as_ref().node()
     }
 
     fn children_ref(&self) -> Option<ChildrenRef<'_>> {
@@ -426,7 +447,7 @@ pub enum WidgetEvent {
 }
 
 #[derive(Default)]
-pub(crate) struct CallbackStore(Box<[Option<Box<dyn FnMut()>>]>);
+pub(crate) struct CallbackStore(Box<[Option<Box<dyn FnMut()>>; 5]>);
 
 impl CallbackStore {
     pub(crate) fn insert(
@@ -445,22 +466,22 @@ impl CallbackStore {
 // -------------------------------------
 
 pub(crate) struct WindowWidget {
-    node: NodeRef,
+    node: ViewNode,
     children: Vec<Box<dyn Widget>>,
 }
 
 impl WindowWidget {
     pub(crate) fn new(rect: Rect) -> Self {
         Self {
-            node: NodeRef::window(rect),
+            node: ViewNode::window(rect),
             children: Vec::new(),
         }
     }
 }
 
 impl Widget for WindowWidget {
-    fn node_ref(&self) -> NodeRef {
-        self.node.clone()
+    fn node(&self) -> ViewNode {
+        self.node
     }
 
     fn children_ref(&self) -> Option<ChildrenRef<'_>> {
@@ -475,13 +496,13 @@ impl Widget for WindowWidget {
 // -------------------------------------
 
 pub struct CircleWidget {
-    node: NodeRef,
+    node: ViewNode,
 }
 
 impl CircleWidget {
     pub fn new() -> Self {
         Self {
-            node: NodeRef::default()
+            node: ViewNode::default()
                 .with_stroke_width(5.)
                 .with_shape(Shape::Circle)
                 .with_size((100., 100.)),
@@ -490,7 +511,7 @@ impl CircleWidget {
 }
 
 impl Widget for CircleWidget {
-    fn node_ref(&self) -> NodeRef {
-        self.node.clone()
+    fn node(&self) -> ViewNode {
+        self.node
     }
 }

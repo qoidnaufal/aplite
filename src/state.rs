@@ -1,9 +1,9 @@
 use std::rc::{Rc, Weak};
 use std::cell::RefCell;
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 
 use aplite_renderer::Shape;
-use aplite_storage::IndexMap;
+use aplite_storage::{EntityManager, IndexMap, Entity, entity};
 use aplite_types::{
     Matrix3x2,
     Rect,
@@ -14,94 +14,40 @@ use aplite_types::{
 };
 
 use crate::layout::{AlignV, AlignH, Orientation, Padding};
-use crate::widget::WidgetId;
+
+entity! {
+    pub WidgetId
+}
 
 thread_local! {
-    pub(crate) static NODE_STORAGE: RefCell<IndexMap<WidgetId, Rc<RefCell<WidgetState>>>> =
-        RefCell::new(IndexMap::with_capacity(1024));
-}
+    pub(crate) static NODE_STORAGE: RefCell<HashMap<WidgetId, Rc<RefCell<WidgetState>>>> =
+        RefCell::new(HashMap::with_capacity(1024));
 
-const VERSION_MASK: u8 = 0xFF;
-const INDEX_BITS: u8 = 24;
-const INDEX_MASK: u32 = (1 << INDEX_BITS) - 1;
-const MINIMUM_FREE_INDEX: usize = 1024;
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct EntityId(u32);
-
-impl EntityId {
-    fn new(id: u32, version: u8) -> Self {
-        Self((version as u32) << INDEX_BITS | id)
-    }
-
-    pub(crate) fn index(&self) -> usize {
-        (self.0 & INDEX_MASK) as usize
-    }
-
-    pub(crate) fn version(&self) -> u8 {
-        ((self.0 >> INDEX_BITS) as u8) & VERSION_MASK
-    }
-}
-
-impl std::fmt::Debug for EntityId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "EntityId({})", self.0)
-    }
-}
-
-struct Manager {
-    tree: IndexMap<WidgetId, Tree>
-}
-
-struct Tree {
-    parent: Option<WidgetId>,
-    children: Vec<WidgetId>,
-}
-
-#[derive(Debug)]
-pub(crate) struct EntityManager {
-    recycled: VecDeque<u32>,
-    version_manager: Vec<u8>,
-}
-
-impl Default for EntityManager {
-    fn default() -> Self {
-        Self {
-            recycled: VecDeque::with_capacity(MINIMUM_FREE_INDEX),
-            version_manager: Vec::with_capacity(MINIMUM_FREE_INDEX),
-        }
-    }
-}
-
-impl EntityManager {
-    pub(crate) fn create(&mut self) -> EntityId {
-        let id = if self.recycled.len() > MINIMUM_FREE_INDEX {
-            self.recycled.pop_front().unwrap()
-        } else {
-            self.version_manager.push(0);
-            let id = (self.version_manager.len() - 1) as u32;
-            assert!(id < (1 << INDEX_BITS));
-            id
-        };
-        EntityId::new(id, self.version_manager[id as usize])
-    }
-
-    fn alive(&self, id: &EntityId) -> bool {
-        self.version_manager[id.index()] == id.version()
-    }
-
-    fn destroy(&mut self, id: EntityId) {
-        let idx = id.index();
-        self.version_manager[idx] += 1;
-        self.recycled.push_back(idx as u32);
-    }
+    pub(crate) static ENTITY_MANAGER: RefCell<EntityManager<WidgetId>> =
+        RefCell::new(EntityManager::with_capacity(1024));
 }
 
 pub(crate) struct StateManager {
-    pub(crate) common: HashMap<EntityId, usize>,
-    pub(crate) layout: HashMap<EntityId, usize>,
-    pub(crate) paint: HashMap<EntityId, usize>,
-    pub(crate) border: HashMap<EntityId, usize>,
+    state_index: StateIndex,
+    common: CommonState,
+    paint: PaintState,
+    border: BorderState,
+    layout_rules: Vec<LayoutRules>,
+    size_constraints: Vec<SizeConstraints>,
+}
+
+#[derive(Default)]
+pub(crate) struct Tree {
+    pub(crate) parent: Option<WidgetId>,
+    pub(crate) children: Vec<WidgetId>,
+}
+
+pub(crate) struct StateIndex {
+    pub(crate) common: HashMap<WidgetId, usize>,
+    pub(crate) paint: HashMap<WidgetId, usize>,
+    pub(crate) border: HashMap<WidgetId, usize>,
+    pub(crate) layout_rules: HashMap<WidgetId, usize>,
+    pub(crate) size_constraints: HashMap<WidgetId, usize>,
 }
 
 pub(crate) struct CommonState {
@@ -114,11 +60,11 @@ pub(crate) struct CommonState {
 }
 
 // I think it's okay not to pack this into vec since this will be used rarely
-pub(crate) struct SizeConstraint {
-    pub(crate) min_width: Vec<Option<f32>>,
-    pub(crate) min_height: Vec<Option<f32>>,
-    pub(crate) max_width: Vec<Option<f32>>,
-    pub(crate) max_height: Vec<Option<f32>>,
+pub(crate) struct SizeConstraints {
+    pub(crate) min_width: Option<f32>,
+    pub(crate) min_height: Option<f32>,
+    pub(crate) max_width: Option<f32>,
+    pub(crate) max_height: Option<f32>,
 }
 
 // I think it's okay not to pack this into vec since this will be used rarely
@@ -315,51 +261,57 @@ impl Flag {
 #[derive(Clone, Debug)]
 pub struct NodeRef {
     node: Weak<RefCell<WidgetState>>,
-    id: WidgetId,
 }
 
-impl Default for NodeRef {
+#[derive(Clone, Copy)]
+pub struct ViewNode {
+    pub(crate) id: WidgetId,
+}
+
+impl Default for ViewNode {
     fn default() -> Self {
         let state = Rc::new(RefCell::new(WidgetState::default()));
-        let node = Rc::downgrade(&state);
-        let id = NODE_STORAGE.with_borrow_mut(|s| s.insert(state));
+        let id = ENTITY_MANAGER.with_borrow_mut(|s| s.create());
+        NODE_STORAGE.with_borrow_mut(|s| s.insert(id, state));
 
-        Self { node, id }
+        Self { id }
     }
 }
 
-impl NodeRef {
+impl ViewNode {
     pub(crate) fn window(rect: Rect) -> Self {
         let state = Rc::new(RefCell::new(WidgetState::window(rect)));
-        let node = Rc::downgrade(&state);
-        let id = NODE_STORAGE.with_borrow_mut(|s| s.insert(state));
+        let id = ENTITY_MANAGER.with_borrow_mut(|s| s.create());
+        NODE_STORAGE.with_borrow_mut(|s| s.insert(id, state));
 
-        Self { node, id }
+        Self { id }
     }
 
     pub(crate) fn id(&self) -> WidgetId {
         self.id
     }
 
-    #[inline(always)]
-    pub(crate) fn try_upgrade(&self) -> Option<Rc<RefCell<WidgetState>>> {
-        self.node.upgrade()
-    }
-
-    pub(crate) fn upgrade(&self) -> Rc<RefCell<WidgetState>> {
-        self.try_upgrade().unwrap()
+    pub fn node_ref(&self) -> Option<NodeRef> {
+        NODE_STORAGE.with_borrow(|s| {
+            s.get(&self.id)
+                .map(|rc| NodeRef { node: Rc::downgrade(rc) })
+        })
     }
 
     pub(crate) fn is_visible(&self) -> bool {
-        self.try_upgrade()
-            .is_some_and(|state| {
-                !state.borrow().flag.is_hidden()
+        NODE_STORAGE.with_borrow(|s| {
+            s.get(&self.id).is_some_and(|rc| {
+                rc.borrow().flag.is_hoverable()
             })
+        })
     }
 
     pub(crate) fn is_hoverable(&self) -> bool {
-        self.try_upgrade()
-            .is_some_and(|state| state.borrow().flag.is_hoverable())
+        NODE_STORAGE.with_borrow(|s| {
+            s.get(&self.id).is_some_and(|rc| {
+                rc.borrow().flag.is_hoverable()
+            })
+        })
     }
 
     /// Types which implement [`Into<Size>`] are:
@@ -479,6 +431,17 @@ impl NodeRef {
             state.borrow_mut().flag.set_hoverable(true);
         }
         self
+    }
+}
+
+impl NodeRef {
+    #[inline(always)]
+    pub(crate) fn try_upgrade(&self) -> Option<Rc<RefCell<WidgetState>>> {
+        self.node.upgrade()
+    }
+
+    pub(crate) fn upgrade(&self) -> Rc<RefCell<WidgetState>> {
+        self.try_upgrade().unwrap()
     }
 
     pub fn set_color(&self, color: Rgba) {

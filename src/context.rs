@@ -3,7 +3,8 @@ use aplite_renderer::Renderer;
 use aplite_types::Vec2f;
 
 use crate::view::{View, Layout};
-use crate::widget::{CALLBACKS, Widget, WidgetId, WidgetEvent};
+use crate::widget::{CALLBACKS, Widget, WidgetEvent};
+use crate::state::WidgetId;
 use crate::cursor::{Cursor, MouseAction, MouseButton, EmittedClickEvent};
 use crate::layout::LayoutCx;
 use crate::state::NODE_STORAGE;

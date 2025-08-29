@@ -7,7 +7,7 @@ pub(crate) enum Content<T> {
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub(crate) struct Slot<T> {
-    pub(crate) version: u8,
+    pub(crate) version: u16,
     pub(crate) content: Content<T>,
 }
 

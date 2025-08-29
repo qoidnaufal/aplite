@@ -1,8 +1,8 @@
 use aplite_types::Size;
 use aplite_renderer::Scene;
 
-use crate::widget::{Widget, WidgetId};
-use crate::state::AspectRatio;
+use crate::widget::Widget;
+use crate::state::{AspectRatio, WidgetId};
 use crate::layout::*;
 use crate::cursor::Cursor;
 

@@ -6,7 +6,7 @@ mod index_map;
 mod slot;
 
 pub use tree::*;
-pub use entity::Entity;
+pub use entity::{Entity, EntityManager};
 pub use hash::U64Map;
 pub use index_map::IndexMap;
 

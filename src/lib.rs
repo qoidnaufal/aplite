@@ -17,7 +17,7 @@ pub mod prelude {
     pub use crate::app::Aplite;
     pub use crate::context::Context;
     pub use crate::cursor::Cursor;
-    pub use crate::state::{NodeRef, AspectRatio};
+    pub use crate::state::{WidgetId, NodeRef, AspectRatio};
     pub use crate::layout::{
         Orientation,
         Padding,
@@ -27,7 +27,6 @@ pub mod prelude {
     pub use crate::widget::{
         Widget,
         WidgetExt,
-        WidgetId,
         CircleWidget,
         HStack,
         VStack,

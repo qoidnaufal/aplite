@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
 use aplite_types::{Rect, Size, Vec2f, ImageRef};
-use aplite_storage::{Tree, Entity, entity};
+use aplite_storage::{IndexMap, Tree, Entity, entity};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Uv {
@@ -210,7 +210,8 @@ entity! { pub AtlasId }
 struct AtlasAllocator {
     rect: Rect,
     last_parent: Option<AtlasId>,
-    tree: Tree<AtlasId, Rect>,
+    allocated: IndexMap<AtlasId, Rect>,
+    tree: Tree<AtlasId>,
 }
 
 impl AtlasAllocator {
@@ -218,7 +219,8 @@ impl AtlasAllocator {
         Self {
             rect: Rect::from_size(size),
             last_parent: None,
-            tree: Tree::new(),
+            allocated: IndexMap::new(),
+            tree: Tree::default(),
         }
     }
 
@@ -230,19 +232,20 @@ impl AtlasAllocator {
             Some(last_parent) => {
                 if let Some((parent, pos)) = self.scan(size) {
                     let rect = Rect::from_vec2f_size(pos, size);
-                    let id = self.tree.insert(rect);
+                    let id = self.allocated.insert(rect);
 
-                    self.tree.add_child(&parent, id);
+                    self.tree.add_child(parent, id);
 
                     Some(rect)
                 } else {
                     // inserting as the next sibling of the last parent
-                    let next_y = self.tree.get(&last_parent).unwrap().max_y();
+                    let next_y = self.allocated.get(last_parent).unwrap().max_y();
                     let pos = Vec2f::new(0.0, next_y);
                     let rect = Rect::from_vec2f_size(pos, size);
-                    let id = self.tree.insert(rect);
+                    let id = self.allocated.insert(rect);
 
-                    self.tree.add_sibling(&last_parent, id);
+                    self.tree.add_sibling(last_parent, id);
+                    // self.tree.add_root(id);
                     self.last_parent = Some(id);
 
                     Some(rect)
@@ -251,8 +254,9 @@ impl AtlasAllocator {
             None => {
                 // first insert
                 let rect = Rect::from_size(size);
-                let id = self.tree.insert(rect);
+                let id = self.allocated.insert(rect);
 
+                self.tree.add_root(id);
                 self.last_parent = Some(id);
 
                 Some(rect)
@@ -271,7 +275,7 @@ impl AtlasAllocator {
         rect: &Rect,
         size: Size,
     ) -> Option<(AtlasId, Vec2f)> {
-        if let Some(first) = self.tree.get_first_child(&parent) {
+        if let Some(first) = self.tree.get_first_child(parent) {
             let mut current = first;
 
             while let Some(sibling) = self.tree.get_next_sibling(current) {
@@ -279,7 +283,7 @@ impl AtlasAllocator {
                     Some(last) => self.check_pos_for(last, current, size),
                     None => self.check_pos_for(current, current, size),
                 }
-                .or(self.indentify_next_sibling(current, &parent, size));
+                .or(self.indentify_next_sibling(current, parent, size));
 
                 if find.is_some() {
                     return find
@@ -321,16 +325,16 @@ impl AtlasAllocator {
     #[inline(always)]
     fn check_pos_for(
         &self,
-        id: &AtlasId,
-        parent: &AtlasId,
+        id: AtlasId,
+        parent: AtlasId,
         size: Size,
     ) -> Option<(AtlasId, Vec2f)> {
-        let rect = self.tree.get(id).unwrap();
+        let rect = self.allocated.get(id).unwrap();
         let cond1 = rect.max_y() + size.height <= rect.max_y();
         let cond2 = size.width <= rect.width;
 
         (cond1 && cond2).then_some((
-            *parent,
+            parent,
             Vec2f::new(rect.x, rect.max_y())
         ))
     }
@@ -338,27 +342,27 @@ impl AtlasAllocator {
     #[inline(always)]
     fn indentify_next_sibling(
         &self,
-        prev: &AtlasId,
-        parent: &AtlasId,
+        prev: AtlasId,
+        parent: AtlasId,
         size: Size,
     ) -> Option<(AtlasId, Vec2f)> {
-        let rect = self.tree.get(prev).unwrap();
+        let rect = self.allocated.get(prev).unwrap();
         let cond1 = rect.max_x() + size.width <= self.rect.width;
         let cond2 = self.tree.get_next_sibling(prev).is_none();
 
         (cond1 && cond2).then_some((
-            *parent,
+            parent,
             Vec2f::new(rect.max_x(), rect.y)
         ))
     }
 
     #[inline(always)]
     fn get_parents(&self) -> impl Iterator<Item = (AtlasId, &Rect)> {
-        self.tree
-            .iter_data_ref()
+        self.allocated
+            .iter()
             .filter_map(|(id, rect)| {
                 self.tree
-                    .get_parent(&id)
+                    .get_parent(id)
                     .is_none()
                     .then_some((id, rect))
             })
@@ -377,8 +381,8 @@ impl AtlasAllocator {
 
     #[inline(always)]
     fn calculate_available_area(&self) -> f32 {
-        let allocated = self.tree
-            .iter_data_ref()
+        let allocated = self.allocated
+            .iter()
             .fold(0.0,|sum, (_, rect)| {
                 sum + rect.area()
             });

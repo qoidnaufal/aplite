@@ -115,12 +115,12 @@ impl<E: Entity, T> IndexMap<E, T> {
     /// Panic if the id is invalid, or there's an internal error.
     /// Use [`try_replace`](IndexMap::try_replace()) if you want to handle the error manually
     #[inline(always)]
-    pub fn replace(&mut self, entity: &E, data: T) -> Option<T> {
+    pub fn replace(&mut self, entity: E, data: T) -> Option<T> {
         self.try_replace(entity, data).ok()
     }
 
     #[inline(always)]
-    pub fn try_replace(&mut self, entity: &E, data: T) -> Result<T, Error> {
+    pub fn try_replace(&mut self, entity: E, data: T) -> Result<T, Error> {
         match self.inner.get_mut(entity.index()) {
             Some(slot) if entity.version() == slot.version => {
                 slot.get_content_mut()
@@ -132,7 +132,7 @@ impl<E: Entity, T> IndexMap<E, T> {
     }
 
     #[inline(always)]
-    pub fn get(&self, entity: &E) -> Option<&T> {
+    pub fn get(&self, entity: E) -> Option<&T> {
         self.inner
             .get(entity.index())
             .and_then(|slot| {
@@ -145,7 +145,7 @@ impl<E: Entity, T> IndexMap<E, T> {
     }
 
     #[inline(always)]
-    pub fn get_mut<'a>(&'a mut self, entity: &'a E) -> Option<&'a mut T> {
+    pub fn get_mut<'a>(&'a mut self, entity: E) -> Option<&'a mut T> {
         self.inner
             .get_mut(entity.index())
             .and_then(|slot| {
@@ -158,7 +158,7 @@ impl<E: Entity, T> IndexMap<E, T> {
     }
 
     #[inline(always)]
-    pub fn remove(&mut self, entity: &E) -> Option<T> {
+    pub fn remove(&mut self, entity: E) -> Option<T> {
         if let Some(slot) = self.inner.get_mut(entity.index())
             && slot.version == entity.version()
         {
@@ -176,7 +176,7 @@ impl<E: Entity, T> IndexMap<E, T> {
     }
 
     #[inline(always)]
-    pub fn contains(&self, entity: &E) -> bool {
+    pub fn contains(&self, entity: E) -> bool {
         self.inner
             .get(entity.index())
             .is_some_and(|slot| slot.version == entity.version())
@@ -218,12 +218,12 @@ where
     }
 }
 
-impl<E, T> std::ops::Index<&E> for IndexMap<E, T>
+impl<E, T> std::ops::Index<E> for IndexMap<E, T>
 where
     E: Entity,
 {
     type Output = T;
-    fn index(&self, index: &E) -> &Self::Output {
+    fn index(&self, index: E) -> &Self::Output {
         self.get(index).unwrap()
     }
 }
@@ -265,7 +265,7 @@ mod index_test {
             created_ids.push(id);
         }
 
-        assert!(created_ids.iter().all(|id| storage.get(id).is_some()));
+        assert!(created_ids.iter().all(|id| storage.get(*id).is_some()));
         assert_eq!(storage.len(), created_ids.len());
     }
 
@@ -279,7 +279,7 @@ mod index_test {
             created_ids.push(id);
         }
 
-        created_ids.iter().for_each(|id| storage.remove(id).unwrap());
+        created_ids.iter().for_each(|id| storage.remove(*id).unwrap());
 
         let mut new_ids = Vec::with_capacity(10);
         for _ in 0..10 {

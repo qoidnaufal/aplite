@@ -3,16 +3,21 @@ pub trait Entity
 where
     Self : std::fmt::Debug + Copy + PartialEq + PartialOrd
 {
+    const VERSION_BITS: u8 = 10;
+    const VERSION_MASK: u16 = (1 << Self::VERSION_BITS) - 1;
+    const INDEX_BITS: u8 = 22;
+    const INDEX_MASK: u32 = (1 << Self::INDEX_BITS) - 1;
+
     /// If you created this manually, you also need to manually [`insert()`](crate::tree::Tree::insert) it to the [`Tree`](crate::tree::Tree).
     /// The [`Tree`](crate::tree::Tree) provides a hassle free [`create_entity()`](Tree::create_entity) method
     /// to create an [`Entity`] and automatically insert it.
-    fn new(index: u32, version: u8) -> Self;
+    fn new(index: u32, version: u16) -> Self;
 
     /// The index where this [`Entity`] is being stored inside the [`Tree`]
     fn index(&self) -> usize;
 
     /// The version of this [`Entity`]
-    fn version(&self) -> u8;
+    fn version(&self) -> u16;
 }
 
 /// A macro to conveniently implement [`Entity`] trait.
@@ -37,16 +42,16 @@ macro_rules! entity {
         $vis struct $name(u32);
 
         impl Entity for $name {
-            fn new(index: u32, version: u8) -> Self {
-                Self((version as u32) << 24 | index)
+            fn new(index: u32, version: u16) -> Self {
+                Self((version as u32) << Self::INDEX_BITS | index)
             }
 
             fn index(&self) -> usize {
-                (self.0 & ((1 << 24) - 1)) as usize
+                (self.0 & Self::INDEX_MASK) as usize
             }
 
-            fn version(&self) -> u8 {
-                ((self.0 >> 24) as u8) & 0xFF
+            fn version(&self) -> u16 {
+                ((self.0 >> Self::INDEX_BITS) as u16) & Self::VERSION_MASK
             }
         }
 
@@ -88,4 +93,72 @@ macro_rules! entity {
         entity! { $vis $name }
         entity! { $($vis2 $name2),* }
     };
+}
+
+// const VERSION_BITS: u8 = 10;
+// const VERSION_MASK: u16 = (1 << VERSION_BITS) - 1;
+// const INDEX_BITS: u8 = 22;
+// const INDEX_MASK: u32 = (1 << INDEX_BITS) - 1;
+// const MINIMUM_FREE_INDEX: usize = 1 << VERSION_BITS;
+
+#[derive(Debug)]
+pub struct EntityManager<E: Entity> {
+    recycled: std::collections::VecDeque<u32>,
+    version_manager: Vec<u16>,
+    marker: std::marker::PhantomData<E>,
+}
+
+impl<E: Entity> Default for EntityManager<E> {
+    /// Create a new manager with no preallocated capacity at all.
+    /// If you want to preallocate a specific initial capacity, use [`EntityManager::with_capacity`]
+    fn default() -> Self {
+        Self {
+            recycled: std::collections::VecDeque::default(),
+            version_manager: Vec::default(),
+            marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<E: Entity> EntityManager<E> {
+    const MINIMUM_FREE_INDEX: usize = 1 << E::VERSION_BITS;
+
+    /// Create a new manager with the specified capacity for the version manager,
+    /// and the recycled capacity will be set to 1 << [`Entity::VERSION_BITS`].
+    /// Using [`EntityManager::default`] will create one with no preallocated capacity at all
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            recycled: std::collections::VecDeque::with_capacity(Self::MINIMUM_FREE_INDEX),
+            version_manager: Vec::with_capacity(capacity),
+            marker: std::marker::PhantomData,
+        }
+    }
+
+    pub fn create(&mut self) -> E {
+        let id = if self.recycled.len() >= (Self::MINIMUM_FREE_INDEX) {
+            self.recycled.pop_front().unwrap()
+        } else {
+            let id = self.version_manager.len() as u32;
+            assert!(id <= E::INDEX_MASK);
+            self.version_manager.push(0);
+            id
+        };
+
+        E::new(id, self.version_manager[id as usize])
+    }
+
+    pub fn is_alive(&self, e: &E) -> bool {
+        self.version_manager[e.index()] == e.version()
+    }
+
+    pub fn destroy(&mut self, e: E) {
+        let idx = e.index();
+        self.version_manager[idx] += 1;
+        self.recycled.push_back(idx as u32);
+    }
+
+    pub fn reset(&mut self) {
+        self.recycled.clear();
+        self.version_manager.clear();
+    }
 }

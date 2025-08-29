@@ -70,7 +70,7 @@ impl Graph {
         let graph = Self::read();
         let r = graph
             .storage
-            .get(&node.id)
+            .get(node.id)
             .and_then(|any| any.as_ref().downcast_ref::<R>())
             .unwrap();
         f(r)
@@ -83,7 +83,7 @@ impl Graph {
     {
         Self::read()
             .storage
-            .get(&node.id)
+            .get(node.id)
             .and_then(|any| f(any.as_ref().downcast_ref::<R>()))
     }
 
@@ -96,12 +96,12 @@ impl Graph {
 
     pub(crate) fn remove<R: Reactive>(node: &Node<R>) -> Option<Box<dyn Any + Send + Sync>> {
         let mut graph = Self::write();
-        graph.storage.remove(&node.id)
+        graph.storage.remove(node.id)
     }
 
     pub(crate) fn is_removed<R: Reactive>(node: &Node<R>) -> bool {
         let graph = Self::read();
-        graph.storage.get(&node.id).is_none()
+        graph.storage.get(node.id).is_none()
     }
 }
 

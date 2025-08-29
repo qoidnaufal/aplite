@@ -1,6 +1,6 @@
 use aplite_types::Vec2f;
 
-use crate::widget::WidgetId;
+use crate::state::WidgetId;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseAction {
