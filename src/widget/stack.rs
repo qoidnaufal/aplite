@@ -3,7 +3,7 @@ use aplite_renderer::Shape;
 
 use crate::layout::Orientation;
 
-use super::{NodeRef, Widget};
+use super::{ViewNode, Widget};
 
 pub fn v_stack<F>() -> VStack {
     VStack::new()
@@ -14,13 +14,13 @@ pub fn h_stack<F>() -> HStack {
 }
 
 pub struct VStack {
-    node: NodeRef,
+    node: ViewNode,
     children: Vec<Box<dyn Widget>>,
 }
 
 impl VStack {
     pub fn new() -> Self {
-        let node = NodeRef::default()
+        let node = ViewNode::default()
             .with_size((1, 1))
             .with_background_paint(Rgba::TRANSPARENT)
             .with_border_paint(Rgba::TRANSPARENT)
@@ -34,7 +34,7 @@ impl VStack {
 }
 
 impl Widget for VStack {
-    fn node_ref(&self) -> NodeRef {
+    fn node(&self) -> ViewNode {
         self.node.clone()
     }
 
@@ -48,13 +48,13 @@ impl Widget for VStack {
 }
 
 pub struct HStack {
-    node: NodeRef,
+    node: ViewNode,
     children: Vec<Box<dyn Widget>>,
 }
 
 impl HStack {
     pub fn new() -> Self {
-        let node = NodeRef::default()
+        let node = ViewNode::default()
             .with_orientation(Orientation::Horizontal)
             .with_size((1, 1))
             .with_background_paint(Rgba::TRANSPARENT)
@@ -69,7 +69,7 @@ impl HStack {
 }
 
 impl Widget for HStack {
-    fn node_ref(&self) -> NodeRef {
+    fn node(&self) -> ViewNode {
         self.node.clone()
     }
 

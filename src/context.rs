@@ -46,7 +46,7 @@ impl Context {
                     state.borrow_mut().flag.set_needs_layout(false);
                     id
                 })
-                .for_each(|id| self.pending_update.push(id));
+                .for_each(|id| self.pending_update.push(*id));
         });
 
         if !self.pending_update.is_empty() {

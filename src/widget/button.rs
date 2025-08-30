@@ -1,15 +1,15 @@
 use aplite_renderer::Shape;
-use super::{NodeRef, Widget};
+use super::{ViewNode, Widget};
 
 pub fn button() -> Button { Button::new() }
 
 pub struct Button {
-    node: NodeRef,
+    node: ViewNode,
 }
 
 impl Button {
     pub fn new() -> Self {
-        let node = NodeRef::default()
+        let node = ViewNode::default()
             .with_shape(Shape::RoundedRect)
             .hoverable()
             .with_size((80, 30));
@@ -21,7 +21,7 @@ impl Button {
 }
 
 impl Widget for Button {
-    fn node_ref(&self) -> NodeRef {
+    fn node(&self) -> ViewNode {
         self.node.clone()
     }
 }

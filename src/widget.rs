@@ -7,8 +7,6 @@ use aplite_types::{Rgba, CornerRadius, Size, Rect};
 use crate::layout::*;
 use crate::view::IntoView;
 use crate::state::{
-    NODE_STORAGE,
-    ENTITY_MANAGER,
     WidgetId,
     ViewNode,
     NodeRef,

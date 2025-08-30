@@ -1,5 +1,5 @@
 use aplite_types::Size;
-use aplite_renderer::Scene;
+// use aplite_renderer::Scene;
 
 use crate::widget::Widget;
 use crate::state::{AspectRatio, WidgetId};
@@ -25,6 +25,7 @@ impl View {
             if let Some(hovered) = children.visible_boxed()
                 .find_map(|child| {
                     child.node_ref()
+                        .unwrap()
                         .upgrade()
                         .borrow()
                         .rect
@@ -38,31 +39,31 @@ impl View {
         }
 
         current
-            .node_ref()
+            .node()
             .is_hoverable()
             .then_some(current)
     }
 
-    pub(crate) fn calculate_layout(&self, bound: aplite_types::Rect) {
-        let window_widget = crate::widget::WindowWidget::new(bound);
-        let mut cx = LayoutCx::new(&window_widget);
+    // pub(crate) fn calculate_layout(&self, bound: aplite_types::Rect) {
+    //     let window_widget = crate::widget::WindowWidget::new(bound);
+    //     let mut cx = LayoutCx::new(&window_widget);
 
-        let mut current = self.widget.as_ref();
+    //     let mut current = self.widget.as_ref();
 
-        loop {
-            if current.layout(&mut cx) {
-                if let Some(children) = current.children_ref() {
-                    cx = LayoutCx::new(current);
+    //     loop {
+    //         if current.layout(&mut cx) {
+    //             if let Some(children) = current.children_ref() {
+    //                 cx = LayoutCx::new(current);
 
-                    for child in children.all_ref() {
-                        current = child;
-                    }
-                }
-            } else {
-                break
-            }
-        }
-    }
+    //                 for child in children.all_ref() {
+    //                     current = child;
+    //                 }
+    //             }
+    //         } else {
+    //             break
+    //         }
+    //     }
+    // }
 
     pub(crate) fn find_parent(&self, id: &WidgetId) -> Option<&Box<dyn Widget>> {
         if self.widget.as_ref().id() == id { return None }
@@ -97,9 +98,9 @@ impl View {
         Some(current)
     }
 
-    pub(crate) fn render(&self, scene: &mut Scene) {
-        let mut current = self.widget.as_ref();
-    }
+    // pub(crate) fn render(&self, scene: &mut Scene) {
+    //     let mut current = self.widget.as_ref();
+    // }
 
     // fn insert<T: Widget + 'static>(&mut self, parent: &WidgetId, widget: T) {
     //     if let Some(mut p) = self.find_mut(parent)
@@ -136,19 +137,15 @@ impl<T: Widget + Sized + 'static> Layout for T {}
 
 pub(crate) trait Layout: Widget + Sized + 'static {
     fn calculate_layout(&self, cx: &mut LayoutCx) {
-        if self.layout(cx)
-            && let Some(children) = self.children_ref()
-        {
+        if self.layout(cx) && let Some(children) = self.children_ref() {
             let mut this_cx = LayoutCx::new(self);
-
-            children
-                .iter()
+            children.iter()
                 .for_each(|child| child.calculate_layout(&mut this_cx));
         }
     }
 
     fn calculate_size(&self, parent: Option<&dyn Widget>) -> Size {
-        let node = self.node_ref().upgrade();
+        let node = self.node_ref().unwrap().upgrade();
         if node.borrow().flag.is_hidden() { return Size::default() }
 
         let state = node.borrow();
@@ -162,7 +159,7 @@ pub(crate) trait Layout: Widget + Sized + 'static {
 
             children
                 .iter()
-                .filter(|child| child.node_ref().is_visible())
+                .filter(|child| child.node().is_visible())
                 .enumerate()
                 .for_each(|(i, child)| {
                     let child_size = child.calculate_size(Some(self));
@@ -208,6 +205,7 @@ pub(crate) trait Layout: Widget + Sized + 'static {
             match parent {
                 Some(parent) if parent
                     .node_ref()
+                    .unwrap()
                     .upgrade()
                     .borrow()
                     .orientation

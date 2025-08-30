@@ -17,9 +17,9 @@ fn image_row(counter: SignalRead<i32>) -> impl IntoView {
         .min_width(350.)
         .image_aspect_ratio(AspectRatio::Defined(16, 9));
 
-    let node1 = image1.node_ref();
-    let node2 = image2.node_ref();
-    let node3 = image3.node_ref();
+    let node1 = image1.node_ref().unwrap();
+    let node2 = image2.node_ref().unwrap();
+    let node3 = image3.node_ref().unwrap();
 
     Effect::new(move |_| {
         let num = counter.get().abs();

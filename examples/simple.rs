@@ -42,8 +42,8 @@ fn simple() -> impl IntoView {
         .border_width(6.0)
         .size((150, 150));
 
-    let button_node = button.node_ref();
-    let circle_node = circle.node_ref();
+    let button_node = button.node_ref().unwrap();
+    let circle_node = circle.node_ref().unwrap();
 
     Effect::new(move |_| counter.with(|num| {
         circle_node.set_color(get_color(*num));

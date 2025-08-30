@@ -301,7 +301,7 @@ impl ViewNode {
     pub(crate) fn is_visible(&self) -> bool {
         NODE_STORAGE.with_borrow(|s| {
             s.get(&self.id).is_some_and(|rc| {
-                rc.borrow().flag.is_hoverable()
+                !rc.borrow().flag.is_hidden()
             })
         })
     }
@@ -319,37 +319,47 @@ impl ViewNode {
     /// - (f32, f32)
     /// - [`Size`](aplite_types::Size)
     pub fn with_size(self, size: impl Into<Size>) -> Self {
-        if let Some(state) = self.try_upgrade() {
-            state.borrow_mut().rect.set_size(size.into());
-        }
+        NODE_STORAGE.with_borrow(|s| {
+            if let Some(rc) = s.get(&self.id) {
+                rc.borrow_mut().rect.set_size(size.into());
+            }
+        });
         self
     }
 
     pub fn with_min_width(self, val: f32) -> Self {
-        if let Some(state) = self.try_upgrade() {
-            state.borrow_mut().min_width = Some(val);
-        }
+        NODE_STORAGE.with_borrow(|s| {
+            if let Some(rc) = s.get(&self.id) {
+                rc.borrow_mut().min_width = Some(val);
+            }
+        });
         self
     }
 
     pub fn with_max_width(self, val: f32) -> Self {
-        if let Some(state) = self.try_upgrade() {
-            state.borrow_mut().max_width = Some(val);
-        }
+        NODE_STORAGE.with_borrow(|s| {
+            if let Some(rc) = s.get(&self.id) {
+                rc.borrow_mut().max_width = Some(val);
+            }
+        });
         self
     }
 
     pub fn with_min_height(self, val: f32) -> Self {
-        if let Some(state) = self.try_upgrade() {
-            state.borrow_mut().min_height = Some(val);
-        }
+        NODE_STORAGE.with_borrow(|s| {
+            if let Some(rc) = s.get(&self.id) {
+                rc.borrow_mut().min_height = Some(val);
+            }
+        });
         self
     }
 
     pub fn with_max_height(self, val: f32) -> Self {
-        if let Some(state) = self.try_upgrade() {
-            state.borrow_mut().max_height = Some(val);
-        }
+        NODE_STORAGE.with_borrow(|s| {
+            if let Some(rc) = s.get(&self.id) {
+                rc.borrow_mut().max_height = Some(val);
+            }
+        });
         self
     }
 
@@ -357,9 +367,11 @@ impl ViewNode {
     /// - [`ImageData`](aplite_types::ImageData)
     /// - [`Rgba`](aplite_types::Rgba)
     pub fn with_background_paint(self, paint: impl Into<Paint>) -> Self {
-        if let Some(state) = self.try_upgrade() {
-            state.borrow_mut().background_paint = paint.into();
-        }
+        NODE_STORAGE.with_borrow(|s| {
+            if let Some(rc) = s.get(&self.id) {
+                rc.borrow_mut().background_paint = paint.into();
+            }
+        });
         self
     }
 
@@ -367,23 +379,29 @@ impl ViewNode {
     /// - [`ImageData`](aplite_types::ImageData)
     /// - [`Rgba`](aplite_types::Rgba)
     pub fn with_border_paint(self, color: impl Into<Paint>) -> Self {
-        if let Some(state) = self.try_upgrade() {
-            state.borrow_mut().border_paint = color.into();
-        }
+        NODE_STORAGE.with_borrow(|s| {
+            if let Some(rc) = s.get(&self.id) {
+                rc.borrow_mut().border_paint = color.into();
+            }
+        });
         self
     }
 
     pub fn with_stroke_width(self, val: f32) -> Self {
-        if let Some(state) = self.try_upgrade() {
-            state.borrow_mut().border_width = val;
-        }
+        NODE_STORAGE.with_borrow(|s| {
+            if let Some(rc) = s.get(&self.id) {
+                rc.borrow_mut().border_width = val;
+            }
+        });
         self
     }
 
     pub fn with_shape(self, shape: Shape) -> Self {
-        if let Some(state) = self.try_upgrade() {
-            state.borrow_mut().shape = shape;
-        }
+        NODE_STORAGE.with_borrow(|s| {
+            if let Some(rc) = s.get(&self.id) {
+                rc.borrow_mut().shape = shape;
+            }
+        });
         self
     }
 
@@ -392,44 +410,56 @@ impl ViewNode {
     }
 
     pub fn with_rotation_rad(self, rad: f32) -> Self {
-        if let Some(state) = self.try_upgrade() {
-            state.borrow_mut().transform.set_rotate_rad(rad);
-        }
+        NODE_STORAGE.with_borrow(|s| {
+            if let Some(rc) = s.get(&self.id) {
+                rc.borrow_mut().transform.set_rotate_rad(rad);
+            }
+        });
         self
     }
 
     pub fn with_corner_radius(self, val: CornerRadius) -> Self {
-        if let Some(state) = self.try_upgrade() {
-            state.borrow_mut().corner_radius = val;
-        }
+        NODE_STORAGE.with_borrow(|s| {
+            if let Some(rc) = s.get(&self.id) {
+                rc.borrow_mut().corner_radius = val;
+            }
+        });
         self
     }
 
     pub fn with_horizontal_align(self, align_h: AlignH) -> Self {
-        if let Some(state) = self.try_upgrade() {
-            state.borrow_mut().align_h = align_h;
-        }
+        NODE_STORAGE.with_borrow(|s| {
+            if let Some(rc) = s.get(&self.id) {
+                rc.borrow_mut().align_h = align_h;
+            }
+        });
         self
     }
 
     pub fn with_vertical_align(self, align_v: AlignV) -> Self {
-        if let Some(state) = self.try_upgrade() {
-            state.borrow_mut().align_v = align_v;
-        }
+        NODE_STORAGE.with_borrow(|s| {
+            if let Some(rc) = s.get(&self.id) {
+                rc.borrow_mut().align_v = align_v;
+            }
+        });
         self
     }
 
     pub fn with_orientation(self, orientation: Orientation) -> Self {
-        if let Some(state) = self.try_upgrade() {
-            state.borrow_mut().orientation = orientation;
-        }
+        NODE_STORAGE.with_borrow(|s| {
+            if let Some(rc) = s.get(&self.id) {
+                rc.borrow_mut().orientation = orientation;
+            }
+        });
         self
     }
 
     pub fn hoverable(self) -> Self {
-        if let Some(state) = self.try_upgrade() {
-            state.borrow_mut().flag.set_hoverable(true);
-        }
+        NODE_STORAGE.with_borrow(|s| {
+            if let Some(rc) = s.get(&self.id) {
+                rc.borrow_mut().flag.set_hoverable(true);
+            }
+        });
         self
     }
 }

@@ -10,7 +10,7 @@ pub struct LayoutCx {
 
 impl LayoutCx {
     pub fn new(parent: &dyn Widget) -> Self {
-        let node = parent.node_ref().upgrade();
+        let node = parent.node_ref().unwrap().upgrade();
         let rules = Rules::new(&node.borrow());
 
         let(total_size, len) = parent.children_ref()
@@ -18,7 +18,7 @@ impl LayoutCx {
                 (
                     children.iter()
                         .map(|child| {
-                            let rect = child.node_ref().upgrade().borrow().rect;
+                            let rect = child.node_ref().unwrap().upgrade().borrow().rect;
                             match rules.orientation {
                                 Orientation::Vertical => rect.size().height,
                                 Orientation::Horizontal => rect.size().width,
