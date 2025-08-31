@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use aplite_renderer::Shape;
-use aplite_storage::{EntityManager, IndexMap, Entity, entity};
+use aplite_storage::{EntityManager, IndexMap, Entity, create_entity};
 use aplite_types::{
     Matrix3x2,
     Rect,
@@ -15,7 +15,7 @@ use aplite_types::{
 
 use crate::layout::{AlignV, AlignH, Orientation, Padding};
 
-entity! {
+create_entity! {
     pub WidgetId
 }
 

@@ -1,11 +1,15 @@
+use crate::entity::Entity;
 use crate::iterator::{
-    EntityDataStoreIter,
+    MappedDataStoreIter,
     DataStoreIter,
     DataStoreIterMut
 };
 
+/// A Contiguous data storage which is guaranteed even after removal.
+/// Doesn't facilitate the creation of [`Entity`], unlike [`IndexMap`](crate::index_map::IndexMap).
+/// You'll need the assistance of [`EntityManager`](crate::entity::EntityManager) to create the key for indexing data.
 #[derive(Default)]
-pub struct DataStore<E: crate::Entity, T> {
+pub struct DataStore<E: Entity, T> {
     pub(crate) ptr: Vec<usize>,
     pub(crate) data: Vec<T>,
     marker: std::marker::PhantomData<E>,
@@ -19,7 +23,7 @@ impl<E: crate::Entity, T: std::fmt::Debug> std::fmt::Debug for DataStore<E, T> {
     }
 }
 
-impl<E: crate::Entity, T> DataStore<E, T> {
+impl<E: Entity, T> DataStore<E, T> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             ptr: Vec::new(),
@@ -48,7 +52,7 @@ impl<E: crate::Entity, T> DataStore<E, T> {
             .map(|&idx| &mut self.data[idx])
     }
 
-    /// inserting or replacing the value
+    /// Inserting or replacing the value
     pub fn insert(&mut self, entity: E, value: T) {
         let entity_index = entity.index();
 
@@ -68,6 +72,8 @@ impl<E: crate::Entity, T> DataStore<E, T> {
         self.ptr[entity_index] = data_index;
     }
 
+    /// The contiguousness of the data is guaranteed after removal via [`Vec::swap_remove`],
+    /// but the order of the data is is not.
     pub fn remove(&mut self, entity: E) -> Option<T> {
         let index = entity.index();
         if let Some(idx) = self.ptr.get(index)
@@ -121,6 +127,11 @@ impl<E: crate::Entity, T> DataStore<E, T> {
         }
     }
 
+    pub fn drain_all(&mut self) -> std::vec::Drain<'_, T> {
+        self.ptr.clear();
+        self.data.drain(..)
+    }
+
     pub fn iter(&self) -> DataStoreIter<'_, T> {
         DataStoreIter::new(self)
     }
@@ -135,8 +146,8 @@ impl<E: crate::Entity, T> DataStore<E, T> {
             .filter(|i| i != &&usize::MAX)
     }
 
-    pub fn iter_mapped(&self) -> EntityDataStoreIter<'_, E, T> {
-        EntityDataStoreIter::new(self)
+    pub fn iter_map(&self) -> MappedDataStoreIter<'_, E, T> {
+        MappedDataStoreIter::new(self)
     }
 
     // pub fn iter_entity(&self) -> impl Iterator<Item = E> {
@@ -152,9 +163,9 @@ impl<E: crate::Entity, T> DataStore<E, T> {
 #[cfg(test)]
 mod store_test {
     use super::DataStore;
-    use crate::{EntityManager, Entity, entity};
+    use crate::{EntityManager, Entity, create_entity};
 
-    entity! { TestId }
+    create_entity! { TestId }
 
     fn setup_entity(num: usize) -> Vec<TestId> {
         let mut manager = EntityManager::<TestId>::with_same_capacity(num);

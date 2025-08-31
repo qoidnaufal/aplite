@@ -7,7 +7,7 @@ use std::sync::{
     OnceLock
 };
 
-use aplite_storage::{IndexMap, Entity, entity};
+use aplite_storage::{IndexMap, Entity, create_entity};
 
 use crate::subscriber::AnySubscriber;
 use crate::reactive_traits::*;
@@ -113,7 +113,7 @@ impl Graph {
 #########################################################
 */
 
-entity! { pub(crate) ReactiveId }
+create_entity! { pub(crate) ReactiveId }
 
 pub(crate) struct Node<R> {
     pub(crate) id: ReactiveId,

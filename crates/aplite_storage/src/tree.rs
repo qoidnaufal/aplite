@@ -335,11 +335,7 @@ impl<E: Entity> Tree<E> {
             .iter()
             .enumerate()
             .filter_map(|(i, p)| {
-                if p.is_none() && let Some(root_first_child) = self.first_child[i] {
-                    self.parent[root_first_child.index()]
-                } else {
-                    None
-                }
+                p.is_none().then_some(E::new(i as u32, 0))
             })
     }
 }
@@ -392,7 +388,7 @@ impl<E: Entity> std::fmt::Debug for Tree<E> {
                 None => {
                     tree.iter_root()
                         .for_each(|root| {
-                            s.push_str(format!("> [{root:?}]\n").as_str());
+                            s.push_str(format!(" > {root:?}\n").as_str());
                             recursive_print(tree, Some(root), s);
                         });
                 },
@@ -409,9 +405,9 @@ impl<E: Entity> std::fmt::Debug for Tree<E> {
 mod tree_test {
     use super::*;
     use crate::{Entity, EntityManager};
-    use crate::entity;
+    use crate::create_entity;
 
-    entity! { TestId }
+    create_entity! { TestId }
 
     fn setup_tree() -> (EntityManager<TestId>, Tree<TestId>) {
         let mut manager = EntityManager::<TestId>::default();

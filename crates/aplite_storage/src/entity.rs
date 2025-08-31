@@ -1,16 +1,12 @@
-/// A trait that needs to be implemented for any type to be stored in the [`Tree`](crate::tree::Tree) or [`IndexMap`](crate::index_map::IndexMap)
-pub trait Entity
-where
-    Self : std::fmt::Debug + Copy + PartialEq + PartialOrd
+/// A trait that needs to be implemented for any type to be stored in the [`Tree`](crate::tree::Tree), [`IndexMap`](crate::index_map::IndexMap) or [`DataStore`](crate::data_store::DataStore)
+pub trait Entity where Self : std::fmt::Debug + Sized + Copy + PartialEq + PartialOrd
 {
     const VERSION_BITS: u8 = 10;
     const VERSION_MASK: u16 = (1 << Self::VERSION_BITS) - 1;
     const INDEX_BITS: u8 = 22;
     const INDEX_MASK: u32 = (1 << Self::INDEX_BITS) - 1;
 
-    /// If you created this manually, you also need to manually [`insert()`](crate::tree::Tree::insert) it to the [`Tree`](crate::tree::Tree).
-    /// The [`Tree`](crate::tree::Tree) provides a hassle free [`create_entity()`](Tree::create_entity) method
-    /// to create an [`Entity`] and automatically insert it.
+    /// Threre's no need to do this manually, the entity creation is integrated with [`EntityManager`] or [`IndexMap`](crate::index_map::IndexMap)
     fn new(index: u32, version: u16) -> Self;
 
     /// The index where this [`Entity`] is being stored inside the [`Tree`]
@@ -23,7 +19,7 @@ where
 /// A macro to conveniently implement [`Entity`] trait.
 /// # Usage
 /// ```ignore
-/// entity! { pub(crate) UniqueId }
+/// create_entity! { pub(crate) UniqueId }
 ///
 /// struct MyData {}
 ///
@@ -36,7 +32,7 @@ where
 /// let id = storage.inner.insert(data);
 /// ```
 #[macro_export]
-macro_rules! entity {
+macro_rules! create_entity {
     { $vis:vis $name:ident } => {
         #[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
         $vis struct $name(u32);

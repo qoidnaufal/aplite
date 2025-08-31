@@ -2,10 +2,11 @@ use std::marker::PhantomData;
 use crate::entity::Entity;
 use crate::iterator::{IndexMapIter, IndexMapIterMut};
 use crate::slot::*;
-use crate::Error;
 
-/// Arena style data allocation which never shrink the Vec
-/// to preserve the spot after removal for new version
+/// Arena style non-contiguous key-value data storage.
+/// Unlike [`DataStore`](crate::data_store::DataStore) which guarantee the data is stored contiguously even after removal,
+/// removing data from [`IndexMap`] will leave a gap between data which will be filled on next insertion.
+/// [`IndexMap`] facilitates the creation of [`Entity`], unlike [`DataStore`](crate::data_store::DataStore) which need the assistance of [`EntityManager`](crate::entity::EntityManager).
 pub struct IndexMap<E: Entity, T> {
     pub(crate) inner: Vec<Slot<T>>,
     next: u32,
@@ -15,7 +16,7 @@ pub struct IndexMap<E: Entity, T> {
 
 impl<E: Entity, T> Default for IndexMap<E, T> {
     fn default() -> Self {
-        Self::new()
+        Self::new_with_capacity(0)
     }
 }
 
@@ -25,7 +26,7 @@ impl<E: Entity, T: PartialEq> IndexMap<E, T> {
     }
 
     #[inline(always)]
-    pub fn try_insert_no_duplicate(&mut self, data: T) -> Result<E, Error> {
+    pub fn try_insert_no_duplicate(&mut self, data: T) -> Result<E, IndexMapError> {
         if let Some((idx, slot)) = self.inner
             .iter()
             .enumerate()
@@ -42,11 +43,6 @@ impl<E: Entity, T: PartialEq> IndexMap<E, T> {
 
 impl<E: Entity, T> IndexMap<E, T> {
     #[inline(always)]
-    pub fn new() -> Self {
-        Self::new_with_capacity(0)
-    }
-
-    #[inline(always)]
     pub fn with_capacity(capacity: usize) -> Self {
         Self::new_with_capacity(capacity)
     }
@@ -55,8 +51,7 @@ impl<E: Entity, T> IndexMap<E, T> {
     /// but kinda wasteful if you don't really use all the capacity.
     #[inline(always)]
     pub fn with_max_capacity() -> Self {
-        let capacity = u32::MAX - 1;
-        Self::new_with_capacity(capacity as usize)
+        Self::new_with_capacity(E::INDEX_MASK as usize)
     }
 
     #[inline(always)]
@@ -82,13 +77,13 @@ impl<E: Entity, T> IndexMap<E, T> {
     }
 
     #[inline(always)]
-    pub fn try_insert(&mut self, data: T) -> Result<E, Error> {
-        if self.count + 1 == u32::MAX { return Err(Error::ReachedMaxId) }
+    pub fn try_insert(&mut self, data: T) -> Result<E, IndexMapError> {
+        if self.count > E::INDEX_MASK { return Err(IndexMapError::ReachedMaxId) }
 
         match self.inner.get_mut(self.next as usize) {
             // first time or after removal
             Some(slot) => match slot.content {
-                Content::Occupied(_) => Err(Error::InternalCollision),
+                Content::Occupied(_) => Err(IndexMapError::InternalCollision),
                 Content::Vacant(idx) => {
                     let entity = E::new(self.next, slot.version);
                     self.next = idx;
@@ -120,14 +115,14 @@ impl<E: Entity, T> IndexMap<E, T> {
     }
 
     #[inline(always)]
-    pub fn try_replace(&mut self, entity: E, data: T) -> Result<T, Error> {
+    pub fn try_replace(&mut self, entity: E, data: T) -> Result<T, IndexMapError> {
         match self.inner.get_mut(entity.index()) {
             Some(slot) if entity.version() == slot.version => {
                 slot.get_content_mut()
-                    .ok_or(Error::InvalidSlot)
+                    .ok_or(IndexMapError::InvalidSlot)
                     .map(|prev| std::mem::replace(prev, data))
             },
-            _ => Err(Error::InvalidId),
+            _ => Err(IndexMapError::InvalidId),
         }
     }
 
@@ -166,6 +161,11 @@ impl<E: Entity, T> IndexMap<E, T> {
             slot.version += 1;
             self.next = entity.index() as u32;
             self.count -= 1;
+
+            if self.inner.len() as u32 - self.count > 4 {
+                self.inner.shrink_to_fit();
+            }
+
             match ret {
                 Content::Occupied(data) => Some(data),
                 Content::Vacant(_) => None,
@@ -248,12 +248,28 @@ impl<E: Entity, T: Clone> Clone for IndexMap<E, T> {
     }
 }
 
+#[derive(Debug)]
+pub enum IndexMapError {
+    ReachedMaxId,
+    InternalCollision,
+    InvalidId,
+    InvalidSlot,
+}
+
+impl std::fmt::Display for IndexMapError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::error::Error for IndexMapError {}
+
 #[cfg(test)]
 mod index_test {
     use super::*;
-    use crate::{entity, Entity};
+    use crate::{create_entity, Entity};
 
-    entity! { TestId }
+    create_entity! { TestId }
 
     #[test]
     fn insert_get() {

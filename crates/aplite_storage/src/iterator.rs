@@ -484,16 +484,15 @@ impl<'a, T> Iterator for DataStoreIter<'a, T> {
 }
 
 fn filter_map_data_store<E: Entity>(idx: &usize) -> Option<E> {
-    (idx != &usize::MAX)
-        .then_some(E::new(*idx as u32, 0))
+    (idx != &usize::MAX).then_some(E::new(*idx as u32, 0))
 }
 
-pub struct EntityDataStoreIter<'a, E: Entity, T> {
+pub struct MappedDataStoreIter<'a, E: Entity, T> {
     inner: Zip<FilterMap<Iter<'a, usize>, fn(&usize) -> Option<E>>,
             Iter<'a, T>>,
 }
 
-impl<'a, E: Entity, T> EntityDataStoreIter<'a, E, T> {
+impl<'a, E: Entity, T> MappedDataStoreIter<'a, E, T> {
     pub(crate) fn new(ds: &'a DataStore<E, T>) -> Self {
         let inner = ds.ptr
             .iter()
@@ -505,7 +504,7 @@ impl<'a, E: Entity, T> EntityDataStoreIter<'a, E, T> {
     }
 }
 
-impl<'a, E: Entity, T> Iterator for EntityDataStoreIter<'a, E, T> {
+impl<'a, E: Entity, T> Iterator for MappedDataStoreIter<'a, E, T> {
     type Item = (E, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -555,9 +554,9 @@ mod iterator_test {
     use crate::tree::Tree;
     use crate::entity::{Entity, EntityManager};
     use crate::index_map::IndexMap;
-    use crate::entity;
+    use crate::create_entity;
 
-    entity! { TestId }
+    create_entity! { TestId }
 
     #[test]
     fn indexmap() {
