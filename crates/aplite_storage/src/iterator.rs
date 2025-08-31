@@ -1,11 +1,11 @@
 use std::slice::{Iter, IterMut};
-use std::iter::{Enumerate, FilterMap};
+use std::iter::{Enumerate, FilterMap, Zip, Filter};
 
 use crate::entity::Entity;
 use crate::tree::Tree;
 use crate::slot::{Slot, Content};
 use crate::index_map::IndexMap;
-use crate::hash::U64Map;
+use crate::data_store::DataStore;
 
 /*
 #########################################################
@@ -193,19 +193,19 @@ impl<E: Entity> NodeRef<E> {
 #########################################################
 */
 
-pub struct TreeNodeIterator<'a, E: Entity> {
-    inner: MemberIterator<'a, E>
+pub struct TreeNodeIter<'a, E: Entity> {
+    inner: TreeMemberIter<'a, E>
 }
 
-impl<'a, E: Entity> TreeNodeIterator<'a, E> {
+impl<'a, E: Entity> TreeNodeIter<'a, E> {
     pub(crate) fn new(tree: &'a Tree<E>, entity: E) -> Self {
         Self {
-            inner: MemberIterator::new(tree, entity)
+            inner: TreeMemberIter::new(tree, entity)
         }
     }
 }
 
-impl<E: Entity> Iterator for TreeNodeIterator<'_, E> {
+impl<E: Entity> Iterator for TreeNodeIter<'_, E> {
     type Item = NodeRef<E>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -273,7 +273,6 @@ impl<E: Entity> Iterator for TreeNodeIterator<'_, E> {
 //             IterMut<'a, Option<E>>>, IterMut<'a, Option<E>>>,
 //             FnIsSomeMut<'a, E>>,
 // }
-
 // impl<'a, E: Entity + 'a> Iterator for TreeIterMut<'a, E> {
 //     type Item = NodeMut<'a, E>;
 //     fn next(&mut self) -> Option<Self::Item> {
@@ -289,12 +288,12 @@ impl<E: Entity> Iterator for TreeNodeIterator<'_, E> {
 #########################################################
 */
 
-pub struct ChildIterator<'a, E: Entity> {
+pub struct TreeChildIter<'a, E: Entity> {
     tree: &'a Tree<E>,
     current: Option<E>,
 }
 
-impl<'a, E: Entity> ChildIterator<'a, E> {
+impl<'a, E: Entity> TreeChildIter<'a, E> {
     pub(crate) fn new(tree: &'a Tree<E>, entity: E) -> Self {
         let current = tree.get_first_child(entity);
         Self {
@@ -304,7 +303,7 @@ impl<'a, E: Entity> ChildIterator<'a, E> {
     }
 }
 
-impl<'a, E: Entity> Iterator for ChildIterator<'a, E> {
+impl<'a, E: Entity> Iterator for TreeChildIter<'a, E> {
     type Item = E;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -324,20 +323,15 @@ impl<'a, E: Entity> Iterator for ChildIterator<'a, E> {
 #########################################################
 */
 
-// pub(crate) enum IterDirection {
-//     EnteringFirstChild,
-//     EnteringNextSibling,
-// }
-
 // TODO: Make a double-ended iterator
 /// Depth first Iterator
-pub struct MemberIterator<'a, E: Entity> {
+pub struct TreeMemberIter<'a, E: Entity> {
     tree: &'a Tree<E>,
     entity: E,
     next: Option<E>,
 }
 
-impl<'a, E: Entity> MemberIterator<'a, E> {
+impl<'a, E: Entity> TreeMemberIter<'a, E> {
     pub(crate) fn new(tree: &'a Tree<E>, entity: E) -> Self {
         Self {
             tree,
@@ -347,7 +341,7 @@ impl<'a, E: Entity> MemberIterator<'a, E> {
     }
 }
 
-impl<'a, E: Entity> Iterator for MemberIterator<'a, E> {
+impl<'a, E: Entity> Iterator for TreeMemberIter<'a, E> {
     type Item = E;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -363,12 +357,11 @@ impl<'a, E: Entity> Iterator for MemberIterator<'a, E> {
                 let mut curr = current;
 
                 while let Some(parent) = self.tree.get_parent(curr) {
-                    if parent == self.entity {
-                        break
-                    }
+                    if parent == self.entity { break }
 
                     if let Some(next_sibling) = self.tree.get_next_sibling(parent) {
                         self.next = Some(next_sibling);
+                        break
                     }
 
                     curr = parent;
@@ -388,12 +381,12 @@ impl<'a, E: Entity> Iterator for MemberIterator<'a, E> {
 #########################################################
 */
 
-pub struct AncestorIter<'a, E: Entity> {
+pub struct TreeAncestorIter<'a, E: Entity> {
     tree: &'a Tree<E>,
     entity: E,
 }
 
-impl<'a, E: Entity> AncestorIter<'a, E> {
+impl<'a, E: Entity> TreeAncestorIter<'a, E> {
     pub(crate) fn new(tree: &'a Tree<E>, entity: E) -> Self {
         Self {
             tree,
@@ -402,7 +395,7 @@ impl<'a, E: Entity> AncestorIter<'a, E> {
     }
 }
 
-impl<'a, E: Entity> Iterator for AncestorIter<'a, E> {
+impl<'a, E: Entity> Iterator for TreeAncestorIter<'a, E> {
     type Item = E;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -417,19 +410,145 @@ impl<'a, E: Entity> Iterator for AncestorIter<'a, E> {
 /*
 #########################################################
 #                                                       #
-#                        U64MAP                         #
+#              TREE::double_ended_iterator              #
 #                                                       #
 #########################################################
 */
 
-impl<'a, K, V> IntoIterator for &'a U64Map<K, V> {
-    type Item = (&'a K, &'a V);
-    type IntoIter = std::collections::hash_map::Iter<'a, K, V>;
+// pub(crate) enum Direction {
+//     EnteringFirstChild,
+//     EnteringNextSibling,
+// }
 
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.iter()
+// pub(crate) struct DirectionalTreeIter<'a, E: Entity> {
+//     tree: &'a Tree<E>,
+//     next: Option<E>,
+//     direction: Direction,
+// }
+
+// impl<'a, E: Entity> Iterator for DirectionalTreeIter<'a, E> {
+//     type Item = E;
+
+//     fn next(&mut self) -> Option<Self::Item> {
+//         let next = self.next.take();
+//         if let Some(current) = next {}
+//         next
+//     }
+// }
+
+// impl<'a, E: Entity> DoubleEndedIterator for DirectionalTreeIter<'a, E> {
+//     fn next_back(&mut self) -> Option<Self::Item> {
+//         let next = self.next.take();
+//         if let Some(current) = next {
+//             if let Some(prev_sibling) = self.tree.get_prev_sibling(current) {}
+//         }
+//         next
+//     }
+// }
+
+/*
+#########################################################
+#                                                       #
+#                       DataStore                       #
+#                                                       #
+#########################################################
+*/
+
+fn filter_data_store(idx: &&usize) -> bool {
+    idx != &&usize::MAX
+}
+
+pub struct DataStoreIter<'a, T> {
+    inner: Zip<Filter<Iter<'a, usize>, fn(&&usize) -> bool>,
+            Iter<'a, T>>,
+}
+
+impl<'a, T> DataStoreIter<'a, T> {
+    pub(crate) fn new<E: Entity>(ds: &'a DataStore<E, T>) -> Self {
+        let inner = ds.ptr
+            .iter()
+            .filter(filter_data_store as fn(&&usize) -> bool)
+            .zip(ds.data.iter());
+        Self {
+            inner,
+        }
     }
 }
+
+impl<'a, T> Iterator for DataStoreIter<'a, T> {
+    type Item = (&'a usize, &'a T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+}
+
+fn filter_map_data_store<E: Entity>(idx: &usize) -> Option<E> {
+    (idx != &usize::MAX)
+        .then_some(E::new(*idx as u32, 0))
+}
+
+pub struct EntityDataStoreIter<'a, E: Entity, T> {
+    inner: Zip<FilterMap<Iter<'a, usize>, fn(&usize) -> Option<E>>,
+            Iter<'a, T>>,
+}
+
+impl<'a, E: Entity, T> EntityDataStoreIter<'a, E, T> {
+    pub(crate) fn new(ds: &'a DataStore<E, T>) -> Self {
+        let inner = ds.ptr
+            .iter()
+            .filter_map(filter_map_data_store as fn(&usize) -> Option<E>)
+            .zip(ds.data.iter());
+        Self {
+            inner,
+        }
+    }
+}
+
+impl<'a, E: Entity, T> Iterator for EntityDataStoreIter<'a, E, T> {
+    type Item = (E, &'a T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+}
+
+fn filter_data_store_mut(idx: &&usize) -> bool {
+    idx != &&usize::MAX
+}
+
+pub struct DataStoreIterMut<'a, T> {
+    inner: Zip<Filter<Iter<'a, usize>, fn(&&usize) -> bool>,
+            IterMut<'a, T>>,
+}
+
+impl<'a, T> DataStoreIterMut<'a, T> {
+    pub(crate) fn new<E: Entity>(ds: &'a mut DataStore<E, T>) -> Self {
+        let inner = ds.ptr
+            .iter()
+            .filter(filter_data_store_mut as fn(&&usize) -> bool)
+            .zip(ds.data.iter_mut());
+        Self {
+            inner,
+        }
+    }
+}
+
+impl<'a, T> Iterator for DataStoreIterMut<'a, T> {
+    type Item = (&'a usize, &'a mut T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+}
+
+/*
+#########################################################
+#                                                       #
+#                         TEST                          #
+#                                                       #
+#########################################################
+*/
 
 #[cfg(test)]
 mod iterator_test {

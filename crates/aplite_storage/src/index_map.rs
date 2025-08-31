@@ -112,7 +112,7 @@ impl<E: Entity, T> IndexMap<E, T> {
         }
     }
 
-    /// Panic if the id is invalid, or there's an internal error.
+    /// Return None if the index is invalid.
     /// Use [`try_replace`](IndexMap::try_replace()) if you want to handle the error manually
     #[inline(always)]
     pub fn replace(&mut self, entity: E, data: T) -> Option<T> {

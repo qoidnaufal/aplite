@@ -119,6 +119,6 @@ impl Eq for ImageRef {}
 
 impl std::hash::Hash for ImageRef {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_usize(Weak::as_ptr(&self.bytes) as usize);
+        Weak::as_ptr(&self.bytes).addr().hash(state);
     }
 }

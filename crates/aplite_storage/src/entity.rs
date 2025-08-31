@@ -95,12 +95,6 @@ macro_rules! entity {
     };
 }
 
-// const VERSION_BITS: u8 = 10;
-// const VERSION_MASK: u16 = (1 << VERSION_BITS) - 1;
-// const INDEX_BITS: u8 = 22;
-// const INDEX_MASK: u32 = (1 << INDEX_BITS) - 1;
-// const MINIMUM_FREE_INDEX: usize = 1 << VERSION_BITS;
-
 #[derive(Debug)]
 pub struct EntityManager<E: Entity> {
     recycled: std::collections::VecDeque<u32>,
@@ -110,7 +104,7 @@ pub struct EntityManager<E: Entity> {
 
 impl<E: Entity> Default for EntityManager<E> {
     /// Create a new manager with no preallocated capacity at all.
-    /// If you want to preallocate a specific initial capacity, use [`EntityManager::with_capacity`]
+    /// If you want to preallocate a specific initial capacity, use [`EntityManager::with_version_capacity`] or [`EntityManager::with_same_capacity`]
     fn default() -> Self {
         Self {
             recycled: std::collections::VecDeque::default(),
@@ -126,9 +120,19 @@ impl<E: Entity> EntityManager<E> {
     /// Create a new manager with the specified capacity for the version manager,
     /// and the recycled capacity will be set to 1 << [`Entity::VERSION_BITS`].
     /// Using [`EntityManager::default`] will create one with no preallocated capacity at all
-    pub fn with_capacity(capacity: usize) -> Self {
+    pub fn with_version_capacity(capacity: usize) -> Self {
         Self {
             recycled: std::collections::VecDeque::with_capacity(Self::MINIMUM_FREE_INDEX),
+            version_manager: Vec::with_capacity(capacity),
+            marker: std::marker::PhantomData,
+        }
+    }
+
+    /// Create a new manager with the specified capacity for the version manager & recycled,
+    /// Using [`EntityManager::default`] will create one with no preallocated capacity at all
+    pub fn with_same_capacity(capacity: usize) -> Self {
+        Self {
+            recycled: std::collections::VecDeque::with_capacity(capacity),
             version_manager: Vec::with_capacity(capacity),
             marker: std::marker::PhantomData,
         }

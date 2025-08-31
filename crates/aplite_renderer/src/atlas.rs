@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
 use aplite_types::{Rect, Size, Vec2f, ImageRef};
-use aplite_storage::{IndexMap, Tree, Entity, entity};
+use aplite_storage::{DataStore, Tree, EntityManager, Entity, entity};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Uv {
@@ -210,20 +210,23 @@ entity! { pub AtlasId }
 struct AtlasAllocator {
     rect: Rect,
     last_parent: Option<AtlasId>,
-    allocated: IndexMap<AtlasId, Rect>,
+    id_manager: EntityManager<AtlasId>,
+    allocated: DataStore<AtlasId, Rect>,
     tree: Tree<AtlasId>,
 }
 
 impl AtlasAllocator {
-    fn new(size: Size) -> Self {
+    fn new(size: impl Into<Size>) -> Self {
         Self {
-            rect: Rect::from_size(size),
+            rect: Rect::from_size(size.into()),
             last_parent: None,
-            allocated: IndexMap::new(),
+            id_manager: EntityManager::default(),
+            allocated: DataStore::default(),
             tree: Tree::default(),
         }
     }
 
+    // FIXME: there's some logic error here
     fn alloc(&mut self, size: Size) -> Option<Rect> {
         // TODO: double the size
         if size.area() > self.calculate_available_area() { return None };
@@ -232,20 +235,21 @@ impl AtlasAllocator {
             Some(last_parent) => {
                 if let Some((parent, pos)) = self.scan(size) {
                     let rect = Rect::from_vec2f_size(pos, size);
-                    let id = self.allocated.insert(rect);
+                    let id = self.id_manager.create();
 
+                    self.allocated.insert(id, rect);
                     self.tree.add_child(parent, id);
 
                     Some(rect)
                 } else {
-                    // inserting as the next sibling of the last parent
+                    // inserting as the next sibling of the last parent or as a new root
                     let next_y = self.allocated.get(last_parent).unwrap().max_y();
                     let pos = Vec2f::new(0.0, next_y);
                     let rect = Rect::from_vec2f_size(pos, size);
-                    let id = self.allocated.insert(rect);
+                    let id = self.id_manager.create();
 
-                    self.tree.add_sibling(last_parent, id);
-                    // self.tree.add_root(id);
+                    self.allocated.insert(id, rect);
+                    self.tree.add_root(id);
                     self.last_parent = Some(id);
 
                     Some(rect)
@@ -254,8 +258,9 @@ impl AtlasAllocator {
             None => {
                 // first insert
                 let rect = Rect::from_size(size);
-                let id = self.allocated.insert(rect);
+                let id = self.id_manager.create();
 
+                self.allocated.insert(id, rect);
                 self.tree.add_root(id);
                 self.last_parent = Some(id);
 
@@ -264,18 +269,21 @@ impl AtlasAllocator {
         }
     }
 
+    #[inline(always)]
     fn scan(&self, size: Size) -> Option<(AtlasId, Vec2f)> {
-        self.get_parents()
-            .find_map(|(id, rect)| self.identify_children(id, rect, size))
+        self.get_root()
+            .find_map(|(root, rect)| self.identify_children(root, rect, size))
     }
 
+    #[inline(always)]
     fn identify_children(
         &self,
-        parent: AtlasId,
+        root: AtlasId,
         rect: &Rect,
         size: Size,
     ) -> Option<(AtlasId, Vec2f)> {
-        if let Some(first) = self.tree.get_first_child(parent) {
+        eprintln!("identifying {root:?}");
+        if let Some(first) = self.tree.get_first_child(root) {
             let mut current = first;
 
             while let Some(sibling) = self.tree.get_next_sibling(current) {
@@ -283,43 +291,21 @@ impl AtlasAllocator {
                     Some(last) => self.check_pos_for(last, current, size),
                     None => self.check_pos_for(current, current, size),
                 }
-                .or(self.indentify_next_sibling(current, parent, size));
+                .or(self.indentify_next_sibling(current, root, size));
 
-                if find.is_some() {
-                    return find
-                } else {
-                    current = sibling;
-                }
+                if find.is_some() { return find }
+
+                current = sibling;
             }
 
             None
         } else {
             (rect.max_x() + size.width <= self.rect.width)
                 .then_some((
-                    parent,
+                    root,
                     Vec2f::new(rect.max_x(), rect.y)
                 ))
         }
-
-        // initial implementation which created unnecessary allocation on Tree::get_all_children
-        // match self.tree.get_all_children(&parent) {
-        //     Some(children) => {
-        //         children
-        //             .iter()
-        //             .find_map(|child_id| {
-        //                 match self.tree.get_last_child(child_id) {
-        //                     Some(last) => self.check_pos_for(last, child_id, size),
-        //                     None => self.check_pos_for(child_id, child_id, size),
-        //                 }
-        //                 .or(self.indentify_next_sibling(child_id, &parent, size))
-        //             })
-        //     },
-        //     None => (rect.max_x() + size.width <= self.rect.width)
-        //         .then_some((
-        //             parent,
-        //             Vec2f::new(rect.max_x(), rect.y)
-        //         )),
-        // }
     }
 
     #[inline(always)]
@@ -330,7 +316,7 @@ impl AtlasAllocator {
         size: Size,
     ) -> Option<(AtlasId, Vec2f)> {
         let rect = self.allocated.get(id).unwrap();
-        let cond1 = rect.max_y() + size.height <= rect.max_y();
+        let cond1 = rect.max_y() + size.height <= self.rect.max_y();
         let cond2 = size.width <= rect.width;
 
         (cond1 && cond2).then_some((
@@ -357,15 +343,25 @@ impl AtlasAllocator {
     }
 
     #[inline(always)]
-    fn get_parents(&self) -> impl Iterator<Item = (AtlasId, &Rect)> {
-        self.allocated
-            .iter()
-            .filter_map(|(id, rect)| {
-                self.tree
-                    .get_parent(id)
-                    .is_none()
-                    .then_some((id, rect))
+    fn get_root(&self) -> impl Iterator<Item = (AtlasId, &Rect)> {
+        self.tree
+            .iter_root()
+            .map(|root| {
+                // eprintln!("{root:?}");
+                self.allocated
+                    .get(root)
+                    .map(|rect| (root, rect))
+                    .unwrap()
             })
+        // self.allocated
+        //     .iter()
+        //     .filter_map(|(&idx, rect)| {
+        //         let id = AtlasId(idx as u32);
+        //         self.tree
+        //             .get_parent(id)
+        //             .is_none()
+        //             .then_some((id, rect))
+        //     })
     }
 
     // fn remove(&mut self, id: AtlasId) -> Option<Rect> {
@@ -386,6 +382,7 @@ impl AtlasAllocator {
             .fold(0.0,|sum, (_, rect)| {
                 sum + rect.area()
             });
+
         self.rect.area() - allocated
     }
 }
@@ -396,7 +393,7 @@ mod atlas_test {
 
     #[test]
     fn packing() {
-        let mut allocator = AtlasAllocator::new(Size::new(700., 1000.));
+        let mut allocator = AtlasAllocator::new((700, 1000));
 
         let first = allocator.alloc(Size::new(500., 200.));
         assert!(first.is_some());
@@ -407,22 +404,18 @@ mod atlas_test {
 
         let third = allocator.alloc(Size::new(100., 100.));
         assert!(third.is_some());
-        // assert_eq!(allocator.get_first_child(&first.unwrap()), third.as_ref());
 
         let fourth = allocator.alloc(Size::new(100., 100.));
         assert!(fourth.is_some());
-        // assert_eq!(allocator.get_last_child(&third.unwrap()), fourth.as_ref());
 
         let fifth = allocator.alloc(Size::new(100., 100.));
         assert!(fifth.is_some());
-        // assert_eq!(allocator.get_last_child(&first.unwrap()), fifth.as_ref());
-        // assert_eq!(allocator.get_next_sibling(&third.unwrap()), fifth.as_ref());
 
         let sixth = allocator.alloc(Size::new(300., 100.));
         assert!(sixth.is_some());
-        // assert_eq!(allocator.get_next_sibling(&second.unwrap()), sixth.as_ref());
-        assert_eq!(allocator.get_parents().count(), 3);
+        // assert_eq!(allocator.tree.iter_root().count(), 3);
 
+        // eprintln!("{:?}", allocator.tree.iter_root().collect::<Vec<_>>());
         eprintln!("{:#?}", allocator.tree);
     }
 }

@@ -24,7 +24,7 @@ thread_local! {
         RefCell::new(HashMap::with_capacity(1024));
 
     pub(crate) static ENTITY_MANAGER: RefCell<EntityManager<WidgetId>> =
-        RefCell::new(EntityManager::with_capacity(1024));
+        RefCell::new(EntityManager::with_version_capacity(1024));
 }
 
 pub(crate) struct StateManager {
@@ -258,11 +258,6 @@ impl Flag {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct NodeRef {
-    node: Weak<RefCell<WidgetState>>,
-}
-
 #[derive(Clone, Copy)]
 pub struct ViewNode {
     pub(crate) id: WidgetId,
@@ -462,6 +457,11 @@ impl ViewNode {
         });
         self
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct NodeRef {
+    node: Weak<RefCell<WidgetState>>,
 }
 
 impl NodeRef {

@@ -1,14 +1,14 @@
-mod tree;
-mod iterator;
+mod data_store;
 mod entity;
-mod hash;
 mod index_map;
+mod iterator;
 mod slot;
+mod tree;
 
 pub use tree::*;
 pub use entity::{Entity, EntityManager};
-pub use hash::U64Map;
 pub use index_map::IndexMap;
+pub use data_store::*;
 
 #[derive(Debug)]
 pub enum Error {

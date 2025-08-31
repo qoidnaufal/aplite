@@ -1,9 +1,9 @@
 use crate::entity::Entity;
 use crate::iterator::{
-    ChildIterator,
-    MemberIterator,
-    AncestorIter,
-    TreeNodeIterator,
+    TreeChildIter,
+    TreeMemberIter,
+    TreeAncestorIter,
+    TreeNodeIter,
 };
 
 #[derive(Debug)]
@@ -37,6 +37,7 @@ pub struct Tree<E: Entity> {
     pub(crate) parent: Vec<Option<E>>,
     pub(crate) first_child: Vec<Option<E>>,
     pub(crate) next_sibling: Vec<Option<E>>,
+    pub(crate) prev_sibling: Vec<Option<E>>,
 }
 
 impl<E: Entity> Default for Tree<E> {
@@ -54,7 +55,70 @@ impl<E: Entity> Tree<E> {
             parent: Vec::with_capacity(capacity),
             first_child: Vec::with_capacity(capacity),
             next_sibling: Vec::with_capacity(capacity),
+            prev_sibling: Vec::with_capacity(capacity),
         }
+    }
+
+    /// get the root of an entity
+    pub fn get_root(&self, entity: E) -> Option<E> {
+        let mut current = entity;
+        while let Some(parent) = self.get_parent(current) {
+            current = parent;
+        }
+        if current == entity {
+            None
+        } else {
+            Some(current)
+        }
+    }
+
+    #[inline(always)]
+    pub fn get_parent(&self, entity: E) -> Option<E> {
+        self.parent[entity.index()]
+    }
+
+    #[inline(always)]
+    pub fn get_first_child(&self, entity: E) -> Option<E> {
+        self.first_child[entity.index()]
+    }
+
+    #[inline(always)]
+    pub fn get_last_child(&self, entity: E) -> Option<E> {
+        let Some(first) = self.get_first_child(entity) else { return None };
+        let mut last = first;
+        while let Some(next) = self.get_next_sibling(last) {
+            last = next;
+        }
+        Some(last)
+    }
+
+    #[inline(always)]
+    pub fn get_next_sibling(&self, entity: E) -> Option<E> {
+        self.next_sibling[entity.index()]
+    }
+
+    #[inline(always)]
+    pub fn get_prev_sibling(&self, entity: E) -> Option<E> {
+        self.prev_sibling[entity.index()]
+        // if let Some(parent) = self.get_parent(entity) {
+        //     let mut first = self.get_first_child(parent).unwrap();
+        //     while let Some(next) = self.get_next_sibling(first) {
+        //         if next == entity {
+        //             return Some(first);
+        //         }
+        //         first = next;
+        //     }
+        //     None
+        // } else {
+        //     None
+        // }
+    }
+
+    /// This method will create an allocation,
+    /// If you want to avoid unnecessary allocation use [`iter_children`](Self::iter_children)
+    #[inline(always)]
+    pub fn get_all_children(&self, entity: E) -> Vec<E> {
+        self.iter_children(entity).collect()
     }
 
     #[inline(always)]
@@ -92,31 +156,39 @@ impl<E: Entity> Tree<E> {
     }
 
     #[inline(always)]
+    fn resize(&mut self, index: usize) {
+        self.parent.resize(index + 1, None);
+        self.first_child.resize(index + 1, None);
+        self.next_sibling.resize(index + 1, None);
+        self.prev_sibling.resize(index + 1, None);
+    }
+
+    #[inline(always)]
     pub fn add_root(&mut self, entity: E) {
         let root_index = entity.index();
 
         if root_index >= self.parent.len() {
-            self.parent.resize(root_index + 1, None);
-            self.first_child.resize(root_index + 1, None);
-            self.next_sibling.resize(root_index + 1, None);
+            self.resize(root_index);
         }
     }
 
     #[inline(always)]
+    /// Adding an entity to be the child of a parent.
+    /// This will calculate if it's the first child of the parent, or the next sibling of parent's last child.
+    /// If a [`TreeError`] is returned it means that the parent is invalid, usually because you haven't registered it to the tree
     pub fn try_add_child(&mut self, parent: E, child: E) -> Result<(), TreeError> {
         if parent.index() > self.parent.len() { return Err(TreeError::InvalidParent) }
 
         let child_index = child.index();
 
         if child_index >= self.parent.len() {
-            self.parent.resize(child_index + 1, None);
-            self.first_child.resize(child_index + 1, None);
-            self.next_sibling.resize(child_index + 1, None);
+            self.resize(child_index);
         }
 
         self.parent[child_index] = Some(parent);
         self.first_child[child_index] = None;
         self.next_sibling[child_index] = None;
+        self.prev_sibling[child_index] = None;
 
         if let Some(first) = self.get_first_child(parent) {
             let mut current = first;
@@ -126,6 +198,7 @@ impl<E: Entity> Tree<E> {
             }
 
             self.next_sibling[current.index()] = Some(child);
+            self.prev_sibling[child_index] = Some(current);
         } else {
             self.first_child[parent.index()] = Some(child);
         }
@@ -140,28 +213,41 @@ impl<E: Entity> Tree<E> {
         self.try_add_child(parent, child).unwrap()
     }
 
+    /// Add a sibling to an entity. This will check if the provided entity is a valid one or not.
+    /// If the returned result is [`TreeError`], this means the provided entity is either not registered,
+    /// or is actually a root. Maybe you want to add a root instead
+    pub fn try_add_sibling(&mut self, entity: E, sibling: E) -> Result<(), TreeError> {
+        if entity.index() >= self.parent.len() { return Err(TreeError::InvalidEntity) }
+
+        let Some(parent) = self.get_parent(entity) else { return Err(TreeError::InvalidEntity) };
+
+        let sibling_index = sibling.index();
+
+        if sibling_index >= self.parent.len() {
+            self.resize(sibling_index);
+        }
+
+        let mut current = entity;
+        while let Some(next) = self.get_next_sibling(current) {
+            current = next;
+        }
+
+        self.parent[sibling_index] = Some(parent);
+        self.next_sibling[current.index()] = Some(sibling);
+        self.prev_sibling[sibling_index] = Some(current);
+
+        Ok(())
+    }
+
     /// Add a sibling to an entity. This will check the current sibling of the entity.
     /// If [`None`], immediately sets the next sibling. If [`Some`], loop until find the last sibling.
     pub fn add_sibling(&mut self, entity: E, sibling: E) {
-        if let Some(parent) = self.get_parent(entity) {
-            self.add_child(parent, sibling);
-        } else {
-            self.add_root(sibling);
-            self.next_sibling[entity.index()] = Some(sibling);
-        }
-    }
+        self.try_add_sibling(entity, sibling).unwrap()
 
-    /// get the root of an entity
-    pub fn get_root(&self, entity: E) -> Option<E> {
-        let mut current = entity;
-        while let Some(parent) = self.get_parent(current) {
-            current = parent;
-        }
-        if current == entity {
-            None
-        } else {
-            Some(current)
-        }
+        // else {
+        //     self.add_root(sibling);
+        //     self.next_sibling[entity.index()] = Some(sibling);
+        // }
     }
 
     /// the distance of an entity from the root
@@ -184,73 +270,6 @@ impl<E: Entity> Tree<E> {
         }
         loc.reverse();
         loc
-    }
-
-    #[inline(always)]
-    pub fn get_parent(&self, entity: E) -> Option<E> {
-        self.parent[entity.index()]
-    }
-
-    #[inline(always)]
-    pub fn get_parent_mut<'a>(&'a mut self, entity: E) -> Option<&'a mut E> {
-        self.parent[entity.index()].as_mut()
-    }
-
-    #[inline(always)]
-    pub fn get_first_child(&self, entity: E) -> Option<E> {
-        self.first_child[entity.index()]
-    }
-
-    #[inline(always)]
-    pub fn get_first_child_mut<'a>(&'a mut self, entity: E) -> Option<&'a mut E> {
-        self.first_child[entity.index()].as_mut()
-    }
-
-    #[inline(always)]
-    pub fn get_last_child(&self, entity: E) -> Option<E> {
-        let maybe_first = self.get_first_child(entity);
-        if let Some(first) = maybe_first {
-            let mut last = first;
-            while let Some(next) = self.get_next_sibling(last) {
-                last = next;
-            }
-            Some(last)
-        } else {
-            None
-        }
-    }
-
-    #[inline(always)]
-    pub fn get_next_sibling(&self, entity: E) -> Option<E> {
-        self.next_sibling[entity.index()]
-    }
-
-    #[inline(always)]
-    pub fn get_next_sibling_mut<'a>(&'a mut self, entity: E) -> Option<&'a mut E> {
-        self.next_sibling[entity.index()].as_mut()
-    }
-
-    #[inline(always)]
-    pub fn get_prev_sibling(&self, entity: E) -> Option<E> {
-        if let Some(parent) = self.get_parent(entity) {
-            let mut first = self.get_first_child(parent).unwrap();
-            while let Some(next) = self.get_next_sibling(first) {
-                if next == entity {
-                    return Some(first);
-                }
-                first = next;
-            }
-            None
-        } else {
-            None
-        }
-    }
-
-    /// This method will create an allocation,
-    /// If you want to avoid unnecessary allocation use [`iter_children`](Self::iter_children)
-    #[inline(always)]
-    pub fn get_all_children(&self, entity: E) -> Vec<E> {
-        self.iter_children(entity).collect()
     }
 
     pub fn is_member_of(&self, entity: E, ancestor: E) -> bool {
@@ -292,23 +311,23 @@ impl<E: Entity> Tree<E> {
     }
 
     /// iterate the children of the entity
-    pub fn iter_children(&self, entity: E) -> ChildIterator<'_, E> {
-        ChildIterator::new(self, entity)
+    pub fn iter_children(&self, entity: E) -> TreeChildIter<'_, E> {
+        TreeChildIter::new(self, entity)
     }
 
     /// iterate the members of the entity
-    pub fn iter_member(&self, entity: E) -> MemberIterator<'_, E> {
-        MemberIterator::new(self, entity)
+    pub fn iter_member(&self, entity: E) -> TreeMemberIter<'_, E> {
+        TreeMemberIter::new(self, entity)
     }
 
     /// iterate the entity's descendant
-    pub fn iter_ancestor(&self, entity: E) -> AncestorIter<'_, E> {
-        AncestorIter::new(self, entity)
+    pub fn iter_ancestor(&self, entity: E) -> TreeAncestorIter<'_, E> {
+        TreeAncestorIter::new(self, entity)
     }
 
     /// iterate the member of the iterator and map it to a [`NodeRef`](crate::iterator::NodeRef)
-    pub fn iter_node(&self, entity: E) -> TreeNodeIterator<'_, E> {
-        TreeNodeIterator::new(self, entity)
+    pub fn iter_node(&self, entity: E) -> TreeNodeIter<'_, E> {
+        TreeNodeIter::new(self, entity)
     }
 
     pub fn iter_root(&self) -> impl Iterator<Item = E> {
@@ -316,8 +335,8 @@ impl<E: Entity> Tree<E> {
             .iter()
             .enumerate()
             .filter_map(|(i, p)| {
-                if p.is_none() && let Some(ancestor) = self.first_child[i] {
-                    self.parent[ancestor.index()]
+                if p.is_none() && let Some(root_first_child) = self.first_child[i] {
+                    self.parent[root_first_child.index()]
                 } else {
                     None
                 }
@@ -373,7 +392,7 @@ impl<E: Entity> std::fmt::Debug for Tree<E> {
                 None => {
                     tree.iter_root()
                         .for_each(|root| {
-                            s.push_str(format!("{root:?} >> Root\n").as_str());
+                            s.push_str(format!("> [{root:?}]\n").as_str());
                             recursive_print(tree, Some(root), s);
                         });
                 },
@@ -394,7 +413,7 @@ mod tree_test {
 
     entity! { TestId }
 
-    fn setup_tree() -> Tree<TestId> {
+    fn setup_tree() -> (EntityManager<TestId>, Tree<TestId>) {
         let mut manager = EntityManager::<TestId>::default();
         let mut tree: Tree<TestId> = Tree::with_capacity(10);
         let root = manager.create();
@@ -410,12 +429,13 @@ mod tree_test {
                 parent = Some(id);
             }
         }
-        tree
+
+        (manager, tree)
     }
 
     #[test]
     fn tree_test() {
-        let tree = setup_tree();
+        let (_, tree) = setup_tree();
         // eprintln!("{tree:?}");
         // eprintln!("{:?}", tree.parent);
 
@@ -438,7 +458,7 @@ mod tree_test {
 
     #[test]
     fn member_test() {
-        let tree = setup_tree();
+        let (_, tree) = setup_tree();
         // eprintln!("{tree:?}");
 
         let count = tree.iter_root().count();
@@ -456,7 +476,7 @@ mod tree_test {
 
     #[test]
     fn remove_first_child() {
-        let mut tree = setup_tree();
+        let (_, mut tree) = setup_tree();
 
         let first_child = tree.get_first_child(TestId::new(2, 0)).unwrap();
         let next_sibling = tree.get_next_sibling(first_child);
@@ -475,7 +495,7 @@ mod tree_test {
 
     #[test]
     fn remove_middle_child() {
-        let mut tree = setup_tree();
+        let (_, mut tree) = setup_tree();
 
         let sibling_before_removal = tree.get_next_sibling(TestId::new(5, 0));
         assert!(sibling_before_removal.is_some_and(|id| tree.contains(id)));
@@ -489,6 +509,19 @@ mod tree_test {
         // eprintln!("{tree:?}");
         // eprintln!("remaining {}", tree.len());
         // eprintln!("removed > {removed:?}");
+    }
+
+    #[test]
+    fn sibling_test() {
+        let (mut manager, mut tree) = setup_tree();
+        let existing_entity = TestId(6);
+        let new_id = manager.create();
+        let err_add = tree.try_add_sibling(new_id, existing_entity);
+        assert!(err_add.is_err());
+
+        let ok_add = tree.try_add_sibling(existing_entity, new_id);
+        assert!(ok_add.is_ok());
+        // eprintln!("{tree:?}");
     }
 
     // #[test]
