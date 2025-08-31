@@ -258,8 +258,6 @@ impl AtlasAllocator {
                     self.allocated.insert(id, rect);
                     self.tree.add_child(parent, id);
 
-                    eprintln!("allocating {id:?} as child of: {parent:?}");
-
                     Some(rect)
                 } else {
                     // inserting as the next root
@@ -272,8 +270,6 @@ impl AtlasAllocator {
                     self.tree.add_root(id);
                     self.last_parent = Some(id);
 
-                    eprintln!("next root: {id:?}");
-
                     Some(rect)
                 }
             },
@@ -285,8 +281,6 @@ impl AtlasAllocator {
                 self.allocated.insert(id, rect);
                 self.tree.add_root(id);
                 self.last_parent = Some(id);
-
-                eprintln!("first root: {id:?}");
         
                 Some(rect)
             },

@@ -3,7 +3,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use aplite_renderer::Shape;
-use aplite_storage::{EntityManager, IndexMap, Entity, create_entity};
+use aplite_storage::{EntityManager, Entity, create_entity};
+use aplite_storage::{DataPointer, DataStore};
 use aplite_types::{
     Matrix3x2,
     Rect,
@@ -27,30 +28,8 @@ thread_local! {
         RefCell::new(EntityManager::with_version_capacity(1024));
 }
 
-pub(crate) struct StateManager {
-    state_index: StateIndex,
-    common: CommonState,
-    paint: PaintState,
-    border: BorderState,
-    layout_rules: Vec<LayoutRules>,
-    size_constraints: Vec<SizeConstraints>,
-}
-
-#[derive(Default)]
-pub(crate) struct Tree {
-    pub(crate) parent: Option<WidgetId>,
-    pub(crate) children: Vec<WidgetId>,
-}
-
-pub(crate) struct StateIndex {
-    pub(crate) common: HashMap<WidgetId, usize>,
-    pub(crate) paint: HashMap<WidgetId, usize>,
-    pub(crate) border: HashMap<WidgetId, usize>,
-    pub(crate) layout_rules: HashMap<WidgetId, usize>,
-    pub(crate) size_constraints: HashMap<WidgetId, usize>,
-}
-
 pub(crate) struct CommonState {
+    pub(crate) ptr: DataPointer<WidgetId>,
     pub(crate) rect: Vec<Rect>,
     pub(crate) transform: Vec<Matrix3x2>,
     pub(crate) flag: Vec<Flag>,
@@ -59,12 +38,34 @@ pub(crate) struct CommonState {
     // pub(crate) rotation: f32, // in radians
 }
 
+impl CommonState {
+    pub(crate) fn get_rect(&self, entity: WidgetId) -> Option<&Rect> {
+        self.ptr.get(entity, |index| &self.rect[index])
+    }
+
+    pub(crate) fn get_rect_mut(&mut self, entity: WidgetId) -> Option<&mut Rect> {
+        self.ptr.get(entity, |index| &mut self.rect[index])
+    }
+
+    pub(crate) fn insert_rect(&mut self, entity: WidgetId, rect: Rect) {
+        self.ptr.insert(entity, rect, &mut self.rect);
+    }
+
+    pub(crate) fn remove_rect(&mut self, entity: WidgetId) -> Option<Rect> {
+        self.ptr.remove(entity, &mut self.rect)
+    }
+}
+
 // I think it's okay not to pack this into vec since this will be used rarely
 pub(crate) struct SizeConstraints {
     pub(crate) min_width: Option<f32>,
     pub(crate) min_height: Option<f32>,
     pub(crate) max_width: Option<f32>,
     pub(crate) max_height: Option<f32>,
+}
+
+pub(crate) struct LayoutState {
+    pub(crate) data: DataStore<WidgetId, LayoutRules>,
 }
 
 // I think it's okay not to pack this into vec since this will be used rarely

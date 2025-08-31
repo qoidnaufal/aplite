@@ -483,12 +483,12 @@ impl<'a, T> Iterator for DataStoreIter<'a, T> {
     }
 }
 
-fn filter_map_data_store<E: Entity>(idx: &usize) -> Option<E> {
-    (idx != &usize::MAX).then_some(E::new(*idx as u32, 0))
+fn filter_map_data_store<E: Entity>((i, idx): (usize, &usize)) -> Option<E> {
+    (idx != &usize::MAX).then_some(E::new(i as u32, 0))
 }
 
 pub struct MappedDataStoreIter<'a, E: Entity, T> {
-    inner: Zip<FilterMap<Iter<'a, usize>, fn(&usize) -> Option<E>>,
+    inner: Zip<FilterMap<Enumerate<Iter<'a, usize>>, fn((usize, &usize)) -> Option<E>>,
             Iter<'a, T>>,
 }
 
@@ -496,7 +496,8 @@ impl<'a, E: Entity, T> MappedDataStoreIter<'a, E, T> {
     pub(crate) fn new(ds: &'a DataStore<E, T>) -> Self {
         let inner = ds.ptr
             .iter()
-            .filter_map(filter_map_data_store as fn(&usize) -> Option<E>)
+            .enumerate()
+            .filter_map(filter_map_data_store as fn((usize, &usize)) -> Option<E>)
             .zip(ds.data.iter());
         Self {
             inner,
