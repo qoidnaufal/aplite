@@ -3,10 +3,9 @@ use crate::entity::Entity;
 use crate::iterator::{IndexMapIter, IndexMapIterMut};
 use crate::slot::*;
 
-/// Arena style non-contiguous key-value data storage.
-/// Unlike [`DataStore`](crate::data_store::DataStore) which guarantee the data is stored contiguously even after removal,
-/// removing data from [`IndexMap`] will leave a gap between data which will be filled on next insertion.
+/// Arena style non-contiguous key-value data storage. Unlike [`DataStore`](crate::data_store::DataStore) which guarantee the data is stored contiguously even after removal, removing data from [`IndexMap`] will leave a gap between data which will be filled on next insertion.
 /// [`IndexMap`] facilitates the creation of [`Entity`], unlike [`DataStore`](crate::data_store::DataStore) which need the assistance of [`EntityManager`](crate::entity::EntityManager).
+/// Currently this hasn't been synchronized with [`EntityManager`](crate::entity::EntityManager) and [`Tree`](crate::tree::Tree), so don't use the Entity created from here in conjunction with both of them.
 pub struct IndexMap<E: Entity, T> {
     pub(crate) inner: Vec<Slot<T>>,
     next: u32,

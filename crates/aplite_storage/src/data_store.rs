@@ -254,7 +254,7 @@ mod store_test {
     create_entity! { TestId }
 
     fn setup_entity(num: usize) -> Vec<TestId> {
-        let mut manager = EntityManager::<TestId>::with_same_capacity(num);
+        let mut manager = EntityManager::<TestId>::with_capacity(num);
         let mut vec = vec![];
         for _ in 0..num {
             let id = manager.create();

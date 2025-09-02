@@ -1,18 +1,20 @@
 use aplite_reactive::*;
 use aplite_renderer::Renderer;
 use aplite_types::Vec2f;
+use aplite_storage::{EntityManager, Tree};
 
-use crate::view::{View, Layout};
-use crate::widget::{CALLBACKS, Widget, WidgetEvent};
-use crate::state::WidgetId;
+use crate::view::View;
+use crate::widget::{CALLBACKS, Widget, WidgetId, WidgetEvent};
 use crate::cursor::{Cursor, MouseAction, MouseButton, EmittedClickEvent};
-use crate::layout::LayoutCx;
+use crate::layout::{LayoutCx, Layout};
 use crate::state::NODE_STORAGE;
 
 // entity! { pub ViewId }
 
 pub struct Context {
     pub(crate) view: View,
+    pub(crate) id_manager: EntityManager<WidgetId>,
+    pub(crate) tree: Tree<WidgetId>,
     pub(crate) dirty: Signal<bool>,
     pub(crate) cursor: Cursor,
     pending_update: Vec<WidgetId>,
@@ -28,6 +30,8 @@ impl Context {
     pub(crate) fn new(view: View) -> Self {
         Self {
             view,
+            id_manager: EntityManager::default(),
+            tree: Tree::default(),
             cursor: Cursor::default(),
             dirty: Signal::new(false),
             pending_update: Vec::new(),

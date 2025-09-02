@@ -3,8 +3,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use aplite_renderer::Shape;
-use aplite_storage::{EntityManager, Entity, create_entity};
-use aplite_storage::{DataPointer, DataStore};
+use aplite_storage::DataPointer;
 use aplite_types::{
     Matrix3x2,
     Rect,
@@ -14,18 +13,12 @@ use aplite_types::{
     Rgba,
 };
 
+use crate::widget::{ENTITY_MANAGER, WidgetId};
 use crate::layout::{AlignV, AlignH, Orientation, Padding};
-
-create_entity! {
-    pub WidgetId
-}
 
 thread_local! {
     pub(crate) static NODE_STORAGE: RefCell<HashMap<WidgetId, Rc<RefCell<WidgetState>>>> =
         RefCell::new(HashMap::with_capacity(1024));
-
-    pub(crate) static ENTITY_MANAGER: RefCell<EntityManager<WidgetId>> =
-        RefCell::new(EntityManager::with_version_capacity(1024));
 }
 
 pub(crate) struct CommonState {
@@ -62,10 +55,6 @@ pub(crate) struct SizeConstraints {
     pub(crate) min_height: Option<f32>,
     pub(crate) max_width: Option<f32>,
     pub(crate) max_height: Option<f32>,
-}
-
-pub(crate) struct LayoutState {
-    pub(crate) data: DataStore<WidgetId, LayoutRules>,
 }
 
 // I think it's okay not to pack this into vec since this will be used rarely
@@ -262,6 +251,7 @@ impl Flag {
 #[derive(Clone, Copy)]
 pub struct ViewNode {
     pub(crate) id: WidgetId,
+    // pub(crate) last_child: Option<Box<dyn crate::widget::Widget>>,
 }
 
 impl Default for ViewNode {

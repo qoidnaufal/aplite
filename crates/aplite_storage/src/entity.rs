@@ -9,6 +9,8 @@ pub trait Entity where Self : std::fmt::Debug + Sized + Copy + PartialEq + Parti
     /// Threre's no need to do this manually, the entity creation is integrated with [`EntityManager`] or [`IndexMap`](crate::index_map::IndexMap)
     fn new(index: u32, version: u16) -> Self;
 
+    fn root() -> Self;
+
     /// The index where this [`Entity`] is being stored inside the [`Tree`]
     fn index(&self) -> usize;
 
@@ -40,6 +42,10 @@ macro_rules! create_entity {
         impl Entity for $name {
             fn new(index: u32, version: u16) -> Self {
                 Self((version as u32) << Self::INDEX_BITS | index)
+            }
+
+            fn root() -> Self {
+                Self(0)
             }
 
             fn index(&self) -> usize {
@@ -102,36 +108,24 @@ impl<E: Entity> Default for EntityManager<E> {
     /// Create a new manager with no preallocated capacity at all.
     /// If you want to preallocate a specific initial capacity, use [`EntityManager::with_version_capacity`] or [`EntityManager::with_same_capacity`]
     fn default() -> Self {
-        Self {
-            recycled: std::collections::VecDeque::default(),
-            version_manager: Vec::default(),
-            marker: std::marker::PhantomData,
-        }
+        Self::with_capacity(0)
     }
 }
 
 impl<E: Entity> EntityManager<E> {
     const MINIMUM_FREE_INDEX: usize = 1 << E::VERSION_BITS;
 
-    /// Create a new manager with the specified capacity for the version manager,
-    /// and the recycled capacity will be set to 1 << [`Entity::VERSION_BITS`].
-    /// Using [`EntityManager::default`] will create one with no preallocated capacity at all
-    pub fn with_version_capacity(capacity: usize) -> Self {
-        Self {
-            recycled: std::collections::VecDeque::with_capacity(Self::MINIMUM_FREE_INDEX),
-            version_manager: Vec::with_capacity(capacity),
-            marker: std::marker::PhantomData,
-        }
-    }
-
     /// Create a new manager with the specified capacity for the version manager & recycled,
     /// Using [`EntityManager::default`] will create one with no preallocated capacity at all
-    pub fn with_same_capacity(capacity: usize) -> Self {
-        Self {
-            recycled: std::collections::VecDeque::with_capacity(capacity),
-            version_manager: Vec::with_capacity(capacity),
+    pub fn with_capacity(capacity: usize) -> Self {
+        let mut this = Self {
+            recycled: std::collections::VecDeque::default(),
+            version_manager: Vec::with_capacity(capacity + 1),
             marker: std::marker::PhantomData,
-        }
+        };
+
+        this.version_manager.push(0);
+        this
     }
 
     pub fn create(&mut self) -> E {
@@ -155,10 +149,18 @@ impl<E: Entity> EntityManager<E> {
         let idx = e.index();
         self.version_manager[idx] += 1;
         self.recycled.push_back(idx as u32);
+
+        if self.recycled.len() >= Self::MINIMUM_FREE_INDEX {
+            self.recycled.shrink_to_fit();
+        }
     }
 
     pub fn reset(&mut self) {
         self.recycled.clear();
         self.version_manager.clear();
+        self.version_manager.push(0);
+
+        self.recycled.shrink_to_fit();
+        self.version_manager.shrink_to_fit();
     }
 }

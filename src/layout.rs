@@ -1,7 +1,10 @@
-use aplite_types::{Rect, Vec2f};
+use std::collections::HashMap;
 
-use crate::state::WidgetState;
-use crate::widget::Widget;
+use aplite_types::{Rect, Vec2f, Size};
+use aplite_storage::{DataPointer, Tree};
+
+use crate::state::{WidgetState, AspectRatio};
+use crate::widget::{Widget, WidgetId};
 
 pub struct LayoutCx {
     pub(crate) next_pos: Vec2f,
@@ -185,20 +188,130 @@ impl Padding {
     }
 }
 
-// /// Either pixel or percentage
-// pub enum Value {
-//     /// 0.0..f32::MAX
-//     Px(f32),
-//     /// 0.0..100.0
-//     Pct(f32),
-// }
+impl<T: Widget + Sized + 'static> Layout for T {}
 
-// impl Value {
-//     pub fn px(val: u32) -> Self {
-//         Self::Px(val as f32)
-//     }
+pub(crate) trait Layout: Widget + Sized + 'static {
+    fn calculate_layout(&self, cx: &mut LayoutCx) {
+        if self.layout(cx) && let Some(children) = self.children_ref() {
+            let mut this_cx = LayoutCx::new(self);
+            children.iter()
+                .for_each(|child| child.calculate_layout(&mut this_cx));
+        }
+    }
 
-//     pub fn pct(val: u32) -> Self {
-//         Self::Pct(val as f32)
-//     }
-// }
+    fn calculate_size(&self, parent: Option<&dyn Widget>) -> Size {
+        let node = self.node_ref().unwrap().upgrade();
+        if node.borrow().flag.is_hidden() { return Size::default() }
+
+        let state = node.borrow();
+        let padding = state.padding;
+        let orientation = state.orientation;
+        let spacing = state.spacing as f32;
+        let mut size = state.rect.size();
+
+        if let Some(children) = self.children_ref() {
+            let mut expand = Size::default();
+
+            children
+                .iter()
+                .filter(|child| child.node().is_visible())
+                .enumerate()
+                .for_each(|(i, child)| {
+                    let child_size = child.calculate_size(Some(self));
+                    let stretch = spacing * i.clamp(0, 1) as f32;
+
+                    match orientation {
+                        Orientation::Vertical => {
+                            expand.height += child_size.height + stretch;
+                            expand.width = expand.width.max(child_size.width + padding.horizontal() as f32);
+                        }
+                        Orientation::Horizontal => {
+                            expand.height = expand.height.max(child_size.height + padding.vertical() as f32);
+                            expand.width += child_size.width + stretch;
+                        }
+                    }
+                });
+
+            match orientation {
+                Orientation::Vertical => {
+                    expand.height += padding.vertical() as f32;
+                },
+                Orientation::Horizontal => {
+                    expand.width += padding.horizontal() as f32;
+                },
+            }
+
+            size = expand;
+        }
+
+        size = size
+            .adjust_on_min_constraints(state.min_width, state.min_height)
+            .adjust_on_max_constraints(state.max_width, state.max_height);
+
+        let aspect_ratio = match state.image_aspect_ratio {
+            AspectRatio::Defined(n, d) => Some((n, d).into()),
+            AspectRatio::Source => node.borrow()
+                .background_paint
+                .aspect_ratio(),
+            AspectRatio::Undefined => None,
+        };
+
+        if let Some(fraction) = aspect_ratio {
+            match parent {
+                Some(parent) if parent
+                    .node_ref()
+                    .unwrap()
+                    .upgrade()
+                    .borrow()
+                    .orientation
+                    .is_vertical() => size.adjust_height_with_fraction(fraction),
+                _ => size.adjust_width_with_fraction(fraction),
+            }
+        }
+
+        if state.rect.size() == size { return size }
+
+        drop(state);
+
+        let mut state = node.borrow_mut();
+        state.rect.set_size(size);
+        state.flag.set_dirty(true);
+
+        size
+    }
+}
+
+/// Unit to calculate size
+pub enum Unit {
+    /// fixed unit
+    Px(f32),
+    Grow,
+}
+
+// this will produce a Rect
+pub(crate) struct LayoutState {
+    ptr: DataPointer<WidgetId>,
+    pub(crate) position: Vec<Vec2f>,
+
+    pub(crate) width: Vec<Unit>,
+    pub(crate) min_width: Vec<Option<f32>>,
+    pub(crate) max_width: Vec<Option<f32>>,
+
+    pub(crate) height: Vec<Unit>,
+    pub(crate) min_height: Vec<Option<f32>>,
+    pub(crate) max_height: Vec<Option<f32>>,
+
+    pub(crate) rules: HashMap<WidgetId, Rules>,
+}
+
+impl LayoutState {
+    pub(crate) fn calculate_size(&self, tree: &Tree<WidgetId>, start: WidgetId) -> Size {
+        let mut current = start;
+
+        todo!()
+    }
+
+    pub(crate) fn calculate_growth(&self) {}
+
+    pub(crate) fn calculate_position(&self) {}
+}

@@ -3,11 +3,11 @@ use std::collections::HashMap;
 
 use aplite_renderer::{Shape, Scene};
 use aplite_types::{Rgba, CornerRadius, Size, Rect};
+use aplite_storage::{EntityManager, Entity, create_entity};
 
 use crate::layout::*;
 use crate::view::IntoView;
 use crate::state::{
-    WidgetId,
     ViewNode,
     NodeRef,
     AspectRatio,
@@ -22,6 +22,15 @@ pub use {
     image::*,
     stack::*,
 };
+
+thread_local! {
+    pub(crate) static ENTITY_MANAGER: RefCell<EntityManager<WidgetId>> =
+        RefCell::new(EntityManager::default());
+}
+
+create_entity! {
+    pub WidgetId
+}
 
 /// main building block to create a renderable component
 pub trait Widget {
