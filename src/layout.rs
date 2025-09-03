@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use aplite_types::{Rect, Vec2f, Size};
-use aplite_storage::{DataPointer, Tree};
+use aplite_storage::{DataPointer, DataStore, Tree};
 
 use crate::state::{WidgetState, AspectRatio};
 use crate::widget::{Widget, WidgetId};
@@ -135,8 +135,8 @@ pub enum AlignV {
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Orientation {
     #[default]
-    Vertical,
     Horizontal,
+    Vertical,
 }
 
 #[derive(Default, Debug, Clone, Copy)]
@@ -284,7 +284,8 @@ pub(crate) trait Layout: Widget + Sized + 'static {
 /// Unit to calculate size
 pub enum Unit {
     /// fixed unit
-    Px(f32),
+    Fixed(f32),
+    FitToChild,
     Grow,
 }
 
@@ -292,6 +293,7 @@ pub enum Unit {
 pub(crate) struct LayoutState {
     ptr: DataPointer<WidgetId>,
     pub(crate) position: Vec<Vec2f>,
+    pub(crate) size: Vec<Size>,
 
     pub(crate) width: Vec<Unit>,
     pub(crate) min_width: Vec<Option<f32>>,
@@ -301,17 +303,128 @@ pub(crate) struct LayoutState {
     pub(crate) min_height: Vec<Option<f32>>,
     pub(crate) max_height: Vec<Option<f32>>,
 
-    pub(crate) rules: HashMap<WidgetId, Rules>,
+    pub(crate) rules: DataStore<WidgetId, Rules>,
 }
 
 impl LayoutState {
-    pub(crate) fn calculate_size(&self, tree: &Tree<WidgetId>, start: WidgetId) -> Size {
-        let mut current = start;
+    // there's no recursion here, but there's unnecessary(?) allocation on the iterator
+    pub(crate) fn calculate_size_breadth(&mut self, tree: &Tree<WidgetId>, start: WidgetId) {
+        self.update_fixed_unit();
 
-        todo!()
+        tree.iter_breadth(start).rev().for_each(|id| {
+            let mut size = Size::default();
+
+            if let Some(rules) = self.rules.get(id) {
+                let orientation = rules.orientation;
+                let spacing = rules.spacing;
+                let padding = rules.padding;
+
+                tree.iter_children(id).enumerate().for_each(|(n, child)| {
+                    let child_size = self.ptr.get(child, &self.size).unwrap();
+                    match orientation {
+                        Orientation::Horizontal => {
+                            size.width += child_size.width + spacing as f32 * n.clamp(0, 1) as f32;
+                            size.height = size.height.max(child_size.height);
+                        },
+                        Orientation::Vertical => {
+                            size.height += child_size.height + spacing as f32 * n.clamp(0, 1) as f32;
+                            size.width = size.width.max(child_size.width);
+                        },
+                    }
+                });
+
+                size.width += padding.horizontal() as f32;
+                size.height += padding.vertical() as f32;
+            }
+
+            if let Some((min_width, max_width, min_height, max_height)) = self.ptr.with(start, |index| {
+                (
+                    &self.min_width[index],
+                    &self.max_width[index],
+                    &self.min_height[index],
+                    &self.max_width[index],
+                )
+            }) {
+                size = size
+                    .adjust_on_min_constraints(*min_width, *min_height)
+                    .adjust_on_max_constraints(*max_width, *max_height);
+            }
+
+            if let Some(this_size) = self.ptr.get_mut(id, &mut self.size) {
+                *this_size = size;
+            }
+        });
+    }
+
+    // using depth first has no extra allocation on the iterator but at the cost of recursive function
+    pub(crate) fn calculate_size_depth(&mut self, tree: &Tree<WidgetId>, start: WidgetId) -> Size {
+        let mut size = Size::default();
+
+        tree.iter_depth(start).for_each(|id| {
+            if let Some(rules) = self.rules.get(id) {
+                let orientation = rules.orientation;
+                let padding = rules.padding;
+                let spacing = rules.spacing as f32;
+
+                tree.iter_children(id).enumerate().for_each(|(n, child)| {
+                    let child_size = self.calculate_size_depth(tree, child);
+                    match orientation {
+                        Orientation::Horizontal => {
+                            size.width += child_size.width + spacing as f32 * n.clamp(0, 1) as f32;
+                            size.height = size.height.max(child_size.height);
+                        },
+                        Orientation::Vertical => {
+                            size.height += child_size.height + spacing as f32 * n.clamp(0, 1) as f32;
+                            size.width = size.width.max(child_size.width);
+                        },
+                    }
+                });
+
+                size.width += padding.horizontal() as f32;
+                size.height += padding.vertical() as f32;
+            }
+        });
+
+        if let Some((min_width, max_width, min_height, max_height)) = self.ptr.with(start, |index| {
+            (
+                &self.min_width[index],
+                &self.max_width[index],
+                &self.min_height[index],
+                &self.max_width[index],
+            )
+        }) {
+            size = size
+                .adjust_on_min_constraints(*min_width, *min_height)
+                .adjust_on_max_constraints(*max_width, *max_height);
+        }
+
+        // do some extra calculations here if needed
+
+        if let Some(this_size) = self.ptr.with(start, |index| &mut self.size[index]) {
+            *this_size = size;
+        }
+
+        size
     }
 
     pub(crate) fn calculate_growth(&self) {}
 
     pub(crate) fn calculate_position(&self) {}
+
+    pub(crate) fn update_fixed_unit(&mut self) {
+        self.size
+            .iter_mut()
+            .zip(&self.width)
+            .zip(&self.height)
+            .for_each(|((size, width), height)| {
+                match width {
+                    Unit::Fixed(w) => size.width = *w,
+                    Unit::FitToChild | Unit::Grow => {},
+                };
+                match height {
+                    Unit::Fixed(h) => size.height = *h,
+                    Unit::FitToChild | Unit::Grow => {},
+                }
+            });
+    }
 }

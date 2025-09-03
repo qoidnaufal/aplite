@@ -148,34 +148,37 @@ pub struct NodeRef<E: Entity> {
     pub(crate) parent: Option<E>,
     pub(crate) first_child: Option<E>,
     pub(crate) next_sibling: Option<E>,
+    pub(crate) prev_sibling: Option<E>,
 }
 
 impl<E: Entity> NodeRef<E> {
-    pub fn id(&self) -> E { self.entity }
+    pub fn entity(&self) -> E { self.entity }
 
     pub fn parent(&self) -> Option<E> { self.parent }
 
     pub fn first_child(&self) -> Option<E> { self.first_child }
 
     pub fn next_sibling(&self) -> Option<E> { self.next_sibling }
+
+    pub fn prev_sibling(&self) -> Option<E> { self.prev_sibling }
 }
 
 /*
 #########################################################
 #                                                       #
-#                         TREE                          #
+#                    NodeRef Iterator                   #
 #                                                       #
 #########################################################
 */
 
 pub struct TreeNodeIter<'a, E: Entity> {
-    inner: TreeMemberDepthIter<'a, E>
+    inner: TreeDepthIter<'a, E>
 }
 
 impl<'a, E: Entity> TreeNodeIter<'a, E> {
     pub(crate) fn new(tree: &'a Tree<E>, entity: E) -> Self {
         Self {
-            inner: TreeMemberDepthIter::new(tree, entity)
+            inner: TreeDepthIter::new(tree, entity)
         }
     }
 }
@@ -192,6 +195,7 @@ impl<E: Entity> Iterator for TreeNodeIter<'_, E> {
                     parent: self.inner.tree.get_parent(entity),
                     first_child: self.inner.tree.get_first_child(entity),
                     next_sibling: self.inner.tree.get_next_sibling(entity),
+                    prev_sibling: self.inner.tree.get_prev_sibling(entity),
                 }
             })
     }
@@ -255,23 +259,23 @@ impl<'a, E: Entity> DoubleEndedIterator for TreeChildIter<'a, E> {
 
 // TODO: Make a double-ended iterator
 /// Depth first Iterator
-pub struct TreeMemberDepthIter<'a, E: Entity> {
+pub struct TreeDepthIter<'a, E: Entity> {
     tree: &'a Tree<E>,
     entity: E,
     next: Option<E>,
 }
 
-impl<'a, E: Entity> TreeMemberDepthIter<'a, E> {
+impl<'a, E: Entity> TreeDepthIter<'a, E> {
     pub(crate) fn new(tree: &'a Tree<E>, entity: E) -> Self {
         Self {
             tree,
             entity,
-            next: tree.get_first_child(entity),
+            next: Some(entity),
         }
     }
 }
 
-impl<'a, E: Entity> Iterator for TreeMemberDepthIter<'a, E> {
+impl<'a, E: Entity> Iterator for TreeDepthIter<'a, E> {
     type Item = E;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -304,24 +308,23 @@ impl<'a, E: Entity> Iterator for TreeMemberDepthIter<'a, E> {
 }
 
 /// Horizontal first
-pub struct TreeMemberBreadthIter<'a, E: Entity> {
+pub struct TreeBreadthIter<'a, E: Entity> {
     tree: &'a Tree<E>,
-    // FIXME: this is so unnecessary
     queue: std::collections::VecDeque<E>,
     next: Option<E>,
 }
 
-impl<'a, E: Entity> TreeMemberBreadthIter<'a, E> {
+impl<'a, E: Entity> TreeBreadthIter<'a, E> {
     pub(crate) fn new(tree: &'a Tree<E>, entity: E) -> Self {
         Self {
             tree,
             queue: Default::default(),
-            next: tree.get_first_child(entity),
+            next: Some(entity),
         }
     }
 }
 
-impl<'a, E: Entity> Iterator for TreeMemberBreadthIter<'a, E> {
+impl<'a, E: Entity> Iterator for TreeBreadthIter<'a, E> {
     type Item = E;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -333,7 +336,6 @@ impl<'a, E: Entity> Iterator for TreeMemberBreadthIter<'a, E> {
 
             if let Some(next_sibling) = self.tree.get_next_sibling(current) {
                 self.next = Some(next_sibling);
-
             } else if let Some(head) = self.queue.pop_front() {
                 self.next = self.tree.get_first_child(head);
             } else {
@@ -346,18 +348,19 @@ impl<'a, E: Entity> Iterator for TreeMemberBreadthIter<'a, E> {
     }
 }
 
-// pub struct BackwardMemberIter<'a, E: Entity> {
-//     tree: &'a Tree<E>,
-// }
+impl<'a, E: Entity> DoubleEndedIterator for TreeBreadthIter<'a, E> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.next.is_some() {
+            let mut queue = std::collections::VecDeque::new();
+            while let Some(next) = self.next() {
+                queue.push_back(next);
+            }
+            self.queue = queue;
+        }
 
-// impl<'a, E: Entity> BackwardMemberIter<'a, E> {
-//     pub(crate) fn new(tree: &'a Tree<E>, entity: E) -> Self {
-//         let mut current = entity;
-//         Self {
-//             tree
-//         }
-//     }
-// }
+        self.queue.pop_back()
+    }
+}
 
 /*
 #########################################################
@@ -451,7 +454,7 @@ pub struct DataStoreIter<'a, T> {
 
 impl<'a, T> DataStoreIter<'a, T> {
     pub(crate) fn new<E: Entity>(ds: &'a DataStore<E, T>) -> Self {
-        let inner = ds.ptr
+        let inner = ds.ptr.ptr
             .iter()
             .filter(filter_data_store as fn(&&usize) -> bool)
             .zip(ds.data.iter());
@@ -480,7 +483,7 @@ pub struct MappedDataStoreIter<'a, E: Entity, T> {
 
 impl<'a, E: Entity, T> MappedDataStoreIter<'a, E, T> {
     pub(crate) fn new(ds: &'a DataStore<E, T>) -> Self {
-        let inner = ds.ptr
+        let inner = ds.ptr.ptr
             .iter()
             .enumerate()
             .filter_map(filter_map_data_store as fn((usize, &usize)) -> Option<E>)
@@ -510,7 +513,7 @@ pub struct DataStoreIterMut<'a, T> {
 
 impl<'a, T> DataStoreIterMut<'a, T> {
     pub(crate) fn new<E: Entity>(ds: &'a mut DataStore<E, T>) -> Self {
-        let inner = ds.ptr
+        let inner = ds.ptr.ptr
             .iter()
             .filter(filter_data_store_mut as fn(&&usize) -> bool)
             .zip(ds.data.iter_mut());

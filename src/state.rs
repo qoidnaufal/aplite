@@ -31,24 +31,6 @@ pub(crate) struct CommonState {
     // pub(crate) rotation: f32, // in radians
 }
 
-impl CommonState {
-    pub(crate) fn get_rect(&self, entity: WidgetId) -> Option<&Rect> {
-        self.ptr.get(entity, |index| &self.rect[index])
-    }
-
-    pub(crate) fn get_rect_mut(&mut self, entity: WidgetId) -> Option<&mut Rect> {
-        self.ptr.get(entity, |index| &mut self.rect[index])
-    }
-
-    pub(crate) fn insert_rect(&mut self, entity: WidgetId, rect: Rect) {
-        self.ptr.insert(entity, rect, &mut self.rect);
-    }
-
-    pub(crate) fn remove_rect(&mut self, entity: WidgetId) -> Option<Rect> {
-        self.ptr.remove(entity, &mut self.rect)
-    }
-}
-
 // I think it's okay not to pack this into vec since this will be used rarely
 pub(crate) struct SizeConstraints {
     pub(crate) min_width: Option<f32>,

@@ -10,9 +10,8 @@ use crate::iterator::{
 /// You'll need the assistance of [`EntityManager`](crate::entity::EntityManager) to create the key for indexing data.
 #[derive(Default)]
 pub struct DataStore<E: Entity, T> {
-    pub(crate) ptr: Vec<usize>,
+    pub(crate) ptr: DataPointer<E>,
     pub(crate) data: Vec<T>,
-    marker: std::marker::PhantomData<E>,
 }
 
 impl<E: crate::Entity, T: std::fmt::Debug> std::fmt::Debug for DataStore<E, T> {
@@ -26,9 +25,8 @@ impl<E: crate::Entity, T: std::fmt::Debug> std::fmt::Debug for DataStore<E, T> {
 impl<E: Entity, T> DataStore<E, T> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            ptr: Vec::new(),
+            ptr: DataPointer::default(),
             data: Vec::with_capacity(capacity),
-            marker: std::marker::PhantomData,
         }
     }
 
@@ -42,66 +40,23 @@ impl<E: Entity, T> DataStore<E, T> {
 
     pub fn get(&self, entity: E) -> Option<&T> {
         self.ptr
-            .get(entity.index())
-            .and_then(|&idx| {
-                (idx != usize::MAX)
-                    .then_some(&self.data[idx])
-            })
+            .with(entity, |index| &self.data[index])
     }
 
     pub fn get_mut(&mut self, entity: E) -> Option<&mut T> {
         self.ptr
-            .get(entity.index())
-            .and_then(|&idx| {
-                (idx != usize::MAX)
-                    .then_some(&mut self.data[idx])
-            })
+            .with(entity, |index| &mut self.data[index])
     }
 
     /// Inserting or replacing the value
     pub fn insert(&mut self, entity: E, value: T) {
-        let entity_index = entity.index();
-
-        if let Some(index) = self.ptr.get(entity.index()).copied()
-            && index != usize::MAX
-        {
-            self.data[index] = value;
-            return;
-        }
-
-        if entity_index >= self.ptr.len() {
-            self.ptr.resize(entity_index + 1, usize::MAX);
-        }
-
-        let data_index = self.data.len();
-        self.data.push(value);
-        self.ptr[entity_index] = data_index;
+        self.ptr.insert(entity, value, &mut self.data);
     }
 
     /// The contiguousness of the data is guaranteed after removal via [`Vec::swap_remove`],
     /// but the order of the data is is not.
     pub fn remove(&mut self, entity: E) -> Option<T> {
-        let index = entity.index();
-        if let Some(idx) = self.ptr.get(index)
-            && idx != &usize::MAX
-            && !self.data.is_empty()
-        {
-            let lid = self.data.len() - 1;
-            let itr = self.ptr[index];
-
-            // FIXME: maybe there's a better way than this?
-            // also try to resize when a certain capacity-to-len ratio exceeded
-            self.ptr
-                .iter()
-                .position(|i| i == &lid)
-                .map(|i| {
-                    self.ptr[i] = itr;
-                    self.ptr[index] = usize::MAX;
-                    self.data.swap_remove(itr)
-                })
-        } else {
-            None
-        }
+        self.ptr.remove(entity, &mut self.data)
     }
 
     /// The length of the data
@@ -115,26 +70,20 @@ impl<E: Entity, T> DataStore<E, T> {
     }
 
     pub fn contains(&self, entity: E) -> bool {
-        entity.index() <= self.ptr.len()
-            && self.ptr[entity.index()] != usize::MAX
+        self.ptr.contains(entity)
     }
 
     pub fn reset(&mut self) {
-        self.ptr.clear();
+        self.ptr.reset();
         self.data.clear();
     }
 
     pub fn entity_data_index(&self, entity: E) -> Option<usize> {
-        if entity.index() < self.ptr.len() {
-            let index = self.ptr[entity.index()];
-            (index != usize::MAX).then_some(index)
-        } else {
-            None
-        }
+        self.ptr.entity_data_index(entity)
     }
 
     pub fn drain_all(&mut self) -> std::vec::Drain<'_, T> {
-        self.ptr.clear();
+        self.ptr.reset();
         self.data.drain(..)
     }
 
@@ -146,10 +95,8 @@ impl<E: Entity, T> DataStore<E, T> {
         DataStoreIterMut::new(self)
     }
 
-    pub fn iter_ptr(&self) -> impl Iterator<Item = &usize> {
-        self.ptr
-            .iter()
-            .filter(|i| i != &&usize::MAX)
+    pub fn iter_data_index(&self) -> impl Iterator<Item = &usize> {
+        self.ptr.iter_data_index()
     }
 
     pub fn iter_map(&self) -> MappedDataStoreIter<'_, E, T> {
@@ -157,32 +104,73 @@ impl<E: Entity, T> DataStore<E, T> {
     }
 }
 
-#[derive(Default)]
+// pub struct DataTable<E: Entity, T> {
+//     ptr: DataPointer<E>,
+//     rows: std::collections::HashMap<std::any::TypeId, Vec<T>>,
+// }
+
+/*
+#########################################################
+#                                                       #
+#                      DataPointer                      #
+#                                                       #
+#########################################################
+*/
+
 pub struct DataPointer<E: Entity> {
-    ptr: Vec<usize>,
+    pub(crate) ptr: Vec<usize>,
     marker: std::marker::PhantomData<E>,
 }
 
+impl<E: Entity> Default for DataPointer<E> {
+    fn default() -> Self {
+        Self {
+            ptr: Vec::new(),
+            marker: std::marker::PhantomData,
+        }
+    }
+}
+
 impl<E: Entity> DataPointer<E> {
-    pub fn get<F, T>(&self, entity: E, f: F) -> Option<T>
+    pub fn get<'a, T>(&self, entity: E, data: &'a Vec<T>) -> Option<&'a T> {
+        let entity_index = entity.index();
+        self.ptr
+            .get(entity_index)
+            .and_then(|&idx| {
+                (idx != usize::MAX)
+                    .then_some(&data[idx])
+            })
+    }
+
+    pub fn get_mut<'a, T>(&self, entity: E, data: &'a mut Vec<T>) -> Option<&'a mut T> {
+        let entity_index = entity.index();
+        self.ptr
+            .get(entity_index)
+            .and_then(|&idx| {
+                (idx != usize::MAX)
+                    .then_some(&mut data[idx])
+            })
+    }
+
+    pub fn with<F, T>(&self, entity: E, f: F) -> Option<T>
     where
         F: FnOnce(usize) -> T
     {
+        let entity_index = entity.index();
         self.ptr
-            .get(entity.index())
+            .get(entity_index)
             .and_then(|&idx| {
-                (idx != usize::MAX)
-                    .then_some(f(idx))
+                (idx != usize::MAX).then_some(f(idx))
             })
     }
 
     pub fn insert<T>(&mut self, entity: E, value: T, data: &mut Vec<T>) {
         let entity_index = entity.index();
 
-        if let Some(index) = self.ptr.get(entity.index()).copied()
-            && index != usize::MAX
+        if let Some(index) = self.ptr.get(entity_index)
+            && index != &usize::MAX
         {
-            data[index] = value;
+            data[*index] = value;
             return;
         }
 
@@ -196,23 +184,25 @@ impl<E: Entity> DataPointer<E> {
     }
 
     pub fn remove<T>(&mut self, entity: E, data: &mut Vec<T>) -> Option<T> {
-        let index = entity.index();
-        if let Some(idx) = self.ptr.get(index)
+        if data.is_empty() { return None }
+
+        let entity_index = entity.index();
+
+        if let Some(idx) = self.ptr.get(entity_index)
             && idx != &usize::MAX
-            && !data.is_empty()
         {
-            let lid = data.len() - 1;
-            let itr = self.ptr[index];
+            let swap_index = data.len() - 1;
+            let data_index_to_remove = self.ptr[entity_index];
 
             // FIXME: maybe there's a better way than this?
             // also try to resize when a certain capacity-to-len ratio exceeded
             self.ptr
                 .iter()
-                .position(|i| i == &lid)
-                .map(|i| {
-                    self.ptr[i] = itr;
-                    self.ptr[index] = usize::MAX;
-                    data.swap_remove(itr)
+                .position(|i| *i == swap_index)
+                .map(|pos| {
+                    self.ptr[pos] = data_index_to_remove;
+                    self.ptr[entity_index] = usize::MAX;
+                    data.swap_remove(data_index_to_remove)
                 })
         } else {
             None
@@ -224,12 +214,21 @@ impl<E: Entity> DataPointer<E> {
             && self.ptr[entity.index()] != usize::MAX
     }
 
+    pub fn entity_data_index(&self, entity: E) -> Option<usize> {
+        if entity.index() < self.ptr.len() {
+            let index = self.ptr[entity.index()];
+            (index != usize::MAX).then_some(index)
+        } else {
+            None
+        }
+    }
+
     pub fn reset(&mut self) {
         self.ptr.clear();
         self.ptr.shrink_to_fit();
     }
 
-    pub fn iter_data_ptr(&self) -> impl Iterator<Item = &usize> {
+    pub fn iter_data_index(&self) -> impl Iterator<Item = &usize> {
         self.ptr
             .iter()
             .filter_map(|p| (p != &usize::MAX).then_some(p))
@@ -239,12 +238,20 @@ impl<E: Entity> DataPointer<E> {
         self.ptr
             .iter()
             .enumerate()
-            .filter_map(|(idx, p)| {
-                (p != &usize::MAX)
-                    .then_some(E::new(idx as u32, 0))
-            })
+            .filter_map(|(idx, p)| (p != &usize::MAX)
+                .then_some({
+                    E::new(idx as u32, 0)
+                }))
     }
 }
+
+/*
+#########################################################
+#                                                       #
+#                         TEST                          #
+#                                                       #
+#########################################################
+*/
 
 #[cfg(test)]
 mod store_test {
@@ -271,7 +278,7 @@ mod store_test {
         let mut store = DataStore::<TestId, String>::with_capacity(NUM);
 
         for i in 0..NUM {
-            store.insert(ids[i], i.to_string());
+            store.insert(ids[i], (i + 1).to_string());
         }
 
         let exist = store.get(TestId(5));

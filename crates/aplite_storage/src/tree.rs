@@ -1,8 +1,8 @@
 use crate::entity::Entity;
 use crate::iterator::{
     TreeChildIter,
-    TreeMemberDepthIter,
-    TreeMemberBreadthIter,
+    TreeDepthIter,
+    TreeBreadthIter,
     TreeAncestryIter,
     TreeNodeIter,
 };
@@ -65,12 +65,6 @@ impl<E: Entity> Tree<E> {
         this.prev_sibling.push(None);
 
         this
-    }
-
-    pub fn get_initial_root(&self) -> E {
-        self.first_child[0]
-            .and_then(|fc| self.parent[fc.index()])
-            .expect("A root entity should have been initialized first")
     }
 
     /// get the root of an entity
@@ -228,23 +222,45 @@ impl<E: Entity> Tree<E> {
         // }
     }
 
-    #[inline(always)]
-    pub fn remove(&mut self, entity: E) -> Vec<E> {
-        let mut to_remove = vec![entity];
+    pub fn add_subtree(&mut self, entity: E, other: Self) {
+        if other.is_empty() { return }
 
-        // maybe inefficient, should just use member iterator?
-        let mut current = entity;
-        while let Some(first_child) = self.get_first_child(current) {
-            to_remove.push(first_child);
+        let mut current = other.get_first_child(E::root()).unwrap();
+        self.insert(current, entity);
+
+        while let Some(first_child) = other.get_first_child(current) {
+            self.insert(first_child, current);
 
             let mut child = first_child;
-            while let Some(next) = self.get_next_sibling(child) {
-                to_remove.push(next);
+            while let Some(next) = other.get_next_sibling(child) {
+                self.add_sibling(child, next);
                 child = next;
             }
 
             current = first_child;
         }
+    }
+
+    #[inline(always)]
+    /// Currently produces another Tree with the member of the removed entity.
+    /// Kinda inefficient if the entity has super big index.
+    /// Maybe should produce some kind of simple subtree like:
+    /// ```ignore
+    /// struct SubTree<E: Entity> {
+    ///     entity: E,
+    ///     children: Vec<SubTree<E>>
+    /// }
+    /// ```
+    pub fn remove(&mut self, entity: E) -> Self {
+        let mut removed_branch = Self::default();
+        removed_branch.insert_as_parent(entity);
+
+        self.iter_node(entity)
+            .for_each(|node| {
+                if let Some(parent) = node.parent {
+                    removed_branch.insert(node.entity, parent);
+                }
+            });
 
         // shifting
         if let Some(prev) = self.get_prev_sibling(entity) {
@@ -252,14 +268,30 @@ impl<E: Entity> Tree<E> {
         } else if let Some(parent) = self.get_parent(entity) {
             self.first_child[parent.index()] = self.get_next_sibling(entity);
         }
-        
-        to_remove
-            .iter()
-            .for_each(|entity| {
-                self.parent[entity.index()] = None;
+
+        if let Some(next) = self.get_next_sibling(entity) {
+            self.prev_sibling[next.index()] = self.get_prev_sibling(entity);
+        }
+
+        let entity_index = entity.index();
+
+        self.parent[entity_index] = None;
+        self.first_child[entity_index] = None;
+        self.next_sibling[entity_index] = None;
+        self.prev_sibling[entity_index] = None;
+
+        removed_branch
+            .iter_depth(entity)
+            .for_each(|removed| {
+                let index = removed.index();
+
+                self.parent[index] = None;
+                self.first_child[index] = None;
+                self.next_sibling[index] = None;
+                self.prev_sibling[index] = None;
             });
 
-        to_remove
+        removed_branch
     }
 
     /// the distance of an entity from the root
@@ -298,12 +330,12 @@ impl<E: Entity> Tree<E> {
         check == ancestor
     }
 
-    pub fn len(&self) -> usize {
-        self.parent.len()
+    pub fn len(&self, start: E) -> usize {
+        self.iter_depth(start).count()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.parent.is_empty()
+        self.iter_depth(E::root()).count() == 0
     }
 
     pub fn contains(&self, entity: E) -> bool {
@@ -333,13 +365,13 @@ impl<E: Entity> Tree<E> {
     }
 
     /// iterate the members of the entity
-    pub fn iter_member_depth(&self, entity: E) -> TreeMemberDepthIter<'_, E> {
-        TreeMemberDepthIter::new(self, entity)
+    pub fn iter_depth(&self, entity: E) -> TreeDepthIter<'_, E> {
+        TreeDepthIter::new(self, entity)
     }
 
     /// iterate the members of the entity
-    pub fn iter_member_breadth(&self, entity: E) -> TreeMemberBreadthIter<'_, E> {
-        TreeMemberBreadthIter::new(self, entity)
+    pub fn iter_breadth(&self, entity: E) -> TreeBreadthIter<'_, E> {
+        TreeBreadthIter::new(self, entity)
     }
 
     /// iterate the entity's parent upward
@@ -352,6 +384,14 @@ impl<E: Entity> Tree<E> {
         TreeNodeIter::new(self, entity)
     }
 }
+
+/*
+#########################################################
+#                                                       #
+#                         PRINT                         #
+#                                                       #
+#########################################################
+*/
 
 // FIXME: there are two spot which created unnecessary allocation on get_all_children + get_all_roots
 impl<E: Entity> std::fmt::Debug for Tree<E> {
@@ -411,6 +451,60 @@ impl<E: Entity> std::fmt::Debug for Tree<E> {
     }
 }
 
+/*
+#########################################################
+#                                                       #
+#                        SubTree                        #
+#                                                       #
+#########################################################
+*/
+
+// pub struct SubTree<E: Entity> {
+//     entity: E,
+//     member: Vec<crate::iterator::NodeRef<E>>,
+// }
+
+// impl<E: Entity> std::fmt::Debug for SubTree<E> {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         let mut s = String::new();
+//         s.push_str(format!("{:?}\n", self.entity).as_str());
+
+//         fn render_string<E: Entity>(subtree: &SubTree<E>, s: &mut String) {
+//             let mut indent = 3;
+
+//             subtree
+//                 .member
+//                 .iter()
+//                 .for_each(|node| {
+//                     if node.next_sibling.is_some() {
+//                         s.push_str(format!("{:indent$}├─ ", "").as_str());
+//                     } else {
+//                         s.push_str(format!("{:indent$}└─ ", "").as_str());
+//                     }
+
+//                     if node.first_child.is_some() {
+//                         indent += 3;
+//                     } else if node.next_sibling.is_none() {
+//                         indent -= 3;
+//                     }
+
+//                     s.push_str(format!("{:?}\n", node.entity).as_str());
+//                 });
+//         }
+
+//         render_string(self, &mut s);
+//         write!(f, "{s}")
+//     }
+// }
+
+/*
+#########################################################
+#                                                       #
+#                         TEST                          #
+#                                                       #
+#########################################################
+*/
+
 #[cfg(test)]
 mod tree_test {
     use super::*;
@@ -468,46 +562,59 @@ mod tree_test {
 
         let root_children = tree.iter_children(TestId::root()).count();
         let all = tree.iter_children(TestId::root())
-            .map(|id| tree.iter_member_depth(id).count())
+            .map(|id| tree.iter_depth(id).count())
             .sum::<usize>();
 
-        assert_eq!(all + root_children, tree.len() - root_children);
+        assert_eq!(all + root_children, tree.len(TestId::root()));
 
-        let member_of_5 = tree.iter_member_depth(TestId(5));
-        let count = member_of_5.count();
+        let subtree_len = tree.len(TestId(5));
 
-        assert_eq!(count, 2);
+        assert_eq!(subtree_len, 3);
     }
 
     #[test]
     fn member_breadth_test() {
         let (mut manager, mut tree) = setup_tree();
         let id12 = manager.create();
-        tree.insert(id12, TestId(10));
-        let root = tree.get_initial_root();
-        let horizontal_member = tree.iter_member_breadth(root);
+        tree.insert(id12, TestId(9));
 
-        assert_eq!(horizontal_member.last(), Some(id12));
-        eprintln!("{tree:?}");
+        let forward = tree.iter_breadth(TestId::root()).collect::<Vec<_>>();
+        assert_eq!(forward.last(), Some(&id12));
+
+        let backward = tree.iter_breadth(TestId::root()).rev().collect::<Vec<_>>();
+        assert_eq!(backward.last(), Some(&TestId::root()));
+
+        // eprintln!("{tree:?}");
+        // eprintln!("{forward:?}");
+        // eprintln!("{backward:?}");
     }
 
     #[test]
     fn remove_first_child() {
         let (_, mut tree) = setup_tree();
+        let initial_len = tree.len(TestId::root());
+
+        // eprintln!("{tree:?}");
 
         let first_child = tree.get_first_child(TestId::new(2, 0)).unwrap();
         let next_sibling = tree.get_next_sibling(first_child);
         assert_eq!(first_child, TestId::new(3, 0));
 
         let removed = tree.remove(TestId::new(3, 0));
-        assert_eq!(removed.len(), 2);
+        let removed_len = removed.len(TestId::new(3, 0));
+        let after_remove_len = tree.len(TestId::root());
+        assert_eq!(removed_len, 2);
+
+        // eprintln!("{removed:?}");
+        // eprintln!("{tree:?}");
 
         let first_child_after_removal = tree.get_first_child(TestId::new(2, 0));
         assert_eq!(first_child_after_removal, next_sibling);
 
-        // eprintln!("{tree:?}");
-        // eprintln!("remaining {} > {:#?}", tree.manager.len(), tree.manager);
-        // eprintln!("removed > {removed:?}");
+        tree.add_subtree(TestId(8), removed);
+        let final_len = tree.len(TestId::root());
+        assert_eq!(initial_len, final_len);
+        assert_eq!(initial_len, removed_len + after_remove_len);
     }
 
     #[test]
@@ -521,11 +628,26 @@ mod tree_test {
         assert!(!tree.contains(TestId::new(5, 0)));
         let sibling_after_removal = tree.get_next_sibling(TestId::new(3, 0));
         assert_eq!(sibling_before_removal, sibling_after_removal);
-        assert_eq!(removed.len(), 3);
+        assert_eq!(removed.len(TestId::new(5, 0)), 3);
 
         // eprintln!("{tree:?}");
         // eprintln!("remaining {}", tree.len());
         // eprintln!("removed > {removed:?}");
+    }
+
+    #[test]
+    fn remove_sub_tree() {
+        let (_, mut tree) = setup_tree();
+        let len = tree.len(TestId::root());
+        // eprintln!("{tree:?}");
+
+        let removed = tree.remove(TestId(2));
+        let removed_len = removed.len(TestId(2));
+        // eprintln!("{removed:?}");
+
+        let after_remove_len = tree.len(TestId::root());
+        assert_eq!(len, removed_len + after_remove_len);
+        // eprintln!("{tree:?}");
     }
 
     #[test]
@@ -538,7 +660,6 @@ mod tree_test {
 
         let ok_add = tree.try_add_sibling(existing_entity, new_id);
         assert!(ok_add.is_ok());
-        // eprintln!("{tree:?}");
     }
 
     // #[test]

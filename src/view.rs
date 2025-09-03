@@ -1,9 +1,4 @@
-use aplite_types::Size;
-// use aplite_renderer::Scene;
-
 use crate::widget::{Widget, WidgetId};
-use crate::state::AspectRatio;
-use crate::layout::*;
 use crate::cursor::Cursor;
 
 /// wrapper over [`Widget`] trait to be stored inside [`ViewStorage`]
@@ -44,27 +39,6 @@ impl View {
             .then_some(current)
     }
 
-    // pub(crate) fn calculate_layout(&self, bound: aplite_types::Rect) {
-    //     let window_widget = crate::widget::WindowWidget::new(bound);
-    //     let mut cx = LayoutCx::new(&window_widget);
-
-    //     let mut current = self.widget.as_ref();
-
-    //     loop {
-    //         if current.layout(&mut cx) {
-    //             if let Some(children) = current.children_ref() {
-    //                 cx = LayoutCx::new(current);
-
-    //                 for child in children.all_ref() {
-    //                     current = child;
-    //                 }
-    //             }
-    //         } else {
-    //             break
-    //         }
-    //     }
-    // }
-
     pub(crate) fn find_parent(&self, id: &WidgetId) -> Option<&Box<dyn Widget>> {
         if self.widget.as_ref().id() == id { return None }
 
@@ -97,10 +71,6 @@ impl View {
 
         Some(current)
     }
-
-    // pub(crate) fn render(&self, scene: &mut Scene) {
-    //     let mut current = self.widget.as_ref();
-    // }
 
     // fn insert<T: Widget + 'static>(&mut self, parent: &WidgetId, widget: T) {
     //     if let Some(mut p) = self.find_mut(parent)
