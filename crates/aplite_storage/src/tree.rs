@@ -396,7 +396,7 @@ impl<E: Entity> Tree<E> {
 // FIXME: there are two spot which created unnecessary allocation on get_all_children + get_all_roots
 impl<E: Entity> std::fmt::Debug for Tree<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fn get_frame<'a, E: Entity>(tree: &'a Tree<E>, entity: E) -> &'a str {
+        fn get_frame<E: Entity>(tree: &Tree<E>, entity: E) -> &str {
             match tree.get_next_sibling(entity) {
                 Some(_) => "├─",
                 None => "└─",
@@ -513,11 +513,11 @@ mod tree_test {
 
     create_entity! { TestId }
 
-    fn setup_tree() -> (EntityManager<TestId>, Tree<TestId>) {
+    fn setup_tree(num: usize) -> (EntityManager<TestId>, Tree<TestId>) {
         let mut manager = EntityManager::<TestId>::default();
-        let mut tree: Tree<TestId> = Tree::with_capacity(11);
+        let mut tree: Tree<TestId> = Tree::with_capacity(num);
         let mut parent = Some(TestId::root());
-        for i in 0..11 {
+        for i in 0..num {
             let id = manager.create();
             if let Some(parent) = parent {
                 tree.insert(id, parent);
@@ -534,7 +534,7 @@ mod tree_test {
 
     #[test]
     fn tree_test() {
-        let (_, tree) = setup_tree();
+        let (_, tree) = setup_tree(11);
         // eprintln!("{tree:?}");
         // eprintln!("{:?}", tree.parent);
 
@@ -557,7 +557,7 @@ mod tree_test {
 
     #[test]
     fn member_depth_test() {
-        let (_, tree) = setup_tree();
+        let (_, tree) = setup_tree(11);
         // eprintln!("{tree:?}");
 
         let root_children = tree.iter_children(TestId::root()).count();
@@ -574,24 +574,29 @@ mod tree_test {
 
     #[test]
     fn member_breadth_test() {
-        let (mut manager, mut tree) = setup_tree();
+        let (mut manager, mut tree) = setup_tree(11);
         let id12 = manager.create();
         tree.insert(id12, TestId(9));
 
-        let forward = tree.iter_breadth(TestId::root()).collect::<Vec<_>>();
-        assert_eq!(forward.last(), Some(&id12));
+        let forward = tree.iter_breadth(TestId::root()).by_ref().last();
+        assert_eq!(forward, Some(id12));
 
-        let backward = tree.iter_breadth(TestId::root()).rev().collect::<Vec<_>>();
-        assert_eq!(backward.last(), Some(&TestId::root()));
+        let backward = tree.iter_breadth(TestId::root()).rev().last();
+        assert_eq!(backward, Some(TestId::root()));
 
-        // eprintln!("{tree:?}");
         // eprintln!("{forward:?}");
         // eprintln!("{backward:?}");
+        // eprintln!("{tree:?}");
+
+        // let depth = tree.iter_depth(TestId::root());
+        // let breadth = tree.iter_breadth(TestId::root());
+        // let combined = depth.zip(breadth).map(|(d, b)| format!("{d:?} . {b:?}")).collect::<Vec<_>>();
+        // eprintln!("{combined:#?}");
     }
 
     #[test]
     fn remove_first_child() {
-        let (_, mut tree) = setup_tree();
+        let (_, mut tree) = setup_tree(11);
         let initial_len = tree.len(TestId::root());
 
         // eprintln!("{tree:?}");
@@ -619,13 +624,14 @@ mod tree_test {
 
     #[test]
     fn remove_middle_child() {
-        let (_, mut tree) = setup_tree();
+        let (_, mut tree) = setup_tree(11);
 
         let sibling_before_removal = tree.get_next_sibling(TestId::new(5, 0));
         assert!(sibling_before_removal.is_some_and(|id| tree.contains(id)));
 
         let removed = tree.remove(TestId::new(5, 0));
         assert!(!tree.contains(TestId::new(5, 0)));
+
         let sibling_after_removal = tree.get_next_sibling(TestId::new(3, 0));
         assert_eq!(sibling_before_removal, sibling_after_removal);
         assert_eq!(removed.len(TestId::new(5, 0)), 3);
@@ -637,7 +643,7 @@ mod tree_test {
 
     #[test]
     fn remove_sub_tree() {
-        let (_, mut tree) = setup_tree();
+        let (_, mut tree) = setup_tree(11);
         let len = tree.len(TestId::root());
         // eprintln!("{tree:?}");
 
@@ -652,7 +658,7 @@ mod tree_test {
 
     #[test]
     fn sibling_test() {
-        let (mut manager, mut tree) = setup_tree();
+        let (mut manager, mut tree) = setup_tree(11);
         let existing_entity = TestId(6);
         let new_id = manager.create();
         let err_add = tree.try_add_sibling(new_id, existing_entity);
@@ -663,26 +669,20 @@ mod tree_test {
     }
 
     // #[test]
-    // fn many_insertion() {
-    //     const NUM: usize = 1 << 16;
-    //     let mut manager = EntityManager::<TestId>::with_capacity(NUM);
-    //     let mut tree: Tree<TestId> = Tree::with_capacity(NUM);
-    //     let root = manager.create();
-    //     tree.add_root(root);
+    // fn stress_test() {
+    //     const NUM: usize = 1 << 19;
+    //     let (_, tree) = setup_tree(NUM);
 
-    //     let mut parent = root;
     //     let now = std::time::Instant::now();
-    //     for i in 1..NUM {
-    //         let id = manager.create();
-    //         if i % 2 == 0 {
-    //             tree.add_child(root, id);
-    //         } else {
-    //             tree.add_child(parent, id);
-    //         }
-    //         parent = id;
-    //     }
+    //     let n = tree.iter_depth(TestId::root()).count();
+    //     eprintln!("depth traverse time for {n} nodes: {:?}", now.elapsed());
 
-    //     assert_eq!(NUM, tree.len());
-    //     eprintln!("time needed to create: {} nodes > {:?}", tree.len(), now.elapsed());
+    //     let now = std::time::Instant::now();
+    //     let n = tree.iter_breadth(TestId::root()).count();
+    //     eprintln!("forward breadth traverse time for {n} nodes: {:?}", now.elapsed());
+
+    //     let now = std::time::Instant::now();
+    //     let n = tree.iter_breadth(TestId::root()).rev().count();
+    //     eprintln!("backward breadth traverse time for {n} nodes: {:?}", now.elapsed());
     // }
 }

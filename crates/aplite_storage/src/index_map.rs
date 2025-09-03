@@ -139,7 +139,7 @@ impl<E: Entity, T> IndexMap<E, T> {
     }
 
     #[inline(always)]
-    pub fn get_mut<'a>(&'a mut self, entity: E) -> Option<&'a mut T> {
+    pub fn get_mut(&mut self, entity: E) -> Option<&mut T> {
         self.inner
             .get_mut(entity.index())
             .and_then(|slot| {

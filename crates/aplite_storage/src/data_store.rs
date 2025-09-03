@@ -132,7 +132,7 @@ impl<E: Entity> Default for DataPointer<E> {
 }
 
 impl<E: Entity> DataPointer<E> {
-    pub fn get<'a, T>(&self, entity: E, data: &'a Vec<T>) -> Option<&'a T> {
+    pub fn get<'a, T>(&self, entity: E, data: &'a [T]) -> Option<&'a T> {
         let entity_index = entity.index();
         self.ptr
             .get(entity_index)
@@ -142,7 +142,7 @@ impl<E: Entity> DataPointer<E> {
             })
     }
 
-    pub fn get_mut<'a, T>(&self, entity: E, data: &'a mut Vec<T>) -> Option<&'a mut T> {
+    pub fn get_mut<'a, T>(&self, entity: E, data: &'a mut [T]) -> Option<&'a mut T> {
         let entity_index = entity.index();
         self.ptr
             .get(entity_index)
@@ -231,7 +231,7 @@ impl<E: Entity> DataPointer<E> {
     pub fn iter_data_index(&self) -> impl Iterator<Item = &usize> {
         self.ptr
             .iter()
-            .filter_map(|p| (p != &usize::MAX).then_some(p))
+            .filter(|p| (p != &&usize::MAX))
     }
 
     pub fn iter_entity_index(&self) -> impl Iterator<Item = E> {

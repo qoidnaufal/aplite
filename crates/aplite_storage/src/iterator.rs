@@ -258,7 +258,7 @@ impl<'a, E: Entity> DoubleEndedIterator for TreeChildIter<'a, E> {
 */
 
 // TODO: Make a double-ended iterator
-/// Depth first Iterator
+/// Depth first traversal
 pub struct TreeDepthIter<'a, E: Entity> {
     tree: &'a Tree<E>,
     entity: E,
@@ -307,11 +307,12 @@ impl<'a, E: Entity> Iterator for TreeDepthIter<'a, E> {
     }
 }
 
-/// Horizontal first
+/// Breadth first traversal
 pub struct TreeBreadthIter<'a, E: Entity> {
     tree: &'a Tree<E>,
     queue: std::collections::VecDeque<E>,
     next: Option<E>,
+    back: Vec<E>,
 }
 
 impl<'a, E: Entity> TreeBreadthIter<'a, E> {
@@ -320,6 +321,7 @@ impl<'a, E: Entity> TreeBreadthIter<'a, E> {
             tree,
             queue: Default::default(),
             next: Some(entity),
+            back: Default::default(),
         }
     }
 }
@@ -329,7 +331,10 @@ impl<'a, E: Entity> Iterator for TreeBreadthIter<'a, E> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let next = self.next.take();
+
         if let Some(current) = next {
+            self.back.push(current);
+
             if self.tree.get_first_child(current).is_some() {
                 self.queue.push_back(current);
             }
@@ -344,6 +349,7 @@ impl<'a, E: Entity> Iterator for TreeBreadthIter<'a, E> {
         } else {
             self.queue.clear();
         }
+
         next
     }
 }
@@ -351,14 +357,10 @@ impl<'a, E: Entity> Iterator for TreeBreadthIter<'a, E> {
 impl<'a, E: Entity> DoubleEndedIterator for TreeBreadthIter<'a, E> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.next.is_some() {
-            let mut queue = std::collections::VecDeque::new();
-            while let Some(next) = self.next() {
-                queue.push_back(next);
-            }
-            self.queue = queue;
+            for _ in self.by_ref() {}
         }
 
-        self.queue.pop_back()
+        self.back.pop()
     }
 }
 
