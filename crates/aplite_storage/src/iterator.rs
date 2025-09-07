@@ -2,9 +2,9 @@ use std::slice::{Iter, IterMut};
 use std::iter::{Enumerate, FilterMap, Zip, Filter};
 
 use crate::entity::Entity;
-use crate::tree::Tree;
-use crate::slot::{Slot, Content};
-use crate::index_map::IndexMap;
+use crate::tree::{Tree, Node};
+use crate::indexmap::slot::{Slot, Content};
+use crate::indexmap::IndexMap;
 use crate::data_store::DataStore;
 
 /*
@@ -138,34 +138,6 @@ impl<'a, E: Entity, T> DoubleEndedIterator for IndexMapIterMut<'a, E, T> {
 /*
 #########################################################
 #                                                       #
-#                        NodeRef                        #
-#                                                       #
-#########################################################
-*/
-
-pub struct NodeRef<E: Entity> {
-    pub(crate) entity: E,
-    pub(crate) parent: Option<E>,
-    pub(crate) first_child: Option<E>,
-    pub(crate) next_sibling: Option<E>,
-    pub(crate) prev_sibling: Option<E>,
-}
-
-impl<E: Entity> NodeRef<E> {
-    pub fn entity(&self) -> E { self.entity }
-
-    pub fn parent(&self) -> Option<E> { self.parent }
-
-    pub fn first_child(&self) -> Option<E> { self.first_child }
-
-    pub fn next_sibling(&self) -> Option<E> { self.next_sibling }
-
-    pub fn prev_sibling(&self) -> Option<E> { self.prev_sibling }
-}
-
-/*
-#########################################################
-#                                                       #
 #                    NodeRef Iterator                   #
 #                                                       #
 #########################################################
@@ -184,13 +156,13 @@ impl<'a, E: Entity> TreeNodeIter<'a, E> {
 }
 
 impl<E: Entity> Iterator for TreeNodeIter<'_, E> {
-    type Item = NodeRef<E>;
+    type Item = Node<E>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner
             .next()
             .map(|entity| {
-                NodeRef {
+                Node {
                     entity,
                     parent: self.inner.tree.get_parent(entity),
                     first_child: self.inner.tree.get_first_child(entity),
@@ -545,7 +517,7 @@ impl<'a, T> Iterator for DataStoreIterMut<'a, T> {
 mod iterator_test {
     use crate::tree::Tree;
     use crate::entity::{Entity, EntityManager};
-    use crate::index_map::IndexMap;
+    use crate::indexmap::IndexMap;
     use crate::create_entity;
 
     create_entity! { TestId }

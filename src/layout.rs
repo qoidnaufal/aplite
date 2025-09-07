@@ -317,6 +317,42 @@ mod layout_state {
         pub(crate) rules: DataStore<WidgetId, LayoutRules>,
     }
 
+    pub(crate) fn update_fixed_unit(size: &mut [Size], width: &[Unit], height: &[Unit], flags: &[Flag]) {
+        for ((size, (w, h)), flag) in size.iter_mut().zip(width.iter().zip(height)).zip(flags) {
+            if !flag.is_hidden() {
+                match w {
+                    Unit::Fixed(val) => size.width = *val,
+                    Unit::FitToChild | Unit::Grow => {},
+                };
+                match h {
+                    Unit::Fixed(val) => size.height = *val,
+                    Unit::FitToChild | Unit::Grow => {},
+                }
+            }
+        }
+    }
+
+    pub(crate) fn update_constraints(
+        size: &mut [Size],
+        min_w: &[Option<f32>],
+        max_w: &[Option<f32>],
+        min_h: &[Option<f32>],
+        max_h: &[Option<f32>],
+        flags: &[Flag]
+    ) {
+        for (((size, (min_w, max_w)), (min_h, max_h)), flag) in size.iter_mut()
+            .zip(min_w.iter().zip(max_w))
+            .zip(min_h.iter().zip(max_h))
+            .zip(flags)
+        {
+            if !flag.is_hidden() {
+                *size = size
+                    .adjust_on_min_constraints(*min_w, *min_h)
+                    .adjust_on_max_constraints(*max_w, *max_h);
+            }
+        }
+    }
+
     impl LayoutState {
         pub(crate) fn calculate_layout(&mut self, tree: &Tree<WidgetId>, start: WidgetId) {
             self.update_fixed_unit();
@@ -334,7 +370,9 @@ mod layout_state {
             self.size
                 .iter_mut()
                 .zip(self.width.iter().zip(&self.height))
-                .for_each(|(size, (width, height))| {
+                .zip(&self.flag)
+                .filter(|(_, flag)| !flag.is_hidden())
+                .for_each(|((size, (width, height)), _)| {
                     match width {
                         Unit::Fixed(w) => size.width = *w,
                         Unit::FitToChild | Unit::Grow => {},
@@ -351,13 +389,9 @@ mod layout_state {
                 .iter_mut()
                 .zip(self.min_width.iter().zip(&self.max_width))
                 .zip(self.min_height.iter().zip(&self.max_height))
-                .filter(|((_, (min_w, max_w)), (min_h, max_h))| {
-                    min_w.is_some()
-                        || max_w.is_some()
-                        || min_h.is_some()
-                        || max_h.is_some()
-                })
-                .for_each(|((size, (min_w, max_w)), (min_h, max_h))| {
+                .zip(&self.flag)
+                .filter(|(_, flag)| !flag.is_hidden())
+                .for_each(|(((size, (min_w, max_w)), (min_h, max_h)), _)| {
                     *size = size
                         .adjust_on_min_constraints(*min_w, *min_h)
                         .adjust_on_max_constraints(*max_w, *max_h);
@@ -365,91 +399,90 @@ mod layout_state {
         }
 
         pub(crate) fn update_growth_unit(&mut self, tree: &Tree<WidgetId>, start: WidgetId) {
-            tree.iter_breadth(start).for_each(|id| {
-                if let Some(rules) = self.rules.get(id) {
-                    let size = self.ptr.get(id, &self.size).copied().unwrap();
+            tree.iter_breadth(start)
+                .filter(|id| !self.ptr.get(*id, &self.flag).unwrap().is_hidden())
+                .for_each(|id| {
+                    if let Some(rules) = self.rules.get(id) {
+                        let size = self.ptr.get(id, &self.size).copied().unwrap();
 
-                    let (rem_w, rem_h) = tree.iter_children(id)
-                        .map(|child| self.ptr.get(child, &self.size).unwrap())
-                        .fold((size.width, size.height), |(w, h), cs| {
+                        let (rem_w, rem_h) = tree.iter_children(id)
+                            .map(|child| self.ptr.get(child, &self.size).unwrap())
+                            .fold((size.width, size.height), |(w, h), cs| {
+                                match rules.orientation {
+                                    Orientation::Horizontal => (w - cs.width, h),
+                                    Orientation::Vertical => (w, h - cs.height),
+                                }
+                            });
+
+                        let to_grow_w = tree.iter_children(id)
+                            .filter(|child| matches!(self.ptr.get(*child, &self.width).unwrap(), Unit::Grow))
+                            .collect::<Vec<_>>();
+
+                        let to_grow_h = tree.iter_children(id)
+                            .filter(|child| matches!(self.ptr.get(*child, &self.height).unwrap(), Unit::Grow))
+                            .collect::<Vec<_>>();
+
+                        let count_w = to_grow_w.len() as f32;
+                        let count_h = to_grow_h.len() as f32;
+
+                        to_grow_w.iter().for_each(|child| {
+                            let cs = self.ptr.get_mut(*child, &mut self.size).unwrap();
                             match rules.orientation {
-                                Orientation::Horizontal => (w - cs.width, h),
-                                Orientation::Vertical => (w, h - cs.height),
+                                Orientation::Horizontal => cs.width += rem_w / count_w,
+                                Orientation::Vertical => cs.width = rem_w,
                             }
                         });
 
-                    let to_grow_w = tree.iter_children(id)
-                        .filter(|child| matches!(self.ptr.get(*child, &self.width).unwrap(), Unit::Grow))
-                        .collect::<Vec<_>>();
-
-                    let to_grow_h = tree.iter_children(id)
-                        .filter(|child| matches!(self.ptr.get(*child, &self.height).unwrap(), Unit::Grow))
-                        .collect::<Vec<_>>();
-
-                    let count_w = to_grow_w.len() as f32;
-                    let count_h = to_grow_h.len() as f32;
-
-                    to_grow_w.iter().for_each(|child| {
-                        let cs = self.ptr.get_mut(*child, &mut self.size).unwrap();
-                        match rules.orientation {
-                            Orientation::Horizontal => cs.width += rem_w / count_w,
-                            Orientation::Vertical => cs.width = rem_w,
-                        }
-                    });
-
-                    to_grow_h.iter().for_each(|child| {
-                        let cs = self.ptr.get_mut(*child, &mut self.size).unwrap();
-                        match rules.orientation {
-                            Orientation::Horizontal => cs.height = rem_h,
-                            Orientation::Vertical => cs.height += rem_h / count_h,
-                        }
-                    });
-                }
-            });
+                        to_grow_h.iter().for_each(|child| {
+                            let cs = self.ptr.get_mut(*child, &mut self.size).unwrap();
+                            match rules.orientation {
+                                Orientation::Horizontal => cs.height = rem_h,
+                                Orientation::Vertical => cs.height += rem_h / count_h,
+                            }
+                        });
+                    }
+                });
         }
 
         pub(crate) fn calculate_size(&mut self, tree: &Tree<WidgetId>, start: WidgetId) {
-            tree.iter_breadth(start).rev().for_each(|id| {
-                let mut size = Size::default();
+            tree.iter_breadth(start)
+                .rev()
+                .filter(|id| !self.ptr.get(*id, &self.flag).unwrap().is_hidden())
+                .for_each(|id| {
+                    let mut size = Size::default();
 
-                if let Some(rules) = self.rules.get(id) {
-                    let orientation = rules.orientation;
-                    let spacing = rules.spacing;
-                    let padding = rules.padding;
+                    if let Some(rules) = self.rules.get(id) {
+                        let orientation = rules.orientation;
+                        let spacing = rules.spacing;
+                        let padding = rules.padding;
 
-                    tree.iter_children(id).enumerate().for_each(|(n, child)| {
-                        let child_size = self.ptr.get(child, &self.size).unwrap();
-                        match orientation {
-                            Orientation::Horizontal => {
-                                size.width += child_size.width + spacing as f32 * n.clamp(0, 1) as f32;
-                                size.height = size.height.max(child_size.height);
-                            },
-                            Orientation::Vertical => {
-                                size.height += child_size.height + spacing as f32 * n.clamp(0, 1) as f32;
-                                size.width = size.width.max(child_size.width);
-                            },
-                        }
-                    });
+                        tree.iter_children(id).enumerate().for_each(|(n, child)| {
+                            let child_size = self.ptr.get(child, &self.size).unwrap();
+                            match orientation {
+                                Orientation::Horizontal => {
+                                    size.width += child_size.width + spacing as f32 * n.clamp(0, 1) as f32;
+                                    size.height = size.height.max(child_size.height);
+                                },
+                                Orientation::Vertical => {
+                                    size.height += child_size.height + spacing as f32 * n.clamp(0, 1) as f32;
+                                    size.width = size.width.max(child_size.width);
+                                },
+                            }
+                        });
 
-                    size.width += padding.horizontal() as f32;
-                    size.height += padding.vertical() as f32;
-                }
+                        size.width += padding.horizontal() as f32;
+                        size.height += padding.vertical() as f32;
+                    }
 
-                if let Some(this_size) = self.ptr.get_mut(id, &mut self.size) {
-                    *this_size = size;
-                }
-            });
+                    if let Some(this_size) = self.ptr.get_mut(id, &mut self.size) {
+                        *this_size = size;
+                    }
+                });
         }
 
         pub(crate) fn calculate_position(&mut self, tree: &Tree<WidgetId>, start: WidgetId) {
             tree.iter_breadth(start)
-                .filter(|id| {
-                    !self.ptr
-                        .get(*id, &self.flag)
-                        .copied()
-                        .unwrap()
-                        .is_hidden()
-                })
+                .filter(|id| !self.ptr.get(*id, &self.flag).unwrap().is_hidden())
                 .for_each(|id| {
                     if let Some(parent) = tree.get_parent(id)
                         && let Some(rules) = self.rules.get(parent)

@@ -1,7 +1,8 @@
 use std::marker::PhantomData;
+
 use crate::entity::Entity;
 use crate::iterator::{IndexMapIter, IndexMapIterMut};
-use crate::slot::*;
+use super::slot::{Slot, Content};
 
 /// Arena style non-contiguous key-value data storage. Unlike [`DataStore`](crate::data_store::DataStore) which guarantee the data is stored contiguously even after removal, removing data from [`IndexMap`] will leave a gap between data which will be filled on next insertion.
 /// [`IndexMap`] facilitates the creation of [`Entity`], unlike [`DataStore`](crate::data_store::DataStore) which need the assistance of [`EntityManager`](crate::entity::EntityManager).
@@ -285,7 +286,7 @@ mod index_test {
     }
 
     #[test]
-    fn remove() {
+    fn remove_index() {
         let mut storage = IndexMap::<TestId, ()>::with_capacity(10);
         let mut created_ids = Vec::with_capacity(10);
 

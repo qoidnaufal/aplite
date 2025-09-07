@@ -581,9 +581,16 @@ mod tree_test {
         let forward = tree.iter_breadth(TestId::root()).by_ref().last();
         assert_eq!(forward, Some(id12));
 
-        let backward = tree.iter_breadth(TestId::root()).rev().last();
+        let backward = tree.iter_breadth(TestId::root()).by_ref().rev().last();
         assert_eq!(backward, Some(TestId::root()));
 
+        let flags = (0..tree.len(TestId::root())).map(|n| n % 2 == 0);
+        let flagged = tree.iter_breadth(TestId::root())
+            .zip(flags)
+            .filter(|(_, flag)| !flag)
+            .count();
+
+        eprintln!("{flagged:?}");
         // eprintln!("{forward:?}");
         // eprintln!("{backward:?}");
         // eprintln!("{tree:?}");
