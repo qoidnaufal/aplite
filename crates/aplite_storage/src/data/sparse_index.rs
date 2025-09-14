@@ -1,121 +1,6 @@
+use std::any::Any;
+
 use crate::entity::Entity;
-use crate::iterator::{
-    MappedDataStoreIter,
-    DataStoreIter,
-    DataStoreIterMut
-};
-
-/// A Contiguous data storage which is guaranteed even after removal.
-/// Doesn't facilitate the creation of [`Entity`], unlike [`IndexMap`](crate::index_map::IndexMap).
-/// You'll need the assistance of [`EntityManager`](crate::entity::EntityManager) to create the key for indexing data.
-#[derive(Default)]
-pub struct DataStore<E: Entity, T> {
-    pub(crate) ptr: DataPointer<E>,
-    pub(crate) data: Vec<T>,
-}
-
-impl<E: crate::Entity, T: std::fmt::Debug> std::fmt::Debug for DataStore<E, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_map()
-            .entries(self.iter())
-            .finish()
-    }
-}
-
-impl<E: Entity, T> DataStore<E, T> {
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            ptr: DataPointer::default(),
-            data: Vec::with_capacity(capacity),
-        }
-    }
-
-    pub fn data(&self) -> &Vec<T> {
-        &self.data
-    }
-
-    pub fn data_mut(&mut self) -> &mut Vec<T> {
-        &mut self.data
-    }
-
-    pub fn get(&self, entity: E) -> Option<&T> {
-        self.ptr
-            .with(entity, |index| &self.data[index])
-    }
-
-    pub fn get_mut(&mut self, entity: E) -> Option<&mut T> {
-        self.ptr
-            .with(entity, |index| &mut self.data[index])
-    }
-
-    /// Inserting or replacing the value
-    pub fn insert(&mut self, entity: E, value: T) {
-        self.ptr.insert(entity, value, &mut self.data);
-    }
-
-    /// The contiguousness of the data is guaranteed after removal via [`Vec::swap_remove`],
-    /// but the order of the data is is not.
-    pub fn remove(&mut self, entity: E) -> Option<T> {
-        self.ptr.remove(entity, &mut self.data)
-    }
-
-    /// The length of the data
-    pub fn len(&self) -> usize {
-        self.data.len()
-    }
-
-    /// Check if the data is empty or not
-    pub fn is_empty(&self) -> bool {
-        self.data.is_empty()
-    }
-
-    pub fn contains(&self, entity: E) -> bool {
-        self.ptr.contains(entity)
-    }
-
-    pub fn reset(&mut self) {
-        self.ptr.reset();
-        self.data.clear();
-    }
-
-    pub fn entity_data_index(&self, entity: E) -> Option<usize> {
-        self.ptr.entity_data_index(entity)
-    }
-
-    pub fn drain_all(&mut self) -> std::vec::Drain<'_, T> {
-        self.ptr.reset();
-        self.data.drain(..)
-    }
-
-    pub fn iter(&self) -> DataStoreIter<'_, T> {
-        DataStoreIter::new(self)
-    }
-
-    pub fn iter_mut(&mut self) -> DataStoreIterMut<'_, T> {
-        DataStoreIterMut::new(self)
-    }
-
-    pub fn iter_data_index(&self) -> impl Iterator<Item = &usize> {
-        self.ptr.iter_data_index()
-    }
-
-    pub fn iter_map(&self) -> MappedDataStoreIter<'_, E, T> {
-        MappedDataStoreIter::new(self)
-    }
-}
-
-// pub struct DataTable<E: Entity, T> {
-//     ptr: DataPointer<E>,
-//     rows: std::collections::HashMap<std::any::TypeId, Vec<T>>,
-// }
-
-/*
-#########################################################
-#                                                       #
-#                      DataPointer                      #
-#                                                       #
-#########################################################
-*/
 
 pub struct DataPointer<E: Entity> {
     pub(crate) ptr: Vec<usize>,
@@ -127,6 +12,91 @@ impl<E: Entity> Default for DataPointer<E> {
         Self {
             ptr: Vec::new(),
             marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<E: Entity> DataPointer<E> {
+    pub fn get_any_ref<'a, T: 'static>(&self, entity: E, data: &'a [Box<dyn Any>]) -> Option<&'a T> {
+        let entity_index = entity.index();
+        self.ptr
+            .get(entity_index)
+            .and_then(|&idx| {
+                (idx != usize::MAX)
+                    .then_some(data[idx].downcast_ref()?)
+            })
+    }
+
+    pub fn get_any_mut<'a, T: 'static>(&self, entity: E, data: &'a mut [Box<dyn Any>]) -> Option<&'a mut T> {
+        let entity_index = entity.index();
+        self.ptr
+            .get(entity_index)
+            .and_then(|&idx| {
+                (idx != usize::MAX)
+                    .then_some(data[idx].downcast_mut()?)
+            })
+    }
+
+    pub fn with_any<F, T>(&self, entity: E, f: F) -> Option<T>
+    where
+        F: FnOnce(usize) -> T,
+        T: 'static,
+    {
+        let entity_index = entity.index();
+        self.ptr
+            .get(entity_index)
+            .and_then(|&idx| {
+                (idx != usize::MAX).then_some(f(idx))
+            })
+    }
+
+    pub fn insert_any<T: Any + 'static>(&mut self, entity: E, value: T, data: &mut Vec<Box<dyn Any>>) {
+        let entity_index = entity.index();
+
+        if let Some(index) = self.ptr.get(entity_index)
+            && index != &usize::MAX
+        {
+            data[*index] = Box::new(value);
+            return;
+        }
+
+        if entity_index >= self.ptr.len() {
+            self.resize(entity_index);
+        }
+
+        let data_index = data.len();
+        data.push(Box::new(value));
+        self.ptr[entity_index] = data_index;
+    }
+
+    pub fn remove_any<T: 'static>(&mut self, entity: E, data: &mut Vec<Box<dyn Any>>) -> Option<T> {
+        if data.is_empty() { return None }
+
+        let entity_index = entity.index();
+
+        if let Some(idx) = self.ptr.get(entity_index)
+            && idx != &usize::MAX
+        {
+            let swap_index = data.len() - 1;
+            let data_index_to_remove = self.ptr[entity_index];
+
+            // FIXME: maybe there's a better way than this?
+            // also try to resize when a certain capacity-to-len ratio exceeded
+            self.ptr
+                .iter()
+                .enumerate()
+                .filter_map(|(i, id)| (*id < usize::MAX).then_some(i))
+                .find(|i| *i == swap_index)
+                .and_then(|pos| {
+                    self.ptr[pos] = data_index_to_remove;
+                    self.ptr[entity_index] = usize::MAX;
+                    data.swap_remove(data_index_to_remove)
+                        .downcast::<T>()
+                        .ok()
+                        .map(|b| *b)
+                })
+        } else {
+            None
         }
     }
 }
@@ -175,7 +145,7 @@ impl<E: Entity> DataPointer<E> {
         }
 
         if entity_index >= self.ptr.len() {
-            self.ptr.resize(entity_index + 1, usize::MAX);
+            self.resize(entity_index);
         }
 
         let data_index = data.len();
@@ -223,6 +193,10 @@ impl<E: Entity> DataPointer<E> {
         }
     }
 
+    fn resize(&mut self, new_len: usize) {
+        self.ptr.resize(new_len + 4, usize::MAX);
+    }
+
     pub fn reset(&mut self) {
         self.ptr.clear();
         self.ptr.shrink_to_fit();
@@ -255,7 +229,9 @@ impl<E: Entity> DataPointer<E> {
 
 #[cfg(test)]
 mod store_test {
-    use super::DataStore;
+    use crate::data::dense_row::DenseRow;
+    use crate::data::table::Table;
+    use crate::data::query::Query;
     use crate::{EntityManager, Entity, create_entity};
 
     create_entity! { TestId }
@@ -275,7 +251,7 @@ mod store_test {
     fn insert_get() {
         const NUM: usize = 10;
         let ids = setup_entity(NUM);
-        let mut store = DataStore::<TestId, String>::with_capacity(NUM);
+        let mut store = DenseRow::<TestId, String>::with_capacity(NUM);
 
         for i in 0..NUM {
             store.insert(ids[i], (i + 1).to_string());
@@ -290,7 +266,7 @@ mod store_test {
     fn remove() {
         const NUM: usize = 10;
         let ids = setup_entity(NUM);
-        let mut store = DataStore::<TestId, ()>::with_capacity(NUM);
+        let mut store = DenseRow::<TestId, ()>::with_capacity(NUM);
 
         for i in 0..NUM {
             store.insert(ids[NUM - 1 - i], ());
@@ -311,7 +287,7 @@ mod store_test {
     fn iter() {
         const NUM: usize = 10;
         let ids = setup_entity(NUM);
-        let mut store = DataStore::<TestId, String>::with_capacity(NUM);
+        let mut store = DenseRow::<TestId, String>::with_capacity(NUM);
 
         for i in 0..NUM {
             store.insert(ids[NUM - 1 - i], i.to_string());
@@ -319,7 +295,21 @@ mod store_test {
 
         let count = store.iter().count();
         assert_eq!(count, store.len());
-        // eprintln!("{store:#?}");
+    }
+
+    #[test]
+    fn multi_store_query() {
+        const NUM: usize = 10;
+        let mut ms = Table::with_capacity(NUM);
+        let ids = setup_entity(NUM);
+        for i in 0..NUM {
+            let id = ids[i];
+            ms.insert(id, i);
+            ms.insert(id, format!("{id:?}"));
+        }
+        let query_usize = Query::<TestId, usize>::new(&ms);
+        let query_string = Query::<TestId, String>::new(&ms);
+        assert_eq!(query_string.into_iter().count(), query_usize.into_iter().count());
     }
 
     // #[test]

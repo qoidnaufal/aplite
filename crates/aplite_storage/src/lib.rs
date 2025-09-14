@@ -1,10 +1,9 @@
-mod data_store;
+mod data;
 mod entity;
 mod indexmap;
 mod iterator;
 mod tree;
 
-pub use data_store::*;
 pub use entity::{Entity, EntityManager};
 pub use indexmap::{
     IndexMap,
@@ -14,4 +13,10 @@ pub use tree::{
     Tree,
     TreeError,
     Node,
+};
+pub use data::{
+    sparse_index::DataPointer,
+    dense_row::DenseRow,
+    table::Table,
+    query::{Query, Component},
 };

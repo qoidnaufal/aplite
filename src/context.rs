@@ -1,7 +1,7 @@
 use aplite_reactive::*;
 use aplite_renderer::Renderer;
 use aplite_types::Vec2f;
-use aplite_storage::{EntityManager, Tree};
+use aplite_storage::{EntityManager, Tree, Table};
 
 use crate::view::View;
 use crate::widget::{CALLBACKS, Widget, WidgetId, WidgetEvent};
@@ -13,8 +13,9 @@ use crate::state::NODE_STORAGE;
 
 pub struct Context {
     pub(crate) view: View,
-    pub(crate) id_manager: EntityManager<WidgetId>,
+    pub(crate) entity_manager: EntityManager<WidgetId>,
     pub(crate) tree: Tree<WidgetId>,
+    pub(crate) data: Table<WidgetId>,
     pub(crate) dirty: Signal<bool>,
     pub(crate) cursor: Cursor,
     pending_update: Vec<WidgetId>,
@@ -30,12 +31,17 @@ impl Context {
     pub(crate) fn new(view: View) -> Self {
         Self {
             view,
-            id_manager: EntityManager::default(),
+            entity_manager: EntityManager::default(),
             tree: Tree::default(),
+            data: Table::default(),
             cursor: Cursor::default(),
             dirty: Signal::new(false),
             pending_update: Vec::new(),
         }
+    }
+
+    pub(crate) fn create_id(&mut self) -> WidgetId {
+        self.entity_manager.create()
     }
 
     pub(crate) fn toggle_dirty(&self) {

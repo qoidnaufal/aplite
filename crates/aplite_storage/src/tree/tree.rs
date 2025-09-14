@@ -185,6 +185,35 @@ impl<E: Entity> Tree<E> {
         self.try_insert(entity, E::root()).unwrap()
     }
 
+    pub fn add_child(&mut self, entity: E, child: E) {
+        self.try_add_child(entity, child).unwrap()
+    }
+
+    pub fn try_add_child(&mut self, entity: E, child: E) -> Result<(), TreeError> {
+        if entity.index() >= self.parent.len() { return Err(TreeError::InvalidEntity) }
+
+        let child_index = child.index();
+
+        if child_index >= self.parent.len() {
+            self.resize(child_index);
+        }
+
+        if let Some(last) = self.get_last_child(entity) {
+            let mut current = last;
+            while let Some(next) = self.get_next_sibling(current) {
+                current = next;
+            }
+
+            self.parent[child_index] = Some(entity);
+            self.next_sibling[current.index()] = Some(entity);
+            self.prev_sibling[child_index] = Some(current);
+        } else {
+            self.first_child[entity.index()] = Some(entity);
+        }
+
+        Ok(())
+    }
+
     /// Add a sibling to an entity. This will check if the provided entity is a valid one or not.
     /// If the returned result is [`TreeError`], this means the provided entity is either not registered,
     /// or is actually a root. Maybe you want to add a root instead

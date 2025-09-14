@@ -522,3 +522,80 @@ impl Widget for CircleWidget {
         self.node
     }
 }
+
+// -------------------------------------
+
+mod alt_widget {
+    use aplite_types::*;
+    use aplite_renderer::Shape;
+    use aplite_storage::{Table, Tree, EntityManager, Component};
+    use super::WidgetId;
+
+    pub struct Context {
+        entity_manager: EntityManager<WidgetId>,
+        data: Table<WidgetId>,
+        tree: Tree<WidgetId>,
+    }
+
+    impl Context {
+        fn component<T: Component>(&mut self, widget: &impl WidgetAlt, component: T) -> &mut Self {
+            component.register(widget.id(), &mut self.data);
+            self
+        }
+
+        fn child(&mut self, id: WidgetId, child: WidgetId) -> &mut Self {
+            self.tree.add_child(id, child);
+            self
+        }
+    }
+
+    pub trait WidgetAlt: Sized {
+        fn id(&self) -> WidgetId;
+
+        fn child<F>(self, cx: &mut Context, child: F) -> Self
+        where
+            F: FnOnce(&mut Context)
+        {
+            child(cx);
+            self
+        }
+
+        fn build(self, cx: &mut Context) {}
+    }
+
+    pub struct TestWidget {
+        id: WidgetId,
+    }
+
+    impl TestWidget {
+        pub fn new(cx: &mut Context) -> Self {
+            Self {
+                id: cx.entity_manager.create()
+            }
+        }
+    }
+
+    impl WidgetAlt for TestWidget {
+        fn id(&self) -> WidgetId {
+            self.id
+        }
+    }
+
+    fn branch1(cx: &mut Context) {
+        let branch = TestWidget::new(cx);
+        cx.component(&branch, (Size::new(200., 100.), Shape::RoundedRect, Rgba::GREEN));
+    }
+
+    fn branch2(cx: &mut Context) {
+        let branch = TestWidget::new(cx);
+        cx.component(&branch, (Size::new(200., 100.), Shape::RoundedRect, Rgba::BLUE));
+    }
+
+    fn app(cx: &mut Context) {
+        let widget = TestWidget::new(cx);
+        cx.component(&widget, (Size::new(200., 100.), Shape::RoundedRect, Rgba::RED));
+
+        widget.child(cx, branch1)
+            .child(cx, branch2);
+    }
+}

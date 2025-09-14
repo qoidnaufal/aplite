@@ -1,5 +1,5 @@
 use aplite_types::{Rect, Vec2f, Size};
-use aplite_storage::{DataPointer, DataStore, Tree};
+use aplite_storage::{DataPointer, DenseRow, Tree};
 
 use crate::state::{WidgetState, AspectRatio, Flag};
 use crate::widget::{Widget, WidgetId};
@@ -280,7 +280,7 @@ pub(crate) trait Layout: Widget + Sized + 'static {
 }
 
 #[allow(unused)]
-mod layout_state {
+pub(crate) mod layout_state {
     use super::*;
 
     pub(crate) struct LayoutRules {
@@ -300,7 +300,7 @@ mod layout_state {
     }
 
     pub(crate) struct LayoutState {
-        ptr: DataPointer<WidgetId>,
+        pub(crate) ptr: DataPointer<WidgetId>,
 
         pub(crate) position: Vec<Vec2f>,
         pub(crate) size: Vec<Size>,
@@ -314,46 +314,26 @@ mod layout_state {
         pub(crate) min_height: Vec<Option<f32>>,
         pub(crate) max_height: Vec<Option<f32>>,
 
-        pub(crate) rules: DataStore<WidgetId, LayoutRules>,
-    }
-
-    pub(crate) fn update_fixed_unit(size: &mut [Size], width: &[Unit], height: &[Unit], flags: &[Flag]) {
-        for ((size, (w, h)), flag) in size.iter_mut().zip(width.iter().zip(height)).zip(flags) {
-            if !flag.is_hidden() {
-                match w {
-                    Unit::Fixed(val) => size.width = *val,
-                    Unit::FitToChild | Unit::Grow => {},
-                };
-                match h {
-                    Unit::Fixed(val) => size.height = *val,
-                    Unit::FitToChild | Unit::Grow => {},
-                }
-            }
-        }
-    }
-
-    pub(crate) fn update_constraints(
-        size: &mut [Size],
-        min_w: &[Option<f32>],
-        max_w: &[Option<f32>],
-        min_h: &[Option<f32>],
-        max_h: &[Option<f32>],
-        flags: &[Flag]
-    ) {
-        for (((size, (min_w, max_w)), (min_h, max_h)), flag) in size.iter_mut()
-            .zip(min_w.iter().zip(max_w))
-            .zip(min_h.iter().zip(max_h))
-            .zip(flags)
-        {
-            if !flag.is_hidden() {
-                *size = size
-                    .adjust_on_min_constraints(*min_w, *min_h)
-                    .adjust_on_max_constraints(*max_w, *max_h);
-            }
-        }
+        pub(crate) rules: DenseRow<WidgetId, LayoutRules>,
     }
 
     impl LayoutState {
+        pub(crate) fn new() -> Self {
+            Self {
+                ptr: DataPointer::default(),
+                position: Vec::new(),
+                size: Vec::new(),
+                flag: Vec::new(),
+                width: Vec::new(),
+                min_width: Vec::new(),
+                max_width: Vec::new(),
+                height: Vec::new(),
+                min_height: Vec::new(),
+                max_height: Vec::new(),
+                rules: DenseRow::default(),
+            }
+        }
+
         pub(crate) fn calculate_layout(&mut self, tree: &Tree<WidgetId>, start: WidgetId) {
             self.update_fixed_unit();
 
@@ -522,5 +502,41 @@ mod layout_state {
         }
 
         pub(crate) fn update_alignment(&mut self) {}
+    }
+
+    pub(crate) fn update_fixed_unit(size: &mut [Size], width: &[Unit], height: &[Unit], flags: &[Flag]) {
+        for ((size, (w, h)), flag) in size.iter_mut().zip(width.iter().zip(height)).zip(flags) {
+            if !flag.is_hidden() {
+                match w {
+                    Unit::Fixed(val) => size.width = *val,
+                    Unit::FitToChild | Unit::Grow => {},
+                };
+                match h {
+                    Unit::Fixed(val) => size.height = *val,
+                    Unit::FitToChild | Unit::Grow => {},
+                }
+            }
+        }
+    }
+
+    pub(crate) fn update_constraints(
+        size: &mut [Size],
+        min_w: &[Option<f32>],
+        max_w: &[Option<f32>],
+        min_h: &[Option<f32>],
+        max_h: &[Option<f32>],
+        flags: &[Flag]
+    ) {
+        for (((size, (min_w, max_w)), (min_h, max_h)), flag) in size.iter_mut()
+            .zip(min_w.iter().zip(max_w))
+            .zip(min_h.iter().zip(max_h))
+            .zip(flags)
+        {
+            if !flag.is_hidden() {
+                *size = size
+                    .adjust_on_min_constraints(*min_w, *min_h)
+                    .adjust_on_max_constraints(*max_w, *max_h);
+            }
+        }
     }
 }
