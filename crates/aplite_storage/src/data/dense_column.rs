@@ -9,12 +9,12 @@ use crate::iterator::{
 /// A dense data storage which is guaranteed even after removal.
 /// Doesn't facilitate the creation of [`Entity`], unlike [`IndexMap`](crate::index_map::IndexMap).
 /// You'll need the assistance of [`EntityManager`](crate::entity::EntityManager) to create the key for indexing data.
-pub struct DenseRow<E: Entity, T> {
+pub struct DenseColumn<E: Entity, T> {
     pub(crate) ptr: DataPointer<E>,
     pub(crate) data: Vec<T>,
 }
 
-impl<E: Entity, T> Default for DenseRow<E, T> {
+impl<E: Entity, T> Default for DenseColumn<E, T> {
     fn default() -> Self {
         Self {
             ptr: DataPointer::default(),
@@ -23,7 +23,7 @@ impl<E: Entity, T> Default for DenseRow<E, T> {
     }
 }
 
-impl<E: crate::Entity, T: std::fmt::Debug> std::fmt::Debug for DenseRow<E, T> {
+impl<E: crate::Entity, T: std::fmt::Debug> std::fmt::Debug for DenseColumn<E, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_map()
             .entries(self.iter())
@@ -31,7 +31,7 @@ impl<E: crate::Entity, T: std::fmt::Debug> std::fmt::Debug for DenseRow<E, T> {
     }
 }
 
-impl<E: Entity, T> DenseRow<E, T> {
+impl<E: Entity, T> DenseColumn<E, T> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             ptr: DataPointer::default(),

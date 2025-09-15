@@ -229,9 +229,9 @@ impl<E: Entity> DataPointer<E> {
 
 #[cfg(test)]
 mod store_test {
-    use crate::data::dense_row::DenseRow;
+    use crate::data::dense_column::DenseColumn;
     use crate::data::table::Table;
-    use crate::data::query::Query;
+    use crate::data::query::QueryOne;
     use crate::{EntityManager, Entity, create_entity};
 
     create_entity! { TestId }
@@ -251,7 +251,7 @@ mod store_test {
     fn insert_get() {
         const NUM: usize = 10;
         let ids = setup_entity(NUM);
-        let mut store = DenseRow::<TestId, String>::with_capacity(NUM);
+        let mut store = DenseColumn::<TestId, String>::with_capacity(NUM);
 
         for i in 0..NUM {
             store.insert(ids[i], (i + 1).to_string());
@@ -266,7 +266,7 @@ mod store_test {
     fn remove() {
         const NUM: usize = 10;
         let ids = setup_entity(NUM);
-        let mut store = DenseRow::<TestId, ()>::with_capacity(NUM);
+        let mut store = DenseColumn::<TestId, ()>::with_capacity(NUM);
 
         for i in 0..NUM {
             store.insert(ids[NUM - 1 - i], ());
@@ -287,7 +287,7 @@ mod store_test {
     fn iter() {
         const NUM: usize = 10;
         let ids = setup_entity(NUM);
-        let mut store = DenseRow::<TestId, String>::with_capacity(NUM);
+        let mut store = DenseColumn::<TestId, String>::with_capacity(NUM);
 
         for i in 0..NUM {
             store.insert(ids[NUM - 1 - i], i.to_string());
@@ -307,8 +307,8 @@ mod store_test {
             ms.insert(id, i);
             ms.insert(id, format!("{id:?}"));
         }
-        let query_usize = Query::<TestId, usize>::new(&ms);
-        let query_string = Query::<TestId, String>::new(&ms);
+        let query_usize = QueryOne::<TestId, usize>::new(&ms);
+        let query_string = QueryOne::<TestId, String>::new(&ms);
         assert_eq!(query_string.into_iter().count(), query_usize.into_iter().count());
     }
 

@@ -2,13 +2,13 @@ use std::collections::HashMap;
 use std::any::{Any, TypeId};
 use std::marker::PhantomData;
 
-use super::dense_row::DenseRow;
-use super::query::{Query, FetchData, QueryData};
+use super::dense_column::DenseColumn;
+use super::query::{Query, QueryOne, QueryData, FetchData};
 
 use crate::entity::Entity;
 
 pub struct Table<E: Entity> {
-    pub(crate) inner: HashMap<TypeId, DenseRow<E, Box<dyn Any>>>,
+    pub(crate) inner: HashMap<TypeId, DenseColumn<E, Box<dyn Any>>>,
 }
 
 impl<E: Entity> Default for Table<E> {
@@ -46,17 +46,19 @@ impl<E: Entity> Table<E> {
             })
     }
 
-    pub fn query<T: 'static>(&self) -> Query<'_, E, T> {
-        let type_id = TypeId::of::<T>();
-        Query {
-            inner: self.inner.get(&type_id).expect("Storage must have been initialized"),
-            marker: PhantomData
-        }
-        
+    pub fn fetch<'a, T: FetchData<'a, E>>(&'a self, entity: E) -> Option<<T as FetchData<'a, E>>::Item> {
+        T::fetch(entity, self)
     }
 
-    pub fn fetch_data<'a, T: FetchData<'a>>(&'a self, entity: E) -> <T as FetchData<'a>>::Item {
-        T::fetch(entity, self)
+    pub fn query_one<T: 'static>(&self) -> QueryOne<'_, E, T> {
+        QueryOne::new(self)
+    }
+
+    pub fn query<'a, Qd: QueryData<'a>>(&'a self) -> Query<'a, Qd> {
+        Query {
+            inner: Qd::query(self),
+            marker: PhantomData,
+        }
     }
 }
 
@@ -82,16 +84,29 @@ mod table_test {
     }
 
     #[test]
-    fn insert_get() {
+    fn query_one() {
+        let mut cx = Context::default();
+        for i in 0..10 {
+            cx.insert((i.to_string(),));
+        }
+        let query_one = cx.data.query_one::<String>();
+        assert_eq!(query_one.count(), 10);
+    }
+
+    #[test]
+    fn query() {
         let mut cx = Context::default();
         for i in 0..10 {
             cx.insert((i.to_string(), i, i as f32));
         }
-        let query_one = cx.data.query::<String>();
-        query_one.into_iter().for_each(|q| println!("{q}"));
 
-        // let query_two = cx.data.query::<(String, i32)>();
-        // query_two.into_iter().for_each(|q| println!("{q:?}"));
+        let query = cx.data.query::<(String, f32, i32)>();
+
+        for (s, f, i) in query {
+            assert!(std::any::type_name_of_val(s).contains("String"));
+            assert!(std::any::type_name_of_val(f).contains("f32"));
+            assert!(std::any::type_name_of_val(i).contains("i32"));
+        }
     }
 
     #[test]
@@ -100,8 +115,12 @@ mod table_test {
         for i in 0..10 {
             cx.insert((i.to_string(), i, i as f32));
         }
-        let fetch_type = <(String, f32)>::fetch(TestId(1), &cx.data);
-        let fetch_table = cx.data.fetch_data::<(String, f32)>(TestId(1));
-        assert_eq!(fetch_type, fetch_table);
+
+        let fetch_one = <(i32,)>::fetch(TestId(3), &cx.data);
+        assert!(fetch_one.is_some());
+
+        let fetch_many_from_type = <(String, f32)>::fetch(TestId(1), &cx.data);
+        let fetch_many_from_table = cx.data.fetch::<(String, f32)>(TestId(1));
+        assert_eq!(fetch_many_from_type, fetch_many_from_table);
     }
 }

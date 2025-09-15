@@ -16,7 +16,7 @@ pub use tree::{
 };
 pub use data::{
     sparse_index::DataPointer,
-    dense_row::DenseRow,
+    dense_column::DenseColumn,
     table::Table,
-    query::{Query, Component},
+    query::{QueryOne, Component},
 };

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
 use aplite_types::{Rect, Size, Vec2f, ImageRef};
-use aplite_storage::{DenseRow, Tree, EntityManager, Entity, create_entity};
+use aplite_storage::{DenseColumn, Tree, EntityManager, Entity, create_entity};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Uv {
@@ -229,7 +229,7 @@ struct AtlasAllocator {
     bound: Rect,
     last_parent: Option<AtlasId>,
     id_manager: EntityManager<AtlasId>,
-    allocated: DenseRow<AtlasId, Rect>,
+    allocated: DenseColumn<AtlasId, Rect>,
     tree: Tree<AtlasId>,
 }
 
@@ -239,7 +239,7 @@ impl AtlasAllocator {
             bound: Rect::from_size(size.into()),
             last_parent: None,
             id_manager: EntityManager::default(),
-            allocated: DenseRow::default(),
+            allocated: DenseColumn::default(),
             tree: Tree::default(),
         }
     }

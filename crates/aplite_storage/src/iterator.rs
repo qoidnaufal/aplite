@@ -5,7 +5,7 @@ use crate::entity::Entity;
 use crate::tree::{Tree, Node};
 use crate::indexmap::slot::{Slot, Content};
 use crate::indexmap::IndexMap;
-use crate::data::dense_row::DenseRow;
+use crate::data::dense_column::DenseColumn;
 
 /*
 #########################################################
@@ -427,7 +427,7 @@ pub struct DataStoreIter<'a, T> {
 }
 
 impl<'a, T> DataStoreIter<'a, T> {
-    pub(crate) fn new<E: Entity>(ds: &'a DenseRow<E, T>) -> Self {
+    pub(crate) fn new<E: Entity>(ds: &'a DenseColumn<E, T>) -> Self {
         let inner = ds.ptr.ptr
             .iter()
             .filter(filter_data_store as fn(&&usize) -> bool)
@@ -456,7 +456,7 @@ pub struct MappedDataStoreIter<'a, E: Entity, T> {
 }
 
 impl<'a, E: Entity, T> MappedDataStoreIter<'a, E, T> {
-    pub(crate) fn new(ds: &'a DenseRow<E, T>) -> Self {
+    pub(crate) fn new(ds: &'a DenseColumn<E, T>) -> Self {
         let inner = ds.ptr.ptr
             .iter()
             .enumerate()
@@ -486,7 +486,7 @@ pub struct DataStoreIterMut<'a, T> {
 }
 
 impl<'a, T> DataStoreIterMut<'a, T> {
-    pub(crate) fn new<E: Entity>(ds: &'a mut DenseRow<E, T>) -> Self {
+    pub(crate) fn new<E: Entity>(ds: &'a mut DenseColumn<E, T>) -> Self {
         let inner = ds.ptr.ptr
             .iter()
             .filter(filter_data_store_mut as fn(&&usize) -> bool)

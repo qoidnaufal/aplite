@@ -1,5 +1,5 @@
 use aplite_types::{Rect, Vec2f, Size};
-use aplite_storage::{DataPointer, DenseRow, Tree};
+use aplite_storage::{DataPointer, DenseColumn, Tree};
 
 use crate::state::{WidgetState, AspectRatio, Flag};
 use crate::widget::{Widget, WidgetId};
@@ -314,7 +314,7 @@ pub(crate) mod layout_state {
         pub(crate) min_height: Vec<Option<f32>>,
         pub(crate) max_height: Vec<Option<f32>>,
 
-        pub(crate) rules: DenseRow<WidgetId, LayoutRules>,
+        pub(crate) rules: DenseColumn<WidgetId, LayoutRules>,
     }
 
     impl LayoutState {
@@ -330,7 +330,7 @@ pub(crate) mod layout_state {
                 height: Vec::new(),
                 min_height: Vec::new(),
                 max_height: Vec::new(),
-                rules: DenseRow::default(),
+                rules: DenseColumn::default(),
             }
         }
 
