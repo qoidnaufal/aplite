@@ -1,5 +1,5 @@
 use aplite_types::{Rect, Vec2f, Size};
-use aplite_storage::{DataPointer, DenseColumn, Tree};
+use aplite_storage::{SparseIndex, DenseColumn, Tree};
 
 use crate::state::{WidgetState, AspectRatio, Flag};
 use crate::widget::{Widget, WidgetId};
@@ -300,7 +300,7 @@ pub(crate) mod layout_state {
     }
 
     pub(crate) struct LayoutState {
-        pub(crate) ptr: DataPointer<WidgetId>,
+        pub(crate) ptr: SparseIndex<WidgetId>,
 
         pub(crate) position: Vec<Vec2f>,
         pub(crate) size: Vec<Size>,
@@ -320,7 +320,7 @@ pub(crate) mod layout_state {
     impl LayoutState {
         pub(crate) fn new() -> Self {
             Self {
-                ptr: DataPointer::default(),
+                ptr: SparseIndex::default(),
                 position: Vec::new(),
                 size: Vec::new(),
                 flag: Vec::new(),
@@ -334,7 +334,7 @@ pub(crate) mod layout_state {
             }
         }
 
-        pub(crate) fn calculate_layout(&mut self, tree: &Tree<WidgetId>, start: WidgetId) {
+        pub(crate) fn calculate_layout(&mut self, tree: &Tree<WidgetId>, start: &WidgetId) {
             self.update_fixed_unit();
 
             self.calculate_size(tree, start);
@@ -378,7 +378,7 @@ pub(crate) mod layout_state {
                 });
         }
 
-        pub(crate) fn update_growth_unit(&mut self, tree: &Tree<WidgetId>, start: WidgetId) {
+        pub(crate) fn update_growth_unit(&mut self, tree: &Tree<WidgetId>, start: &WidgetId) {
             tree.iter_breadth(start)
                 .filter(|id| !self.ptr.get(*id, &self.flag).unwrap().is_hidden())
                 .for_each(|id| {
@@ -424,7 +424,7 @@ pub(crate) mod layout_state {
                 });
         }
 
-        pub(crate) fn calculate_size(&mut self, tree: &Tree<WidgetId>, start: WidgetId) {
+        pub(crate) fn calculate_size(&mut self, tree: &Tree<WidgetId>, start: &WidgetId) {
             tree.iter_breadth(start)
                 .rev()
                 .filter(|id| !self.ptr.get(*id, &self.flag).unwrap().is_hidden())
@@ -460,7 +460,7 @@ pub(crate) mod layout_state {
                 });
         }
 
-        pub(crate) fn calculate_position(&mut self, tree: &Tree<WidgetId>, start: WidgetId) {
+        pub(crate) fn calculate_position(&mut self, tree: &Tree<WidgetId>, start: &WidgetId) {
             tree.iter_breadth(start)
                 .filter(|id| !self.ptr.get(*id, &self.flag).unwrap().is_hidden())
                 .for_each(|id| {

@@ -3,7 +3,7 @@ use std::any::{Any, TypeId};
 use std::marker::PhantomData;
 
 use super::dense_column::DenseColumn;
-use super::query::{Query, QueryOne, QueryData, FetchData};
+use super::component::{Query, QueryOne, QueryData, FetchData};
 
 use crate::entity::Entity;
 
@@ -46,7 +46,7 @@ impl<E: Entity> Table<E> {
             })
     }
 
-    pub fn fetch<'a, T: FetchData<'a, E>>(&'a self, entity: E) -> Option<<T as FetchData<'a, E>>::Item> {
+    pub fn fetch<'a, T: FetchData<'a>>(&'a self, entity: &'a E) -> Option<<T as FetchData<'a>>::Item> {
         T::fetch(entity, self)
     }
 
@@ -116,11 +116,11 @@ mod table_test {
             cx.insert((i.to_string(), i, i as f32));
         }
 
-        let fetch_one = <(i32,)>::fetch(TestId(3), &cx.data);
+        let fetch_one = <(i32,)>::fetch(&TestId(3), &cx.data);
         assert!(fetch_one.is_some());
 
-        let fetch_many_from_type = <(String, f32)>::fetch(TestId(1), &cx.data);
-        let fetch_many_from_table = cx.data.fetch::<(String, f32)>(TestId(1));
+        let fetch_many_from_type = <(String, f32)>::fetch(&TestId(1), &cx.data);
+        let fetch_many_from_table = cx.data.fetch::<(String, f32)>(&TestId(1));
         assert_eq!(fetch_many_from_type, fetch_many_from_table);
     }
 }

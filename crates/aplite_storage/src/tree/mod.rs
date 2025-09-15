@@ -1,5 +1,2 @@
-mod node;
-mod tree;
-
-pub use tree::{Tree, TreeError};
-pub use node::Node;
+pub(crate) mod node;
+pub(crate) mod tree;

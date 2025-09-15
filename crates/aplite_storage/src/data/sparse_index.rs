@@ -2,12 +2,12 @@ use std::any::Any;
 
 use crate::entity::Entity;
 
-pub struct DataPointer<E: Entity> {
+pub struct SparseIndex<E: Entity> {
     pub(crate) ptr: Vec<usize>,
     marker: std::marker::PhantomData<E>,
 }
 
-impl<E: Entity> Default for DataPointer<E> {
+impl<E: Entity> Default for SparseIndex<E> {
     fn default() -> Self {
         Self {
             ptr: Vec::new(),
@@ -16,7 +16,7 @@ impl<E: Entity> Default for DataPointer<E> {
     }
 }
 
-impl<E: Entity> DataPointer<E> {
+impl<E: Entity> SparseIndex<E> {
     pub fn get_any_ref<'a, T: 'static>(&self, entity: E, data: &'a [Box<dyn Any>]) -> Option<&'a T> {
         let entity_index = entity.index();
         self.ptr
@@ -101,8 +101,8 @@ impl<E: Entity> DataPointer<E> {
     }
 }
 
-impl<E: Entity> DataPointer<E> {
-    pub fn get<'a, T>(&self, entity: E, data: &'a [T]) -> Option<&'a T> {
+impl<E: Entity> SparseIndex<E> {
+    pub fn get<'a, T>(&self, entity: &'a E, data: &'a [T]) -> Option<&'a T> {
         let entity_index = entity.index();
         self.ptr
             .get(entity_index)
@@ -112,7 +112,7 @@ impl<E: Entity> DataPointer<E> {
             })
     }
 
-    pub fn get_mut<'a, T>(&self, entity: E, data: &'a mut [T]) -> Option<&'a mut T> {
+    pub fn get_mut<'a, T>(&self, entity: &'a E, data: &'a mut [T]) -> Option<&'a mut T> {
         let entity_index = entity.index();
         self.ptr
             .get(entity_index)
@@ -122,7 +122,7 @@ impl<E: Entity> DataPointer<E> {
             })
     }
 
-    pub fn with<F, T>(&self, entity: E, f: F) -> Option<T>
+    pub fn with<F, T>(&self, entity: &E, f: F) -> Option<T>
     where
         F: FnOnce(usize) -> T
     {
@@ -231,7 +231,7 @@ impl<E: Entity> DataPointer<E> {
 mod store_test {
     use crate::data::dense_column::DenseColumn;
     use crate::data::table::Table;
-    use crate::data::query::QueryOne;
+    use crate::data::component::QueryOne;
     use crate::{EntityManager, Entity, create_entity};
 
     create_entity! { TestId }
@@ -257,7 +257,7 @@ mod store_test {
             store.insert(ids[i], (i + 1).to_string());
         }
 
-        let exist = store.get(TestId(5));
+        let exist = store.get(&TestId(5));
         assert!(exist.is_some());
         assert_eq!(exist.unwrap(), "5");
     }

@@ -5,11 +5,17 @@ use std::iter::FilterMap;
 use super::table::Table;
 
 use crate::entity::Entity;
-use crate::iterator::DataStoreIter;
+use crate::data::dense_column::DenseColumnIter;
+
+/// Query on many component type
+pub struct Query<'a, Qd: QueryData<'a>> {
+    pub(crate) inner: Option<Qd::Iter>,
+    pub(crate) marker: PhantomData<fn() -> &'a Qd>,
+}
 
 /// Query (and iterate) one component type
 pub struct QueryOne<'a, E: Entity, T> {
-    pub(crate) inner: Option<FilterMap<DataStoreIter<'a, Box<dyn Any>>, FnDownCast<'a, T>>>,
+    pub(crate) inner: Option<FilteredQuery<'a, T>>,
     pub(crate) marker: PhantomData<E>,
 }
 
@@ -18,6 +24,7 @@ fn downcast<'a, T: 'static>((_, b): (&usize, &'a Box<dyn Any>)) -> Option<&'a T>
 }
 
 type FnDownCast<'a, T> = fn((&usize, &'a Box<dyn Any>)) -> Option<&'a T>;
+type FilteredQuery<'a, T> = FilterMap<DenseColumnIter<'a, Box<dyn Any>>, FnDownCast<'a, T>>;
 
 impl<'a, E: Entity, T: 'static> QueryOne<'a, E, T> {
     pub(crate) fn new(table: &'a Table<E>) -> Self {
@@ -40,20 +47,14 @@ impl<'a, E: Entity, T: 'static> Iterator for QueryOne<'a, E, T> {
     }
 }
 
-/// Query on many component type
-pub struct Query<'a, Qd: QueryData<'a>> {
-    pub(crate) inner: Option<Qd::Iter>,
-    pub(crate) marker: PhantomData<fn() -> &'a Qd>,
-}
-
 pub trait Component: Sized + 'static {
     fn register<E: Entity>(self, entity: E, table: &mut Table<E>);
 }
 
-pub trait FetchData<'a, E: Entity> {
+pub trait FetchData<'a> {
     type Item;
 
-    fn fetch(entity: E, source: &'a Table<E>) -> Option<Self::Item>;
+    fn fetch<E: Entity>(entity: &'a E, source: &'a Table<E>) -> Option<Self::Item>;
 }
 
 pub trait QueryData<'a>: Sized {
@@ -72,10 +73,10 @@ macro_rules! component {
             }
         }
 
-        impl<'a, En: Entity, $($name: 'static),*> FetchData<'a, En> for ($($name,)*) {
+        impl<'a, $($name: 'static),*> FetchData<'a> for ($($name,)*) {
             type Item = ($(&'a $name,)*);
 
-            fn fetch(entity: En, source: &'a Table<En>) -> Option<Self::Item> {
+            fn fetch<En: Entity>(entity: &'a En, source: &'a Table<En>) -> Option<Self::Item> {
                 Some(($(
                     source.inner
                         .get(&std::any::TypeId::of::<$name>())
@@ -88,7 +89,7 @@ macro_rules! component {
         }
 
         impl<'a, $($name: 'static),*> QueryData<'a> for ($($name,)*) {
-            type Iter = ($(FilterMap<DataStoreIter<'a, Box<dyn std::any::Any>>, FnDownCast<'a, $name>>,)*);
+            type Iter = ($(FilterMap<DenseColumnIter<'a, Box<dyn std::any::Any>>, FnDownCast<'a, $name>>,)*);
 
             fn query<En: Entity>(source: &'a Table<En>) -> Option<Self::Iter> {
                 Some(($(

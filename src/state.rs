@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use aplite_renderer::Shape;
-use aplite_storage::DataPointer;
+use aplite_storage::SparseIndex;
 use aplite_types::{
     Matrix3x2,
     Rect,
@@ -22,7 +22,7 @@ thread_local! {
 }
 
 pub(crate) struct CommonState {
-    pub(crate) ptr: DataPointer<WidgetId>,
+    pub(crate) ptr: SparseIndex<WidgetId>,
     pub(crate) rect: Vec<Rect>,
     pub(crate) transform: Vec<Matrix3x2>,
     pub(crate) flag: Vec<Flag>,

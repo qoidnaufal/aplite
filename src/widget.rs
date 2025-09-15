@@ -543,7 +543,7 @@ mod alt_widget {
             self
         }
 
-        fn child(&mut self, id: WidgetId, child: WidgetId) -> &mut Self {
+        fn child(&mut self, id: &WidgetId, child: WidgetId) -> &mut Self {
             self.tree.add_child(id, child);
             self
         }

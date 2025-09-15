@@ -10,13 +10,12 @@ pub use indexmap::{
     IndexMapError,
 };
 pub use tree::{
-    Tree,
-    TreeError,
-    Node,
+    tree::{Tree, TreeError},
+    node::{Node, NodeRef},
 };
 pub use data::{
-    sparse_index::DataPointer,
+    component::{QueryOne, Component},
     dense_column::DenseColumn,
+    sparse_index::SparseIndex,
     table::Table,
-    query::{QueryOne, Component},
 };
