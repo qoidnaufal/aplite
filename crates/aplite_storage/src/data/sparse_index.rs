@@ -17,7 +17,7 @@ impl<E: Entity> Default for SparseIndex<E> {
 }
 
 impl<E: Entity> SparseIndex<E> {
-    pub fn get_any_ref<'a, T: 'static>(&self, entity: E, data: &'a [Box<dyn Any>]) -> Option<&'a T> {
+    pub fn get_any_ref<'a, T: 'static>(&self, entity: &E, data: &'a [Box<dyn Any>]) -> Option<&'a T> {
         let entity_index = entity.index();
         self.ptr
             .get(entity_index)
@@ -27,7 +27,7 @@ impl<E: Entity> SparseIndex<E> {
             })
     }
 
-    pub fn get_any_mut<'a, T: 'static>(&self, entity: E, data: &'a mut [Box<dyn Any>]) -> Option<&'a mut T> {
+    pub fn get_any_mut<'a, T: 'static>(&self, entity: &E, data: &'a mut [Box<dyn Any>]) -> Option<&'a mut T> {
         let entity_index = entity.index();
         self.ptr
             .get(entity_index)
@@ -179,12 +179,12 @@ impl<E: Entity> SparseIndex<E> {
         }
     }
 
-    pub fn contains(&self, entity: E) -> bool {
+    pub fn contains(&self, entity: &E) -> bool {
         entity.index() <= self.ptr.len()
             && self.ptr[entity.index()] != usize::MAX
     }
 
-    pub fn entity_data_index(&self, entity: E) -> Option<usize> {
+    pub fn entity_data_index(&self, entity: &E) -> Option<usize> {
         if entity.index() < self.ptr.len() {
             let index = self.ptr[entity.index()];
             (index != usize::MAX).then_some(index)
@@ -272,11 +272,11 @@ mod store_test {
             store.insert(ids[NUM - 1 - i], ());
         }
 
-        let index = ids[0];
+        let index = &ids[0];
         let index_before_remove = store.entity_data_index(index);
         assert!(index_before_remove.is_some());
 
-        let removed = store.remove(index);
+        let removed = store.remove(*index);
         assert!(removed.is_some());
 
         let index_after_remove = store.entity_data_index(index);

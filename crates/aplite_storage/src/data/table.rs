@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::any::{Any, TypeId};
-use std::marker::PhantomData;
 
 use super::dense_column::DenseColumn;
 use super::component::{Query, QueryOne, QueryData, FetchData};
@@ -30,7 +29,7 @@ impl<E: Entity> Table<E> {
         data.insert(entity, Box::new(value));
     }
 
-    pub fn get<T: 'static>(&self, entity: E) -> Option<&T> {
+    pub fn get<T: 'static>(&self, entity: &E) -> Option<&T> {
         let type_id = TypeId::of::<T>();
         self.inner.get(&type_id)
             .and_then(|ds| {
@@ -38,7 +37,7 @@ impl<E: Entity> Table<E> {
             })
     }
 
-    pub fn get_mut<T: 'static>(&mut self, entity: E) -> Option<&mut T> {
+    pub fn get_mut<T: 'static>(&mut self, entity: &E) -> Option<&mut T> {
         let type_id = TypeId::of::<T>();
         self.inner.get_mut(&type_id)
             .and_then(|ds| {
@@ -46,8 +45,8 @@ impl<E: Entity> Table<E> {
             })
     }
 
-    pub fn fetch<'a, T: FetchData<'a>>(&'a self, entity: &'a E) -> Option<<T as FetchData<'a>>::Item> {
-        T::fetch(entity, self)
+    pub fn fetch<'a, Fd: FetchData<'a>>(&'a self, entity: &'a E) -> Option<<Fd as FetchData<'a>>::Item> {
+        Fd::fetch(entity, self)
     }
 
     pub fn query_one<T: 'static>(&self) -> QueryOne<'_, E, T> {
@@ -55,10 +54,7 @@ impl<E: Entity> Table<E> {
     }
 
     pub fn query<'a, Qd: QueryData<'a>>(&'a self) -> Query<'a, Qd> {
-        Query {
-            inner: Qd::query(self),
-            marker: PhantomData,
-        }
+        Query::new(self)
     }
 }
 

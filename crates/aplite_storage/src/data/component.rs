@@ -13,6 +13,15 @@ pub struct Query<'a, Qd: QueryData<'a>> {
     pub(crate) marker: PhantomData<fn() -> &'a Qd>,
 }
 
+impl<'a, Qd: QueryData<'a>> Query<'a, Qd> {
+    pub fn new<E: Entity>(source: &'a Table<E>) -> Self {
+        Self {
+            inner: Qd::query(source).ok(),
+            marker: PhantomData,
+        }
+    }
+}
+
 /// Query (and iterate) one component type
 pub struct QueryOne<'a, E: Entity, T> {
     pub(crate) inner: Option<FilteredQuery<'a, T>>,
@@ -60,7 +69,7 @@ pub trait FetchData<'a> {
 pub trait QueryData<'a>: Sized {
     type Iter;
 
-    fn query<E: Entity>(source: &'a Table<E>) -> Option<Self::Iter>;
+    fn query<E: Entity>(source: &'a Table<E>) -> Result<Self::Iter, InvalidComponent>;
 }
 
 macro_rules! component {
@@ -91,13 +100,14 @@ macro_rules! component {
         impl<'a, $($name: 'static),*> QueryData<'a> for ($($name,)*) {
             type Iter = ($(FilterMap<DenseColumnIter<'a, Box<dyn std::any::Any>>, FnDownCast<'a, $name>>,)*);
 
-            fn query<En: Entity>(source: &'a Table<En>) -> Option<Self::Iter> {
-                Some(($(
+            fn query<En: Entity>(source: &'a Table<En>) -> Result<Self::Iter, InvalidComponent> {
+                Ok(($(
                     source.inner
                         .get(&std::any::TypeId::of::<$name>())
                         .map(|row| {
                             row.iter().filter_map(downcast as FnDownCast<'a, $name>)
-                        })?,
+                        })
+                        .ok_or(InvalidComponent(stringify!($name)))?,
                 )*))
             }
         }
@@ -135,21 +145,21 @@ impl_tuple_macro!(
     U, V, W, X, Y, Z
 );
 
-// #[derive(Debug)]
-// pub struct InvalidComponent(&'static str);
+#[derive(Debug)]
+pub struct InvalidComponent(&'static str);
 
-// impl std::error::Error for InvalidComponent {}
+impl std::error::Error for InvalidComponent {}
 
-// impl std::fmt::Display for InvalidComponent {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "Invalid component {}", self.0)
-//     }
-// }
+impl std::fmt::Display for InvalidComponent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Invalid component {}", self.0)
+    }
+}
 
-// impl PartialEq for InvalidComponent {
-//     fn eq(&self, other: &Self) -> bool {
-//         self.0 == other.0
-//     }
-// }
+impl PartialEq for InvalidComponent {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
 
-// impl Eq for InvalidComponent {}
+impl Eq for InvalidComponent {}

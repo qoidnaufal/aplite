@@ -76,7 +76,7 @@ impl<E: Entity, T> DenseColumn<E, T> {
         self.data.is_empty()
     }
 
-    pub fn contains(&self, entity: E) -> bool {
+    pub fn contains(&self, entity: &E) -> bool {
         self.ptr.contains(entity)
     }
 
@@ -85,7 +85,7 @@ impl<E: Entity, T> DenseColumn<E, T> {
         self.data.clear();
     }
 
-    pub fn entity_data_index(&self, entity: E) -> Option<usize> {
+    pub fn entity_data_index(&self, entity: &E) -> Option<usize> {
         self.ptr.entity_data_index(entity)
     }
 
