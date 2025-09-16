@@ -57,7 +57,7 @@ impl<'a, E: Entity, T: 'static> Iterator for QueryOne<'a, E, T> {
 }
 
 pub trait Component: Sized + 'static {
-    fn register<E: Entity>(self, entity: E, table: &mut Table<E>);
+    fn register<E: Entity>(self, entity: &E, table: &mut Table<E>);
 }
 
 pub trait FetchData<'a> {
@@ -66,7 +66,7 @@ pub trait FetchData<'a> {
     fn fetch<E: Entity>(entity: &'a E, source: &'a Table<E>) -> Option<Self::Item>;
 }
 
-pub trait QueryData<'a>: Sized {
+pub trait QueryData<'a> {
     type Iter;
 
     fn query<E: Entity>(source: &'a Table<E>) -> Result<Self::Iter, InvalidComponent>;
@@ -75,14 +75,14 @@ pub trait QueryData<'a>: Sized {
 macro_rules! component {
     ($($name:ident),*) => {
         impl<$($name: 'static),*> Component for ($($name,)*) {
-            fn register<En: Entity>(self, entity: En, table: &mut Table<En>) {
+            fn register<En: Entity>(self, entity: &En, table: &mut Table<En>) {
                 #[allow(non_snake_case)]
                 let ($($name,)*) = self;
-                $(table.insert(entity, $name);)*
+                $(table.insert_one(entity, $name);)*
             }
         }
 
-        impl<'a, $($name: 'static),*> FetchData<'a> for ($($name,)*) {
+        impl<'a, $($name: 'static),*> FetchData<'a> for ($(&'a $name,)*) {
             type Item = ($(&'a $name,)*);
 
             fn fetch<En: Entity>(entity: &'a En, source: &'a Table<En>) -> Option<Self::Item> {
@@ -96,8 +96,12 @@ macro_rules! component {
                 )*))
             }
         }
+    };
+}
 
-        impl<'a, $($name: 'static),*> QueryData<'a> for ($($name,)*) {
+macro_rules! query {
+    ($($name:ident),*) => {
+        impl<'a, $($name: 'static),*> QueryData<'a> for ($(&'a $name,)*) {
             type Iter = ($(FilterMap<DenseColumnIter<'a, Box<dyn std::any::Any>>, FnDownCast<'a, $name>>,)*);
 
             fn query<En: Entity>(source: &'a Table<En>) -> Result<Self::Iter, InvalidComponent> {
@@ -112,7 +116,7 @@ macro_rules! component {
             }
         }
 
-        impl<'a, $($name: 'static),*> Iterator for Query<'a, ($($name,)*)> {
+        impl<'a, $($name: 'static),*> Iterator for Query<'a, ($(&'a $name,)*)> {
             type Item = ($(&'a $name,)*);
 
             fn next(&mut self) -> Option<Self::Item> {
@@ -138,6 +142,15 @@ macro_rules! impl_tuple_macro {
 
 impl_tuple_macro!(
     component,
+    A, B, C, D, E,
+    F, G, H, I, J,
+    K, L, M, N, O,
+    P, Q, R, S, T,
+    U, V, W, X, Y, Z
+);
+
+impl_tuple_macro!(
+    query,
     A, B, C, D, E,
     F, G, H, I, J,
     K, L, M, N, O,

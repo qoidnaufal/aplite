@@ -313,7 +313,7 @@ impl<E: Entity> Tree<E> {
     }
 
     /// the distance of an entity from the root
-    pub fn depth(&self, entity: &E) -> usize {
+    pub fn entity_depth(&self, entity: &E) -> usize {
         let mut current = entity;
         let mut depth = 0;
         while let Some(parent) = self.get_parent(current) {
@@ -321,6 +321,13 @@ impl<E: Entity> Tree<E> {
             current = parent;
         }
         depth
+    }
+
+    pub fn tree_depth(&self) -> usize {
+        1 + self.first_child
+            .iter()
+            .filter(|p| p.is_some())
+            .count()
     }
 
     fn ancestors_with_sibling(&self, entity: &E) -> Vec<bool> {
@@ -433,7 +440,7 @@ impl<E: Entity> std::fmt::Debug for Tree<E> {
                             .max()
                             .unwrap_or_default();
 
-                        let depth = tree.depth(child);
+                        let depth = tree.entity_depth(child);
                         let frame = get_frame(tree, child);
                         let len = frame.len() / 2;
 

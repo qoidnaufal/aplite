@@ -255,7 +255,7 @@ impl AtlasAllocator {
                     let rect = Rect::from_vec2f_size(pos, new_size);
                     let id = self.id_manager.create();
 
-                    self.allocated.insert(id, rect);
+                    self.allocated.insert(&id, rect);
                     self.tree.insert(id, &parent);
 
                     Some(rect)
@@ -266,7 +266,7 @@ impl AtlasAllocator {
                     let rect = Rect::from_vec2f_size(pos, new_size);
                     let id = self.id_manager.create();
 
-                    self.allocated.insert(id, rect);
+                    self.allocated.insert(&id, rect);
                     self.tree.insert_as_parent(id);
                     self.last_parent = Some(id);
 
@@ -278,7 +278,7 @@ impl AtlasAllocator {
                 let rect = Rect::from_size(new_size);
                 let id = self.id_manager.create();
 
-                self.allocated.insert(id, rect);
+                self.allocated.insert(&id, rect);
                 self.tree.insert_as_parent(id);
                 self.last_parent = Some(id);
         

@@ -525,42 +525,58 @@ impl Widget for CircleWidget {
 
 // -------------------------------------
 
+#[cfg(test)]
 mod alt_widget {
     use aplite_types::*;
     use aplite_renderer::Shape;
-    use aplite_storage::{Table, Tree, EntityManager, Component};
+    use aplite_storage::{Table, Tree, EntityManager, Entity, Component};
     use super::WidgetId;
 
     pub struct Context {
-        entity_manager: EntityManager<WidgetId>,
-        data: Table<WidgetId>,
+        entities: EntityManager<WidgetId>,
+        table: Table<WidgetId>,
         tree: Tree<WidgetId>,
+        current: Option<WidgetId>,
     }
 
     impl Context {
-        fn component<T: Component>(&mut self, widget: &impl WidgetAlt, component: T) -> &mut Self {
-            component.register(widget.id(), &mut self.data);
-            self
+        fn new() -> Self {
+            Self {
+                entities: EntityManager::default(),
+                table: Table::default(),
+                tree: Tree::default(),
+                current: None,
+            }
         }
 
-        fn child(&mut self, id: &WidgetId, child: WidgetId) -> &mut Self {
-            self.tree.add_child(id, child);
-            self
+        fn create_entity(&mut self) -> WidgetId {
+            let id = self.entities.create();
+            if let Some(parent) = self.current.as_ref() {
+                self.tree.insert(id, parent);
+            } else {
+                self.tree.insert_as_parent(id);
+            }
+            id
         }
     }
 
-    pub trait WidgetAlt: Sized {
-        fn id(&self) -> WidgetId;
+    pub trait WidgetTrait: Sized {
+        fn id(&self) -> &WidgetId;
 
         fn child<F>(self, cx: &mut Context, child: F) -> Self
         where
             F: FnOnce(&mut Context)
         {
+            let current = cx.current.replace(*self.id());
             child(cx);
+            cx.current = current;
             self
         }
 
-        fn build(self, cx: &mut Context) {}
+        fn component<C: Component>(self, cx: &mut Context, component: C) -> Self {
+            cx.table.insert(self.id(), component);
+            self
+        }
     }
 
     pub struct TestWidget {
@@ -570,32 +586,49 @@ mod alt_widget {
     impl TestWidget {
         pub fn new(cx: &mut Context) -> Self {
             Self {
-                id: cx.entity_manager.create()
+                id: cx.create_entity()
             }
         }
     }
 
-    impl WidgetAlt for TestWidget {
-        fn id(&self) -> WidgetId {
-            self.id
+    impl WidgetTrait for TestWidget {
+        fn id(&self) -> &WidgetId {
+            &self.id
         }
     }
 
-    fn branch1(cx: &mut Context) {
-        let branch = TestWidget::new(cx);
-        cx.component(&branch, (Size::new(200., 100.), Shape::RoundedRect, Rgba::GREEN));
+    fn child1(cx: &mut Context) {
+        TestWidget::new(cx)
+            .component(cx, (Size::new(200., 100.), Shape::RoundedRect, Rgba::GREEN))
+            .child(cx, |cx| {
+                TestWidget::new(cx);
+                TestWidget::new(cx);
+                TestWidget::new(cx);
+            });
     }
 
-    fn branch2(cx: &mut Context) {
-        let branch = TestWidget::new(cx);
-        cx.component(&branch, (Size::new(200., 100.), Shape::RoundedRect, Rgba::BLUE));
+    fn child2(cx: &mut Context) {
+        TestWidget::new(cx)
+            .component(cx, (Size::new(200., 100.), Shape::RoundedRect, Rgba::BLUE));
     }
 
     fn app(cx: &mut Context) {
-        let widget = TestWidget::new(cx);
-        cx.component(&widget, (Size::new(200., 100.), Shape::RoundedRect, Rgba::RED));
+        TestWidget::new(cx)
+            .component(cx, (Size::new(200., 100.), Shape::RoundedRect, Rgba::RED))
+            .child(cx, child1)
+            .child(cx, child2);
+    }
 
-        widget.child(cx, branch1)
-            .child(cx, branch2);
+    #[test]
+    fn widget_ecs() {
+        let mut cx = Context::new();
+        app(&mut cx);
+        assert_eq!(cx.tree.len(&WidgetId::root()), 7);
+        assert_eq!(cx.tree.tree_depth(), 4);
+
+        let query = cx.table.query::<(&Shape, &Size)>();
+        let query2 = cx.table.query_one::<Rgba>();
+
+        assert_eq!(query.count(), query2.count());
     }
 }

@@ -37,19 +37,6 @@ impl<E: Entity> SparseIndex<E> {
             })
     }
 
-    pub fn with_any<F, T>(&self, entity: E, f: F) -> Option<T>
-    where
-        F: FnOnce(usize) -> T,
-        T: 'static,
-    {
-        let entity_index = entity.index();
-        self.ptr
-            .get(entity_index)
-            .and_then(|&idx| {
-                (idx != usize::MAX).then_some(f(idx))
-            })
-    }
-
     pub fn insert_any<T: Any + 'static>(&mut self, entity: E, value: T, data: &mut Vec<Box<dyn Any>>) {
         let entity_index = entity.index();
 
@@ -134,7 +121,7 @@ impl<E: Entity> SparseIndex<E> {
             })
     }
 
-    pub fn insert<T>(&mut self, entity: E, value: T, data: &mut Vec<T>) {
+    pub fn insert<T>(&mut self, entity: &E, value: T, data: &mut Vec<T>) {
         let entity_index = entity.index();
 
         if let Some(index) = self.ptr.get(entity_index)
@@ -254,7 +241,7 @@ mod store_test {
         let mut store = DenseColumn::<TestId, String>::with_capacity(NUM);
 
         for i in 0..NUM {
-            store.insert(ids[i], (i + 1).to_string());
+            store.insert(&ids[i], (i + 1).to_string());
         }
 
         let exist = store.get(&TestId(5));
@@ -269,7 +256,7 @@ mod store_test {
         let mut store = DenseColumn::<TestId, ()>::with_capacity(NUM);
 
         for i in 0..NUM {
-            store.insert(ids[NUM - 1 - i], ());
+            store.insert(&ids[NUM - 1 - i], ());
         }
 
         let index = &ids[0];
@@ -290,7 +277,7 @@ mod store_test {
         let mut store = DenseColumn::<TestId, String>::with_capacity(NUM);
 
         for i in 0..NUM {
-            store.insert(ids[NUM - 1 - i], i.to_string());
+            store.insert(&ids[NUM - 1 - i], i.to_string());
         }
 
         let count = store.iter().count();
@@ -303,9 +290,9 @@ mod store_test {
         let mut ms = Table::with_capacity(NUM);
         let ids = setup_entity(NUM);
         for i in 0..NUM {
-            let id = ids[i];
-            ms.insert(id, i);
-            ms.insert(id, format!("{id:?}"));
+            let id = &ids[i];
+            ms.insert_one(id, i);
+            ms.insert_one(id, format!("{id:?}"));
         }
         let query_usize = QueryOne::<TestId, usize>::new(&ms);
         let query_string = QueryOne::<TestId, String>::new(&ms);

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::any::{Any, TypeId};
 
 use super::dense_column::DenseColumn;
-use super::component::{Query, QueryOne, QueryData, FetchData};
+use super::component::{Component, Query, QueryOne, QueryData, FetchData};
 
 use crate::entity::Entity;
 
@@ -23,7 +23,11 @@ impl<E: Entity> Table<E> {
         }
     }
 
-    pub fn insert<T: Any + 'static>(&mut self, entity: E, value: T) {
+    pub fn insert<C: Component>(&mut self, entity: &E, component: C) {
+        component.register(entity, self);
+    }
+
+    pub fn insert_one<T: Any + 'static>(&mut self, entity: &E, value: T) {
         let type_id = TypeId::of::<T>();
         let data = self.inner.entry(type_id).or_default();
         data.insert(entity, Box::new(value));
@@ -75,7 +79,7 @@ mod table_test {
     impl Context {
         fn insert(&mut self, component: impl Component) {
             let id = self.manager.create();
-            component.register(id, &mut self.data);
+            component.register(&id, &mut self.data);
         }
     }
 
@@ -96,7 +100,7 @@ mod table_test {
             cx.insert((i.to_string(), i, i as f32));
         }
 
-        let query = cx.data.query::<(String, f32, i32)>();
+        let query = cx.data.query::<(&String, &f32, &i32)>();
 
         for (s, f, i) in query {
             assert!(std::any::type_name_of_val(s).contains("String"));
@@ -112,11 +116,11 @@ mod table_test {
             cx.insert((i.to_string(), i, i as f32));
         }
 
-        let fetch_one = <(i32,)>::fetch(&TestId(3), &cx.data);
+        let fetch_one = <(&i32,)>::fetch(&TestId(3), &cx.data);
         assert!(fetch_one.is_some());
 
-        let fetch_many_from_type = <(String, f32)>::fetch(&TestId(1), &cx.data);
-        let fetch_many_from_table = cx.data.fetch::<(String, f32)>(&TestId(1));
+        let fetch_many_from_type = <(&String, &f32)>::fetch(&TestId(1), &cx.data);
+        let fetch_many_from_table = cx.data.fetch::<(&String, &f32)>(&TestId(1));
         assert_eq!(fetch_many_from_type, fetch_many_from_table);
     }
 }

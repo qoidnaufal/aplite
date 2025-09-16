@@ -56,7 +56,7 @@ impl<E: Entity, T> DenseColumn<E, T> {
     }
 
     /// Inserting or replacing the value
-    pub fn insert(&mut self, entity: E, value: T) {
+    pub fn insert(&mut self, entity: &E, value: T) {
         self.ptr.insert(entity, value, &mut self.data);
     }
 
