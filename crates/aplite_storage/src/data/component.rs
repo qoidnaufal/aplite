@@ -8,13 +8,13 @@ use crate::entity::Entity;
 use crate::data::dense_column::DenseColumnIter;
 
 /// Query on many component type
-pub struct Query<'a, Qd: QueryData<'a>> {
+pub struct Query<'a, E: Entity, Qd: QueryData<'a, E>> {
     pub(crate) inner: Option<Qd::Iter>,
     pub(crate) marker: PhantomData<fn() -> &'a Qd>,
 }
 
-impl<'a, Qd: QueryData<'a>> Query<'a, Qd> {
-    pub fn new<E: Entity>(source: &'a Table<E>) -> Self {
+impl<'a, E: Entity, Qd: QueryData<'a, E>> Query<'a, E, Qd> {
+    pub fn new(source: &'a Table<E>) -> Self {
         Self {
             inner: Qd::query(source).ok(),
             marker: PhantomData,
@@ -24,16 +24,15 @@ impl<'a, Qd: QueryData<'a>> Query<'a, Qd> {
 
 /// Query (and iterate) one component type
 pub struct QueryOne<'a, E: Entity, T> {
-    pub(crate) inner: Option<FilteredQuery<'a, T>>,
-    pub(crate) marker: PhantomData<E>,
+    pub(crate) inner: Option<FilteredQuery<'a, E, T>>,
 }
 
-fn downcast<'a, T: 'static>((_, b): (&usize, &'a Box<dyn Any>)) -> Option<&'a T> {
+fn downcast<'a, T: 'static>((_, b): (usize, &'a Box<dyn Any>)) -> Option<&'a T> {
     b.downcast_ref::<T>()
 }
 
-type FnDownCast<'a, T> = fn((&usize, &'a Box<dyn Any>)) -> Option<&'a T>;
-type FilteredQuery<'a, T> = FilterMap<DenseColumnIter<'a, Box<dyn Any>>, FnDownCast<'a, T>>;
+type FnDownCast<'a, T> = fn((usize, &'a Box<dyn Any>)) -> Option<&'a T>;
+type FilteredQuery<'a, E, T> = FilterMap<DenseColumnIter<'a, E, Box<dyn Any>>, FnDownCast<'a, T>>;
 
 impl<'a, E: Entity, T: 'static> QueryOne<'a, E, T> {
     pub(crate) fn new(table: &'a Table<E>) -> Self {
@@ -41,7 +40,6 @@ impl<'a, E: Entity, T: 'static> QueryOne<'a, E, T> {
             inner: table.inner
                 .get(&TypeId::of::<T>())
                 .map(|col| col.iter().filter_map(downcast as FnDownCast<'a, T>)),
-            marker: PhantomData,
         }
     }
 }
@@ -66,10 +64,10 @@ pub trait FetchData<'a> {
     fn fetch<E: Entity>(entity: &'a E, source: &'a Table<E>) -> Option<Self::Item>;
 }
 
-pub trait QueryData<'a> {
+pub trait QueryData<'a, E: Entity> {
     type Iter;
 
-    fn query<E: Entity>(source: &'a Table<E>) -> Result<Self::Iter, InvalidComponent>;
+    fn query(source: &'a Table<E>) -> Result<Self::Iter, InvalidComponent>;
 }
 
 macro_rules! component {
@@ -88,7 +86,7 @@ macro_rules! component {
             fn fetch<En: Entity>(entity: &'a En, source: &'a Table<En>) -> Option<Self::Item> {
                 Some(($(
                     source.inner
-                        .get(&std::any::TypeId::of::<$name>())
+                        .get(&TypeId::of::<$name>())
                         .and_then(|row| {
                             row.get(entity)
                                 .and_then(|any| any.downcast_ref::<$name>())
@@ -101,30 +99,28 @@ macro_rules! component {
 
 macro_rules! query {
     ($($name:ident),*) => {
-        impl<'a, $($name: 'static),*> QueryData<'a> for ($(&'a $name,)*) {
-            type Iter = ($(FilterMap<DenseColumnIter<'a, Box<dyn std::any::Any>>, FnDownCast<'a, $name>>,)*);
+        impl<'a, En: Entity, $($name: 'static),*> QueryData<'a, En> for ($(&'a $name,)*) {
+            type Iter = ($(FilterMap<DenseColumnIter<'a, En, Box<dyn Any>>, FnDownCast<'a, $name>>,)*);
 
-            fn query<En: Entity>(source: &'a Table<En>) -> Result<Self::Iter, InvalidComponent> {
+            fn query(source: &'a Table<En>) -> Result<Self::Iter, InvalidComponent> {
                 Ok(($(
                     source.inner
-                        .get(&std::any::TypeId::of::<$name>())
-                        .map(|row| {
-                            row.iter().filter_map(downcast as FnDownCast<'a, $name>)
+                        .get(&TypeId::of::<$name>())
+                        .map(|dense| {
+                            dense.iter().filter_map(downcast as FnDownCast<'a, $name>)
                         })
                         .ok_or(InvalidComponent(stringify!($name)))?,
                 )*))
             }
         }
 
-        impl<'a, $($name: 'static),*> Iterator for Query<'a, ($(&'a $name,)*)> {
+        impl<'a, En: Entity, $($name: 'static),*> Iterator for Query<'a, En, ($(&'a $name,)*)> {
             type Item = ($(&'a $name,)*);
 
             fn next(&mut self) -> Option<Self::Item> {
                 #[allow(non_snake_case)]
                 let Some(($($name,)*)) = self.inner.as_mut() else { return None };
-                Some(($(
-                    $name.next()?,
-                )*))
+                Some(($($name.next()?,)*))
             }
         }
     };

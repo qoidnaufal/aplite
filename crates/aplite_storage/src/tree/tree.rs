@@ -7,18 +7,6 @@ use crate::iterator::{
     TreeNodeIter,
 };
 
-#[derive(Debug)]
-pub enum TreeError {
-    InvalidParent,
-    InvalidEntity,
-}
-
-impl std::fmt::Display for TreeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-
 /// Array based data structure, where the related information is allocated parallel to the main [`Entity`].
 /// This should enable fast and efficient indexing when accessing the data. Internally the data is stored using [`IndexMap`].
 /// 
@@ -476,51 +464,19 @@ impl<E: Entity> std::fmt::Debug for Tree<E> {
     }
 }
 
-/*
-#########################################################
-#                                                       #
-#                        SubTree                        #
-#                                                       #
-#########################################################
-*/
+#[derive(Debug)]
+pub enum TreeError {
+    InvalidParent,
+    InvalidEntity,
+}
 
-// pub struct SubTree<E: Entity> {
-//     entity: E,
-//     member: Vec<crate::iterator::NodeRef<E>>,
-// }
+impl std::fmt::Display for TreeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
 
-// impl<E: Entity> std::fmt::Debug for SubTree<E> {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         let mut s = String::new();
-//         s.push_str(format!("{:?}\n", self.entity).as_str());
-
-//         fn render_string<E: Entity>(subtree: &SubTree<E>, s: &mut String) {
-//             let mut indent = 3;
-
-//             subtree
-//                 .member
-//                 .iter()
-//                 .for_each(|node| {
-//                     if node.next_sibling.is_some() {
-//                         s.push_str(format!("{:indent$}├─ ", "").as_str());
-//                     } else {
-//                         s.push_str(format!("{:indent$}└─ ", "").as_str());
-//                     }
-
-//                     if node.first_child.is_some() {
-//                         indent += 3;
-//                     } else if node.next_sibling.is_none() {
-//                         indent -= 3;
-//                     }
-
-//                     s.push_str(format!("{:?}\n", node.entity).as_str());
-//                 });
-//         }
-
-//         render_string(self, &mut s);
-//         write!(f, "{s}")
-//     }
-// }
+impl std::error::Error for TreeError {}
 
 /*
 #########################################################

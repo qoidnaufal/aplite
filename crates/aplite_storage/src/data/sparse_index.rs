@@ -1,9 +1,32 @@
-use std::any::Any;
-
 use crate::entity::Entity;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Index(usize);
+
+impl Index {
+    pub(crate) fn new<E: Entity>(entity: &E, data_index: usize) -> Self {
+        Self((entity.version() << E::VERSION_BITS) as usize | data_index)
+    }
+
+    pub(crate) fn null() -> Self {
+        Self(usize::MAX)
+    }
+
+    pub(crate) fn index<E: Entity>(&self) -> usize {
+        self.0 & E::INDEX_MASK as usize
+    }
+
+    pub(crate) fn version<E: Entity>(&self) -> u16 {
+        (self.0 >> E::INDEX_BITS) as u16 & E::VERSION_MASK
+    }
+
+    pub(crate) fn is_null(&self) -> bool {
+        self.0 == usize::MAX
+    }
+}
+
 pub struct SparseIndex<E: Entity> {
-    pub(crate) ptr: Vec<usize>,
+    pub(crate) ptr: Vec<Index>,
     marker: std::marker::PhantomData<E>,
 }
 
@@ -17,171 +40,46 @@ impl<E: Entity> Default for SparseIndex<E> {
 }
 
 impl<E: Entity> SparseIndex<E> {
-    pub fn get_any_ref<'a, T: 'static>(&self, entity: &E, data: &'a [Box<dyn Any>]) -> Option<&'a T> {
-        let entity_index = entity.index();
-        self.ptr
-            .get(entity_index)
-            .and_then(|&idx| {
-                (idx != usize::MAX)
-                    .then_some(data[idx].downcast_ref()?)
-            })
+    pub fn get_index(&self, entity: &E) -> Option<usize> {
+        self.ptr.get(entity.index())
+            .and_then(|i| (!i.is_null()).then_some(i.index::<E>()))
     }
 
-    pub fn get_any_mut<'a, T: 'static>(&self, entity: &E, data: &'a mut [Box<dyn Any>]) -> Option<&'a mut T> {
-        let entity_index = entity.index();
-        self.ptr
-            .get(entity_index)
-            .and_then(|&idx| {
-                (idx != usize::MAX)
-                    .then_some(data[idx].downcast_mut()?)
-            })
+    pub(crate) fn set_index_from_entity(&mut self, entity: &E, data_index: usize) {
+        self.ptr[entity.index()] = Index::new(entity, data_index)
     }
 
-    pub fn insert_any<T: Any + 'static>(&mut self, entity: E, value: T, data: &mut Vec<Box<dyn Any>>) {
-        let entity_index = entity.index();
-
-        if let Some(index) = self.ptr.get(entity_index)
-            && index != &usize::MAX
-        {
-            data[*index] = Box::new(value);
-            return;
-        }
-
-        if entity_index >= self.ptr.len() {
-            self.resize(entity_index);
-        }
-
-        let data_index = data.len();
-        data.push(Box::new(value));
-        self.ptr[entity_index] = data_index;
+    pub(crate) fn set_null(&mut self, entity: &E) {
+        self.ptr[entity.index()] = Index::null()
     }
 
-    pub fn remove_any<T: 'static>(&mut self, entity: E, data: &mut Vec<Box<dyn Any>>) -> Option<T> {
-        if data.is_empty() { return None }
-
-        let entity_index = entity.index();
-
-        if let Some(idx) = self.ptr.get(entity_index)
-            && idx != &usize::MAX
-        {
-            let swap_index = data.len() - 1;
-            let data_index_to_remove = self.ptr[entity_index];
-
-            // FIXME: maybe there's a better way than this?
-            // also try to resize when a certain capacity-to-len ratio exceeded
-            self.ptr
-                .iter()
-                .enumerate()
-                .filter_map(|(i, id)| (*id < usize::MAX).then_some(i))
-                .find(|i| *i == swap_index)
-                .and_then(|pos| {
-                    self.ptr[pos] = data_index_to_remove;
-                    self.ptr[entity_index] = usize::MAX;
-                    data.swap_remove(data_index_to_remove)
-                        .downcast::<T>()
-                        .ok()
-                        .map(|b| *b)
-                })
-        } else {
-            None
-        }
-    }
-}
-
-impl<E: Entity> SparseIndex<E> {
-    pub fn get<'a, T>(&self, entity: &'a E, data: &'a [T]) -> Option<&'a T> {
-        let entity_index = entity.index();
-        self.ptr
-            .get(entity_index)
-            .and_then(|&idx| {
-                (idx != usize::MAX)
-                    .then_some(&data[idx])
-            })
-    }
-
-    pub fn get_mut<'a, T>(&self, entity: &'a E, data: &'a mut [T]) -> Option<&'a mut T> {
-        let entity_index = entity.index();
-        self.ptr
-            .get(entity_index)
-            .and_then(|&idx| {
-                (idx != usize::MAX)
-                    .then_some(&mut data[idx])
-            })
+    pub(crate) fn set_index_from_usize(&mut self, index: usize, data_index: usize) {
+        let version = self.ptr[index].version::<E>();
+        let entity = E::new(index as u32, version);
+        self.ptr[index] = Index::new(&entity, data_index);
     }
 
     pub fn with<F, T>(&self, entity: &E, f: F) -> Option<T>
     where
         F: FnOnce(usize) -> T
     {
-        let entity_index = entity.index();
-        self.ptr
-            .get(entity_index)
-            .and_then(|&idx| {
-                (idx != usize::MAX).then_some(f(idx))
-            })
-    }
-
-    pub fn insert<T>(&mut self, entity: &E, value: T, data: &mut Vec<T>) {
-        let entity_index = entity.index();
-
-        if let Some(index) = self.ptr.get(entity_index)
-            && index != &usize::MAX
-        {
-            data[*index] = value;
-            return;
-        }
-
-        if entity_index >= self.ptr.len() {
-            self.resize(entity_index);
-        }
-
-        let data_index = data.len();
-        data.push(value);
-        self.ptr[entity_index] = data_index;
-    }
-
-    pub fn remove<T>(&mut self, entity: E, data: &mut Vec<T>) -> Option<T> {
-        if data.is_empty() { return None }
-
-        let entity_index = entity.index();
-
-        if let Some(idx) = self.ptr.get(entity_index)
-            && idx != &usize::MAX
-        {
-            let swap_index = data.len() - 1;
-            let data_index_to_remove = self.ptr[entity_index];
-
-            // FIXME: maybe there's a better way than this?
-            // also try to resize when a certain capacity-to-len ratio exceeded
-            self.ptr
-                .iter()
-                .position(|i| *i == swap_index)
-                .map(|pos| {
-                    self.ptr[pos] = data_index_to_remove;
-                    self.ptr[entity_index] = usize::MAX;
-                    data.swap_remove(data_index_to_remove)
-                })
-        } else {
-            None
-        }
+        self.get_index(entity).map(f)
     }
 
     pub fn contains(&self, entity: &E) -> bool {
-        entity.index() <= self.ptr.len()
-            && self.ptr[entity.index()] != usize::MAX
+        self.get_index(entity).is_some()
     }
 
-    pub fn entity_data_index(&self, entity: &E) -> Option<usize> {
-        if entity.index() < self.ptr.len() {
-            let index = self.ptr[entity.index()];
-            (index != usize::MAX).then_some(index)
-        } else {
-            None
-        }
+    pub(crate) fn resize(&mut self, new_len: usize) {
+        self.ptr.resize(new_len + 4, Index::null());
     }
 
-    fn resize(&mut self, new_len: usize) {
-        self.ptr.resize(new_len + 4, usize::MAX);
+    pub(crate) fn shrink_to_fit(&mut self) {
+        self.ptr.shrink_to_fit();
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.ptr.len()
     }
 
     pub fn reset(&mut self) {
@@ -189,20 +87,29 @@ impl<E: Entity> SparseIndex<E> {
         self.ptr.shrink_to_fit();
     }
 
-    pub fn iter_data_index(&self) -> impl Iterator<Item = &usize> {
+    // pub fn position(&self, index: usize) {
+    //     self.ptr
+    // }
+
+    pub fn iter_all(&self) -> impl Iterator<Item = usize> {
+        self.ptr.iter().map(|i| i.index::<E>())
+    }
+
+    pub fn iter_data_index(&self) -> impl Iterator<Item = usize> {
         self.ptr
             .iter()
-            .filter(|p| (p != &&usize::MAX))
+            .filter_map(|i| (!i.is_null()).then_some(i.index::<E>()))
     }
 
     pub fn iter_entity_index(&self) -> impl Iterator<Item = E> {
         self.ptr
             .iter()
             .enumerate()
-            .filter_map(|(idx, p)| (p != &usize::MAX)
-                .then_some({
-                    E::new(idx as u32, 0)
-                }))
+            .filter_map(|(i, p)| {
+                (!p.is_null()).then_some({
+                    E::new(i as u32, p.version::<E>())
+                })
+            })
     }
 }
 

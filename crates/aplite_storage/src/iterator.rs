@@ -439,7 +439,7 @@ mod iterator_test {
         assert_eq!(storage.len(), created_ids.len());
 
         for i in 0..3 {
-            storage.remove(created_ids[i * 3]);
+            storage.remove(&created_ids[i * 3]);
         }
 
         let remaining = storage.iter().count();

@@ -28,24 +28,27 @@ impl<E: Entity> Table<E> {
     }
 
     pub fn insert_one<T: Any + 'static>(&mut self, entity: &E, value: T) {
-        let type_id = TypeId::of::<T>();
-        let data = self.inner.entry(type_id).or_default();
-        data.insert(entity, Box::new(value));
+        self.inner
+            .entry(TypeId::of::<T>())
+            .or_default()
+            .insert(entity, Box::new(value));
     }
 
     pub fn get<T: 'static>(&self, entity: &E) -> Option<&T> {
-        let type_id = TypeId::of::<T>();
-        self.inner.get(&type_id)
-            .and_then(|ds| {
-                ds.ptr.get_any_ref(entity, &ds.data)
+        self.inner
+            .get(&TypeId::of::<T>())
+            .and_then(|dense| {
+                dense.get(entity)
+                    .and_then(|any| any.downcast_ref())
             })
     }
 
     pub fn get_mut<T: 'static>(&mut self, entity: &E) -> Option<&mut T> {
-        let type_id = TypeId::of::<T>();
-        self.inner.get_mut(&type_id)
-            .and_then(|ds| {
-                ds.ptr.get_any_mut(entity, &mut ds.data)
+        self.inner
+            .get_mut(&TypeId::of::<T>())
+            .and_then(|dense| {
+                dense.get_mut(entity)
+                    .and_then(|any| any.downcast_mut())
             })
     }
 
@@ -57,7 +60,7 @@ impl<E: Entity> Table<E> {
         QueryOne::new(self)
     }
 
-    pub fn query<'a, Qd: QueryData<'a>>(&'a self) -> Query<'a, Qd> {
+    pub fn query<'a, Qd: QueryData<'a, E>>(&'a self) -> Query<'a, E, Qd> {
         Query::new(self)
     }
 }

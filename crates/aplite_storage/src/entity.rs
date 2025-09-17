@@ -53,7 +53,7 @@ macro_rules! create_entity {
             }
 
             fn version(&self) -> u16 {
-                ((self.0 >> Self::INDEX_BITS) as u16) & Self::VERSION_MASK
+                (self.0 >> Self::INDEX_BITS) as u16 & Self::VERSION_MASK
             }
         }
 

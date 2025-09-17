@@ -63,7 +63,7 @@ impl Effect {
                 if scope.source_count() == 0 { break }
             }
 
-            Graph::with_mut(|graph| graph.storage.remove(node.id));
+            Graph::with_mut(|graph| graph.storage.remove(&node.id));
         });
 
         Self { node }
