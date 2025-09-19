@@ -1,25 +1,28 @@
 use std::collections::HashMap;
 use std::any::{Any, TypeId};
+use std::marker::PhantomData;
 
-use super::dense_column::DenseColumn;
-use super::component::{Component, Query, QueryOne, QueryData, FetchData};
+use super::array::Array;
+use super::component::{Component, Query, QueryOne, QueryData, FetchData, Remove};
 
 use crate::entity::Entity;
 
 pub struct Table<E: Entity> {
-    pub(crate) inner: HashMap<TypeId, DenseColumn<E, Box<dyn Any>>>,
+    pub(crate) inner: HashMap<TypeId, Box<dyn Any>>,
+    marker: PhantomData<E>,
 }
 
-impl<E: Entity> Default for Table<E> {
+impl<E: Entity + 'static> Default for Table<E> {
     fn default() -> Self {
         Self::with_capacity(0)
     }
 }
 
-impl<E: Entity> Table<E> {
+impl<E: Entity + 'static> Table<E> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            inner: HashMap::with_capacity(capacity)
+            inner: HashMap::with_capacity(capacity),
+            marker: PhantomData,
         }
     }
 
@@ -28,40 +31,48 @@ impl<E: Entity> Table<E> {
     }
 
     pub fn insert_one<T: Any + 'static>(&mut self, entity: &E, value: T) {
-        self.inner
+        if let Some(dense) = self.inner
             .entry(TypeId::of::<T>())
-            .or_default()
-            .insert(entity, Box::new(value));
+            .or_insert_with(|| {
+                let column = Array::<E, T>::default();
+                Box::new(column)
+            })
+            .downcast_mut::<Array<E, T>>()
+        {
+            dense.insert(entity, value);
+        }
+            // .or_default()
+            // .insert(entity, Box::new(value));
     }
 
     pub fn get<T: 'static>(&self, entity: &E) -> Option<&T> {
         self.inner
             .get(&TypeId::of::<T>())
-            .and_then(|dense| {
-                dense.get(entity)
-                    .and_then(|any| any.downcast_ref())
-            })
+            .and_then(|any| any.downcast_ref::<Array<E, T>>())
+            .and_then(|dense| dense.get(entity))
     }
 
     pub fn get_mut<T: 'static>(&mut self, entity: &E) -> Option<&mut T> {
         self.inner
             .get_mut(&TypeId::of::<T>())
-            .and_then(|dense| {
-                dense.get_mut(entity)
-                    .and_then(|any| any.downcast_mut())
-            })
+            .and_then(|any| any.downcast_mut::<Array<E, T>>())
+            .and_then(|dense| dense.get_mut(entity))
     }
 
     pub fn fetch<'a, Fd: FetchData<'a>>(&'a self, entity: &'a E) -> Option<<Fd as FetchData<'a>>::Item> {
         Fd::fetch(entity, self)
     }
 
-    pub fn query_one<T: 'static>(&self) -> QueryOne<'_, E, T> {
+    pub fn query_one<T: 'static>(&self) -> QueryOne<'_, T> {
         QueryOne::new(self)
     }
 
-    pub fn query<'a, Qd: QueryData<'a, E>>(&'a self) -> Query<'a, E, Qd> {
+    pub fn query<'a, Qd: QueryData<'a>>(&'a self) -> Query<'a, Qd> {
         Query::new(self)
+    }
+
+    pub fn remove<R: Remove>(&mut self, entity: E) -> Option<<R as Remove>::Removed> {
+        R::remove(entity, self)
     }
 }
 
@@ -125,5 +136,16 @@ mod table_test {
         let fetch_many_from_type = <(&String, &f32)>::fetch(&TestId(1), &cx.data);
         let fetch_many_from_table = cx.data.fetch::<(&String, &f32)>(&TestId(1));
         assert_eq!(fetch_many_from_type, fetch_many_from_table);
+    }
+
+    #[test]
+    fn removal() {
+        let mut cx = Context::default();
+        for i in 0..10 {
+            cx.insert((i.to_string(), i, i as f32));
+        }
+
+        let removed = cx.data.remove::<(String, f32, i32)>(TestId(5));
+        assert!(removed.is_some())
     }
 }

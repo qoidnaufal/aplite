@@ -1,28 +1,29 @@
-use std::iter::{Enumerate, Filter, FilterMap, Zip};
-use std::marker::PhantomData;
+use std::iter::Zip;
 use std::slice::{Iter, IterMut};
 
 use crate::entity::Entity;
-use super::sparse_index::{SparseIndex, Index};
+use super::sparse_index::SparseIndices;
 
 /// A dense data storage which is guaranteed even after removal.
 /// Doesn't facilitate the creation of [`Entity`], unlike [`IndexMap`](crate::index_map::IndexMap).
 /// You'll need the assistance of [`EntityManager`](crate::entity::EntityManager) to create the key for indexing data.
-pub struct DenseColumn<E: Entity, T> {
-    pub(crate) ptr: SparseIndex<E>,
+pub struct Array<E: Entity, T> {
+    pub(crate) ptr: SparseIndices<E>,
     pub(crate) data: Vec<T>,
+    pub(crate) entities: Vec<E>,
 }
 
-impl<E: Entity, T> Default for DenseColumn<E, T> {
+impl<E: Entity, T> Default for Array<E, T> {
     fn default() -> Self {
         Self {
-            ptr: SparseIndex::default(),
+            ptr: SparseIndices::default(),
             data: Vec::default(),
+            entities: Vec::default(),
         }
     }
 }
 
-impl<E: Entity, T: std::fmt::Debug> std::fmt::Debug for DenseColumn<E, T> {
+impl<E: Entity, T: std::fmt::Debug> std::fmt::Debug for Array<E, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_map()
             .entries(self.iter())
@@ -30,40 +31,41 @@ impl<E: Entity, T: std::fmt::Debug> std::fmt::Debug for DenseColumn<E, T> {
     }
 }
 
-impl<E: Entity, T> DenseColumn<E, T> {
+impl<E: Entity, T> Array<E, T> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            ptr: SparseIndex::default(),
+            ptr: SparseIndices::default(),
             data: Vec::with_capacity(capacity),
+            entities: Vec::with_capacity(capacity),
         }
     }
 
-    pub fn data(&self) -> &Vec<T> {
+    pub fn data(&self) -> &[T] {
         &self.data
     }
 
-    pub fn data_mut(&mut self) -> &mut Vec<T> {
+    pub fn data_mut(&mut self) -> &mut [T] {
         &mut self.data
     }
 
     pub fn get(&self, entity: &E) -> Option<&T> {
         self.ptr
             .get_index(entity)
-            .map(|index| &self.data[index])
+            .map(|index| &self.data[index.index()])
     }
 
     pub fn get_mut(&mut self, entity: &E) -> Option<&mut T> {
         self.ptr
             .get_index(entity)
-            .map(|index| &mut self.data[index])
+            .map(|index| &mut self.data[index.index()])
     }
 
     /// Inserting or replacing the value
     pub fn insert(&mut self, entity: &E, value: T) {
         if let Some(index) = self.ptr.get_index(entity)
-            && index != usize::MAX
+            && !index.is_null()
         {
-            self.data[index] = value;
+            self.data[index.index()] = value;
             return;
         }
 
@@ -75,7 +77,8 @@ impl<E: Entity, T> DenseColumn<E, T> {
 
         let data_index = self.data.len();
         self.data.push(value);
-        self.ptr.set_index_from_entity(entity, data_index);
+        self.entities.push(*entity);
+        self.ptr.set_index(entity_index, data_index);
     }
 
     /// The contiguousness of the data is guaranteed after removal via [`Vec::swap_remove`],
@@ -83,19 +86,16 @@ impl<E: Entity, T> DenseColumn<E, T> {
     pub fn remove(&mut self, entity: E) -> Option<T> {
         if self.data.is_empty() { return None }
 
-        self.ptr.get_index(&entity)
-            .and_then(|idx| {
-                let swap_index = self.data.len() - 1;
+        self.ptr
+            .get_index(&entity)
+            .cloned()
+            .map(|idx| {
+                let last = self.entities.last().unwrap();
 
-                let pos = self.ptr
-                    .iter_all()
-                    .position(|i| i == swap_index);
-
-                pos.map(|pos| {
-                    self.ptr.set_index_from_usize(pos, idx);
-                    self.ptr.set_null(&entity);
-                    self.data.swap_remove(idx)
-                })
+                self.ptr.set_index(last.index(), idx.index());
+                self.ptr.set_null(&entity);
+                self.entities.swap_remove(idx.index());
+                self.data.swap_remove(idx.index())
             })
     }
 
@@ -110,7 +110,7 @@ impl<E: Entity, T> DenseColumn<E, T> {
     }
 
     pub fn contains(&self, entity: &E) -> bool {
-        self.ptr.contains(entity)
+        self.entities.contains(entity)
     }
 
     pub fn shrink_to_fit(&mut self) {
@@ -124,7 +124,7 @@ impl<E: Entity, T> DenseColumn<E, T> {
     }
 
     pub fn entity_data_index(&self, entity: &E) -> Option<usize> {
-        self.ptr.get_index(entity)
+        self.ptr.get_index(entity).map(|i| i.index())
     }
 
     pub fn iter(&self) -> DenseColumnIter<'_, E, T> {
@@ -138,10 +138,6 @@ impl<E: Entity, T> DenseColumn<E, T> {
     pub fn iter_data_index(&self) -> impl Iterator<Item = usize> {
         self.ptr.iter_data_index()
     }
-
-    pub fn iter_map(&self) -> MappedDenseColumnIter<'_, E, T> {
-        MappedDenseColumnIter::new(self)
-    }
 }
 
 /*
@@ -153,66 +149,22 @@ impl<E: Entity, T> DenseColumn<E, T> {
 */
 
 pub struct DenseColumnIter<'a, E: Entity, T> {
-    inner: ZippedFilter<'a, T>,
-    marker: PhantomData<E>,
+    inner: Zip<Iter<'a, E>, Iter<'a, T>>,
 }
-
-fn filter(idx: &&Index) -> bool {
-    !idx.is_null()
-}
-
-type FnFilter = fn(&&Index) -> bool;
-type ZippedFilter<'a, T> = Zip<Filter<Iter<'a, super::sparse_index::Index>, FnFilter>, Iter<'a, T>>;
 
 impl<'a, E: Entity, T> DenseColumnIter<'a, E, T> {
-    pub(crate) fn new(ds: &'a DenseColumn<E, T>) -> Self {
-        let inner = ds.ptr.ptr
+    pub(crate) fn new(ds: &'a Array<E, T>) -> Self {
+        let inner = ds.entities
             .iter()
-            .filter(filter as FnFilter)
             .zip(ds.data.iter());
         Self {
             inner,
-            marker: PhantomData,
         }
     }
 }
 
 impl<'a, E: Entity, T> Iterator for DenseColumnIter<'a, E, T> {
-    type Item = (usize, &'a T);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next()
-            .map(|(i, t)| (i.index::<E>(), t))
-    }
-}
-
-pub struct MappedDenseColumnIter<'a, E: Entity, T> {
-    inner: MappedZipFilter<'a, E, T>,
-}
-
-fn filter_map<E: Entity>((i, idx): (usize, &Index)) -> Option<E> {
-    (!idx.is_null()).then_some(E::new(i as u32, idx.version::<E>()))
-}
-
-type FnFilterMap<E> = fn((usize, &Index)) -> Option<E>;
-type MappedZipFilter<'a, E, T> = Zip<FilterMap<Enumerate<Iter<'a, Index>>, FnFilterMap<E>>, Iter<'a, T>>;
-
-impl<'a, E: Entity, T> MappedDenseColumnIter<'a, E, T> {
-    pub(crate) fn new(ds: &'a DenseColumn<E, T>) -> Self {
-        let inner = ds.ptr.ptr
-            .iter()
-            .enumerate()
-            .filter_map(filter_map as FnFilterMap<E>)
-            .zip(ds.data.iter());
-        Self {
-            inner,
-        }
-    }
-}
-
-impl<'a, E: Entity, T> Iterator for MappedDenseColumnIter<'a, E, T> {
-    type Item = (E, &'a T);
+    type Item = (&'a E, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
@@ -220,31 +172,24 @@ impl<'a, E: Entity, T> Iterator for MappedDenseColumnIter<'a, E, T> {
 }
 
 pub struct DenseColumnIterMut<'a, E: Entity, T> {
-    inner: ZippedFilterMut<'a, T>,
-    marker: PhantomData<E>,
+    inner: Zip<Iter<'a, E>, IterMut<'a, T>>,
 }
 
-type ZippedFilterMut<'a, T> = Zip<Filter<Iter<'a, Index>, FnFilter>, IterMut<'a, T>>;
-
 impl<'a, E: Entity, T> DenseColumnIterMut<'a, E, T> {
-    pub(crate) fn new(ds: &'a mut DenseColumn<E, T>) -> Self {
-        let inner = ds.ptr.ptr
+    pub(crate) fn new(ds: &'a mut Array<E, T>) -> Self {
+        let inner = ds.entities
             .iter()
-            .filter(filter as FnFilter)
             .zip(ds.data.iter_mut());
         Self {
             inner,
-            marker: PhantomData,
         }
     }
 }
 
 impl<'a, E: Entity, T> Iterator for DenseColumnIterMut<'a, E, T> {
-    type Item = (usize, &'a mut T);
+    type Item = (&'a E, &'a mut T);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next()
-            .map(|(i, t)| (i.index::<E>(), t))
+        self.inner.next()
     }
 }

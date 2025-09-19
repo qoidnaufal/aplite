@@ -1,5 +1,5 @@
 use crate::entity::Entity;
-use crate::data::dense_column::DenseColumn;
+use crate::data::array::Array;
 
 pub struct Node<E: Entity> {
     pub entity: E,
@@ -38,7 +38,7 @@ pub struct NodeMut<'a, E: Entity> {
 }
 
 pub struct SubTree<E: Entity> {
-    pub(crate) inner: DenseColumn<E, Node<E>>,
+    pub(crate) inner: Array<E, Node<E>>,
 }
 
 impl<E: Entity> SubTree<E> {

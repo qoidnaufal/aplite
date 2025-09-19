@@ -15,8 +15,8 @@ pub use tree::{
     node::SubTree,
 };
 pub use data::{
+    array::Array,
     component::{QueryOne, Component},
-    dense_column::DenseColumn,
-    sparse_index::SparseIndex,
+    sparse_index::SparseIndices,
     table::Table,
 };

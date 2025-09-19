@@ -1,5 +1,5 @@
 use aplite_types::{Rect, Vec2f, Size};
-use aplite_storage::{SparseIndex, DenseColumn, Tree};
+use aplite_storage::{SparseIndices, Array, Tree};
 
 use crate::state::{WidgetState, AspectRatio, Flag};
 use crate::widget::{Widget, WidgetId};
@@ -300,7 +300,7 @@ pub(crate) mod layout_state {
     }
 
     pub(crate) struct LayoutState {
-        pub(crate) ptr: SparseIndex<WidgetId>,
+        pub(crate) ptr: SparseIndices<WidgetId>,
 
         pub(crate) position: Vec<Vec2f>,
         pub(crate) size: Vec<Size>,
@@ -314,13 +314,13 @@ pub(crate) mod layout_state {
         pub(crate) min_height: Vec<Option<f32>>,
         pub(crate) max_height: Vec<Option<f32>>,
 
-        pub(crate) rules: DenseColumn<WidgetId, LayoutRules>,
+        pub(crate) rules: Array<WidgetId, LayoutRules>,
     }
 
     impl LayoutState {
         pub(crate) fn new() -> Self {
             Self {
-                ptr: SparseIndex::default(),
+                ptr: SparseIndices::default(),
                 position: Vec::new(),
                 size: Vec::new(),
                 flag: Vec::new(),
@@ -330,7 +330,7 @@ pub(crate) mod layout_state {
                 height: Vec::new(),
                 min_height: Vec::new(),
                 max_height: Vec::new(),
-                rules: DenseColumn::default(),
+                rules: Array::default(),
             }
         }
 
