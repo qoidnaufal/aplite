@@ -149,6 +149,10 @@ impl Flag {
         self.0 & Self::HIDE == Self::HIDE
     }
 
+    pub(crate) fn is_visible(&self) -> bool {
+        self.0 & Self::HIDE != Self::HIDE
+    }
+
     #[inline(always)]
     pub(crate) fn is_dragable(&self) -> bool {
         self.0 & Self::DRAGABLE == Self::DRAGABLE

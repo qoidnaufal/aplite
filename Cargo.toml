@@ -33,7 +33,7 @@ aplite_renderer = { path = "crates/aplite_renderer" }
 aplite_future = { path = "crates/aplite_future" }
 
 [dependencies.image]
-version = "0.25.6"
+version = "0.25.8"
 default-features = false
 features = ["rayon", "jpeg", "png"]
 optional = true
@@ -42,7 +42,7 @@ optional = true
 aplite_storage = { path = "crates/aplite_storage" }
 aplite_types = { path = "crates/aplite_types" }
 wgpu = "26.0.1"
-winit = "0.30.11"
+winit = "0.30.12"
 
 [features]
 default = ["image"]

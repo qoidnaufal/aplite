@@ -30,19 +30,14 @@ impl<E: Entity + 'static> Table<E> {
         component.register(entity, self);
     }
 
-    pub fn insert_one<T: Any + 'static>(&mut self, entity: &E, value: T) {
+    pub fn insert_one<T: 'static>(&mut self, entity: &E, value: T) {
         if let Some(dense) = self.inner
             .entry(TypeId::of::<T>())
-            .or_insert_with(|| {
-                let column = Array::<E, T>::default();
-                Box::new(column)
-            })
+            .or_insert(Box::new(Array::<E, T>::default()))
             .downcast_mut::<Array<E, T>>()
         {
             dense.insert(entity, value);
         }
-            // .or_default()
-            // .insert(entity, Box::new(value));
     }
 
     pub fn get<T: 'static>(&self, entity: &E) -> Option<&T> {

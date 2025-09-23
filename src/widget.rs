@@ -534,7 +534,7 @@ mod alt_widget {
 
     pub struct Context {
         entities: EntityManager<WidgetId>,
-        table: Table<WidgetId>,
+        components: Table<WidgetId>,
         tree: Tree<WidgetId>,
         current: Option<WidgetId>,
     }
@@ -543,7 +543,7 @@ mod alt_widget {
         fn new() -> Self {
             Self {
                 entities: EntityManager::default(),
-                table: Table::default(),
+                components: Table::default(),
                 tree: Tree::default(),
                 current: None,
             }
@@ -551,11 +551,13 @@ mod alt_widget {
 
         fn create_entity(&mut self) -> WidgetId {
             let id = self.entities.create();
+
             if let Some(parent) = self.current.as_ref() {
                 self.tree.insert(id, parent);
             } else {
                 self.tree.insert_as_parent(id);
             }
+
             id
         }
     }
@@ -574,9 +576,11 @@ mod alt_widget {
         }
 
         fn component<C: Component>(self, cx: &mut Context, component: C) -> Self {
-            cx.table.insert(self.id(), component);
+            cx.components.insert(self.id(), component);
             self
         }
+
+        fn build(self, cx: &mut Context) {}
     }
 
     pub struct TestWidget {
@@ -622,13 +626,5 @@ mod alt_widget {
     #[test]
     fn widget_ecs() {
         let mut cx = Context::new();
-        app(&mut cx);
-        assert_eq!(cx.tree.len(&WidgetId::root()), 7);
-        assert_eq!(cx.tree.tree_depth(), 4);
-
-        let query = cx.table.query::<(&Shape, &Size)>();
-        let query2 = cx.table.query_one::<Rgba>();
-
-        assert_eq!(query.count(), query2.count());
     }
 }

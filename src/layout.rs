@@ -279,8 +279,9 @@ pub(crate) trait Layout: Widget + Sized + 'static {
     }
 }
 
-#[allow(unused)]
-pub(crate) mod layout_state {
+#[cfg(test)]
+pub(crate) mod layout_test {
+    use aplite_storage::{Entity, EntityManager};
     use super::*;
 
     pub(crate) struct LayoutRules {
@@ -299,8 +300,32 @@ pub(crate) mod layout_state {
         Grow,
     }
 
+    impl Default for Unit {
+        fn default() -> Self {
+            Self::Fixed(0.0)
+        }
+    }
+
+    impl Unit {
+        fn is_grow(&self) -> bool {
+            matches!(self, Self::Grow)
+        }
+
+        fn is_fit_to_child(&self) -> bool {
+            matches!(self, Self::FitToChild)
+        }
+    }
+
+    #[derive(Default)]
+    pub(crate) struct LayoutCache {
+        child_count: Vec<usize>,
+        child_width: Vec<f32>,
+        child_height: Vec<f32>,
+    }
+
     pub(crate) struct LayoutState {
         pub(crate) ptr: SparseIndices<WidgetId>,
+        pub(crate) entities: Vec<WidgetId>,
 
         pub(crate) position: Vec<Vec2f>,
         pub(crate) size: Vec<Size>,
@@ -315,12 +340,14 @@ pub(crate) mod layout_state {
         pub(crate) max_height: Vec<Option<f32>>,
 
         pub(crate) rules: Array<WidgetId, LayoutRules>,
+        pub(crate) cache: LayoutCache,
     }
 
     impl LayoutState {
         pub(crate) fn new() -> Self {
             Self {
                 ptr: SparseIndices::default(),
+                entities: Vec::new(),
                 position: Vec::new(),
                 size: Vec::new(),
                 flag: Vec::new(),
@@ -331,6 +358,78 @@ pub(crate) mod layout_state {
                 min_height: Vec::new(),
                 max_height: Vec::new(),
                 rules: Array::default(),
+                cache: LayoutCache::default(),
+            }
+        }
+
+        pub(crate) fn with_capacity(capacity: usize) -> Self {
+            Self {
+                ptr: SparseIndices::default(),
+                entities: Vec::with_capacity(capacity),
+                position: Vec::with_capacity(capacity),
+                size: Vec::with_capacity(capacity),
+                flag: Vec::with_capacity(capacity),
+                width: Vec::with_capacity(capacity),
+                min_width: Vec::with_capacity(capacity),
+                max_width: Vec::with_capacity(capacity),
+                height: Vec::with_capacity(capacity),
+                min_height: Vec::with_capacity(capacity),
+                max_height: Vec::with_capacity(capacity),
+                rules: Array::default(),
+                cache: LayoutCache::default(),
+            }
+        }
+
+        fn new_entity(&mut self, id: &WidgetId) {
+            let entity_index = id.index();
+
+            if entity_index >= self.ptr.len() {
+                self.ptr.resize(entity_index);
+            }
+
+            let data_index = self.width.len();
+
+            self.position.push(Default::default());
+            self.size.push(Size::default());
+            self.width.push(Unit::Fixed(1.0));
+            self.height.push(Unit::Fixed(1.0));
+            self.flag.push(Flag::default());
+
+            self.entities.push(*id);
+            self.ptr.set_index(entity_index, data_index);
+        }
+
+        fn add_rules(&mut self, id: &WidgetId) {
+            self.rules.insert(id, LayoutRules {
+                orientation: Orientation::Horizontal,
+                padding: Padding::splat(3),
+                spacing: 10,
+            });
+        }
+
+        pub(crate) fn len(&self) -> usize {
+            self.position.len()
+        }
+
+        pub(crate) fn remove(&mut self, id: &WidgetId) {
+            if self.len() == 0 { return }
+
+            if let Some(index) = self.ptr.get_data_index(id) {
+                let last = self.entities.last().unwrap();
+
+                self.ptr.set_index(last.index(), index);
+                self.ptr.set_null(id);
+                self.entities.swap_remove(index);
+
+                self.size.swap_remove(index);
+                self.position.swap_remove(index);
+                self.flag.swap_remove(index);
+                self.width.swap_remove(index);
+                self.min_width.swap_remove(index);
+                self.max_width.swap_remove(index);
+                self.height.swap_remove(index);
+                self.min_height.swap_remove(index);
+                self.max_height.swap_remove(index);
             }
         }
 
@@ -351,7 +450,7 @@ pub(crate) mod layout_state {
                 .iter_mut()
                 .zip(self.width.iter().zip(&self.height))
                 .zip(&self.flag)
-                .filter(|(_, flag)| !flag.is_hidden())
+                .filter(|(_, flag)| flag.is_visible())
                 .for_each(|((size, (width, height)), _)| {
                     match width {
                         Unit::Fixed(w) => size.width = *w,
@@ -370,7 +469,7 @@ pub(crate) mod layout_state {
                 .zip(self.min_width.iter().zip(&self.max_width))
                 .zip(self.min_height.iter().zip(&self.max_height))
                 .zip(&self.flag)
-                .filter(|(_, flag)| !flag.is_hidden())
+                .filter(|(_, flag)| flag.is_visible())
                 .for_each(|(((size, (min_w, max_w)), (min_h, max_h)), _)| {
                     *size = size
                         .adjust_on_min_constraints(*min_w, *min_h)
@@ -380,13 +479,13 @@ pub(crate) mod layout_state {
 
         pub(crate) fn update_growth_unit(&mut self, tree: &Tree<WidgetId>, start: &WidgetId) {
             tree.iter_breadth(start)
-                .filter(|id| !self.ptr.with(*id, |index| &self.flag[index]).unwrap().is_hidden())
+                .filter(|id| self.ptr.with(*id, |index| &self.flag[index]).is_some_and(|flag| flag.is_visible()))
                 .for_each(|id| {
                     if let Some(rules) = self.rules.get(id) {
                         let size = self.ptr.with(id, |index| &self.size[index]).copied().unwrap();
 
                         let (rem_w, rem_h) = tree.iter_children(id)
-                            .map(|child| self.ptr.with(child, |index| &self.size[index]).unwrap())
+                            .flat_map(|child| self.ptr.with(child, |index| &self.size[index]))
                             .fold((size.width, size.height), |(w, h), cs| {
                                 match rules.orientation {
                                     Orientation::Horizontal => (w - cs.width, h),
@@ -395,11 +494,11 @@ pub(crate) mod layout_state {
                             });
 
                         let to_grow_w = tree.iter_children(id)
-                            .filter(|child| matches!(self.ptr.with(*child, |index| &self.width[index]).unwrap(), Unit::Grow))
+                            .filter(|child| self.ptr.with(*child, |index| &self.width[index]).is_some_and(|unit| unit.is_grow()))
                             .collect::<Vec<_>>();
 
                         let to_grow_h = tree.iter_children(id)
-                            .filter(|child| matches!(self.ptr.with(*child, |index| &self.height[index]).unwrap(), Unit::Grow))
+                            .filter(|child| self.ptr.with(*child, |index| &self.height[index]).is_some_and(|unit| unit.is_grow()))
                             .collect::<Vec<_>>();
 
                         let count_w = to_grow_w.len() as f32;
@@ -424,45 +523,57 @@ pub(crate) mod layout_state {
                 });
         }
 
-        pub(crate) fn calculate_size(&mut self, tree: &Tree<WidgetId>, start: &WidgetId) {
-            tree.iter_breadth(start)
-                .rev()
-                .filter(|id| !self.ptr.with(*id, |index| &self.flag[index]).unwrap().is_hidden())
-                .for_each(|id| {
-                    let mut size = Size::default();
+        fn calculate_size(&mut self, tree: &Tree<WidgetId>, start: &WidgetId) -> Size {
+            let mut size = Size::default();
 
-                    if let Some(rules) = self.rules.get(id) {
-                        let orientation = rules.orientation;
-                        let spacing = rules.spacing;
-                        let padding = rules.padding;
+            if self.ptr
+                .with(start, |index| &self.flag[index])
+                .is_some_and(|flag| flag.is_hidden()) { return size }
 
-                        tree.iter_children(id).enumerate().for_each(|(n, child)| {
-                            let child_size = self.ptr.with(child, |index| &self.size[index]).unwrap();
-                            match orientation {
-                                Orientation::Horizontal => {
-                                    size.width += child_size.width + spacing as f32 * n.clamp(0, 1) as f32;
-                                    size.height = size.height.max(child_size.height);
-                                },
-                                Orientation::Vertical => {
-                                    size.height += child_size.height + spacing as f32 * n.clamp(0, 1) as f32;
-                                    size.width = size.width.max(child_size.width);
-                                },
-                            }
-                        });
+            if let Some(rules) = self.rules.get(start) {
+                let orientation = rules.orientation;
+                let padding = rules.padding;
+                let spacing = rules.spacing;
 
-                        size.width += padding.horizontal() as f32;
-                        size.height += padding.vertical() as f32;
-                    }
+                let child_count = tree.iter_children(start)
+                    .map(|child| {
+                        let child_size = self.calculate_size(tree, child);
+                        match orientation {
+                            Orientation::Horizontal => {
+                                size.width += child_size.width;
+                                size.height = size.height.max(child_size.height);
+                            },
+                            Orientation::Vertical => {
+                                size.height += child_size.height;
+                                size.width = size.width.max(child_size.width);
+                            },
+                        }
+                    })
+                    .count();
 
-                    if let Some(this_size) = self.ptr.with(id, |index| &mut self.size[index]) {
-                        *this_size = size;
-                    }
-                });
+                match orientation {
+                    Orientation::Horizontal => size.width += spacing as f32 * (child_count - 1) as f32,
+                    Orientation::Vertical => size.height += spacing as f32 * (child_count - 1) as f32,
+                }
+
+                size.width += padding.horizontal() as f32;
+                size.height += padding.vertical() as f32;
+            }
+
+            if let Some(this_size) = self.ptr.with(start, |index| &mut self.size[index]) {
+                *this_size = size;
+            }
+
+            size
         }
 
         pub(crate) fn calculate_position(&mut self, tree: &Tree<WidgetId>, start: &WidgetId) {
-            tree.iter_breadth(start)
-                .filter(|id| !self.ptr.with(*id, |index| &self.flag[index]).unwrap().is_hidden())
+            tree.iter_depth(start)
+                .filter(|id| {
+                    self.ptr
+                        .with(*id, |index| &self.flag[index])
+                        .is_some_and(|flag| flag.is_visible())
+                })
                 .for_each(|id| {
                     if let Some(parent) = tree.get_parent(id)
                         && let Some(rules) = self.rules.get(parent)
@@ -504,39 +615,44 @@ pub(crate) mod layout_state {
         pub(crate) fn update_alignment(&mut self) {}
     }
 
-    pub(crate) fn update_fixed_unit(size: &mut [Size], width: &[Unit], height: &[Unit], flags: &[Flag]) {
-        for ((size, (w, h)), flag) in size.iter_mut().zip(width.iter().zip(height)).zip(flags) {
-            if !flag.is_hidden() {
-                match w {
-                    Unit::Fixed(val) => size.width = *val,
-                    Unit::FitToChild | Unit::Grow => {},
-                };
-                match h {
-                    Unit::Fixed(val) => size.height = *val,
-                    Unit::FitToChild | Unit::Grow => {},
-                }
+    fn setup() -> (LayoutState, Tree<WidgetId>) {
+        const NUM: usize = 1024 * 8;
+        let mut manager = EntityManager::<WidgetId>::default();
+        let mut tree: Tree<WidgetId> = Tree::with_capacity(NUM);
+        let mut layout_state = LayoutState::with_capacity(NUM);
+        let mut parent = Some(WidgetId::root());
+
+        layout_state.new_entity(&WidgetId::root());
+
+        for i in 0..NUM {
+            let id = manager.create();
+            layout_state.new_entity(&id);
+
+            if let Some(parent) = parent.as_ref() {
+                tree.insert(id, parent);
+                layout_state.add_rules(parent);
+            }
+
+            if i > 0 && i % 3 == 0 {
+                parent = tree.get_first_child(&WidgetId::new(1, 0)).copied();
+            } else {
+                parent = Some(id);
             }
         }
+
+        (layout_state, tree)
     }
 
-    pub(crate) fn update_constraints(
-        size: &mut [Size],
-        min_w: &[Option<f32>],
-        max_w: &[Option<f32>],
-        min_h: &[Option<f32>],
-        max_h: &[Option<f32>],
-        flags: &[Flag]
-    ) {
-        for (((size, (min_w, max_w)), (min_h, max_h)), flag) in size.iter_mut()
-            .zip(min_w.iter().zip(max_w))
-            .zip(min_h.iter().zip(max_h))
-            .zip(flags)
-        {
-            if !flag.is_hidden() {
-                *size = size
-                    .adjust_on_min_constraints(*min_w, *min_h)
-                    .adjust_on_max_constraints(*max_w, *max_h);
-            }
-        }
+    #[test]
+    fn performance() {
+        let (mut state, tree) = setup();
+
+        let start = std::time::Instant::now();
+
+        state.update_fixed_unit();
+        state.calculate_size(&tree, &WidgetId::root());
+        state.calculate_position(&tree, &WidgetId::root());
+
+        eprintln!("time: {:?}", start.elapsed());
     }
 }

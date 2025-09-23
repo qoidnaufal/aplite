@@ -1,3 +1,4 @@
+use std::marker::PhantomData;
 use crate::entity::Entity;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -23,14 +24,14 @@ impl Index {
 
 pub struct SparseIndices<E: Entity> {
     pub(crate) ptr: Vec<Index>,
-    marker: std::marker::PhantomData<E>,
+    marker: PhantomData<E>,
 }
 
 impl<E: Entity> Default for SparseIndices<E> {
     fn default() -> Self {
         Self {
             ptr: Vec::new(),
-            marker: std::marker::PhantomData,
+            marker: PhantomData,
         }
     }
 }
@@ -40,11 +41,20 @@ impl<E: Entity> SparseIndices<E> {
         self.ptr.get(entity.index()).filter(|i| !i.is_null())
     }
 
-    pub(crate) fn set_index(&mut self, index: usize, data_index: usize) {
+    pub fn get_data_index(&self, entity: &E) -> Option<usize> {
+        self.ptr
+            .get(entity.index())
+            .and_then(|i| (!i.is_null()).then_some(i.index()))
+    }
+
+    pub fn set_index(&mut self, index: usize, data_index: usize) {
+        if index >= self.ptr.len() {
+            self.resize(index);
+        }
         self.ptr[index] = Index::new(data_index);
     }
 
-    pub(crate) fn set_null(&mut self, entity: &E) {
+    pub fn set_null(&mut self, entity: &E) {
         self.ptr[entity.index()] = Index::null()
     }
 
@@ -59,15 +69,15 @@ impl<E: Entity> SparseIndices<E> {
         self.get_index(entity).is_some()
     }
 
-    pub(crate) fn resize(&mut self, new_len: usize) {
-        self.ptr.resize(new_len + 4, Index::null());
+    pub fn resize(&mut self, new_len: usize) {
+        self.ptr.resize(new_len + 1, Index::null());
     }
 
     pub(crate) fn shrink_to_fit(&mut self) {
         self.ptr.shrink_to_fit();
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.ptr.len()
     }
 
@@ -76,10 +86,15 @@ impl<E: Entity> SparseIndices<E> {
         self.ptr.shrink_to_fit();
     }
 
-    pub fn iter_all(&self) -> impl Iterator<Item = usize> {
-        self.ptr.iter().map(|i| i.index())
+    /// Iterate over the index of the associated entity
+    pub fn iter_entity_index(&self) -> impl Iterator<Item = usize> {
+        self.ptr
+            .iter()
+            .enumerate()
+            .filter_map(|(i, idx)| (!idx.is_null()).then_some(i))
     }
 
+    /// Iterate over the position of the indexed data
     pub fn iter_data_index(&self) -> impl Iterator<Item = usize> {
         self.ptr
             .iter()
