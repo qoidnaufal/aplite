@@ -1,8 +1,9 @@
-use std::iter::Zip;
+use std::iter::{Zip, FilterMap, Enumerate};
+use std::marker::PhantomData;
 use std::slice::{Iter, IterMut};
 
 use crate::entity::Entity;
-use super::sparse_index::SparseIndices;
+use super::sparse_index::{SparseIndices, Index};
 
 /// A dense data storage which is guaranteed even after removal.
 /// Doesn't facilitate the creation of [`Entity`], unlike [`IndexMap`](crate::index_map::IndexMap).
@@ -11,6 +12,25 @@ pub struct Array<E: Entity, T> {
     pub(crate) ptr: SparseIndices<E>,
     pub(crate) data: Vec<T>,
     pub(crate) entities: Vec<E>,
+}
+
+/// A dense data storage which doesn't support insertion or removal.
+/// Doesn't facilitate the creation of [`Entity`], unlike [`IndexMap`](crate::index_map::IndexMap).
+/// You'll need the assistance of [`EntityManager`](crate::entity::EntityManager) to create the key for indexing data.
+pub struct ImmutableArray<E: Entity, T> {
+    ptr: Box<[Index]>,
+    data: Box<[T]>,
+    marker: PhantomData<E>,
+}
+
+impl<E: Entity, T> From<Array<E, T>> for ImmutableArray<E, T> {
+    fn from(arr: Array<E, T>) -> Self {
+        Self {
+            ptr: arr.ptr.ptr.into_boxed_slice(),
+            data: arr.data.into_boxed_slice(),
+            marker: std::marker::PhantomData,
+        }
+    }
 }
 
 impl<E: Entity, T> Default for Array<E, T> {
@@ -127,12 +147,12 @@ impl<E: Entity, T> Array<E, T> {
         self.ptr.get_index(entity).map(|i| i.index())
     }
 
-    pub fn iter(&self) -> DenseColumnIter<'_, E, T> {
-        DenseColumnIter::new(self)
+    pub fn iter(&self) -> ArrayIter<'_, E, T> {
+        ArrayIter::new(self)
     }
 
-    pub fn iter_mut(&mut self) -> DenseColumnIterMut<'_, E, T> {
-        DenseColumnIterMut::new(self)
+    pub fn iter_mut(&mut self) -> ArrayIterMut<'_, E, T> {
+        ArrayIterMut::new(self)
     }
 
     pub fn iter_data_index(&self) -> impl Iterator<Item = usize> {
@@ -140,19 +160,60 @@ impl<E: Entity, T> Array<E, T> {
     }
 }
 
+impl<E: Entity, T> ImmutableArray<E, T> {
+    pub fn get(&self, entity: &E) -> Option<&T> {
+        self.ptr.get(entity.index())
+            .and_then(|index| self.data.get(index.index()))
+    }
+
+    pub fn get_mut(&mut self, entity: &E) -> Option<&mut T> {
+        self.ptr.get(entity.index())
+            .and_then(|index| self.data.get_mut(index.index()))
+    }
+
+    pub fn contains(&self, entity: &E) -> bool {
+        self.ptr.get(entity.index())
+            .is_some_and(|index| !index.is_null())
+    }
+
+    pub fn iter(&self) -> ImmutableArrayIter<'_, E, T> {
+        ImmutableArrayIter {
+            inner: self.ptr.iter()
+                .enumerate()
+                .filter_map(filter_map as fn((usize, &Index)) -> Option<usize>)
+                .zip(self.data.as_ref()),
+            marker: PhantomData,
+        }
+    }
+
+    pub fn iter_mut(&mut self) -> ImmutableArrayIterMut<'_, E, T> {
+        ImmutableArrayIterMut {
+            inner: self.ptr.iter()
+                .enumerate()
+                .filter_map(filter_map as fn((usize, &Index)) -> Option<usize>)
+                .zip(self.data.as_mut()),
+            marker: PhantomData,
+        }
+    }
+}
+
+fn filter_map((i, index): (usize, &Index)) -> Option<usize> {
+    (!index.is_null()).then_some(i)
+}
+
 /*
 #########################################################
 #                                                       #
-#                        Iterator                       #
+#                    Array::Iterator                    #
 #                                                       #
 #########################################################
 */
 
-pub struct DenseColumnIter<'a, E: Entity, T> {
+pub struct ArrayIter<'a, E: Entity, T> {
     inner: Zip<Iter<'a, E>, Iter<'a, T>>,
 }
 
-impl<'a, E: Entity, T> DenseColumnIter<'a, E, T> {
+impl<'a, E: Entity, T> ArrayIter<'a, E, T> {
     pub(crate) fn new(ds: &'a Array<E, T>) -> Self {
         let inner = ds.entities
             .iter()
@@ -163,7 +224,7 @@ impl<'a, E: Entity, T> DenseColumnIter<'a, E, T> {
     }
 }
 
-impl<'a, E: Entity, T> Iterator for DenseColumnIter<'a, E, T> {
+impl<'a, E: Entity, T> Iterator for ArrayIter<'a, E, T> {
     type Item = (&'a E, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -171,11 +232,11 @@ impl<'a, E: Entity, T> Iterator for DenseColumnIter<'a, E, T> {
     }
 }
 
-pub struct DenseColumnIterMut<'a, E: Entity, T> {
+pub struct ArrayIterMut<'a, E: Entity, T> {
     inner: Zip<Iter<'a, E>, IterMut<'a, T>>,
 }
 
-impl<'a, E: Entity, T> DenseColumnIterMut<'a, E, T> {
+impl<'a, E: Entity, T> ArrayIterMut<'a, E, T> {
     pub(crate) fn new(ds: &'a mut Array<E, T>) -> Self {
         let inner = ds.entities
             .iter()
@@ -186,8 +247,42 @@ impl<'a, E: Entity, T> DenseColumnIterMut<'a, E, T> {
     }
 }
 
-impl<'a, E: Entity, T> Iterator for DenseColumnIterMut<'a, E, T> {
+impl<'a, E: Entity, T> Iterator for ArrayIterMut<'a, E, T> {
     type Item = (&'a E, &'a mut T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+}
+
+/*
+#########################################################
+#                                                       #
+#               ImmutableArray::Iterator                #
+#                                                       #
+#########################################################
+*/
+
+pub struct ImmutableArrayIter<'a, E: Entity, T> {
+    inner: Zip<FilterMap<Enumerate<Iter<'a, Index>>, fn((usize, &Index)) -> Option<usize>>, Iter<'a, T>>,
+    marker: PhantomData<E>,
+}
+
+impl<'a, E: Entity, T> Iterator for ImmutableArrayIter<'a, E, T> {
+    type Item = (usize, &'a T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+}
+
+pub struct ImmutableArrayIterMut<'a, E: Entity, T> {
+    inner: Zip<FilterMap<Enumerate<Iter<'a, Index>>, fn((usize, &Index)) -> Option<usize>>, IterMut<'a, T>>,
+    marker: PhantomData<E>,
+}
+
+impl<'a, E: Entity, T> Iterator for ImmutableArrayIterMut<'a, E, T> {
+    type Item = (usize, &'a mut T);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()

@@ -2,7 +2,6 @@ use crate::entity::Entity;
 use crate::iterator::{
     TreeChildIter,
     TreeDepthIter,
-    TreeBreadthIter,
     TreeAncestryIter,
     TreeNodeIter,
 };
@@ -382,11 +381,6 @@ impl<E: Entity> Tree<E> {
         TreeDepthIter::new(self, entity)
     }
 
-    /// iterate the members of the entity
-    pub fn iter_breadth<'a>(&'a self, entity: &'a E) -> TreeBreadthIter<'a, E> {
-        TreeBreadthIter::new(self, entity)
-    }
-
     /// iterate the entity's parent upward
     pub fn iter_ancestry<'a>(&'a self, entity: &'a E) -> TreeAncestryIter<'a, E> {
         TreeAncestryIter::new(self, entity)
@@ -551,36 +545,6 @@ mod tree_test {
         let subtree_len = tree.len(&TestId(5));
 
         assert_eq!(subtree_len, 3);
-    }
-
-    #[test]
-    fn member_breadth_test() {
-        let (mut manager, mut tree) = setup_tree(11);
-        let id12 = manager.create();
-        tree.insert(id12, &TestId(9));
-
-        let root = TestId::root();
-        let forward = tree.iter_breadth(&root).by_ref().last();
-        assert_eq!(forward, Some(&id12));
-
-        let backward = tree.iter_breadth(&root).by_ref().rev().last();
-        assert_eq!(backward, Some(&TestId::root()));
-
-        let flags = (0..tree.len(&TestId::root())).map(|n| n % 2 == 0);
-        let flagged = tree.iter_breadth(&TestId::root())
-            .zip(flags)
-            .filter(|(_, flag)| !flag)
-            .count();
-
-        eprintln!("{flagged:?}");
-        // eprintln!("{forward:?}");
-        // eprintln!("{backward:?}");
-        // eprintln!("{tree:?}");
-
-        // let depth = tree.iter_depth(TestId::root());
-        // let breadth = tree.iter_breadth(TestId::root());
-        // let combined = depth.zip(breadth).map(|(d, b)| format!("{d:?} . {b:?}")).collect::<Vec<_>>();
-        // eprintln!("{combined:#?}");
     }
 
     #[test]

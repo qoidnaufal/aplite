@@ -3,7 +3,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use aplite_renderer::Shape;
-use aplite_storage::SparseIndices;
 use aplite_types::{
     Matrix3x2,
     Rect,
@@ -19,43 +18,6 @@ use crate::layout::{AlignV, AlignH, Orientation, Padding};
 thread_local! {
     pub(crate) static NODE_STORAGE: RefCell<HashMap<WidgetId, Rc<RefCell<WidgetState>>>> =
         RefCell::new(HashMap::with_capacity(1024));
-}
-
-pub(crate) struct CommonState {
-    pub(crate) ptr: SparseIndices<WidgetId>,
-    pub(crate) rect: Vec<Rect>,
-    pub(crate) transform: Vec<Matrix3x2>,
-    pub(crate) flag: Vec<Flag>,
-    pub(crate) shape: Vec<Shape>,
-    pub(crate) corner_radius: Vec<CornerRadius>,
-    // pub(crate) rotation: f32, // in radians
-}
-
-// I think it's okay not to pack this into vec since this will be used rarely
-pub(crate) struct SizeConstraints {
-    pub(crate) min_width: Option<f32>,
-    pub(crate) min_height: Option<f32>,
-    pub(crate) max_width: Option<f32>,
-    pub(crate) max_height: Option<f32>,
-}
-
-// I think it's okay not to pack this into vec since this will be used rarely
-pub(crate) struct LayoutRules {
-    pub(crate) padding: Padding,
-    pub(crate) align_v: AlignV,
-    pub(crate) align_h: AlignH,
-    pub(crate) orientation: Orientation,
-    pub(crate) spacing: u8,
-}
-
-pub(crate) struct PaintState {
-    pub(crate) background_paint: Vec<Paint>,
-    pub(crate) aspect_ratio: Vec<AspectRatio>,
-}
-
-pub(crate) struct BorderState {
-    pub(crate) border_paint: Vec<Rgba>,
-    pub(crate) border_width: Vec<u8>,
 }
 
 pub struct WidgetState {
@@ -237,14 +199,11 @@ impl Flag {
 #[derive(Clone, Copy)]
 pub struct ViewNode {
     pub(crate) id: WidgetId,
-    // pub(crate) last_child: Option<Box<dyn crate::widget::Widget>>,
 }
 
 impl Default for ViewNode {
     fn default() -> Self {
-        let state = Rc::new(RefCell::new(WidgetState::default()));
         let id = ENTITY_MANAGER.with_borrow_mut(|s| s.create());
-        NODE_STORAGE.with_borrow_mut(|s| s.insert(id, state));
 
         Self { id }
     }

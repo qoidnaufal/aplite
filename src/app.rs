@@ -14,7 +14,7 @@ use aplite_future::{block_on, Executor};
 
 use crate::prelude::ApliteResult;
 use crate::context::Context;
-use crate::layout::{LayoutCx, Layout};
+// use crate::layout::{LayoutCx, Layout};
 use crate::error::ApliteError;
 use crate::view::IntoView;
 use crate::widget::WindowWidget;
@@ -82,16 +82,17 @@ impl Aplite {
         let window = Arc::new(window);
         let window_id = window.id();
 
-        let size = window
-            .inner_size()
-            .to_logical::<f32>(window.scale_factor());
-        let bound = Rect::from_size(Size::new(size.width, size.height));
-        let window_widget = WindowWidget::new(bound);
-        let mut cx = LayoutCx::new(&window_widget);
+        // let size = window
+        //     .inner_size()
+        //     .to_logical::<f32>(window.scale_factor());
+        // let bound = Rect::from_size(Size::new(size.width, size.height));
+        // let window_widget = WindowWidget::new(&mut self.cx, bound);
+        // let mut cx = LayoutCx::new(&window_widget);
 
-        self.cx.view.widget.calculate_size(None);
-        self.cx.view.widget.calculate_layout(&mut cx);
+        // self.cx.view.widget.calculate_size(None);
+        // self.cx.view.widget.calculate_layout(&mut cx);
 
+        self.cx.state.calculate_layout(&self.cx.tree, &self.cx.view.id());
         #[cfg(feature = "debug_tree")] eprintln!("{:#?}", view);
 
         let renderer = block_on(async { Renderer::new(Arc::downgrade(&window)).await })?;

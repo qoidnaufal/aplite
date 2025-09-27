@@ -69,7 +69,14 @@ impl<E: Entity> SparseIndices<E> {
         self.get_index(entity).is_some()
     }
 
-    pub fn resize(&mut self, new_len: usize) {
+    pub fn resize_if_needed(&mut self, entity: &E) {
+        let index = entity.index();
+        if index >= self.ptr.len() {
+            self.resize(index);
+        }
+    }
+
+    pub(crate) fn resize(&mut self, new_len: usize) {
         self.ptr.resize(new_len + 1, Index::null());
     }
 

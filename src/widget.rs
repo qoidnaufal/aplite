@@ -1,10 +1,11 @@
-use std::cell::RefCell;
+use std::cell::{RefCell, UnsafeCell};
 use std::collections::HashMap;
 
 use aplite_renderer::{Shape, Scene};
 use aplite_types::{Rgba, CornerRadius, Size, Rect};
-use aplite_storage::{EntityManager, Entity, create_entity};
+use aplite_storage::{Tree, EntityManager, Entity, create_entity};
 
+use crate::context::Context;
 use crate::layout::*;
 use crate::view::IntoView;
 use crate::state::{
@@ -34,94 +35,133 @@ create_entity! {
 
 /// main building block to create a renderable component
 pub trait Widget {
+    fn id(&self) -> WidgetId;
+
     fn node(&self) -> ViewNode;
 
-    fn node_ref(&self) -> Option<NodeRef> {
-        self.node().node_ref()
-    }
-
-    fn id(&self) -> WidgetId {
-        self.node().id()
-    }
-
-    fn children_ref(&self) -> Option<ChildrenRef<'_>> {
+    fn children(&self) -> Option<&Children> {
         None
     }
 
-    fn children_mut(&mut self) -> Option<ChildrenMut<'_>> {
-        None
-    }
+    // fn draw(&self, scene: &mut Scene) {
+    //     let node = self.node_ref().unwrap().upgrade();
 
-    fn draw(&self, scene: &mut Scene) {
-        let node = self.node_ref().unwrap().upgrade();
+    //     if !node.borrow().flag.is_hidden() {
+    //         if node.borrow().flag.is_dirty() {
+    //             let state = node.borrow();
 
-        if !node.borrow().flag.is_hidden() {
-            if node.borrow().flag.is_dirty() {
-                let state = node.borrow();
+    //             scene.draw(&aplite_renderer::DrawArgs {
+    //                 rect: &state.rect,
+    //                 transform: &state.transform,
+    //                 background_paint: &state.background_paint.as_paint_ref(),
+    //                 border_paint: &state.border_paint.as_paint_ref(),
+    //                 border_width: state.border_width.max(5.0),
+    //                 shape: state.shape,
+    //                 corner_radius: state.corner_radius,
+    //             });
 
-                scene.draw(&aplite_renderer::DrawArgs {
-                    rect: &state.rect,
-                    transform: &state.transform,
-                    background_paint: &state.background_paint.as_paint_ref(),
-                    border_paint: &state.border_paint.as_paint_ref(),
-                    border_width: state.border_width.max(5.0),
-                    shape: state.shape,
-                    corner_radius: state.corner_radius,
-                });
+    //             drop(state);
 
-                drop(state);
+    //             node.borrow_mut().flag.set_dirty(false);
+    //         } else {
+    //             scene.next_draw();
+    //         }
 
-                node.borrow_mut().flag.set_dirty(false);
-            } else {
-                scene.next_draw();
-            }
+    //         if let Some(children) = self.children_ref() {
+    //             children
+    //                 .iter()
+    //                 .for_each(|child| {
+    //                     child.draw(scene);
+    //                 });
+    //         }
+    //     }
+    // }
 
-            if let Some(children) = self.children_ref() {
-                children
-                    .iter()
-                    .for_each(|child| {
-                        child.draw(scene);
-                    });
-            }
-        }
-    }
+    // fn layout(&self, cx: &mut LayoutCx) -> bool {
+    //     let node = self.node_ref().unwrap().upgrade();
+    //     if node.borrow().flag.is_hidden() { return false }
 
-    fn layout(&self, cx: &mut LayoutCx) -> bool {
-        let node = self.node_ref().unwrap().upgrade();
-        if node.borrow().flag.is_hidden() { return false }
+    //     let size = node.borrow().rect.size();
+    //     let mut this = node.borrow_mut();
 
-        let size = node.borrow().rect.size();
-        let mut this = node.borrow_mut();
+    //     match cx.rules.orientation {
+    //         Orientation::Vertical => {
+    //             match cx.rules.align_h {
+    //                 AlignH::Left | AlignH::Right => this.rect.x = cx.next_pos.x,
+    //                 AlignH::Center => this.rect.x = cx.next_pos.x - size.width / 2.,
+    //             }
 
-        match cx.rules.orientation {
-            Orientation::Vertical => {
-                match cx.rules.align_h {
-                    AlignH::Left | AlignH::Right => this.rect.x = cx.next_pos.x,
-                    AlignH::Center => this.rect.x = cx.next_pos.x - size.width / 2.,
-                }
+    //             this.rect.y = cx.next_pos.y;
+    //             cx.next_pos.y += cx.rules.spacing as f32 + size.height;
+    //         },
+    //         Orientation::Horizontal => {
+    //             match cx.rules.align_v {
+    //                 AlignV::Top | AlignV::Bottom => this.rect.y = cx.next_pos.y,
+    //                 AlignV::Middle => this.rect.y = cx.next_pos.y - size.height / 2.,
+    //             }
 
-                this.rect.y = cx.next_pos.y;
-                cx.next_pos.y += cx.rules.spacing as f32 + size.height;
-            },
-            Orientation::Horizontal => {
-                match cx.rules.align_v {
-                    AlignV::Top | AlignV::Bottom => this.rect.y = cx.next_pos.y,
-                    AlignV::Middle => this.rect.y = cx.next_pos.y - size.height / 2.,
-                }
+    //             this.rect.x = cx.next_pos.x;
+    //             cx.next_pos.x += cx.rules.spacing as f32 + size.width;
+    //         },
+    //     }
 
-                this.rect.x = cx.next_pos.x;
-                cx.next_pos.x += cx.rules.spacing as f32 + size.width;
-            },
-        }
+    //     this.flag.set_dirty(true);
 
-        this.flag.set_dirty(true);
-
-        true
-    }
+    //     true
+    // }
 
 }
 
-pub struct ChildrenRef<'a>(&'a Vec<Box<dyn Widget>>);
+pub struct Children(UnsafeCell<Vec<Box<dyn IntoView>>>);
+
+impl std::fmt::Debug for Children {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        unsafe {
+            if let Some(vec) = self.0.get().as_ref() {
+                f.debug_list()
+                    .entries(vec)
+                    .finish()
+            } else {
+                write!(f, "[]")
+            }
+        }
+    }
+}
+
+impl Children {
+    pub fn new() -> Self {
+        Self(UnsafeCell::new(Vec::new()))
+    }
+
+    pub fn push(&self, child: impl IntoView + 'static) {
+        unsafe {
+            if let Some(vec) = self.0.get().as_mut() {
+                vec.push(Box::new(child));
+            }
+        }
+    }
+
+    pub(crate) fn iter_all(&self) -> impl Iterator<Item = &dyn IntoView> {
+        unsafe {
+            self.0.get()
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|child| child.as_ref())
+        }
+    }
+
+    pub(crate) fn drain(self) -> impl Iterator<Item = Box<dyn IntoView>> {
+        unsafe {
+            self.0.get()
+                .as_mut()
+                .unwrap()
+                .drain(..)
+        }
+    }
+}
+
+pub struct ChildrenRef<'a>(&'a [Box<dyn Widget>]);
 
 impl<'a> ChildrenRef<'a> {
     pub fn all_ref(&self) -> impl Iterator<Item = &'a dyn Widget> {
@@ -158,7 +198,7 @@ impl<'a> From<&'a Vec<Box<dyn Widget>>> for ChildrenRef<'a> {
 }
 
 impl std::ops::Deref for ChildrenRef<'_> {
-    type Target = Vec<Box<dyn Widget>>;
+    type Target = [Box<dyn Widget>];
     fn deref(&self) -> &Self::Target {
         self.0
     }
@@ -167,7 +207,7 @@ impl std::ops::Deref for ChildrenRef<'_> {
 impl std::fmt::Debug for ChildrenRef<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_list()
-            .entry(self.0)
+            .entry(&self.0)
             .finish()
     }
 }
@@ -203,9 +243,9 @@ impl std::fmt::Debug for ChildrenMut<'_> {
 
 // TODO: is immediately calculate the size here a good idea?
 pub trait WidgetExt: Widget + Sized {
-    fn child(mut self, child: impl IntoView + 'static) -> Self {
-        if let Some(children) = self.children_mut() {
-            children.0.push(Box::new(child));
+    fn child(self, child: impl IntoView + 'static) -> Self {
+        if let Some(children) = self.children() {
+            children.push(child);
         }
         self
     }
@@ -223,32 +263,34 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn image_aspect_ratio(self, val: AspectRatio) -> Self {
-        self.node_ref()
-            .unwrap()
-            .upgrade()
-            .borrow_mut()
-            .image_aspect_ratio = val;
+    // fn image_aspect_ratio(self, val: AspectRatio) -> Self {
+    //     self.node_ref()
+    //         .unwrap()
+    //         .upgrade()
+    //         .borrow_mut()
+    //         .image_aspect_ratio = val;
 
-        self
-    }
+    //     self
+    // }
 
     fn color(self, color: Rgba) -> Self {
-        self.node_ref()
-            .unwrap()
-            .upgrade()
-            .borrow_mut()
-            .background_paint = color.into();
+        let _ = color;
+        // self.node_ref()
+        //     .unwrap()
+        //     .upgrade()
+        //     .borrow_mut()
+        //     .background_paint = color.into();
 
         self
     }
 
     fn border_color(self, color: Rgba) -> Self {
-        self.node_ref()
-            .unwrap()
-            .upgrade()
-            .borrow_mut()
-            .border_paint = color.into();
+        let _ = color;
+        // self.node_ref()
+        //     .unwrap()
+        //     .upgrade()
+        //     .borrow_mut()
+        //     .border_paint = color.into();
 
         self
     }
@@ -264,129 +306,153 @@ pub trait WidgetExt: Widget + Sized {
     }
 
     fn border_width(self, val: f32) -> Self {
-        self.node_ref()
-            .unwrap()
-            .upgrade()
-            .borrow_mut()
-            .border_width = val;
+        let _ = val;
+        // self.node_ref()
+        //     .unwrap()
+        //     .upgrade()
+        //     .borrow_mut()
+        //     .border_width = val;
 
         self
     }
 
     fn corner_radius(self, corner_radius: CornerRadius) -> Self {
-        self.node_ref()
-            .unwrap()
-            .upgrade()
-            .borrow_mut()
-            .corner_radius = corner_radius;
+        let _ = corner_radius;
+        // self.node_ref()
+        //     .unwrap()
+        //     .upgrade()
+        //     .borrow_mut()
+        //     .corner_radius = corner_radius;
 
         self
     }
 
     fn shape(self, shape: Shape) -> Self {
-        self.node_ref()
-            .unwrap()
-            .upgrade()
-            .borrow_mut()
-            .shape = shape;
+        let _ = shape;
+        // self.node_ref()
+        //     .unwrap()
+        //     .upgrade()
+        //     .borrow_mut()
+        //     .shape = shape;
 
         self
     }
 
     fn size(self, size: impl Into<Size>) -> Self {
-        self.node_ref()
-            .unwrap()
-            .upgrade()
-            .borrow_mut()
-            .rect.set_size(size.into());
+        let _ = size;
+        // self.node_ref()
+        //     .unwrap()
+        //     .upgrade()
+        //     .borrow_mut()
+        //     .rect.set_size(size.into());
 
         self
     }
 
+    fn width(self, width: Unit) -> Self {
+        let _ = width;
+        self
+    }
+
+    fn height(self, height: Unit) -> Self {
+        let _ = height;
+        self
+    }
+
     fn dragable(self) -> Self {
-        let node = self.node_ref().unwrap().upgrade();
-        let mut node = node.borrow_mut();
-        node.flag.set_dragable(true);
-        node.flag.set_hoverable(true);
+        // let node = self.node_ref().unwrap().upgrade();
+        // let mut node = node.borrow_mut();
+        // node.flag.set_dragable(true);
+        // node.flag.set_hoverable(true);
 
         self
     }
 
     fn spacing(self, val: u8) -> Self {
-        self.node_ref()
-            .unwrap()
-            .upgrade()
-            .borrow_mut()
-            .spacing = val;
+        let _ = val;
+        // self.node_ref()
+        //     .unwrap()
+        //     .upgrade()
+        //     .borrow_mut()
+        //     .spacing = val;
 
         self
     }
 
     fn padding(self, padding: Padding) -> Self {
-        self.node_ref()
-            .unwrap()
-            .upgrade()
-            .borrow_mut()
-            .padding = padding;
+        let _ = padding;
+        // self.node_ref()
+        //     .unwrap()
+        //     .upgrade()
+        //     .borrow_mut()
+        //     .padding = padding;
 
         self
     }
 
     fn min_width(self, val: f32) -> Self {
-        self.node_ref()
-            .unwrap()
-            .upgrade()
-            .borrow_mut()
-            .min_width = Some(val);
+        let _ = val;
+        // self.node_ref()
+        //     .unwrap()
+        //     .upgrade()
+        //     .borrow_mut()
+        //     .min_width = Some(val);
 
         self
     }
 
     fn min_height(self, val: f32) -> Self {
-        self.node_ref()
-            .unwrap()
-            .upgrade()
-            .borrow_mut()
-            .min_height = Some(val);
+        let _ = val;
+        // self.node_ref()
+        //     .unwrap()
+        //     .upgrade()
+        //     .borrow_mut()
+        //     .min_height = Some(val);
 
         self
     }
 
     fn max_width(self, val: f32) -> Self {
-        self.node_ref()
-            .unwrap()
-            .upgrade()
-            .borrow_mut()
-            .max_width = Some(val);
+        let _ = val;
+        // self.node_ref()
+        //     .unwrap()
+        //     .upgrade()
+        //     .borrow_mut()
+        //     .max_width = Some(val);
 
         self
     }
 
     fn max_height(self, val: f32) -> Self {
-        self.node_ref()
-            .unwrap()
-            .upgrade()
-            .borrow_mut()
-            .max_height = Some(val);
+        let _ = val;
+        // self.node_ref()
+        //     .unwrap()
+        //     .upgrade()
+        //     .borrow_mut()
+        //     .max_height = Some(val);
 
         self
     }
 
     fn align_h(self, align_h: AlignH) -> Self {
-        self.node_ref()
-            .unwrap()
-            .upgrade()
-            .borrow_mut()
-            .align_h = align_h;
+        let _ = align_h;
+        // self.node_ref()
+        //     .unwrap()
+        //     .upgrade()
+        //     .borrow_mut()
+        //     .align_h = align_h;
+
         self
     }
 
     fn align_v(self, align_v: AlignV) -> Self {
-        self.node_ref()
-            .unwrap()
-            .upgrade()
-            .borrow_mut()
-            .align_v = align_v;
+        let _ = align_v;
+        // self.node_ref()
+        //     .unwrap()
+        //     .upgrade()
+        //     .borrow_mut()
+        //     .align_v = align_v;
+
         self
     }
 }
@@ -394,30 +460,30 @@ pub trait WidgetExt: Widget + Sized {
 impl<T> WidgetExt for T where T: Widget + Sized {}
 
 impl Widget for Box<dyn Widget> {
+    fn id(&self) -> WidgetId {
+        self.as_ref().id()
+    }
+
     fn node(&self) -> ViewNode {
         self.as_ref().node()
     }
 
-    fn children_ref(&self) -> Option<ChildrenRef<'_>> {
-        self.as_ref().children_ref()
-    }
-
-    fn children_mut(&mut self) -> Option<ChildrenMut<'_>> {
-        self.as_mut().children_mut()
+    fn children(&self) -> Option<&Children> {
+        self.as_ref().children()
     }
 }
 
 impl Widget for Box<&mut dyn Widget> {
+    fn id(&self) -> WidgetId {
+        self.as_ref().id()
+    }
+
     fn node(&self) -> ViewNode {
         self.as_ref().node()
     }
 
-    fn children_ref(&self) -> Option<ChildrenRef<'_>> {
-        self.as_ref().children_ref()
-    }
-
-    fn children_mut(&mut self) -> Option<ChildrenMut<'_>> {
-        self.as_mut().children_mut()
+    fn children(&self) -> Option<&Children> {
+        self.as_ref().children()
     }
 }
 
@@ -431,7 +497,7 @@ impl std::fmt::Debug for &dyn Widget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct(std::any::type_name::<Self>())
             .field("id", &self.id())
-            .field("children", &self.children_ref().unwrap_or(ChildrenRef::from(&vec![])))
+            .field("children", &self.children().unwrap_or(&Children::new()))
             .finish()
     }
 }
@@ -473,158 +539,56 @@ impl CallbackStore {
 // -------------------------------------
 
 pub(crate) struct WindowWidget {
-    node: ViewNode,
-    children: Vec<Box<dyn Widget>>,
+    id: WidgetId,
+    children: Children,
 }
 
 impl WindowWidget {
-    pub(crate) fn new(rect: Rect) -> Self {
+    pub(crate) fn new(cx: &mut Context, rect: Rect) -> Self {
         Self {
-            node: ViewNode::window(rect),
-            children: Vec::new(),
+            id: cx.create_id(),
+            children: Children::new(),
         }
     }
 }
 
 impl Widget for WindowWidget {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
     fn node(&self) -> ViewNode {
-        self.node
+        todo!()
     }
 
-    fn children_ref(&self) -> Option<ChildrenRef<'_>> {
-        Some((&self.children).into())
-    }
-
-    fn children_mut(&mut self) -> Option<ChildrenMut<'_>> {
-        Some((&mut self.children).into())
+    fn children(&self) -> Option<&Children> {
+        Some(&self.children)
     }
 }
 
 // -------------------------------------
 
 pub struct CircleWidget {
-    node: ViewNode,
+    id: WidgetId,
 }
 
 impl CircleWidget {
-    pub fn new() -> Self {
-        Self {
-            node: ViewNode::default()
-                .with_stroke_width(5.)
-                .with_shape(Shape::Circle)
-                .with_size((100., 100.)),
-        }
+    pub fn new(cx: &mut Context) -> Self {
+        let id = cx.create_id();
+        // node: ViewNode::default()
+        //     .with_stroke_width(5.)
+        //     .with_shape(Shape::Circle)
+        //     .with_size((100., 100.)),
+        Self { id }
     }
 }
 
 impl Widget for CircleWidget {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
     fn node(&self) -> ViewNode {
-        self.node
-    }
-}
-
-// -------------------------------------
-
-#[cfg(test)]
-mod alt_widget {
-    use aplite_types::*;
-    use aplite_renderer::Shape;
-    use aplite_storage::{Table, Tree, EntityManager, Entity, Component};
-    use super::WidgetId;
-
-    pub struct Context {
-        entities: EntityManager<WidgetId>,
-        components: Table<WidgetId>,
-        tree: Tree<WidgetId>,
-        current: Option<WidgetId>,
-    }
-
-    impl Context {
-        fn new() -> Self {
-            Self {
-                entities: EntityManager::default(),
-                components: Table::default(),
-                tree: Tree::default(),
-                current: None,
-            }
-        }
-
-        fn create_entity(&mut self) -> WidgetId {
-            let id = self.entities.create();
-
-            if let Some(parent) = self.current.as_ref() {
-                self.tree.insert(id, parent);
-            } else {
-                self.tree.insert_as_parent(id);
-            }
-
-            id
-        }
-    }
-
-    pub trait WidgetTrait: Sized {
-        fn id(&self) -> &WidgetId;
-
-        fn child<F>(self, cx: &mut Context, child: F) -> Self
-        where
-            F: FnOnce(&mut Context)
-        {
-            let current = cx.current.replace(*self.id());
-            child(cx);
-            cx.current = current;
-            self
-        }
-
-        fn component<C: Component>(self, cx: &mut Context, component: C) -> Self {
-            cx.components.insert(self.id(), component);
-            self
-        }
-
-        fn build(self, cx: &mut Context) {}
-    }
-
-    pub struct TestWidget {
-        id: WidgetId,
-    }
-
-    impl TestWidget {
-        pub fn new(cx: &mut Context) -> Self {
-            Self {
-                id: cx.create_entity()
-            }
-        }
-    }
-
-    impl WidgetTrait for TestWidget {
-        fn id(&self) -> &WidgetId {
-            &self.id
-        }
-    }
-
-    fn child1(cx: &mut Context) {
-        TestWidget::new(cx)
-            .component(cx, (Size::new(200., 100.), Shape::RoundedRect, Rgba::GREEN))
-            .child(cx, |cx| {
-                TestWidget::new(cx);
-                TestWidget::new(cx);
-                TestWidget::new(cx);
-            });
-    }
-
-    fn child2(cx: &mut Context) {
-        TestWidget::new(cx)
-            .component(cx, (Size::new(200., 100.), Shape::RoundedRect, Rgba::BLUE));
-    }
-
-    fn app(cx: &mut Context) {
-        TestWidget::new(cx)
-            .component(cx, (Size::new(200., 100.), Shape::RoundedRect, Rgba::RED))
-            .child(cx, child1)
-            .child(cx, child2);
-    }
-
-    #[test]
-    fn widget_ecs() {
-        let mut cx = Context::new();
+        todo!()
     }
 }

@@ -279,63 +279,6 @@ impl<'a, E: Entity> Iterator for TreeDepthIter<'a, E> {
     }
 }
 
-/// Breadth first traversal
-pub struct TreeBreadthIter<'a, E: Entity> {
-    tree: &'a Tree<E>,
-    queue: std::collections::VecDeque<&'a E>,
-    next: Option<&'a E>,
-    back: Vec<&'a E>,
-}
-
-impl<'a, E: Entity> TreeBreadthIter<'a, E> {
-    pub(crate) fn new(tree: &'a Tree<E>, entity: &'a E) -> Self {
-        Self {
-            tree,
-            queue: Default::default(),
-            next: Some(entity),
-            back: Default::default(),
-        }
-    }
-}
-
-impl<'a, E: Entity> Iterator for TreeBreadthIter<'a, E> {
-    type Item = &'a E;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let next = self.next.take();
-
-        if let Some(current) = next {
-            self.back.push(current);
-
-            if self.tree.get_first_child(current).is_some() {
-                self.queue.push_back(current);
-            }
-
-            if let Some(next_sibling) = self.tree.get_next_sibling(current) {
-                self.next = Some(next_sibling);
-            } else if let Some(head) = self.queue.pop_front() {
-                self.next = self.tree.get_first_child(head);
-            } else {
-                self.next = self.tree.get_first_child(current);
-            }
-        } else {
-            self.queue.clear();
-        }
-
-        next
-    }
-}
-
-impl<'a, E: Entity> DoubleEndedIterator for TreeBreadthIter<'a, E> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        if self.next.is_some() {
-            for _ in self.by_ref() {}
-        }
-
-        self.back.pop()
-    }
-}
-
 /*
 #########################################################
 #                                                       #

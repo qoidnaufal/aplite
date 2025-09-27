@@ -1,5 +1,9 @@
-use crate::widget::{Widget, WidgetId};
+use aplite_storage::{Tree, Entity};
+
+use crate::widget::{Widget, WidgetId, Children};
 use crate::cursor::Cursor;
+use crate::context::Context;
+use crate::layout::State;
 
 /// wrapper over [`Widget`] trait to be stored inside [`ViewStorage`]
 pub struct View {
@@ -13,64 +17,68 @@ impl View {
         }
     }
 
-    pub(crate) fn detect_hover(&self, cursor: &Cursor) -> Option<&Box<dyn Widget>> {
-        let mut current = &self.widget;
-
-        while let Some(children) = current.children_ref() {
-            if let Some(hovered) = children.visible_boxed()
-                .find_map(|child| {
-                    child.node_ref()
-                        .unwrap()
-                        .upgrade()
-                        .borrow()
-                        .rect
-                        .contains(cursor.hover.pos)
-                        .then_some(child)
-                }) {
-                current = hovered
-            } else {
-                break
-            }
-        }
-
-        current
-            .node()
-            .is_hoverable()
-            .then_some(current)
+    pub(crate) fn id(&self) -> WidgetId {
+        self.widget.id()
     }
 
-    pub(crate) fn find_parent(&self, id: &WidgetId) -> Option<&Box<dyn Widget>> {
-        if self.widget.as_ref().id() == id { return None }
+    // pub(crate) fn detect_hover(&self, cursor: &Cursor) -> Option<&Box<dyn Widget>> {
+    //     let mut current = &self.widget;
 
-        let mut current = &self.widget;
+    //     while let Some(children) = current.children_ref() {
+    //         if let Some(hovered) = children.visible_boxed()
+    //             .find_map(|child| {
+    //                 child.node_ref()
+    //                     .unwrap()
+    //                     .upgrade()
+    //                     .borrow()
+    //                     .rect
+    //                     .contains(cursor.hover.pos)
+    //                     .then_some(child)
+    //             }) {
+    //             current = hovered
+    //         } else {
+    //             break
+    //         }
+    //     }
 
-        while let Some(children) = current.children_ref() {
-            if children.iter().any(|child| child.id() == id) { break }
+    //     current
+    //         .node()
+    //         .is_hoverable()
+    //         .then_some(current)
+    // }
 
-            children
-                .all_boxed()
-                .for_each(|child| current = child);
-        }
+    // pub(crate) fn find_parent(&self, id: &WidgetId) -> Option<&Box<dyn Widget>> {
+    //     if self.widget.as_ref().id() == id { return None }
 
-        current
-            .id()
-            .ne(id)
-            .then_some(current)
-    }
+    //     let mut current = &self.widget;
 
-    pub(crate) fn find_visible(&self, id: &WidgetId) -> Option<&dyn Widget> {
-        let mut current = self.widget.as_ref();
+    //     while let Some(children) = current.children_ref() {
+    //         if children.iter().any(|child| child.id() == id) { break }
 
-        while let Some(children) = current.children_ref() {
-            if current.id() == id { break }
+    //         children
+    //             .all_boxed()
+    //             .for_each(|child| current = child);
+    //     }
 
-            children
-                .visible_ref()
-                .for_each(|child| current = child);
-        }
+    //     current
+    //         .id()
+    //         .ne(id)
+    //         .then_some(current)
+    // }
 
-        Some(current)
-    }
+    // pub(crate) fn find_visible(&self, id: &WidgetId) -> Option<&dyn Widget> {
+    //     let mut current = self.widget.as_ref();
+
+    //     while let Some(children) = current.children_ref() {
+    //         if current.id() == id { break }
+
+    //         children
+    //             .visible_ref()
+    //             .for_each(|child| current = child);
+    //     }
+
+    //     Some(current)
+    // }
 
     // fn insert<T: Widget + 'static>(&mut self, parent: &WidgetId, widget: T) {
     //     if let Some(mut p) = self.find_mut(parent)
@@ -103,65 +111,17 @@ impl<T: Widget + 'static> IntoView for T {
     }
 }
 
-#[cfg(test)]
-mod ptr_test {
-    struct PtrWrapper(*const dyn Name);
-
-    impl Name for PtrWrapper {
-        fn name(&self) -> &str {
-            unsafe {
-                self.0.as_ref().unwrap().name()
-            }
-        }
+impl std::fmt::Debug for Box<dyn IntoView> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.as_ref().fmt(f)
     }
+}
 
-    trait Caster: Name + Sized + 'static {
-        fn get_ptr(&self) -> PtrWrapper {
-            PtrWrapper(self as *const dyn Name)
-        } 
-    }
-
-    impl Name for Box<dyn Name> {
-        fn name(&self) -> &str {
-            self.as_ref().name()
-        }
-    }
-
-    impl Caster for Box<dyn Name> {}
-
-    trait Name {
-        fn name(&self) -> &str;
-    }
-
-    struct MyStruct {
-        name: String,
-    }
-
-    impl MyStruct {
-        fn new(name: impl Into<String>) -> Self {
-            Self {
-                name: name.into()
-            }
-        }
-    }
-
-    impl Name for MyStruct {
-        fn name(&self) -> &str {
-            &self.name
-        }
-    }
-
-    struct TraitContainer {
-        inner: Box<dyn Name>
-    }
-
-    #[test]
-    fn ptr() {
-        let mystruct = MyStruct::new("one");
-        let container = TraitContainer { inner: Box::new(mystruct) };
-        let wrapper = container.inner.get_ptr();
-
-        let name = wrapper.name();
-        assert_eq!(name, "one");
+impl std::fmt::Debug for &dyn IntoView {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct(std::any::type_name::<Self>())
+            .field("id", &self.id())
+            .field("children", &self.children().unwrap_or(&Children::new()))
+            .finish()
     }
 }

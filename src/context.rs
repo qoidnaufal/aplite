@@ -1,23 +1,22 @@
 use aplite_reactive::*;
-use aplite_renderer::Renderer;
-use aplite_types::Vec2f;
-use aplite_storage::{EntityManager, Tree, Table};
+use aplite_renderer::{Renderer, DrawArgs};
+use aplite_types::{Vec2f, Rect};
+use aplite_storage::{EntityManager, Tree};
 
 use crate::view::View;
 use crate::widget::{CALLBACKS, Widget, WidgetId, WidgetEvent};
 use crate::cursor::{Cursor, MouseAction, MouseButton, EmittedClickEvent};
-use crate::layout::{LayoutCx, Layout};
+use crate::layout::State;
 use crate::state::NODE_STORAGE;
-
-// entity! { pub ViewId }
 
 pub struct Context {
     pub(crate) view: View,
     pub(crate) entity_manager: EntityManager<WidgetId>,
     pub(crate) tree: Tree<WidgetId>,
-    pub(crate) data: Table<WidgetId>,
+    pub(crate) state: State,
     pub(crate) dirty: Signal<bool>,
     pub(crate) cursor: Cursor,
+    pub(crate) current: Option<WidgetId>,
     pending_update: Vec<WidgetId>,
 }
 
@@ -33,15 +32,26 @@ impl Context {
             view,
             entity_manager: EntityManager::default(),
             tree: Tree::default(),
-            data: Table::default(),
+            state: State::new(),
             cursor: Cursor::default(),
             dirty: Signal::new(false),
+            current: None,
             pending_update: Vec::new(),
         }
     }
 
-    pub(crate) fn create_id(&mut self) -> WidgetId {
-        self.entity_manager.create()
+    pub fn create_id(&mut self) -> WidgetId {
+        let id = self.entity_manager.create();
+        self.state.insert_default_state(&id);
+        id
+    }
+
+    pub(crate) fn insert_new_id(&mut self, id: &WidgetId) {
+        let current = self.current.take();
+        if let Some(parent) = current.as_ref() {
+            self.tree.insert(*id, parent);
+        }
+        self.current = current;
     }
 
     pub(crate) fn toggle_dirty(&self) {
@@ -63,14 +73,14 @@ impl Context {
             self.pending_update
                 .drain(..)
                 .for_each(|id| {
-                    if let Some(widget) = self.view.find_parent(&id)
-                        && let Some(children) = widget.children_ref()
-                    {
-                        widget.calculate_size(None);
-                        let mut cx = LayoutCx::new(widget.as_ref());
-                        children.iter()
-                            .for_each(|child| child.calculate_layout(&mut cx));
-                    }
+                    // if let Some(widget) = self.view.find_parent(&id)
+                    //     && let Some(children) = widget.children_ref()
+                    // {
+                    //     widget.calculate_size(None);
+                    //     let mut cx = LayoutCx::new(widget.as_ref());
+                    //     children.iter()
+                    //         .for_each(|child| child.calculate_layout(&mut cx));
+                    // }
                 });
             self.toggle_dirty();
         }
@@ -93,9 +103,45 @@ impl Context {
     }
 
     fn detect_hover(&mut self) {
-        let hovered = self.view.detect_hover(&self.cursor).map(Widget::id);
+        let Vec2f { x, y } = self.cursor.hover.pos;
 
-        self.cursor.hover.curr = hovered;
+        if let Some(id) = self.cursor.hover.curr {
+            let pos = self.state.get_position(&id).unwrap();
+            let size = self.state.get_size(&id).unwrap();
+            let contains = (pos.x..pos.x + size.width).contains(&x) && (pos.y..pos.y + size.height).contains(&y);
+
+            if !contains {
+                self.cursor.hover.curr = self.tree.get_parent(&id).copied();
+            } else {
+                self.cursor.hover.curr = self.tree
+                    .iter_children(&id)
+                    .find(|child| {
+                        let child_pos = self.state.get_position(*child).unwrap();
+                        let child_size = self.state.get_size(*child).unwrap();
+                        (child_pos.x..child_pos.x + child_size.width).contains(&x)
+                            && (child_pos.y..child_pos.y + child_size.height).contains(&y)
+                    })
+                    .or(Some(&id))
+                    .copied();
+            }
+        } else {
+            self.cursor.hover.curr = self.tree
+                .iter_depth(&self.view.id())
+                .filter(|member| {
+                    self.state
+                        .get_flag(member)
+                        .is_some_and(|flag| flag.is_visible())
+                })
+                .find(|member| {
+                    let pos = self.state.get_position(*member).unwrap();
+                    let size = self.state.get_size(*member).unwrap();
+                    (pos.x..pos.x + size.width).contains(&x) && (pos.y..pos.y + size.height).contains(&y)
+                })
+                .copied();
+        }
+
+        // let hovered = self.view.detect_hover(&self.cursor).map(Widget::id);
+        // self.cursor.hover.curr = hovered;
     }
 
     pub(crate) fn handle_drag(&mut self) {
@@ -114,12 +160,13 @@ impl Context {
 
                     drop(state);
 
-                    let widget = self.view.find_visible(&captured).unwrap();
-                    if let Some(children) = widget.children_ref() {
-                        let mut cx = LayoutCx::new(widget);
-                        children.iter()
-                            .for_each(|child| child.calculate_layout(&mut cx));
-                    }
+                    self.state.calculate_position(&self.tree, &captured);
+                    // let widget = self.view.find_visible(&captured).unwrap();
+                    // if let Some(children) = widget.children_ref() {
+                    //     let mut cx = LayoutCx::new(widget);
+                    //     children.iter()
+                    //         .for_each(|child| child.calculate_layout(&mut cx));
+                    // }
 
                     self.toggle_dirty();
                 }
@@ -164,7 +211,9 @@ impl Context {
 // #########################################################
 
     pub(crate) fn render(&self, renderer: &mut Renderer) {
-        let mut scene = renderer.scene();
-        self.view.widget.draw(&mut scene);
+        self.state.render(renderer);
+
+        // let mut scene = renderer.scene();
+        // self.view.widget.draw(&mut scene);
     }
 }
