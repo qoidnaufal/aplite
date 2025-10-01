@@ -1,10 +1,10 @@
 use aplite_reactive::*;
-use aplite_renderer::{Renderer, DrawArgs};
-use aplite_types::{Vec2f, Rect};
+use aplite_renderer::Renderer;
+use aplite_types::Vec2f;
 use aplite_storage::{EntityManager, Tree};
 
 use crate::view::View;
-use crate::widget::{CALLBACKS, Widget, WidgetId, WidgetEvent};
+use crate::widget::{CALLBACKS, WidgetId, WidgetEvent};
 use crate::cursor::{Cursor, MouseAction, MouseButton, EmittedClickEvent};
 use crate::layout::State;
 use crate::state::NODE_STORAGE;
@@ -46,14 +46,6 @@ impl Context {
         id
     }
 
-    pub(crate) fn insert_new_id(&mut self, id: &WidgetId) {
-        let current = self.current.take();
-        if let Some(parent) = current.as_ref() {
-            self.tree.insert(*id, parent);
-        }
-        self.current = current;
-    }
-
     pub(crate) fn toggle_dirty(&self) {
         self.dirty.set(true);
     }
@@ -72,7 +64,7 @@ impl Context {
         if !self.pending_update.is_empty() {
             self.pending_update
                 .drain(..)
-                .for_each(|id| {
+                .for_each(|_id| {
                     // if let Some(widget) = self.view.find_parent(&id)
                     //     && let Some(children) = widget.children_ref()
                     // {

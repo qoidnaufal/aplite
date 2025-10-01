@@ -397,7 +397,7 @@ mod iterator_test {
         let mut ids = vec![];
         for _ in 0..10 {
             let id = manager.create();
-            tree.insert_as_parent(id);
+            tree.insert(id, None);
             ids.push(id);
         }
 

@@ -134,7 +134,7 @@ mod channel_test {
 
     #[test]
     fn poll() {
-        Executor::init();
+        Executor::init(1);
 
         Executor::spawn(async {
             let (tx, mut rx) = Channel::new();

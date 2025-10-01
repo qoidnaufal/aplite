@@ -22,27 +22,6 @@ impl Size {
         (self.width.powi(2) + self.height.powi(2)).sqrt()
     }
 
-    // #[inline(always)]
-    // pub const fn min(self, other: Self) -> Self {
-    //     Self::new(
-    //         self.width.min(other.width),
-    //         self.height.min(other.height)
-    //     )
-    // }
-
-    // #[inline(always)]
-    // pub const fn max(self, other: Self) -> Self {
-    //     Self::new(
-    //         self.width.max(other.width),
-    //         self.height.max(other.height)
-    //     )
-    // }
-
-    // #[inline(always)]
-    // pub const fn clamp(self, start: Self, end: Self) -> Self {
-    //     self.max(start).min(end)
-    // }
-
     pub fn adjust_on_min_constraints(self, min_width: Option<f32>, min_height: Option<f32>) -> Self {
         let width = min_width.map(|w| self.width.max(w)).unwrap_or(self.width);
         let height = min_height.map(|h| self.height.max(h)).unwrap_or(self.height);

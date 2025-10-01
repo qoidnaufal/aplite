@@ -256,7 +256,7 @@ impl AtlasAllocator {
                     let id = self.id_manager.create();
 
                     self.allocated.insert(&id, rect);
-                    self.tree.insert(id, &parent);
+                    self.tree.insert(id, Some(parent));
 
                     Some(rect)
                 } else {
@@ -267,7 +267,7 @@ impl AtlasAllocator {
                     let id = self.id_manager.create();
 
                     self.allocated.insert(&id, rect);
-                    self.tree.insert_as_parent(id);
+                    self.tree.insert(id, None);
                     self.last_parent = Some(id);
 
                     Some(rect)
@@ -279,7 +279,7 @@ impl AtlasAllocator {
                 let id = self.id_manager.create();
 
                 self.allocated.insert(&id, rect);
-                self.tree.insert_as_parent(id);
+                self.tree.insert(id, None);
                 self.last_parent = Some(id);
         
                 Some(rect)

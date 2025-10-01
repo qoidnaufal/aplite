@@ -116,7 +116,8 @@ impl<E: Entity> Tree<E> {
     /// Adding an entity to be the child of a parent.
     /// This will calculate if it's the first child of the parent, or the next sibling of parent's last child.
     /// If a [`TreeError`] is returned it means that the parent is invalid, usually because you haven't registered it to the tree
-    pub fn try_insert(&mut self, entity: E, parent: &E) -> Result<(), TreeError> {
+    pub fn try_insert(&mut self, entity: E, parent: Option<E>) -> Result<(), TreeError> {
+        let parent = parent.unwrap_or(E::root());
         if parent.index() > self.parent.len() { return Err(TreeError::InvalidParent) }
 
         let index = entity.index();
@@ -125,12 +126,12 @@ impl<E: Entity> Tree<E> {
             self.resize(index);
         }
 
-        self.parent[index] = Some(*parent);
+        self.parent[index] = Some(parent);
         self.first_child[index] = None;
         self.next_sibling[index] = None;
         self.prev_sibling[index] = None;
 
-        if let Some(first) = self.get_first_child(parent) {
+        if let Some(first) = self.get_first_child(&parent) {
             let mut current = *first;
 
             while let Some(next) = self.get_next_sibling(&current) {
@@ -149,15 +150,8 @@ impl<E: Entity> Tree<E> {
     /// Adding an entity to be the child of a parent.
     /// This will calculate if it's the first child of the parent,
     /// or the next sibling of parent's last child.
-    pub fn insert(&mut self, entity: E, parent: &E) {
+    pub fn insert(&mut self, entity: E, parent: Option<E>) {
         self.try_insert(entity, parent).unwrap()
-    }
-
-    /// Adding an entity to be the child of the root.
-    /// This will calculate if it's the first child of the root,
-    /// or the next sibling of rootparent's last child.
-    pub fn insert_as_parent(&mut self, entity: E) {
-        self.try_insert(entity, &E::root()).unwrap()
     }
 
     pub fn add_child(&mut self, entity: &E, child: E) {
@@ -226,25 +220,25 @@ impl<E: Entity> Tree<E> {
         // }
     }
 
-    pub fn add_subtree(&mut self, entity: &E, other: Self) {
-        if other.is_empty() { return }
+    // pub fn add_subtree(&mut self, entity: &E, other: Self) {
+    //     if other.is_empty() { return }
 
-        let root = E::root();
-        let mut current = other.get_first_child(&root).unwrap();
-        self.insert(*current, entity);
+    //     let root = E::root();
+    //     let mut current = other.get_first_child(&root).unwrap();
+    //     self.insert(*current, entity);
 
-        while let Some(first_child) = other.get_first_child(current) {
-            self.insert(*first_child, current);
+    //     while let Some(first_child) = other.get_first_child(current) {
+    //         self.insert(*first_child, current);
 
-            let mut child = first_child;
-            while let Some(next) = other.get_next_sibling(child) {
-                self.add_sibling(child, *next);
-                child = next;
-            }
+    //         let mut child = first_child;
+    //         while let Some(next) = other.get_next_sibling(child) {
+    //             self.add_sibling(child, *next);
+    //             child = next;
+    //         }
 
-            current = first_child;
-        }
-    }
+    //         current = first_child;
+    //     }
+    // }
 
     #[inline(always)]
     /// Currently produces another Tree with the member of the removed entity.
@@ -258,13 +252,11 @@ impl<E: Entity> Tree<E> {
     /// ```
     pub fn remove(&mut self, entity: E) -> Self {
         let mut removed_branch = Self::default();
-        removed_branch.insert_as_parent(entity);
+        removed_branch.insert(entity, None);
 
         self.iter_node(&entity)
             .for_each(|node| {
-                if let Some(parent) = node.parent {
-                    removed_branch.insert(*node.entity, parent);
-                }
+                removed_branch.insert(*node.entity, node.parent.copied());
             });
 
         // shifting
@@ -494,9 +486,7 @@ mod tree_test {
         let mut parent = Some(TestId::root());
         for i in 0..num {
             let id = manager.create();
-            if let Some(parent) = parent.as_ref() {
-                tree.insert(id, parent);
-            }
+            tree.insert(id, parent);
             if i > 0 && i % 3 == 0 {
                 parent = tree.get_first_child(&TestId::new(1, 0)).copied();
             } else {
@@ -563,17 +553,13 @@ mod tree_test {
         let removed_len = removed.len(&TestId::new(3, 0));
         let after_remove_len = tree.len(&TestId::root());
         assert_eq!(removed_len, 2);
+        assert_eq!(after_remove_len, initial_len - after_remove_len);
 
         // eprintln!("{removed:?}");
         // eprintln!("{tree:?}");
 
         let first_child_after_removal = tree.get_first_child(&test_id2);
         assert_eq!(first_child_after_removal, next_sibling.as_ref());
-
-        tree.add_subtree(&TestId(8), removed);
-        let final_len = tree.len(&TestId::root());
-        assert_eq!(initial_len, final_len);
-        assert_eq!(initial_len, removed_len + after_remove_len);
     }
 
     #[test]

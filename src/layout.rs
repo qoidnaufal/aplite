@@ -1,9 +1,23 @@
-use aplite_types::{Rect, Vec2f, Size, Matrix3x2, Paint, Rgba, CornerRadius};
-use aplite_storage::{SparseIndices, Array, ImmutableArray, Tree, Entity};
 use aplite_renderer::{Renderer, DrawArgs, Shape};
+use aplite_types::{
+    // Rect,
+    Vec2f,
+    Size,
+    Matrix3x2,
+    Paint,
+    Rgba,
+    CornerRadius,
+    Unit
+};
+use aplite_storage::{
+    SparseIndices,
+    Array,
+    Tree,
+    Entity,
+};
 
-use crate::state::{WidgetState, AspectRatio, Flag};
-use crate::widget::{Widget, WidgetId};
+use crate::state::{WidgetState, Flag};
+use crate::widget::WidgetId;
 
 // pub struct LayoutCx {
 //     pub(crate) next_pos: Vec2f,
@@ -288,26 +302,6 @@ pub(crate) struct LayoutRules {
     pub(crate) spacing: u8,
 }
 
-/// Unit to calculate size
-pub enum Unit {
-    /// fixed unit
-    Fixed(f32),
-    Grow,
-    FitToChild,
-}
-
-impl Default for Unit {
-    fn default() -> Self {
-        Self::Fixed(0.0)
-    }
-}
-
-impl Unit {
-    fn is_grow(&self) -> bool {
-        matches!(self, Self::Grow)
-    }
-}
-
 pub struct Border {
     paint: Paint,
     width: u32,
@@ -318,7 +312,8 @@ pub(crate) struct State {
     pub(crate) entities: Vec<WidgetId>,
 
     pub(crate) transform: Vec<Matrix3x2>,
-    pub(crate) rect: Vec<Rect>,
+    pub(crate) position: Vec<Vec2f>,
+    pub(crate) size: Vec<Size>,
     pub(crate) width: Vec<Unit>,
     pub(crate) height: Vec<Unit>,
 
@@ -329,11 +324,12 @@ pub(crate) struct State {
     // pub(crate) max_height: Vec<Option<f32>>,
 
     pub(crate) flag: Vec<Flag>,
-    pub(crate) background: Vec<Paint>,
     pub(crate) shape: Vec<Shape>,
     pub(crate) corner_radius: Vec<CornerRadius>,
+    pub(crate) background: Vec<Paint>,
+    pub(crate) border_paint: Vec<Paint>,
+    pub(crate) border_width: Vec<u32>,
 
-    pub(crate) border: Array<WidgetId, Border>,
     pub(crate) rules: Array<WidgetId, LayoutRules>,
 }
 
@@ -348,7 +344,8 @@ impl State {
             entities: Vec::with_capacity(capacity),
 
             transform: Vec::with_capacity(capacity),
-            rect: Vec::with_capacity(capacity),
+            position: Vec::with_capacity(capacity),
+            size: Vec::with_capacity(capacity),
             width: Vec::with_capacity(capacity),
             height: Vec::with_capacity(capacity),
 
@@ -358,13 +355,46 @@ impl State {
             // max_height: Vec::with_capacity(capacity),
 
             flag: Vec::with_capacity(capacity),
-            background: Vec::with_capacity(capacity),
             shape: Vec::with_capacity(capacity),
             corner_radius: Vec::with_capacity(capacity),
+            background: Vec::with_capacity(capacity),
+            border_paint: Vec::with_capacity(capacity),
+            border_width: Vec::with_capacity(capacity),
 
-            border: Array::default(),
             rules: Array::default(),
         }
+    }
+
+    pub(crate) fn insert_state(&mut self, id: &WidgetId, state: &WidgetState) {
+        let WidgetState {
+            width,
+            height,
+            transform,
+            shape,
+            corner_radius,
+            flag,
+            background_paint,
+            border_paint,
+            border_width,
+            ..
+        } = state.clone();
+
+        self.ptr.resize_if_needed(id);
+        self.entities.push(*id);
+
+        self.transform.push(transform);
+        self.position.push(Default::default());
+        self.size.push(Default::default());
+        self.width.push(width);
+        self.height.push(height);
+
+        self.flag.push(flag);
+        self.shape.push(shape);
+        self.corner_radius.push(corner_radius);
+
+        self.background.push(background_paint);
+        self.border_paint.push(border_paint);
+        self.border_width.push(border_width);
     }
 
     pub(crate) fn insert_default_state(&mut self, id: &WidgetId) {
@@ -372,19 +402,25 @@ impl State {
         self.entities.push(*id);
 
         self.transform.push(Matrix3x2::identity());
-        self.rect.push(Default::default());
+        self.position.push(Default::default());
+        self.size.push(Default::default());
         self.width.push(Default::default());
         self.height.push(Default::default());
-
-        // self.min_width.push(Default::default());
-        // self.max_width.push(Default::default());
-        // self.min_height.push(Default::default());
-        // self.max_height.push(Default::default());
 
         self.flag.push(Default::default());
         self.background.push(Paint::Color(Rgba::RED));
         self.shape.push(Shape::RoundedRect);
         self.corner_radius.push(CornerRadius::default());
+    }
+
+    pub(crate) fn insert_default_rules(&mut self, id: &WidgetId) {
+        self.rules.insert(id, LayoutRules {
+            orientation: Orientation::Horizontal,
+            align_h: AlignH::Left,
+            align_v: AlignV::Top,
+            padding: Padding::splat(0),
+            spacing: 0,
+        });
     }
 
     pub(crate) fn get_flag(&self, id: &WidgetId) -> Option<&Flag> {
@@ -395,8 +431,8 @@ impl State {
         self.ptr.with(id, |index| self.flag.get_mut(index))?
     }
 
-    pub(crate) fn get_rect(&self, id: &WidgetId) -> Option<&Rect> {
-        self.ptr.with(id, |index| self.rect.get(index))?
+    pub(crate) fn get_position(&self, id: &WidgetId) -> Option<&Vec2f> {
+        self.ptr.with(id, |index| self.position.get(index))?
     }
 
     pub(crate) fn get_transform(&self, id: &WidgetId) -> Option<&Matrix3x2> {
@@ -404,9 +440,9 @@ impl State {
     }
 
     pub(crate) fn set_position(&mut self, id: &WidgetId, position: Vec2f) {
-        if let Some(rect) = self.ptr.with(id, |index| &mut self.rect[index]) {
-            rect.x = position.x;
-            rect.y = position.y;
+        if let Some(pos) = self.ptr.with(id, |index| &mut self.position[index]) {
+            pos.x = position.x;
+            pos.y = position.y;
         }
     }
 
@@ -423,7 +459,7 @@ impl State {
     }
 
     pub(crate) fn len(&self) -> usize {
-        self.rect.len()
+        self.position.len()
     }
 
     pub(crate) fn remove(&mut self, id: &WidgetId) {
@@ -436,7 +472,8 @@ impl State {
             self.ptr.set_null(id);
             self.entities.swap_remove(index);
 
-            self.rect.swap_remove(index);
+            self.position.swap_remove(index);
+            self.size.swap_remove(index);
             self.width.swap_remove(index);
             self.height.swap_remove(index);
 
@@ -450,6 +487,8 @@ impl State {
             self.shape.swap_remove(index);
             self.corner_radius.swap_remove(index);
         }
+
+        self.rules.remove(*id);
     }
 
     pub(crate) fn set_visible(&mut self, tree: &Tree<WidgetId>, id: &WidgetId, visible: bool) {
@@ -553,12 +592,20 @@ impl State {
             });
     }
 
+    // at the same time makes any container fit to child
     fn calculate_size(&mut self, tree: &Tree<WidgetId>, start: &WidgetId) -> Size {
         let mut size = Size::default();
 
         if self.ptr
             .with(start, |index| &self.flag[index])
             .is_some_and(|flag| flag.is_hidden()) { return size }
+
+        // let width = self.ptr
+        //     .with(start, |index| &self.width[index])
+        //     .unwrap();
+        // let height = self.ptr
+        //     .with(start, |index| &self.height[index])
+        //     .unwrap();
 
         if let Some(rules) = self.rules.get(start) {
             let orientation = rules.orientation;
@@ -645,29 +692,24 @@ impl State {
 
     pub(crate) fn render(&self, renderer: &mut Renderer) {
         let mut scene = renderer.scene();
-        self.entities.iter()
-            .zip(&self.position)
+        self.position.iter()
             .zip(&self.size)
             .zip(&self.transform)
             .zip(&self.background)
+            .zip(&self.border_paint)
+            .zip(&self.border_width)
             .zip(&self.corner_radius)
             .zip(&self.shape)
             .zip(&self.flag)
-            .for_each(|(((((((id, position), size), transform), background), corner_radius), shape), flag)| {
+            .for_each(|((((((((position, size), transform), background), border_paint), border_width), corner_radius), shape), flag)| {
                 if flag.is_visible() {
-                    let (border_paint, border_width) = self.border
-                        .get(id)
-                        .map(|border| {
-                            (border.paint.as_paint_ref(), border.width)
-                        })
-                        .unwrap_or((background.as_paint_ref(), 0));
                     let draw_args = DrawArgs {
                         position,
                         size,
                         transform,
                         background_paint: &background.as_paint_ref(),
-                        border_paint: &border_paint,
-                        border_width: &border_width,
+                        border_paint: &border_paint.as_paint_ref(),
+                        border_width,
                         shape,
                         corner_radius,
                     };

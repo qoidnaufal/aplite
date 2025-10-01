@@ -7,7 +7,7 @@ use crate::vector::{Vec2u, Vec2f};
 /// x0 , y0        │ y: y0, y1, y2
 /// x1 , y1        │ 
 /// x2 , y2        │ 
-// #[derive(Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct Matrix3x2([f32; 6]);
 
 impl Matrix3x2 {

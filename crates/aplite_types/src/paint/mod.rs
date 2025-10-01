@@ -6,6 +6,7 @@ use crate::fraction::Fraction;
 pub(crate) mod color;
 pub(crate) mod image_data;
 
+#[derive(Clone)]
 pub enum Paint {
     Color(Rgba),
     Image(ImageData),

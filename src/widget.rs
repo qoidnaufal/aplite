@@ -1,18 +1,14 @@
 use std::cell::{RefCell, UnsafeCell};
 use std::collections::HashMap;
 
-use aplite_renderer::{Shape, Scene};
-use aplite_types::{Rgba, CornerRadius, Size, Rect};
-use aplite_storage::{Tree, EntityManager, Entity, create_entity};
+use aplite_renderer::Shape;
+use aplite_types::{Rgba, CornerRadius, Size, Rect, Unit};
+use aplite_storage::{EntityManager, Entity, create_entity};
 
 use crate::context::Context;
 use crate::layout::*;
-use crate::view::IntoView;
-use crate::state::{
-    ViewNode,
-    NodeRef,
-    AspectRatio,
-};
+use crate::view::{IntoView, View};
+use crate::state::WidgetState;
 
 mod button;
 mod image;
@@ -35,9 +31,7 @@ create_entity! {
 
 /// main building block to create a renderable component
 pub trait Widget {
-    fn id(&self) -> WidgetId;
-
-    fn node(&self) -> ViewNode;
+    fn state(&self) -> &WidgetState;
 
     fn children(&self) -> Option<&Children> {
         None
@@ -117,13 +111,9 @@ pub struct Children(UnsafeCell<Vec<Box<dyn IntoView>>>);
 impl std::fmt::Debug for Children {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         unsafe {
-            if let Some(vec) = self.0.get().as_ref() {
-                f.debug_list()
-                    .entries(vec)
-                    .finish()
-            } else {
-                write!(f, "[]")
-            }
+            f.debug_list()
+                .entries(&*self.0.get())
+                .finish()
         }
     }
 }
@@ -135,28 +125,33 @@ impl Children {
 
     pub fn push(&self, child: impl IntoView + 'static) {
         unsafe {
-            if let Some(vec) = self.0.get().as_mut() {
-                vec.push(Box::new(child));
-            }
+            let inner = &mut *self.0.get();
+            inner.push(Box::new(child));
         }
     }
 
     pub(crate) fn iter_all(&self) -> impl Iterator<Item = &dyn IntoView> {
         unsafe {
-            self.0.get()
-                .as_ref()
-                .unwrap()
-                .iter()
-                .map(|child| child.as_ref())
+            let inner = &*self.0.get();
+            inner.iter().map(|child| child.as_ref())
         }
     }
 
-    pub(crate) fn drain(self) -> impl Iterator<Item = Box<dyn IntoView>> {
+    pub(crate) fn iter_visible(&self) -> impl Iterator<Item = &Box<dyn IntoView>> {
         unsafe {
-            self.0.get()
-                .as_mut()
-                .unwrap()
-                .drain(..)
+            let inner = &*self.0.get();
+            inner.iter()
+                .filter(|child| {
+                    child.state()
+                        .is_visible()
+                })
+        }
+    }
+
+    pub(crate) fn drain(&self) -> impl Iterator<Item = Box<dyn IntoView>> {
+        unsafe {
+            let inner = &mut *self.0.get();
+            inner.drain(..)
         }
     }
 }
@@ -172,22 +167,14 @@ impl<'a> ChildrenRef<'a> {
         self.0.iter()
     }
 
+    // WARN: fix the visible filtering later
     pub fn visible_ref(&self) -> impl Iterator<Item = &'a dyn Widget> {
-        self.0.iter()
-            .filter_map(|child| {
-                child.node()
-                    .is_visible()
-                    .then_some(child.as_ref())
-            })
+        self.0.iter().map(|child| child.as_ref())
     }
 
+    // WARN: fix the visible filtering later
     pub fn visible_boxed(&self) -> impl Iterator<Item = &'a Box<dyn Widget>> {
         self.0.iter()
-            .filter_map(|child| {
-                child.node()
-                    .is_visible()
-                    .then_some(child)
-            })
     }
 }
 
@@ -263,35 +250,13 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    // fn image_aspect_ratio(self, val: AspectRatio) -> Self {
-    //     self.node_ref()
-    //         .unwrap()
-    //         .upgrade()
-    //         .borrow_mut()
-    //         .image_aspect_ratio = val;
-
-    //     self
-    // }
-
     fn color(self, color: Rgba) -> Self {
         let _ = color;
-        // self.node_ref()
-        //     .unwrap()
-        //     .upgrade()
-        //     .borrow_mut()
-        //     .background_paint = color.into();
-
         self
     }
 
     fn border_color(self, color: Rgba) -> Self {
         let _ = color;
-        // self.node_ref()
-        //     .unwrap()
-        //     .upgrade()
-        //     .borrow_mut()
-        //     .border_paint = color.into();
-
         self
     }
 
@@ -307,45 +272,21 @@ pub trait WidgetExt: Widget + Sized {
 
     fn border_width(self, val: f32) -> Self {
         let _ = val;
-        // self.node_ref()
-        //     .unwrap()
-        //     .upgrade()
-        //     .borrow_mut()
-        //     .border_width = val;
-
         self
     }
 
     fn corner_radius(self, corner_radius: CornerRadius) -> Self {
         let _ = corner_radius;
-        // self.node_ref()
-        //     .unwrap()
-        //     .upgrade()
-        //     .borrow_mut()
-        //     .corner_radius = corner_radius;
-
         self
     }
 
     fn shape(self, shape: Shape) -> Self {
         let _ = shape;
-        // self.node_ref()
-        //     .unwrap()
-        //     .upgrade()
-        //     .borrow_mut()
-        //     .shape = shape;
-
         self
     }
 
     fn size(self, size: impl Into<Size>) -> Self {
         let _ = size;
-        // self.node_ref()
-        //     .unwrap()
-        //     .upgrade()
-        //     .borrow_mut()
-        //     .rect.set_size(size.into());
-
         self
     }
 
@@ -360,99 +301,46 @@ pub trait WidgetExt: Widget + Sized {
     }
 
     fn dragable(self) -> Self {
-        // let node = self.node_ref().unwrap().upgrade();
-        // let mut node = node.borrow_mut();
-        // node.flag.set_dragable(true);
-        // node.flag.set_hoverable(true);
-
         self
     }
 
     fn spacing(self, val: u8) -> Self {
         let _ = val;
-        // self.node_ref()
-        //     .unwrap()
-        //     .upgrade()
-        //     .borrow_mut()
-        //     .spacing = val;
-
         self
     }
 
     fn padding(self, padding: Padding) -> Self {
         let _ = padding;
-        // self.node_ref()
-        //     .unwrap()
-        //     .upgrade()
-        //     .borrow_mut()
-        //     .padding = padding;
-
         self
     }
 
     fn min_width(self, val: f32) -> Self {
         let _ = val;
-        // self.node_ref()
-        //     .unwrap()
-        //     .upgrade()
-        //     .borrow_mut()
-        //     .min_width = Some(val);
-
         self
     }
 
     fn min_height(self, val: f32) -> Self {
         let _ = val;
-        // self.node_ref()
-        //     .unwrap()
-        //     .upgrade()
-        //     .borrow_mut()
-        //     .min_height = Some(val);
-
         self
     }
 
     fn max_width(self, val: f32) -> Self {
         let _ = val;
-        // self.node_ref()
-        //     .unwrap()
-        //     .upgrade()
-        //     .borrow_mut()
-        //     .max_width = Some(val);
-
         self
     }
 
     fn max_height(self, val: f32) -> Self {
         let _ = val;
-        // self.node_ref()
-        //     .unwrap()
-        //     .upgrade()
-        //     .borrow_mut()
-        //     .max_height = Some(val);
-
         self
     }
 
     fn align_h(self, align_h: AlignH) -> Self {
         let _ = align_h;
-        // self.node_ref()
-        //     .unwrap()
-        //     .upgrade()
-        //     .borrow_mut()
-        //     .align_h = align_h;
-
         self
     }
 
     fn align_v(self, align_v: AlignV) -> Self {
         let _ = align_v;
-        // self.node_ref()
-        //     .unwrap()
-        //     .upgrade()
-        //     .borrow_mut()
-        //     .align_v = align_v;
-
         self
     }
 }
@@ -460,12 +348,8 @@ pub trait WidgetExt: Widget + Sized {
 impl<T> WidgetExt for T where T: Widget + Sized {}
 
 impl Widget for Box<dyn Widget> {
-    fn id(&self) -> WidgetId {
-        self.as_ref().id()
-    }
-
-    fn node(&self) -> ViewNode {
-        self.as_ref().node()
+    fn state(&self) -> &WidgetState {
+        self.as_ref().state()
     }
 
     fn children(&self) -> Option<&Children> {
@@ -474,12 +358,8 @@ impl Widget for Box<dyn Widget> {
 }
 
 impl Widget for Box<&mut dyn Widget> {
-    fn id(&self) -> WidgetId {
-        self.as_ref().id()
-    }
-
-    fn node(&self) -> ViewNode {
-        self.as_ref().node()
+    fn state(&self) -> &WidgetState {
+        self.as_ref().state()
     }
 
     fn children(&self) -> Option<&Children> {
@@ -496,7 +376,6 @@ impl std::fmt::Debug for Box<dyn Widget> {
 impl std::fmt::Debug for &dyn Widget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct(std::any::type_name::<Self>())
-            .field("id", &self.id())
             .field("children", &self.children().unwrap_or(&Children::new()))
             .finish()
     }
@@ -539,26 +418,22 @@ impl CallbackStore {
 // -------------------------------------
 
 pub(crate) struct WindowWidget {
-    id: WidgetId,
+    state: WidgetState,
     children: Children,
 }
 
 impl WindowWidget {
-    pub(crate) fn new(cx: &mut Context, rect: Rect) -> Self {
+    pub(crate) fn new(rect: Rect) -> Self {
         Self {
-            id: cx.create_id(),
+            state: WidgetState::window(rect.width, rect.height),
             children: Children::new(),
         }
     }
 }
 
 impl Widget for WindowWidget {
-    fn id(&self) -> WidgetId {
-        self.id
-    }
-
-    fn node(&self) -> ViewNode {
-        todo!()
+    fn state(&self) -> &WidgetState {
+        &self.state
     }
 
     fn children(&self) -> Option<&Children> {
@@ -569,26 +444,22 @@ impl Widget for WindowWidget {
 // -------------------------------------
 
 pub struct CircleWidget {
-    id: WidgetId,
+    state: WidgetState,
 }
 
 impl CircleWidget {
-    pub fn new(cx: &mut Context) -> Self {
-        let id = cx.create_id();
-        // node: ViewNode::default()
-        //     .with_stroke_width(5.)
-        //     .with_shape(Shape::Circle)
-        //     .with_size((100., 100.)),
-        Self { id }
+    pub fn new() -> Self {
+        Self {
+            state: WidgetState::default()
+                .with_size(100, 100)
+                .with_shape(Shape::Circle)
+                .with_border_width(5)
+        }
     }
 }
 
 impl Widget for CircleWidget {
-    fn id(&self) -> WidgetId {
-        self.id
-    }
-
-    fn node(&self) -> ViewNode {
-        todo!()
+    fn state(&self) -> &WidgetState {
+        &self.state
     }
 }

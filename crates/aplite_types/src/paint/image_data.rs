@@ -1,6 +1,7 @@
 use std::sync::{Arc, Weak};
 use crate::{Fraction, Rgba, Size};
 
+#[derive(Clone)]
 pub struct ImageData {
     pub width: u32,
     pub height: u32,

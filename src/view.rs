@@ -1,13 +1,9 @@
-use aplite_storage::{Tree, Entity};
-
 use crate::widget::{Widget, WidgetId, Children};
-use crate::cursor::Cursor;
 use crate::context::Context;
-use crate::layout::State;
 
 /// wrapper over [`Widget`] trait to be stored inside [`ViewStorage`]
 pub struct View {
-    pub(crate) widget: Box<dyn Widget>,
+    pub(crate) widget: Box<dyn IntoView>,
 }
 
 impl View {
@@ -17,46 +13,79 @@ impl View {
         }
     }
 
-    pub(crate) fn id(&self) -> WidgetId {
-        self.widget.id()
+    fn build(self, cx: &mut Context) {
+        let current = cx.current.take();
+        let id = cx.create_id();
+        let state = self.widget.state();
+
+        cx.tree.insert(id, current);
+        cx.state.insert_state(&id, state);
+
+        if let Some(children) = self.widget.children() {
+            cx.current = Some(id);
+            cx.state.rules.insert(&id, state.layout_rules());
+
+            children.drain().for_each(|child| {
+                let child_view = Self { widget: child };
+                child_view.build(cx);
+            });
+        }
+
+        cx.current = current;
     }
 
-    // pub(crate) fn detect_hover(&self, cursor: &Cursor) -> Option<&Box<dyn Widget>> {
-    //     let mut current = &self.widget;
+    // pub(crate) fn detect_hover(&self, rects: &[Rect], cursor: &mut Cursor) {
+    //     if let Some(id) = cursor.hover.curr {
+    //         let rect = &rects[id.index()];
+    //         let contains = rect.contains(cursor.hover_pos());
 
-    //     while let Some(children) = current.children_ref() {
-    //         if let Some(hovered) = children.visible_boxed()
-    //             .find_map(|child| {
-    //                 child.node_ref()
-    //                     .unwrap()
-    //                     .upgrade()
-    //                     .borrow()
-    //                     .rect
-    //                     .contains(cursor.hover.pos)
-    //                     .then_some(child)
-    //             }) {
-    //             current = hovered
+    //         if !contains {
+    //             cursor.hover.curr = self.find_parent(&id).map(|parent| parent.id());
     //         } else {
-    //             break
+    //             let this = self.find_visible(&id).unwrap();
+    //             cursor.hover.curr = this.children().unwrap()
+    //                 .iter_visible()
+    //                 .find_map(|child| {
+    //                     let child_rect = &rects[child.id().index()];
+    //                     child_rect.contains(cursor.hover_pos())
+    //                         .then_some(child.id())
+    //                 })
+    //                 .or(Some(id));
     //         }
-    //     }
+    //     } else {
+    //         let mut current = &self.widget;
 
-    //     current
-    //         .node()
-    //         .is_hoverable()
-    //         .then_some(current)
+    //         while let Some(children) = current.children() {
+    //             if let Some(hovered) = children.iter_visible()
+    //                 .find_map(|child| {
+    //                     let index = child.id().index();
+    //                     rects[index].contains(cursor.hover_pos())
+    //                         .then_some(child)
+    //                 }) {
+    //                 current = hovered
+    //             } else {
+    //                 break
+    //             }
+    //         }
+
+    //         cursor.hover.curr = current
+    //             .state()
+    //             .flag
+    //             .is_hoverable()
+    //             .then_some(current.id());
+    //     }
     // }
 
-    // pub(crate) fn find_parent(&self, id: &WidgetId) -> Option<&Box<dyn Widget>> {
+    // pub(crate) fn find_parent(&self, id: &WidgetId) -> Option<&dyn IntoView> {
     //     if self.widget.as_ref().id() == id { return None }
 
-    //     let mut current = &self.widget;
+    //     let mut current = self.widget.as_ref();
 
-    //     while let Some(children) = current.children_ref() {
-    //         if children.iter().any(|child| child.id() == id) { break }
+    //     while let Some(children) = current.children() {
+    //         if children.iter_all().any(|child| child.id() == id) { break }
 
     //         children
-    //             .all_boxed()
+    //             .iter_all()
     //             .for_each(|child| current = child);
     //     }
 
@@ -66,15 +95,15 @@ impl View {
     //         .then_some(current)
     // }
 
-    // pub(crate) fn find_visible(&self, id: &WidgetId) -> Option<&dyn Widget> {
+    // pub(crate) fn find_visible(&self, id: &WidgetId) -> Option<&dyn IntoView> {
     //     let mut current = self.widget.as_ref();
 
-    //     while let Some(children) = current.children_ref() {
+    //     while let Some(children) = current.children() {
     //         if current.id() == id { break }
 
     //         children
-    //             .visible_ref()
-    //             .for_each(|child| current = child);
+    //             .iter_visible()
+    //             .for_each(|child| current = child.as_ref());
     //     }
 
     //     Some(current)
@@ -120,8 +149,13 @@ impl std::fmt::Debug for Box<dyn IntoView> {
 impl std::fmt::Debug for &dyn IntoView {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct(std::any::type_name::<Self>())
-            .field("id", &self.id())
             .field("children", &self.children().unwrap_or(&Children::new()))
             .finish()
+    }
+}
+
+impl std::fmt::Debug for View {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.widget.fmt(f)
     }
 }

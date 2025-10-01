@@ -12,7 +12,6 @@ pub use indexmap::{
 pub use tree::{
     tree::{Tree, TreeError},
     node::{Node, NodeRef},
-    node::SubTree,
 };
 pub use data::{
     array::{Array, ImmutableArray},

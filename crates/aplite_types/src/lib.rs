@@ -6,6 +6,7 @@ mod corner_radius;
 mod shapes;
 mod paint;
 mod point;
+mod unit;
 
 pub use corner_radius::CornerRadius;
 pub use size::{gcd, Size};
@@ -25,3 +26,5 @@ pub use paint::image_data::{ImageData, ImageRef};
 
 pub use point::Point;
 pub use point::point;
+
+pub use unit::Unit;

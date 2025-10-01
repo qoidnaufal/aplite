@@ -8,16 +8,14 @@ use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::application::ApplicationHandler;
 
 use aplite_reactive::*;
-use aplite_types::{Size, Rect};
 use aplite_renderer::Renderer;
-use aplite_future::{block_on, Executor};
+use aplite_future::block_on;
 
 use crate::prelude::ApliteResult;
 use crate::context::Context;
 // use crate::layout::{LayoutCx, Layout};
 use crate::error::ApliteError;
 use crate::view::IntoView;
-use crate::widget::WindowWidget;
 
 pub(crate) const DEFAULT_SCREEN_SIZE: LogicalSize<u32> = LogicalSize::new(800, 600);
 
@@ -38,7 +36,7 @@ pub struct Aplite {
 // user API
 impl Aplite {
     pub fn new<IV: IntoView + 'static>(view_fn: impl FnOnce() -> IV + 'static) -> Self {
-        Executor::init();
+        // Executor::init();
         Self {
             renderer: None,
             cx: Context::new(view_fn().into_view()),

@@ -35,7 +35,7 @@ impl Effect {
         Self::with_scope(Scope::new(tx), rx, f)
     }
 
-    pub fn with_scope<F, R>(scope: Scope, mut rx: Receiver, mut f: F) -> Self
+    fn with_scope<F, R>(scope: Scope, mut rx: Receiver, mut f: F) -> Self
     where
         F: FnMut(Option<R>) -> R + 'static,
         R: 'static,
@@ -174,7 +174,7 @@ mod effect_test {
 
     #[test]
     fn effect() {
-        Executor::init();
+        Executor::init(4);
 
         let use_last = Signal::new(false);
         let (first, set_first) = Signal::split("Dario");

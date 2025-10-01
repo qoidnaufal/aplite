@@ -36,8 +36,8 @@ unsafe impl Sync for Worker {}
 pub struct Executor;
 
 impl Executor {
-    pub fn init() {
-        let (tx, rx) = sync_channel(128);
+    pub fn init(capacity: usize) {
+        let (tx, rx) = sync_channel(capacity);
         let worker = Worker { rx };
 
         SPAWNER.set(tx).expect("Executor can only be initiated once");
@@ -47,8 +47,16 @@ impl Executor {
     }
 
     pub fn spawn(future: impl Future<Output = ()> + 'static) {
-        let spawner = SPAWNER.get().expect("Executor should has been initialized once");
         let task = Arc::new(Task::new(future));
+
+        let spawner = SPAWNER.get_or_init(|| {
+            let (tx, rx) = sync_channel(128);
+            let worker = Worker { rx };
+            let worker_thread = thread::Builder::new().name("async worker".to_string());
+            let _ = worker_thread.spawn(move || worker.work());
+            tx
+        });
+
         let _ = spawner.send(task);
     }
 }
@@ -69,7 +77,7 @@ mod excutor_test {
 
     #[test]
     fn spawn_test() {
-        Executor::init();
+        Executor::init(1);
 
         Executor::spawn(async {
             let result = dummy_async().await;
