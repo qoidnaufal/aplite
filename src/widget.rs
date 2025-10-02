@@ -106,13 +106,16 @@ pub trait Widget {
 
 }
 
-pub struct Children(UnsafeCell<Vec<Box<dyn IntoView>>>);
+pub struct Children {
+    children: UnsafeCell<Vec<Box<dyn IntoView>>>,
+    pub(crate) rules: LayoutRules,
+}
 
 impl std::fmt::Debug for Children {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         unsafe {
             f.debug_list()
-                .entries(&*self.0.get())
+                .entries(&*self.children.get())
                 .finish()
         }
     }
@@ -120,26 +123,49 @@ impl std::fmt::Debug for Children {
 
 impl Children {
     pub fn new() -> Self {
-        Self(UnsafeCell::new(Vec::new()))
+        Self {
+            children: UnsafeCell::new(Vec::new()),
+            rules: LayoutRules::default(),
+        }
     }
 
     pub fn push(&self, child: impl IntoView + 'static) {
         unsafe {
-            let inner = &mut *self.0.get();
+            let inner = &mut *self.children.get();
             inner.push(Box::new(child));
         }
     }
 
+    pub fn padding(&mut self, padding: Padding) {
+        self.rules.padding = padding;
+    }
+
+    pub fn spacing(&mut self, spacing: u8) {
+        self.rules.spacing = spacing;
+    }
+
+    pub fn orientation(&mut self, orientation: Orientation) {
+        self.rules.orientation = orientation;
+    }
+
+    pub fn align_h(&mut self, align_h: AlignH) {
+        self.rules.align_h = align_h;
+    }
+
+    pub fn align_v(&mut self, align_v: AlignV) {
+        self.rules.align_v = align_v;
+    }
+
     pub(crate) fn iter_all(&self) -> impl Iterator<Item = &dyn IntoView> {
         unsafe {
-            let inner = &*self.0.get();
+            let inner = &*self.children.get();
             inner.iter().map(|child| child.as_ref())
         }
     }
 
     pub(crate) fn iter_visible(&self) -> impl Iterator<Item = &Box<dyn IntoView>> {
         unsafe {
-            let inner = &*self.0.get();
+            let inner = &*self.children.get();
             inner.iter()
                 .filter(|child| {
                     child.state()
@@ -150,7 +176,7 @@ impl Children {
 
     pub(crate) fn drain(&self) -> impl Iterator<Item = Box<dyn IntoView>> {
         unsafe {
-            let inner = &mut *self.0.get();
+            let inner = &mut *self.children.get();
             inner.drain(..)
         }
     }
@@ -304,16 +330,6 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn spacing(self, val: u8) -> Self {
-        let _ = val;
-        self
-    }
-
-    fn padding(self, padding: Padding) -> Self {
-        let _ = padding;
-        self
-    }
-
     fn min_width(self, val: f32) -> Self {
         let _ = val;
         self
@@ -331,16 +347,6 @@ pub trait WidgetExt: Widget + Sized {
 
     fn max_height(self, val: f32) -> Self {
         let _ = val;
-        self
-    }
-
-    fn align_h(self, align_h: AlignH) -> Self {
-        let _ = align_h;
-        self
-    }
-
-    fn align_v(self, align_v: AlignV) -> Self {
-        let _ = align_v;
         self
     }
 }
@@ -419,7 +425,7 @@ impl CallbackStore {
 
 pub(crate) struct WindowWidget {
     state: WidgetState,
-    children: Children,
+    pub(crate) children: Children,
 }
 
 impl WindowWidget {

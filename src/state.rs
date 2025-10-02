@@ -1,4 +1,4 @@
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -14,7 +14,6 @@ use aplite_types::{
 };
 
 use crate::widget::WidgetId;
-use crate::layout::{AlignV, AlignH, Orientation, Padding, LayoutRules};
 
 thread_local! {
     pub(crate) static NODE_STORAGE: RefCell<HashMap<WidgetId, Rc<RefCell<WidgetState>>>> =
@@ -34,14 +33,8 @@ pub struct WidgetState {
     pub(crate) background_paint: Paint,
     pub(crate) aspect_ratio: AspectRatio,
 
-    pub(crate) border_width: u32,
     pub(crate) border_paint: Paint,
-
-    pub(crate) padding: Padding,
-    pub(crate) spacing: u8,
-    pub(crate) orientation: Orientation,
-    pub(crate) align_v: AlignV,
-    pub(crate) align_h: AlignH,
+    pub(crate) border_width: u32,
 }
 
 impl Default for WidgetState {
@@ -60,12 +53,6 @@ impl Default for WidgetState {
 
             border_paint: Paint::Color(Rgba::WHITE),
             border_width: 0,
-
-            align_v: AlignV::Top,
-            align_h: AlignH::Left,
-            orientation: Orientation::Vertical,
-            spacing: 0,
-            padding: Padding::default(),
         }
     }
 }
@@ -79,16 +66,6 @@ impl WidgetState {
             background_paint: Paint::Color(Rgba::TRANSPARENT),
             border_paint: Paint::Color(Rgba::TRANSPARENT),
             ..Default::default()
-        }
-    }
-
-    pub(crate) fn layout_rules(&self) -> LayoutRules {
-        LayoutRules {
-            orientation: self.orientation,
-            align_h: self.align_h,
-            align_v: self.align_v,
-            padding: self.padding,
-            spacing: self.spacing,
         }
     }
 
@@ -162,41 +139,6 @@ impl WidgetState {
     pub fn with_corner_radius(self, val: CornerRadius) -> Self {
         Self {
             corner_radius: val,
-            ..self
-        }
-    }
-
-    pub fn with_align_h(self, align_h: AlignH) -> Self {
-        Self {
-            align_h,
-            ..self
-        }
-    }
-
-    pub fn with_align_v(self, align_v: AlignV) -> Self {
-        Self {
-            align_v,
-            ..self
-        }
-    }
-
-    pub fn with_orientation(self, orientation: Orientation) -> Self {
-        Self {
-            orientation,
-            ..self
-        }
-    }
-
-    pub fn with_padding(self, padding: Padding) -> Self {
-        Self {
-            padding,
-            ..self
-        }
-    }
-
-    pub fn with_spacing(self, spacing: u8) -> Self {
-        Self {
-            spacing,
             ..self
         }
     }
@@ -316,104 +258,6 @@ impl Flag {
     pub(crate) fn set_needs_layout(&mut self, needs_layout: bool) {
         if self.needs_layout() ^ needs_layout {
             self.toggle_needs_layout();
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct NodeRef {
-    node: Weak<RefCell<WidgetState>>,
-}
-
-impl NodeRef {
-    #[inline(always)]
-    pub(crate) fn try_upgrade(&self) -> Option<Rc<RefCell<WidgetState>>> {
-        self.node.upgrade()
-    }
-
-    pub(crate) fn upgrade(&self) -> Rc<RefCell<WidgetState>> {
-        self.try_upgrade().unwrap()
-    }
-
-    pub fn set_color(&self, color: Rgba) {
-        if let Some(node) = self.try_upgrade() {
-            node.borrow_mut().background_paint = color.into();
-            node.borrow_mut().flag.set_dirty(true);
-        }
-    }
-
-    pub fn set_border_color(&self, border_color: Rgba) {
-        if let Some(node) = self.try_upgrade() {
-            node.borrow_mut().background_paint = border_color.into();
-            node.borrow_mut().flag.set_dirty(true);
-        }
-    }
-
-    pub fn set_border_width(&self, val: u32) {
-        if let Some(node) = self.try_upgrade() {
-            node.borrow_mut().border_width = val;
-            node.borrow_mut().flag.set_dirty(true);
-        }
-    }
-
-    pub fn set_corner_radius(&self, corner_radius: CornerRadius) {
-        if let Some(node) = self.try_upgrade() {
-            node.borrow_mut().corner_radius = corner_radius;
-            node.borrow_mut().flag.set_dirty(true);
-        }
-    }
-
-    pub fn set_shape(&self, shape: Shape) {
-        if let Some(node) = self.try_upgrade() {
-            node.borrow_mut().shape = shape;
-            node.borrow_mut().flag.set_dirty(true);
-        }
-    }
-
-    pub fn set_rotation_deg(&self, deg: f32) {
-        self.set_rotation_rad(deg.to_radians());
-    }
-
-    pub fn set_rotation_rad(&self, rad: f32) {
-        if let Some(node) = self.try_upgrade() {
-            node.borrow_mut().transform.set_rotate_rad(rad);
-            node.borrow_mut().flag.set_dirty(true);
-        }
-    }
-
-    pub fn set_spacing(&self, val: u8) {
-        if let Some(node) = self.try_upgrade() {
-            node.borrow_mut().spacing = val;
-            node.borrow_mut().flag.set_needs_layout(true);
-        }
-    }
-
-    pub fn toggle_hoverable(&self) {
-        if let Some(node) = self.try_upgrade() {
-            node.borrow_mut().flag.toggle_hoverable();
-        }
-    }
-
-    pub fn toggle_dragable(&self) {
-        if let Some(node) = self.try_upgrade() {
-            node.borrow_mut().flag.toggle_draggable();
-        }
-    }
-
-    pub fn hide(&self, val: bool) {
-        if let Some(node) = self.try_upgrade() {
-            let prev = node.borrow().flag.is_hidden();
-            node.borrow_mut().flag.set_hidden(val);
-            if prev != val {
-                node.borrow_mut().flag.set_needs_layout(true);
-            }
-        }
-    }
-
-    pub fn set_image_aspect_ratio(&self, val: AspectRatio) {
-        if let Some(node) = self.try_upgrade() {
-            node.borrow_mut().aspect_ratio = val;
-            node.borrow_mut().flag.set_dirty(true);
         }
     }
 }

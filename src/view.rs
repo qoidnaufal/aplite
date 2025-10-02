@@ -1,5 +1,6 @@
 use crate::widget::{Widget, WidgetId, Children};
 use crate::context::Context;
+use crate::layout::LayoutRules;
 
 /// wrapper over [`Widget`] trait to be stored inside [`ViewStorage`]
 pub struct View {
@@ -18,12 +19,12 @@ impl View {
         let id = cx.create_id();
         let state = self.widget.state();
 
-        cx.tree.insert(id, current);
+        cx.layout.tree.insert(id, current);
         cx.state.insert_state(&id, state);
 
         if let Some(children) = self.widget.children() {
             cx.current = Some(id);
-            cx.state.rules.insert(&id, state.layout_rules());
+            cx.layout.rules.insert(&id, LayoutRules::default());
 
             children.drain().for_each(|child| {
                 let child_view = Self { widget: child };

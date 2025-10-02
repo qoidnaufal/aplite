@@ -1,19 +1,19 @@
 use aplite_reactive::*;
 use aplite_renderer::Renderer;
 use aplite_types::Vec2f;
-use aplite_storage::{EntityManager, Tree};
+use aplite_storage::{Entity, EntityManager};
 
 use crate::view::View;
 use crate::widget::{CALLBACKS, WidgetId, WidgetEvent};
 use crate::cursor::{Cursor, MouseAction, MouseButton, EmittedClickEvent};
-use crate::layout::State;
+use crate::layout::{Layout, State};
 use crate::state::NODE_STORAGE;
 
 pub struct Context {
     pub(crate) view: View,
-    pub(crate) entity_manager: EntityManager<WidgetId>,
-    pub(crate) tree: Tree<WidgetId>,
+    pub(crate) manager: EntityManager<WidgetId>,
     pub(crate) state: State,
+    pub(crate) layout: Layout,
     pub(crate) dirty: Signal<bool>,
     pub(crate) cursor: Cursor,
     pub(crate) current: Option<WidgetId>,
@@ -30,9 +30,9 @@ impl Context {
     pub(crate) fn new(view: View) -> Self {
         Self {
             view,
-            entity_manager: EntityManager::default(),
-            tree: Tree::default(),
+            manager: EntityManager::default(),
             state: State::new(),
+            layout: Layout::new(),
             cursor: Cursor::default(),
             dirty: Signal::new(false),
             current: None,
@@ -41,7 +41,7 @@ impl Context {
     }
 
     pub fn create_id(&mut self) -> WidgetId {
-        let id = self.entity_manager.create();
+        let id = self.manager.create();
         self.state.insert_default_state(&id);
         id
     }
@@ -95,39 +95,33 @@ impl Context {
     }
 
     fn detect_hover(&mut self) {
-        let Vec2f { x, y } = self.cursor.hover.pos;
-
         if let Some(id) = self.cursor.hover.curr {
-            let pos = self.state.get_position(&id).unwrap();
-            let size = self.state.get_size(&id).unwrap();
-            let contains = (pos.x..pos.x + size.width).contains(&x) && (pos.y..pos.y + size.height).contains(&y);
+            let rect = self.layout.rects.get(&id).unwrap();
+            let contains = rect.contains(self.cursor.hover_pos());
 
             if !contains {
-                self.cursor.hover.curr = self.tree.get_parent(&id).copied();
+                self.cursor.hover.curr = self.layout.tree.get_parent(&id).copied();
             } else {
-                self.cursor.hover.curr = self.tree
+                self.cursor.hover.curr = self.layout.tree
                     .iter_children(&id)
                     .find(|child| {
-                        let child_pos = self.state.get_position(*child).unwrap();
-                        let child_size = self.state.get_size(*child).unwrap();
-                        (child_pos.x..child_pos.x + child_size.width).contains(&x)
-                            && (child_pos.y..child_pos.y + child_size.height).contains(&y)
+                        let child_rect = self.layout.rects.get(*child).unwrap();
+                        child_rect.contains(self.cursor.hover_pos())
                     })
                     .or(Some(&id))
                     .copied();
             }
         } else {
-            self.cursor.hover.curr = self.tree
-                .iter_depth(&self.view.id())
+            self.cursor.hover.curr = self.layout.tree
+                .iter_depth(&WidgetId::root())
                 .filter(|member| {
                     self.state
                         .get_flag(member)
                         .is_some_and(|flag| flag.is_visible())
                 })
                 .find(|member| {
-                    let pos = self.state.get_position(*member).unwrap();
-                    let size = self.state.get_size(*member).unwrap();
-                    (pos.x..pos.x + size.width).contains(&x) && (pos.y..pos.y + size.height).contains(&y)
+                    let rect = self.layout.rects.get(*member).unwrap();
+                    rect.contains(self.cursor.hover_pos())
                 })
                 .copied();
         }
@@ -138,31 +132,20 @@ impl Context {
 
     pub(crate) fn handle_drag(&mut self) {
         if let Some(captured) = self.cursor.click.captured {
-            NODE_STORAGE.with_borrow(|s| {
-                let node = s.get(&captured).unwrap();
-                let dragable = node.borrow().flag.is_dragable();
+            let rect = self.layout.rects.get_mut(&captured).unwrap();
+            let flag = self.state.get_flag_mut(&captured).unwrap();
 
-                if self.cursor.is_dragging() && dragable {
-                    self.cursor.is_dragging = true;
-                    let pos = self.cursor.hover.pos - self.cursor.click.offset;
+            if self.cursor.is_dragging() && flag.is_dragable() {
+                self.cursor.is_dragging = true;
+                let pos = self.cursor.hover.pos - self.cursor.click.offset;
 
-                    let mut state = node.borrow_mut();
-                    state.rect.set_pos(pos);
-                    state.flag.set_dirty(true);
+                rect.set_pos(pos);
+                flag.set_dirty(true);
 
-                    drop(state);
-
-                    self.state.calculate_position(&self.tree, &captured);
-                    // let widget = self.view.find_visible(&captured).unwrap();
-                    // if let Some(children) = widget.children_ref() {
-                    //     let mut cx = LayoutCx::new(widget);
-                    //     children.iter()
-                    //         .for_each(|child| child.calculate_layout(&mut cx));
-                    // }
-
-                    self.toggle_dirty();
-                }
-            });
+                self.layout.calculate_position(&captured, &self.state);
+                // TODO: dirty scissor rect
+                self.toggle_dirty();
+            }
         }
     }
 
@@ -173,12 +156,8 @@ impl Context {
     ) {
         match self.cursor.process_click_event(action.into(), button.into()) {
             EmittedClickEvent::Captured(captured) => {
-                NODE_STORAGE.with_borrow(|s| {
-                    let node = s.get(&captured).unwrap();
-                    let pos = node.borrow().rect.vec2f();
-
-                    self.cursor.click.offset = self.cursor.click.pos - pos;
-                })
+                let pos = self.layout.rects.get(&captured).unwrap().vec2f();
+                self.cursor.click.offset = self.cursor.click.pos - pos;
             },
             EmittedClickEvent::TriggerCallback(id) => {
                 CALLBACKS.with_borrow_mut(|cb| {
@@ -203,7 +182,7 @@ impl Context {
 // #########################################################
 
     pub(crate) fn render(&self, renderer: &mut Renderer) {
-        self.state.render(renderer);
+        self.state.render(renderer, &self.layout);
 
         // let mut scene = renderer.scene();
         // self.view.widget.draw(&mut scene);

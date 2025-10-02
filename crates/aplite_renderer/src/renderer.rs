@@ -2,7 +2,7 @@ use std::sync::Weak;
 
 use winit::window::Window;
 use winit::dpi::PhysicalSize;
-use aplite_types::{Rect, Vec2f, Matrix3x2, Size, PaintRef, CornerRadius};
+use aplite_types::{Rect, Matrix3x2, Size, PaintRef, CornerRadius};
 
 // use super::RenderError;
 use super::InitiationError;
@@ -264,8 +264,7 @@ pub struct Scene<'a> {
 }
 
 pub struct DrawArgs<'a> {
-    pub position: &'a Vec2f,
-    pub size: &'a Size,
+    pub rect: &'a Rect,
     pub transform: &'a Matrix3x2,
     pub background_paint: &'a PaintRef<'a>,
     pub border_paint: &'a PaintRef<'a>,
@@ -279,8 +278,7 @@ impl Scene<'_> {
     pub fn draw(
         &mut self,
         DrawArgs {
-            position,
-            size,
+            rect,
             transform,
             background_paint,
             border_paint,
@@ -291,7 +289,7 @@ impl Scene<'_> {
     ) {
         let offset = self.mesh.offset;
 
-        let mut element = Element::new(*size / self.size)
+        let mut element = Element::new(rect.size() / self.size)
             .with_shape(*shape)
             .with_corner_radius(corner_radius)
             .with_border_width(*border_width as f32 / self.size.width);
@@ -309,7 +307,7 @@ impl Scene<'_> {
             PaintRef::Color(rgba) => {
                 element.background = rgba.pack_u32();
                 Vertices::new(
-                    &Rect::new(position.x, position.y, size.width, size.height),
+                    rect,
                     Uv {
                         min_x: 0.,
                         min_y: 0.,
@@ -324,7 +322,7 @@ impl Scene<'_> {
             PaintRef::Image(image_ref) => {
                 let uv = self.atlas.append(image_ref).unwrap();
                 Vertices::new(
-                    &Rect::new(position.x, position.y, size.width, size.height),
+                    rect,
                     uv,
                     self.size,
                     offset as _,

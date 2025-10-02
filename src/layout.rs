@@ -1,7 +1,6 @@
 use aplite_renderer::{Renderer, DrawArgs, Shape};
 use aplite_types::{
-    // Rect,
-    Vec2f,
+    Rect,
     Size,
     Matrix3x2,
     Paint,
@@ -294,6 +293,7 @@ impl Padding {
 //     }
 // }
 
+#[derive(Default)]
 pub(crate) struct LayoutRules {
     pub(crate) orientation: Orientation,
     pub(crate) align_h: AlignH,
@@ -307,218 +307,45 @@ pub struct Border {
     width: u32,
 }
 
-pub(crate) struct State {
-    pub(crate) ptr: SparseIndices<WidgetId>,
-    pub(crate) entities: Vec<WidgetId>,
-
-    pub(crate) transform: Vec<Matrix3x2>,
-    pub(crate) position: Vec<Vec2f>,
-    pub(crate) size: Vec<Size>,
-    pub(crate) width: Vec<Unit>,
-    pub(crate) height: Vec<Unit>,
-
-    // pub(crate) min_width: Vec<Option<f32>>,
-    // pub(crate) max_width: Vec<Option<f32>>,
-
-    // pub(crate) min_height: Vec<Option<f32>>,
-    // pub(crate) max_height: Vec<Option<f32>>,
-
-    pub(crate) flag: Vec<Flag>,
-    pub(crate) shape: Vec<Shape>,
-    pub(crate) corner_radius: Vec<CornerRadius>,
-    pub(crate) background: Vec<Paint>,
-    pub(crate) border_paint: Vec<Paint>,
-    pub(crate) border_width: Vec<u32>,
+pub(crate) struct Layout {
+    pub(crate) tree: Tree<WidgetId>,
+    pub(crate) rects: Array<WidgetId, Rect>,
 
     pub(crate) rules: Array<WidgetId, LayoutRules>,
 }
 
-impl State {
+impl Layout {
     pub(crate) fn new() -> Self {
         Self::with_capacity(0)
     }
 
     pub(crate) fn with_capacity(capacity: usize) -> Self {
         Self {
-            ptr: SparseIndices::default(),
-            entities: Vec::with_capacity(capacity),
-
-            transform: Vec::with_capacity(capacity),
-            position: Vec::with_capacity(capacity),
-            size: Vec::with_capacity(capacity),
-            width: Vec::with_capacity(capacity),
-            height: Vec::with_capacity(capacity),
-
-            // min_width: Vec::with_capacity(capacity),
-            // max_width: Vec::with_capacity(capacity),
-            // min_height: Vec::with_capacity(capacity),
-            // max_height: Vec::with_capacity(capacity),
-
-            flag: Vec::with_capacity(capacity),
-            shape: Vec::with_capacity(capacity),
-            corner_radius: Vec::with_capacity(capacity),
-            background: Vec::with_capacity(capacity),
-            border_paint: Vec::with_capacity(capacity),
-            border_width: Vec::with_capacity(capacity),
-
+            tree: Tree::with_capacity(capacity),
+            rects: Array::with_capacity(capacity),
             rules: Array::default(),
         }
     }
 
-    pub(crate) fn insert_state(&mut self, id: &WidgetId, state: &WidgetState) {
-        let WidgetState {
-            width,
-            height,
-            transform,
-            shape,
-            corner_radius,
-            flag,
-            background_paint,
-            border_paint,
-            border_width,
-            ..
-        } = state.clone();
+    pub(crate) fn calculate_layout(&mut self, start: &WidgetId, state: &State) {
+        self.update_fixed_unit(&state.width, &state.height, &state.flag);
 
-        self.ptr.resize_if_needed(id);
-        self.entities.push(*id);
-
-        self.transform.push(transform);
-        self.position.push(Default::default());
-        self.size.push(Default::default());
-        self.width.push(width);
-        self.height.push(height);
-
-        self.flag.push(flag);
-        self.shape.push(shape);
-        self.corner_radius.push(corner_radius);
-
-        self.background.push(background_paint);
-        self.border_paint.push(border_paint);
-        self.border_width.push(border_width);
-    }
-
-    pub(crate) fn insert_default_state(&mut self, id: &WidgetId) {
-        self.ptr.resize_if_needed(id);
-        self.entities.push(*id);
-
-        self.transform.push(Matrix3x2::identity());
-        self.position.push(Default::default());
-        self.size.push(Default::default());
-        self.width.push(Default::default());
-        self.height.push(Default::default());
-
-        self.flag.push(Default::default());
-        self.background.push(Paint::Color(Rgba::RED));
-        self.shape.push(Shape::RoundedRect);
-        self.corner_radius.push(CornerRadius::default());
-    }
-
-    pub(crate) fn insert_default_rules(&mut self, id: &WidgetId) {
-        self.rules.insert(id, LayoutRules {
-            orientation: Orientation::Horizontal,
-            align_h: AlignH::Left,
-            align_v: AlignV::Top,
-            padding: Padding::splat(0),
-            spacing: 0,
-        });
-    }
-
-    pub(crate) fn get_flag(&self, id: &WidgetId) -> Option<&Flag> {
-        self.ptr.with(id, |index| self.flag.get(index))?
-    }
-
-    pub(crate) fn get_flag_mut(&mut self, id: &WidgetId) -> Option<&mut Flag> {
-        self.ptr.with(id, |index| self.flag.get_mut(index))?
-    }
-
-    pub(crate) fn get_position(&self, id: &WidgetId) -> Option<&Vec2f> {
-        self.ptr.with(id, |index| self.position.get(index))?
-    }
-
-    pub(crate) fn get_transform(&self, id: &WidgetId) -> Option<&Matrix3x2> {
-        self.ptr.with(id, |index| self.transform.get(index))?
-    }
-
-    pub(crate) fn set_position(&mut self, id: &WidgetId, position: Vec2f) {
-        if let Some(pos) = self.ptr.with(id, |index| &mut self.position[index]) {
-            pos.x = position.x;
-            pos.y = position.y;
-        }
-    }
-
-    pub(crate) fn set_width(&mut self, id: &WidgetId, width: Unit) {
-        if let Some(w) = self.ptr.with(id, |index| &mut self.width[index]) {
-            *w = width
-        }
-    }
-
-    pub(crate) fn set_height(&mut self, id: &WidgetId, height: Unit) {
-        if let Some(h) = self.ptr.with(id, |index| &mut self.height[index]) {
-            *h = height
-        }
-    }
-
-    pub(crate) fn len(&self) -> usize {
-        self.position.len()
-    }
-
-    pub(crate) fn remove(&mut self, id: &WidgetId) {
-        if self.len() == 0 { return }
-
-        if let Some(index) = self.ptr.get_data_index(id) {
-            let last = self.entities.last().unwrap();
-
-            self.ptr.set_index(last.index(), index);
-            self.ptr.set_null(id);
-            self.entities.swap_remove(index);
-
-            self.position.swap_remove(index);
-            self.size.swap_remove(index);
-            self.width.swap_remove(index);
-            self.height.swap_remove(index);
-
-            // self.min_width.swap_remove(index);
-            // self.max_width.swap_remove(index);
-            // self.min_height.swap_remove(index);
-            // self.max_height.swap_remove(index);
-
-            self.flag.swap_remove(index);
-            self.background.swap_remove(index);
-            self.shape.swap_remove(index);
-            self.corner_radius.swap_remove(index);
-        }
-
-        self.rules.remove(*id);
-    }
-
-    pub(crate) fn set_visible(&mut self, tree: &Tree<WidgetId>, id: &WidgetId, visible: bool) {
-        tree.iter_depth(id)
-            .for_each(|member| {
-                if let Some(flag) = self.ptr.with(member, |index| &mut self.flag[index]) {
-                    flag.set_hidden(!visible);
-                }
-            });
-    }
-
-    pub(crate) fn calculate_layout(&mut self, tree: &Tree<WidgetId>, start: &WidgetId) {
-        self.update_fixed_unit();
-
-        self.calculate_size(tree, start);
+        self.calculate_size(start, state);
 
         // self.update_constraints();
 
-        self.update_growth_unit(tree, start);
+        self.update_growth_unit(start, state);
 
-        self.calculate_position(tree, start);
+        self.calculate_position(start, state);
     }
 
-    pub(crate) fn update_fixed_unit(&mut self) {
-        self.size
+    pub(crate) fn update_fixed_unit(&mut self, widths: &[Unit], heights: &[Unit], flags: &[Flag]) {
+        self.rects
             .iter_mut()
-            .zip(self.width.iter().zip(&self.height))
-            .zip(&self.flag)
+            .zip(widths.iter().zip(heights))
+            .zip(flags)
             .filter(|(_, flag)| flag.is_visible())
-            .for_each(|((size, (width, height)), _)| {
+            .for_each(|(((_, size), (width, height)), _)| {
                 if let Unit::Fixed(w) = width { size.width = *w }
                 if let Unit::Fixed(h) = height { size.height = *h }
             });
@@ -538,15 +365,15 @@ impl State {
     //         });
     // }
 
-    pub(crate) fn update_growth_unit(&mut self, tree: &Tree<WidgetId>, start: &WidgetId) {
-        tree.iter_depth(start)
-            .filter(|id| self.ptr.with(*id, |index| &self.flag[index]).is_some_and(|flag| flag.is_visible()))
+    pub(crate) fn update_growth_unit(&mut self, start: &WidgetId, state: &State) {
+        self.tree.iter_depth(start)
+            .filter(|id| state.ptr.with(*id, |index| &state.flag[index]).is_some_and(|flag| flag.is_visible()))
             .for_each(|id| {
                 if let Some(rules) = self.rules.get(id) {
-                    let size = self.ptr.with(id, |index| &self.size[index]).unwrap();
+                    let size = self.rects.get(id).unwrap().size();
 
-                    let (rem_w, rem_h) = tree.iter_children(id)
-                        .flat_map(|child| self.ptr.with(child, |index| &self.size[index]))
+                    let (rem_w, rem_h) = self.tree.iter_children(id)
+                        .flat_map(|child| self.rects.get(child))
                         .fold((size.width, size.height), |(w, h), cs| {
                             match rules.orientation {
                                 Orientation::Horizontal => (w - cs.width, h),
@@ -554,18 +381,18 @@ impl State {
                             }
                         });
 
-                    let to_grow_w = tree.iter_children(id)
+                    let to_grow_w = self.tree.iter_children(id)
                         .filter(|child| {
-                            self.ptr
-                                .with(*child, |index| &self.width[index])
+                            state.ptr
+                                .with(*child, |index| &state.width[index])
                                 .is_some_and(|unit| unit.is_grow())
                         })
                         .collect::<Vec<_>>();
 
-                    let to_grow_h = tree.iter_children(id)
+                    let to_grow_h = self.tree.iter_children(id)
                         .filter(|child| {
-                            self.ptr
-                                .with(*child, |index| &self.height[index])
+                            state.ptr
+                                .with(*child, |index| &state.height[index])
                                 .is_some_and(|unit| unit.is_grow())
                         })
                         .collect::<Vec<_>>();
@@ -574,18 +401,18 @@ impl State {
                     let count_h = to_grow_h.len() as f32;
 
                     to_grow_w.iter().for_each(|child| {
-                        let cs = self.ptr.with(*child, |index| &mut self.size[index]).unwrap();
+                        let child_rect = self.rects.get_mut(child).unwrap();
                         match rules.orientation {
-                            Orientation::Horizontal => cs.width += rem_w / count_w,
-                            Orientation::Vertical => cs.width = rem_w,
+                            Orientation::Horizontal => child_rect.width += rem_w / count_w,
+                            Orientation::Vertical => child_rect.width = rem_w,
                         }
                     });
 
                     to_grow_h.iter().for_each(|child| {
-                        let cs = self.ptr.with(*child, |index| &mut self.size[index]).unwrap();
+                        let child_rect = self.rects.get_mut(child).unwrap();
                         match rules.orientation {
-                            Orientation::Horizontal => cs.height = rem_h,
-                            Orientation::Vertical => cs.height += rem_h / count_h,
+                            Orientation::Horizontal => child_rect.height = rem_h,
+                            Orientation::Vertical => child_rect.height += rem_h / count_h,
                         }
                     });
                 }
@@ -593,28 +420,23 @@ impl State {
     }
 
     // at the same time makes any container fit to child
-    fn calculate_size(&mut self, tree: &Tree<WidgetId>, start: &WidgetId) -> Size {
+    fn calculate_size(&mut self, start: &WidgetId, state: &State) -> Size {
         let mut size = Size::default();
 
-        if self.ptr
-            .with(start, |index| &self.flag[index])
+        if state.ptr
+            .with(start, |index| &state.flag[index])
             .is_some_and(|flag| flag.is_hidden()) { return size }
-
-        // let width = self.ptr
-        //     .with(start, |index| &self.width[index])
-        //     .unwrap();
-        // let height = self.ptr
-        //     .with(start, |index| &self.height[index])
-        //     .unwrap();
 
         if let Some(rules) = self.rules.get(start) {
             let orientation = rules.orientation;
             let padding = rules.padding;
             let spacing = rules.spacing;
 
-            let child_count = tree.iter_children(start)
+            let children = self.tree.iter_children(start).copied().collect::<Vec<_>>();
+            let child_count = children
+                .iter()
                 .map(|child| {
-                    let child_size = self.calculate_size(tree, child);
+                    let child_size = self.calculate_size(&child, state);
                     match orientation {
                         Orientation::Horizontal => {
                             size.width += child_size.width;
@@ -637,47 +459,39 @@ impl State {
             size.height += padding.vertical() as f32;
         }
 
-        if let Some(this_size) = self.ptr.with(start, |index| &mut self.size[index]) {
-            *this_size = size;
+        if let Some(this_size) = self.rects.get_mut(start) {
+            this_size.set_size(size);
         }
 
         size
     }
 
-    pub(crate) fn calculate_position(&mut self, tree: &Tree<WidgetId>, start: &WidgetId) {
-        tree.iter_depth(start)
-            .filter(|id| {
-                self.ptr
-                    .with(*id, |index| &self.flag[index])
-                    .is_some_and(|flag| flag.is_visible())
-            })
+    pub(crate) fn calculate_position(&mut self, start: &WidgetId, state: &State) {
+        self.tree.iter_depth(start)
+            .filter(|id| state.get_flag(id).is_some_and(|flag| flag.is_visible()))
             .for_each(|id| {
-                if let Some(parent) = tree.get_parent(id)
+                if let Some(parent) = self.tree.get_parent(id)
                     && let Some(rules) = self.rules.get(parent)
                 {
-                    let prev_pos_size = tree.get_prev_sibling(id)
-                        .and_then(|prev| {
-                            let pos = self.ptr.with(prev, |index| &self.position[index]).copied();
-                            let size = self.ptr.with(prev, |index| &self.size[index]).copied();
-                            pos.zip(size)
-                        });
+                    let prev_rect = self.tree.get_prev_sibling(id)
+                        .and_then(|prev| self.rects.get(prev).copied());
 
-                    let parent_pos = *self.ptr.with(parent, |index| &self.position[index]).unwrap();
-                    let pos = self.ptr.with(id, |index| &mut self.position[index]).unwrap();
+                    let parent_pos = self.rects.get(parent).copied().unwrap();
+                    let pos = self.rects.get_mut(id).unwrap();
 
                     let orientation = rules.orientation;
                     let spacing = rules.spacing;
                     let padding = rules.padding;
 
-                    if let Some((p, s)) = prev_pos_size {
+                    if let Some(rect) = prev_rect {
                         match orientation {
                             Orientation::Horizontal => {
-                                pos.x = p.x + s.width + spacing as f32;
-                                pos.y = p.y;
+                                pos.x = rect.x + rect.width + spacing as f32;
+                                pos.y = rect.y;
                             },
                             Orientation::Vertical => {
-                                pos.x = p.x;
-                                pos.y = p.y + s.height + spacing as f32;
+                                pos.x = rect.x;
+                                pos.y = rect.y + rect.height + spacing as f32;
                             },
                         }
                     } else {
@@ -689,11 +503,167 @@ impl State {
     }
 
     pub(crate) fn update_alignment(&mut self) {}
+}
 
-    pub(crate) fn render(&self, renderer: &mut Renderer) {
+pub(crate) struct State {
+    pub(crate) ptr: SparseIndices<WidgetId>,
+    pub(crate) entities: Vec<WidgetId>,
+
+    pub(crate) transform: Vec<Matrix3x2>,
+    pub(crate) width: Vec<Unit>,
+    pub(crate) height: Vec<Unit>,
+
+    // pub(crate) min_width: Vec<Option<f32>>,
+    // pub(crate) max_width: Vec<Option<f32>>,
+
+    // pub(crate) min_height: Vec<Option<f32>>,
+    // pub(crate) max_height: Vec<Option<f32>>,
+
+    pub(crate) flag: Vec<Flag>,
+    pub(crate) shape: Vec<Shape>,
+    pub(crate) corner_radius: Vec<CornerRadius>,
+    pub(crate) background: Vec<Paint>,
+    pub(crate) border_paint: Vec<Paint>,
+    pub(crate) border_width: Vec<u32>,
+}
+
+impl State {
+    pub(crate) fn new() -> Self {
+        Self::with_capacity(0)
+    }
+
+    pub(crate) fn with_capacity(capacity: usize) -> Self {
+        Self {
+            ptr: SparseIndices::default(),
+            entities: Vec::with_capacity(capacity),
+
+            transform: Vec::with_capacity(capacity),
+            width: Vec::with_capacity(capacity),
+            height: Vec::with_capacity(capacity),
+
+            // min_width: Vec::with_capacity(capacity),
+            // max_width: Vec::with_capacity(capacity),
+            // min_height: Vec::with_capacity(capacity),
+            // max_height: Vec::with_capacity(capacity),
+
+            flag: Vec::with_capacity(capacity),
+            shape: Vec::with_capacity(capacity),
+            corner_radius: Vec::with_capacity(capacity),
+            background: Vec::with_capacity(capacity),
+            border_paint: Vec::with_capacity(capacity),
+            border_width: Vec::with_capacity(capacity),
+        }
+    }
+
+    pub(crate) fn insert_state(&mut self, id: &WidgetId, state: &WidgetState) {
+        let WidgetState {
+            width,
+            height,
+            transform,
+            shape,
+            corner_radius,
+            flag,
+            background_paint,
+            border_paint,
+            border_width,
+            ..
+        } = state.clone();
+
+        self.ptr.resize_if_needed(id);
+        self.entities.push(*id);
+
+        self.transform.push(transform);
+        self.width.push(width);
+        self.height.push(height);
+
+        self.flag.push(flag);
+        self.shape.push(shape);
+        self.corner_radius.push(corner_radius);
+
+        self.background.push(background_paint);
+        self.border_paint.push(border_paint);
+        self.border_width.push(border_width);
+    }
+
+    pub(crate) fn insert_default_state(&mut self, id: &WidgetId) {
+        self.ptr.resize_if_needed(id);
+        self.entities.push(*id);
+
+        self.transform.push(Matrix3x2::identity());
+        self.width.push(Default::default());
+        self.height.push(Default::default());
+
+        self.flag.push(Default::default());
+        self.background.push(Paint::Color(Rgba::RED));
+        self.shape.push(Shape::RoundedRect);
+        self.corner_radius.push(CornerRadius::default());
+    }
+
+    pub(crate) fn get_flag(&self, id: &WidgetId) -> Option<&Flag> {
+        self.ptr.with(id, |index| self.flag.get(index))?
+    }
+
+    pub(crate) fn get_flag_mut(&mut self, id: &WidgetId) -> Option<&mut Flag> {
+        self.ptr.with(id, |index| self.flag.get_mut(index))?
+    }
+
+    pub(crate) fn get_transform(&self, id: &WidgetId) -> Option<&Matrix3x2> {
+        self.ptr.with(id, |index| self.transform.get(index))?
+    }
+
+    pub(crate) fn set_width(&mut self, id: &WidgetId, width: Unit) {
+        if let Some(w) = self.ptr.with(id, |index| &mut self.width[index]) {
+            *w = width
+        }
+    }
+
+    pub(crate) fn set_height(&mut self, id: &WidgetId, height: Unit) {
+        if let Some(h) = self.ptr.with(id, |index| &mut self.height[index]) {
+            *h = height
+        }
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.entities.len()
+    }
+
+    pub(crate) fn remove(&mut self, id: &WidgetId) {
+        if self.len() == 0 { return }
+
+        if let Some(index) = self.ptr.get_data_index(id) {
+            let last = self.entities.last().unwrap();
+
+            self.ptr.set_index(last.index(), index);
+            self.ptr.set_null(id);
+            self.entities.swap_remove(index);
+
+            self.width.swap_remove(index);
+            self.height.swap_remove(index);
+
+            // self.min_width.swap_remove(index);
+            // self.max_width.swap_remove(index);
+            // self.min_height.swap_remove(index);
+            // self.max_height.swap_remove(index);
+
+            self.flag.swap_remove(index);
+            self.background.swap_remove(index);
+            self.shape.swap_remove(index);
+            self.corner_radius.swap_remove(index);
+        }
+    }
+
+    pub(crate) fn set_visible(&mut self, tree: &Tree<WidgetId>, id: &WidgetId, visible: bool) {
+        tree.iter_depth(id)
+            .for_each(|member| {
+                if let Some(flag) = self.ptr.with(member, |index| &mut self.flag[index]) {
+                    flag.set_hidden(!visible);
+                }
+            });
+    }
+
+    pub(crate) fn render(&self, renderer: &mut Renderer, layout: &Layout) {
         let mut scene = renderer.scene();
-        self.position.iter()
-            .zip(&self.size)
+        layout.rects.iter()
             .zip(&self.transform)
             .zip(&self.background)
             .zip(&self.border_paint)
@@ -701,11 +671,10 @@ impl State {
             .zip(&self.corner_radius)
             .zip(&self.shape)
             .zip(&self.flag)
-            .for_each(|((((((((position, size), transform), background), border_paint), border_width), corner_radius), shape), flag)| {
+            .for_each(|((((((((_, rect), transform), background), border_paint), border_width), corner_radius), shape), flag)| {
                 if flag.is_visible() {
                     let draw_args = DrawArgs {
-                        position,
-                        size,
+                        rect,
                         transform,
                         background_paint: &background.as_paint_ref(),
                         border_paint: &border_paint.as_paint_ref(),
