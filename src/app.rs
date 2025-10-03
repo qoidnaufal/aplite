@@ -90,7 +90,7 @@ impl Aplite {
         // self.cx.view.widget.calculate_size(None);
         // self.cx.view.widget.calculate_layout(&mut cx);
 
-        self.cx.state.calculate_layout(&self.cx.tree, &self.cx.view.id());
+        self.cx.calculate_layout();
         #[cfg(feature = "debug_tree")] eprintln!("{:#?}", view);
 
         let renderer = block_on(async { Renderer::new(Arc::downgrade(&window)).await })?;

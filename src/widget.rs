@@ -5,7 +5,6 @@ use aplite_renderer::Shape;
 use aplite_types::{Rgba, CornerRadius, Size, Rect, Unit};
 use aplite_storage::{EntityManager, Entity, create_entity};
 
-use crate::context::Context;
 use crate::layout::*;
 use crate::view::{IntoView, View};
 use crate::state::WidgetState;

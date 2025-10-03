@@ -6,8 +6,8 @@ use aplite_storage::{Entity, EntityManager};
 use crate::view::View;
 use crate::widget::{CALLBACKS, WidgetId, WidgetEvent};
 use crate::cursor::{Cursor, MouseAction, MouseButton, EmittedClickEvent};
-use crate::layout::{Layout, State};
-use crate::state::NODE_STORAGE;
+use crate::layout::Layout;
+use crate::state::{State, NODE_STORAGE};
 
 pub struct Context {
     pub(crate) view: View,
@@ -174,6 +174,9 @@ impl Context {
         }
     }
 
+    pub(crate) fn calculate_layout(&mut self) {
+        self.layout.calculate_layout(&WidgetId::root(), &self.state);
+    }
 
 // #########################################################
 // #                                                       #

@@ -41,7 +41,7 @@ optional = true
 [workspace.dependencies]
 aplite_storage = { path = "crates/aplite_storage" }
 aplite_types = { path = "crates/aplite_types" }
-wgpu = "26.0.1"
+wgpu = "27.0.1"
 winit = "0.30.12"
 
 [features]

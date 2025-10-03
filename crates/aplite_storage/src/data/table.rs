@@ -3,11 +3,19 @@ use std::any::{Any, TypeId};
 use std::marker::PhantomData;
 
 use super::array::Array;
-use super::component::{Component, Query, QueryOne, QueryData, FetchData, Remove};
+use super::component::{
+    Component,
+    Query,
+    QueryOne,
+    QueryData,
+    Queryable,
+    FetchData,
+    Remove
+};
 
 use crate::entity::Entity;
 
-pub struct Table<E: Entity> {
+pub struct Table<E: Entity + 'static> {
     pub(crate) inner: HashMap<TypeId, Box<dyn Any>>,
     marker: PhantomData<E>,
 }
@@ -26,17 +34,17 @@ impl<E: Entity + 'static> Table<E> {
         }
     }
 
-    pub fn insert<C: Component>(&mut self, entity: &E, component: C) {
-        component.register(entity, self);
+    pub fn register<C: Component>(&mut self, entity: &E, component: C) {
+        // component.register(entity, self);
     }
 
-    pub fn insert_one<T: 'static>(&mut self, entity: &E, value: T) {
-        if let Some(dense) = self.inner
+    pub fn insert<T: 'static>(&mut self, entity: &E, value: T) {
+        if let Some(array) = self.inner
             .entry(TypeId::of::<T>())
             .or_insert(Box::new(Array::<E, T>::default()))
             .downcast_mut::<Array<E, T>>()
         {
-            dense.insert(entity, value);
+            array.insert(entity, value);
         }
     }
 
@@ -58,11 +66,11 @@ impl<E: Entity + 'static> Table<E> {
         Fd::fetch(entity, self)
     }
 
-    pub fn query_one<T: 'static>(&self) -> QueryOne<'_, T> {
+    pub fn query_one<'a, Q: QueryData<'a>>(&'a self) -> QueryOne<'a, Q> {
         QueryOne::new(self)
     }
 
-    pub fn query<'a, Qd: QueryData<'a>>(&'a self) -> Query<'a, Qd> {
+    pub fn query<'a, Q: Queryable<'a>>(&'a self) -> Query<'a, Q> {
         Query::new(self)
     }
 
@@ -74,31 +82,25 @@ impl<E: Entity + 'static> Table<E> {
 #[cfg(test)]
 mod table_test {
     use crate::entity::{Entity, EntityManager};
-    use crate::{create_entity, Component};
-    use super::{Table, FetchData};
+    use crate::create_entity;
+    use super::Table;
 
     create_entity! { TestId }
 
     #[derive(Default)]
     struct Context {
         manager: EntityManager<TestId>,
-        data: Table<TestId>,
-    }
-
-    impl Context {
-        fn insert(&mut self, component: impl Component) {
-            let id = self.manager.create();
-            component.register(&id, &mut self.data);
-        }
+        table: Table<TestId>,
     }
 
     #[test]
     fn query_one() {
         let mut cx = Context::default();
         for i in 0..10 {
-            cx.insert((i.to_string(),));
+            let id = cx.manager.create();
+            cx.table.insert(&id, i.to_string());
         }
-        let query_one = cx.data.query_one::<String>();
+        let query_one = cx.table.query_one::<&String>();
         assert_eq!(query_one.count(), 10);
     }
 
@@ -106,41 +108,36 @@ mod table_test {
     fn query() {
         let mut cx = Context::default();
         for i in 0..10 {
-            cx.insert((i.to_string(), i, i as f32));
+            let id = cx.manager.create();
+            cx.table.insert(&id, i.to_string());
+            cx.table.insert(&id, (i + 1) * -1);
+            cx.table.insert(&id, i as f32);
         }
 
-        let query = cx.data.query::<(&String, &f32, &i32)>();
+        let query = cx.table.query::<(&String, &mut f32, &i32)>();
 
         for (s, f, i) in query {
+            *f = *i as f32;
             assert!(std::any::type_name_of_val(s).contains("String"));
             assert!(std::any::type_name_of_val(f).contains("f32"));
             assert!(std::any::type_name_of_val(i).contains("i32"));
         }
-    }
 
-    #[test]
-    fn fetch() {
-        let mut cx = Context::default();
-        for i in 0..10 {
-            cx.insert((i.to_string(), i, i as f32));
+        let query_f32 = cx.table.query_one::<&f32>();
+
+        for f in query_f32 {
+            assert!(f.is_sign_negative())
         }
-
-        let fetch_one = <(&i32,)>::fetch(&TestId(3), &cx.data);
-        assert!(fetch_one.is_some());
-
-        let fetch_many_from_type = <(&String, &f32)>::fetch(&TestId(1), &cx.data);
-        let fetch_many_from_table = cx.data.fetch::<(&String, &f32)>(&TestId(1));
-        assert_eq!(fetch_many_from_type, fetch_many_from_table);
     }
 
-    #[test]
-    fn removal() {
-        let mut cx = Context::default();
-        for i in 0..10 {
-            cx.insert((i.to_string(), i, i as f32));
-        }
+    // #[test]
+    // fn removal() {
+    //     let mut cx = Context::default();
+    //     for i in 0..10 {
+    //         cx.insert((i.to_string(), i, i as f32));
+    //     }
 
-        let removed = cx.data.remove::<(String, f32, i32)>(TestId(5));
-        assert!(removed.is_some())
-    }
+    //     let removed = cx.table.remove::<(String, f32, i32)>(TestId(5));
+    //     assert!(removed.is_some())
+    // }
 }

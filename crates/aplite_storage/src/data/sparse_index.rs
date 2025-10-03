@@ -194,11 +194,11 @@ mod store_test {
         let ids = setup_entity(NUM);
         for i in 0..NUM {
             let id = &ids[i];
-            ms.insert_one(id, i);
-            ms.insert_one(id, format!("{id:?}"));
+            ms.insert(id, i);
+            ms.insert(id, format!("{id:?}"));
         }
-        let query_usize = QueryOne::<usize>::new(&ms);
-        let query_string = QueryOne::<String>::new(&ms);
+        let query_usize = QueryOne::<&usize>::new(&ms);
+        let query_string = QueryOne::<&String>::new(&ms);
         assert_eq!(query_string.into_iter().count(), query_usize.into_iter().count());
     }
 

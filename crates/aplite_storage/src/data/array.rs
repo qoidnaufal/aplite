@@ -1,16 +1,19 @@
-use std::iter::{Zip, FilterMap, Enumerate};
+use std::iter::{Zip, Map, FilterMap, Enumerate};
 use std::marker::PhantomData;
 use std::slice::{Iter, IterMut};
+use std::cell::UnsafeCell;
 
 use crate::entity::Entity;
 use super::sparse_index::{SparseIndices, Index};
+use super::component::{Component, QueryData};
+use super::component::{map_query, FnMapQuery};
 
 /// A dense data storage which is guaranteed even after removal.
 /// Doesn't facilitate the creation of [`Entity`], unlike [`IndexMap`](crate::index_map::IndexMap).
 /// You'll need the assistance of [`EntityManager`](crate::entity::EntityManager) to create the key for indexing data.
 pub struct Array<E: Entity, T> {
     pub(crate) ptr: SparseIndices<E>,
-    pub(crate) data: Vec<T>,
+    pub(crate) data: Vec<UnsafeCell<T>>,
     pub(crate) entities: Vec<E>,
 }
 
@@ -19,7 +22,7 @@ pub struct Array<E: Entity, T> {
 /// You'll need the assistance of [`EntityManager`](crate::entity::EntityManager) to create the key for indexing data.
 pub struct ImmutableArray<E: Entity, T> {
     ptr: Box<[Index]>,
-    data: Box<[T]>,
+    data: Box<[UnsafeCell<T>]>,
     marker: PhantomData<E>,
 }
 
@@ -60,24 +63,20 @@ impl<E: Entity, T> Array<E, T> {
         }
     }
 
-    pub fn data(&self) -> &[T] {
-        &self.data
-    }
-
-    pub fn data_mut(&mut self) -> &mut [T] {
-        &mut self.data
-    }
-
     pub fn get(&self, entity: &E) -> Option<&T> {
         self.ptr
             .get_index(entity)
-            .map(|index| &self.data[index.index()])
+            .map(|index| unsafe {
+                &*self.data[index.index()].get()
+            })
     }
 
     pub fn get_mut(&mut self, entity: &E) -> Option<&mut T> {
         self.ptr
             .get_index(entity)
-            .map(|index| &mut self.data[index.index()])
+            .map(|index| {
+                self.data[index.index()].get_mut()
+            })
     }
 
     /// Inserting or replacing the value
@@ -85,7 +84,7 @@ impl<E: Entity, T> Array<E, T> {
         if let Some(index) = self.ptr.get_index(entity)
             && !index.is_null()
         {
-            self.data[index.index()] = value;
+            *self.data[index.index()].get_mut() = value;
             return;
         }
 
@@ -96,7 +95,7 @@ impl<E: Entity, T> Array<E, T> {
         }
 
         let data_index = self.data.len();
-        self.data.push(value);
+        self.data.push(UnsafeCell::new(value));
         self.entities.push(*entity);
         self.ptr.set_index(entity_index, data_index);
     }
@@ -115,7 +114,7 @@ impl<E: Entity, T> Array<E, T> {
                 self.ptr.set_index(last.index(), idx.index());
                 self.ptr.set_null(&entity);
                 self.entities.swap_remove(idx.index());
-                self.data.swap_remove(idx.index())
+                self.data.swap_remove(idx.index()).into_inner()
             })
     }
 
@@ -160,15 +159,28 @@ impl<E: Entity, T> Array<E, T> {
     }
 }
 
+impl<E: Entity, T: Component> Array<E, T> {
+    pub(crate) fn query_one<'a, Q>(&'a self) -> Map<Iter<'a, UnsafeCell<T>>, FnMapQuery<'a, Q>>
+    where
+        Q: QueryData<'a, Fetch = T>,
+    {
+        self.data.iter().map(map_query::<'a, Q> as FnMapQuery<'a, Q>)
+    }
+}
+
 impl<E: Entity, T> ImmutableArray<E, T> {
     pub fn get(&self, entity: &E) -> Option<&T> {
         self.ptr.get(entity.index())
-            .and_then(|index| self.data.get(index.index()))
+            .map(|index| unsafe {
+                &*self.data[index.index()].get()
+            })
     }
 
     pub fn get_mut(&mut self, entity: &E) -> Option<&mut T> {
         self.ptr.get(entity.index())
-            .and_then(|index| self.data.get_mut(index.index()))
+            .map(|index| {
+                self.data[index.index()].get_mut()
+            })
     }
 
     pub fn contains(&self, entity: &E) -> bool {
@@ -210,7 +222,7 @@ fn filter_map((i, index): (usize, &Index)) -> Option<usize> {
 */
 
 pub struct ArrayIter<'a, E: Entity, T> {
-    inner: Zip<Iter<'a, E>, Iter<'a, T>>,
+    inner: Zip<Iter<'a, E>, Iter<'a, UnsafeCell<T>>>,
 }
 
 impl<'a, E: Entity, T> ArrayIter<'a, E, T> {
@@ -228,12 +240,16 @@ impl<'a, E: Entity, T> Iterator for ArrayIter<'a, E, T> {
     type Item = (&'a E, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
+        self.inner
+            .next()
+            .map(|(i, cell)| unsafe {
+                (i, &*cell.get())
+            })
     }
 }
 
 pub struct ArrayIterMut<'a, E: Entity, T> {
-    inner: Zip<Iter<'a, E>, IterMut<'a, T>>,
+    inner: Zip<Iter<'a, E>, IterMut<'a, UnsafeCell<T>>>,
 }
 
 impl<'a, E: Entity, T> ArrayIterMut<'a, E, T> {
@@ -251,7 +267,11 @@ impl<'a, E: Entity, T> Iterator for ArrayIterMut<'a, E, T> {
     type Item = (&'a E, &'a mut T);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
+        self.inner
+            .next()
+            .map(|(i, cell)| {
+                (i, cell.get_mut())
+            })
     }
 }
 
@@ -264,7 +284,7 @@ impl<'a, E: Entity, T> Iterator for ArrayIterMut<'a, E, T> {
 */
 
 pub struct ImmutableArrayIter<'a, E: Entity, T> {
-    inner: Zip<FilterMap<Enumerate<Iter<'a, Index>>, fn((usize, &Index)) -> Option<usize>>, Iter<'a, T>>,
+    inner: Zip<FilterMap<Enumerate<Iter<'a, Index>>, fn((usize, &Index)) -> Option<usize>>, Iter<'a, UnsafeCell<T>>>,
     marker: PhantomData<E>,
 }
 
@@ -272,12 +292,16 @@ impl<'a, E: Entity, T> Iterator for ImmutableArrayIter<'a, E, T> {
     type Item = (usize, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
+        self.inner
+            .next()
+            .map(|(i, cell)| unsafe {
+                (i, &*cell.get())
+            })
     }
 }
 
 pub struct ImmutableArrayIterMut<'a, E: Entity, T> {
-    inner: Zip<FilterMap<Enumerate<Iter<'a, Index>>, fn((usize, &Index)) -> Option<usize>>, IterMut<'a, T>>,
+    inner: Zip<FilterMap<Enumerate<Iter<'a, Index>>, fn((usize, &Index)) -> Option<usize>>, IterMut<'a, UnsafeCell<T>>>,
     marker: PhantomData<E>,
 }
 
@@ -285,6 +309,10 @@ impl<'a, E: Entity, T> Iterator for ImmutableArrayIterMut<'a, E, T> {
     type Item = (usize, &'a mut T);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
+        self.inner
+            .next()
+            .map(|(i, cell)| {
+                (i, cell.get_mut())
+            })
     }
 }
