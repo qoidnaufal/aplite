@@ -5,7 +5,7 @@ use std::cell::UnsafeCell;
 
 use crate::entity::Entity;
 use super::sparse_index::{SparseIndices, Index};
-use super::component::{Component, QueryData};
+use super::component::QueryData;
 use super::component::{map_query, FnMapQuery};
 
 /// A dense data storage which is guaranteed even after removal.
@@ -159,7 +159,7 @@ impl<E: Entity, T> Array<E, T> {
     }
 }
 
-impl<E: Entity, T: Component> Array<E, T> {
+impl<E: Entity, T: 'static> Array<E, T> {
     pub(crate) fn query_one<'a, Q>(&'a self) -> Map<Iter<'a, UnsafeCell<T>>, FnMapQuery<'a, Q>>
     where
         Q: QueryData<'a, Fetch = T>,

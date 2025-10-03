@@ -5,12 +5,11 @@ use std::marker::PhantomData;
 use super::array::Array;
 use super::component::{
     Component,
+    InvalidComponent,
     Query,
     QueryOne,
     QueryData,
     Queryable,
-    FetchData,
-    Remove
 };
 
 use crate::entity::Entity;
@@ -32,10 +31,6 @@ impl<E: Entity + 'static> Table<E> {
             inner: HashMap::with_capacity(capacity),
             marker: PhantomData,
         }
-    }
-
-    pub fn register<C: Component>(&mut self, entity: &E, component: C) {
-        // component.register(entity, self);
     }
 
     pub fn insert<T: 'static>(&mut self, entity: &E, value: T) {
@@ -62,10 +57,6 @@ impl<E: Entity + 'static> Table<E> {
             .and_then(|dense| dense.get_mut(entity))
     }
 
-    pub fn fetch<'a, Fd: FetchData<'a>>(&'a self, entity: &'a E) -> Option<<Fd as FetchData<'a>>::Item> {
-        Fd::fetch(entity, self)
-    }
-
     pub fn query_one<'a, Q: QueryData<'a>>(&'a self) -> QueryOne<'a, Q> {
         QueryOne::new(self)
     }
@@ -74,8 +65,12 @@ impl<E: Entity + 'static> Table<E> {
         Query::new(self)
     }
 
-    pub fn remove<R: Remove>(&mut self, entity: E) -> Option<<R as Remove>::Removed> {
-        R::remove(entity, self)
+    pub fn register<C: Component>(&mut self, entity: &E, component: C) {
+        component.register(entity, self);
+    }
+
+    pub fn remove<C: Component>(&mut self, entity: E) -> Result<C::Item, InvalidComponent> {
+        C::remove(entity, self)
     }
 }
 
@@ -109,9 +104,7 @@ mod table_test {
         let mut cx = Context::default();
         for i in 0..10 {
             let id = cx.manager.create();
-            cx.table.insert(&id, i.to_string());
-            cx.table.insert(&id, (i + 1) * -1);
-            cx.table.insert(&id, i as f32);
+            cx.table.register(&id, (i.to_string(), (i + 1) * -1, i as f32));
         }
 
         let query = cx.table.query::<(&String, &mut f32, &i32)>();

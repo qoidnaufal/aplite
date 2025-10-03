@@ -1,4 +1,4 @@
-use std::any::TypeId;
+use std::any::{TypeId, type_name};
 use std::marker::PhantomData;
 use std::slice::Iter;
 use std::iter::Map;
@@ -50,15 +50,20 @@ impl<'a, Q: QueryData<'a>> Iterator for QueryOne<'a, Q> {
 }
 
 pub trait Component: Sized + 'static {
-    // fn register<E: Entity + 'static>(self, entity: &E, table: &mut Table<E>);
-}
+    type Item;
 
-impl<T: Sized + 'static> Component for T {}
+    /// Register value(s) to the table
+    fn register<E: Entity + 'static>(self, entity: &E, table: &mut Table<E>);
+
+    /// Use this function carefully, or else this will mess up your data
+    fn remove<E: Entity + 'static>(entity: E, source: &mut Table<E>) -> Result<Self::Item, InvalidComponent>;
+}
 
 pub trait QueryData<'a> {
     type Fetch: 'static;
     type Output: 'a;
 
+    /// Convert `UnsafeCell<T>` to `&T` or `&mut T`.
     fn get(fetch: &UnsafeCell<Self::Fetch>) -> Self::Output;
 }
 
@@ -86,61 +91,36 @@ pub trait Queryable<'a> {
     fn query<E: Entity + 'static>(source: &'a Table<E>) -> Option<Self::Iter>;
 }
 
-pub trait FetchData<'a> {
-    type Item: 'a;
+macro_rules! component {
+    ($($name:ident),*) => {
+        impl<$($name: 'static),*> Component for ($($name,)*) {
+            type Item = ($($name,)*);
 
-    fn fetch<E: Entity + 'static>(entity: &'a E, source: &'a Table<E>) -> Option<Self::Item>;
+            fn register<En: Entity + 'static>(self, entity: &En, table: &mut Table<En>) {
+                #[allow(non_snake_case)]
+                let ($($name,)*) = self;
+                $(table.insert(entity, $name);)*
+            }
+
+            fn remove<En: Entity + 'static>(entity: En, source: &mut Table<En>) -> Result<Self::Item, InvalidComponent> {
+                Ok(($(
+                    source.inner
+                        .get_mut(&TypeId::of::<$name>())
+                        .and_then(|any| any.downcast_mut::<Array<En, $name>>())
+                        .and_then(|array| array.remove(entity))
+                        .ok_or(InvalidComponent(type_name::<$name>()))?,
+                )*))
+            }
+        }
+    };
 }
-
-pub trait Remove {
-    type Removed;
-
-    fn remove<E: Entity + 'static>(entity: E, source: &mut Table<E>) -> Option<Self::Removed>;
-}
-
-// macro_rules! component {
-//     ($($name:ident),*) => {
-//         impl<$($name: 'static),*> Component for ($($name,)*) {
-//             fn register<En: Entity + 'static>(self, entity: &En, table: &mut Table<En>) {
-//                 #[allow(non_snake_case)]
-//                 let ($($name,)*) = self;
-//                 $(table.insert_one(entity, $name);)*
-//             }
-//         }
-
-//         impl<'a, $($name: 'static),*> FetchData<'a> for ($(&'a $name,)*) {
-//             type Item = ($(&'a $name,)*);
-
-//             fn fetch<En: Entity + 'static>(entity: &'a En, source: &'a Table<En>) -> Option<Self::Item> {
-//                 Some(($(
-//                     source.inner
-//                         .get(&TypeId::of::<$name>())
-//                         .and_then(|any| any.downcast_ref::<Array<En, $name>>())
-//                         .and_then(|column| column.get(entity))?,
-//                 )*))
-//             }
-//         }
-
-//         impl<$($name: 'static),*> Remove for ($($name,)*) {
-//             type Removed = ($($name,)*);
-
-//             fn remove<En: Entity + 'static>(entity: En, source: &mut Table<En>) -> Option<Self::Removed> {
-//                 Some(($(
-//                     source.inner
-//                         .get_mut(&TypeId::of::<$name>())
-//                         .and_then(|any| any.downcast_mut::<Array<En, $name>>())
-//                         .and_then(|column| column.remove(entity))?,
-//                 )*))
-//             }
-//         }
-//     };
-// }
 
 pub(crate) fn map_query<'a, Qd: QueryData<'a>>(cell: &'a UnsafeCell<Qd::Fetch>) -> Qd::Output {
     Qd::get(cell)
 }
 
-pub(crate) type FnMapQuery<'a, Qd> = fn(&'a UnsafeCell<<Qd as QueryData<'a>>::Fetch>) -> <Qd as QueryData<'a>>::Output;
+pub(crate) type FnMapQuery<'a, Qd> =
+    fn(&'a UnsafeCell<<Qd as QueryData<'a>>::Fetch>) -> <Qd as QueryData<'a>>::Output;
 
 macro_rules! query {
     ($($name:ident),*) => {
@@ -183,14 +163,15 @@ macro_rules! impl_tuple_macro {
     };
 }
 
-// impl_tuple_macro!(
-//     component,
-//     A, B, C, D, E,
-//     F, G, H, I, J,
-//     K, L, M, N, O,
-//     P, Q, R, S, T,
-//     U, V, W, X, Y, Z
-// );
+impl_tuple_macro!(
+    component,
+    A, B, C, D, E,
+    F, G, H, I, J,
+    K, L, M, N, O,
+    P, Q, R, S, T,
+    U, V, W, X, Y,
+    Z
+);
 
 impl_tuple_macro!(
     query,
@@ -198,7 +179,8 @@ impl_tuple_macro!(
     F, G, H, I, J,
     K, L, M, N, O,
     P, Q, R, S, T,
-    U, V, W, X, Y, Z
+    U, V, W, X, Y,
+    Z
 );
 
 #[derive(Debug)]
