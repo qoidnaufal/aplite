@@ -9,46 +9,6 @@ use super::array::Array;
 
 use crate::entity::Entity;
 
-/// Query on many component type
-pub struct Query<'a, Q: Queryable<'a>> {
-    pub(crate) inner: Option<Q::Iter>,
-    pub(crate) marker: PhantomData<fn() -> &'a Q>,
-}
-
-impl<'a, Q: Queryable<'a>> Query<'a, Q> {
-    pub fn new<E: Entity + 'static>(source: &'a Table<E>) -> Self {
-        Self {
-            inner: Q::query(source),
-            marker: PhantomData,
-        }
-    }
-}
-
-/// Query (and iterate) one component type
-pub struct QueryOne<'a, Q: QueryData<'a>> {
-    pub(crate) inner: Option<Map<Iter<'a, UnsafeCell<Q::Fetch>>, FnMapQuery<'a, Q>>>,
-}
-
-impl<'a, Q: QueryData<'a>> QueryOne<'a, Q> {
-    pub(crate) fn new<E: Entity + 'static>(table: &'a Table<E>) -> Self {
-        Self {
-            inner: table.inner.get(&TypeId::of::<Q::Fetch>())
-                .and_then(|any| any.downcast_ref::<Array<E, Q::Fetch>>())
-                .map(|arr| arr.query_one::<Q>())
-        }
-    }
-}
-
-impl<'a, Q: QueryData<'a>> Iterator for QueryOne<'a, Q> {
-    type Item = Q::Output;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner
-            .as_mut()
-            .and_then(|i| i.next())
-    }
-}
-
 pub trait Component: Sized + 'static {
     type Item;
 
@@ -57,38 +17,6 @@ pub trait Component: Sized + 'static {
 
     /// Use this function carefully, or else this will mess up your data
     fn remove<E: Entity + 'static>(entity: E, source: &mut Table<E>) -> Result<Self::Item, InvalidComponent>;
-}
-
-pub trait QueryData<'a> {
-    type Fetch: 'static;
-    type Output: 'a;
-
-    /// Convert `UnsafeCell<T>` to `&T` or `&mut T`.
-    fn get(fetch: &UnsafeCell<Self::Fetch>) -> Self::Output;
-}
-
-impl<'a, T: 'static> QueryData<'a> for &'a T {
-    type Fetch = T;
-    type Output = &'a T;
-
-    fn get(item: &UnsafeCell<Self::Fetch>) -> Self::Output {
-        unsafe { &*item.get() }
-    }
-}
-
-impl<'a, T: 'static> QueryData<'a> for &'a mut T {
-    type Fetch = T;
-    type Output = &'a mut T;
-
-    fn get(item: &UnsafeCell<Self::Fetch>) -> Self::Output {
-        unsafe { &mut *item.get() }
-    }
-}
-
-pub trait Queryable<'a> {
-    type Iter;
-
-    fn query<E: Entity + 'static>(source: &'a Table<E>) -> Option<Self::Iter>;
 }
 
 macro_rules! component {
@@ -115,27 +43,114 @@ macro_rules! component {
     };
 }
 
-pub(crate) fn map_query<'a, Qd: QueryData<'a>>(cell: &'a UnsafeCell<Qd::Fetch>) -> Qd::Output {
+/// Query on many component type
+pub struct Query<'a, Q: Queryable<'a>> {
+    pub(crate) inner: Option<Q::Iter>,
+    pub(crate) marker: PhantomData<fn() -> &'a Q>,
+}
+
+impl<'a, Q: Queryable<'a>> Query<'a, Q> {
+    pub fn new<E: Entity + 'static>(source: &'a Table<E>) -> Self {
+        Self {
+            inner: Q::query(source),
+            marker: PhantomData,
+        }
+    }
+}
+
+/// Query (and iterate) one component type
+pub struct QueryOne<'a, Q: QueryData<'a>> {
+    pub(crate) inner: Option<Map<Iter<'a, UnsafeCell<Q::Item>>, FnMapQuery<'a, Q>>>,
+}
+
+impl<'a, Q: QueryData<'a>> QueryOne<'a, Q> {
+    pub(crate) fn new<E: Entity + 'static>(table: &'a Table<E>) -> Self {
+        Self {
+            inner: table.inner.get(&TypeId::of::<Q::Item>())
+                .and_then(|any| any.downcast_ref::<Array<E, Q::Item>>())
+                .map(|arr| arr.query_one::<Q>())
+        }
+    }
+}
+
+impl<'a, Q: QueryData<'a>> Iterator for QueryOne<'a, Q> {
+    type Item = Q::Output;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner
+            .as_mut()
+            .and_then(|i| i.next())
+    }
+}
+
+pub trait QueryData<'a> {
+    type Item: 'static;
+    type Output: 'a;
+
+    /// Convert `UnsafeCell<T>` to `&T` or `&mut T`.
+    fn get(fetch: &UnsafeCell<Self::Item>) -> Self::Output;
+}
+
+impl<'a, T: 'static> QueryData<'a> for &'a T {
+    type Item = T;
+    type Output = &'a T;
+
+    fn get(item: &UnsafeCell<Self::Item>) -> Self::Output {
+        unsafe { &*item.get() }
+    }
+}
+
+impl<'a, T: 'static> QueryData<'a> for &'a mut T {
+    type Item = T;
+    type Output = &'a mut T;
+
+    fn get(item: &UnsafeCell<Self::Item>) -> Self::Output {
+        unsafe { &mut *item.get() }
+    }
+}
+
+pub trait Queryable<'a> {
+    type Iter;
+    type Fetch;
+
+    fn query<E: Entity + 'static>(source: &'a Table<E>) -> Option<Self::Iter>;
+    fn fetch<E: Entity + 'static>(entity: &E, source: &'a Table<E>) -> Option<Self::Fetch>;
+}
+
+pub(crate) fn map_query<'a, Qd: QueryData<'a>>(cell: &'a UnsafeCell<Qd::Item>) -> Qd::Output {
     Qd::get(cell)
 }
 
 pub(crate) type FnMapQuery<'a, Qd> =
-    fn(&'a UnsafeCell<<Qd as QueryData<'a>>::Fetch>) -> <Qd as QueryData<'a>>::Output;
+    fn(&'a UnsafeCell<<Qd as QueryData<'a>>::Item>) -> <Qd as QueryData<'a>>::Output;
 
 macro_rules! query {
     ($($name:ident),*) => {
         impl<'a, $($name: QueryData<'a>),*> Queryable<'a> for ($($name,)*) {
-            type Iter = ($(Map<Iter<'a, UnsafeCell<$name::Fetch>>, FnMapQuery<'a, $name>>,)*);
+            type Iter = ($(Map<Iter<'a, UnsafeCell<$name::Item>>, FnMapQuery<'a, $name>>,)*);
+            type Fetch = ($($name::Output,)*);
 
             fn query<En: Entity + 'static>(source: &'a Table<En>) -> Option<Self::Iter> {
                 Some(($(
                     source.inner
-                        .get(&TypeId::of::<$name::Fetch>())
-                        .and_then(|any| any.downcast_ref::<Array<En, $name::Fetch>>())
+                        .get(&TypeId::of::<$name::Item>())
+                        .and_then(|any| any.downcast_ref::<Array<En, $name::Item>>())
                         .map(|array| {
                             array.data
                                 .iter()
                                 .map(map_query::<'a, $name> as FnMapQuery<'a, $name>)
+                        })?,
+                )*))
+            }
+
+            fn fetch<En: Entity + 'static>(entity: &En, source: &'a Table<En>) -> Option<Self::Fetch> {
+                Some(($(
+                    source.inner
+                        .get(&TypeId::of::<$name::Item>())
+                        .and_then(|any| any.downcast_ref::<Array<En, $name::Item>>())
+                        .and_then(|array| {
+                            array.get_raw(entity)
+                                .map(|cell| $name::get(cell))
                         })?,
                 )*))
             }

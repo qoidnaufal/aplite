@@ -166,10 +166,7 @@ impl Children {
         unsafe {
             let inner = &*self.children.get();
             inner.iter()
-                .filter(|child| {
-                    child.state()
-                        .is_visible()
-                })
+                .filter(|child| child.state().flag.visible)
         }
     }
 
@@ -266,11 +263,11 @@ pub trait WidgetExt: Widget + Sized {
     where
         F: FnMut() + 'static,
     {
-        CALLBACKS.with(|cell| {
-            let mut storage = cell.borrow_mut();
-            let callbacks = storage.entry(self.id()).or_default();
-            callbacks.insert(event, Box::new(f));
-        });
+        // CALLBACKS.with(|cell| {
+        //     let mut storage = cell.borrow_mut();
+        //     let callbacks = storage.entry(self.id()).or_default();
+        //     callbacks.insert(event, Box::new(f));
+        // });
 
         self
     }
@@ -454,12 +451,11 @@ pub struct CircleWidget {
 
 impl CircleWidget {
     pub fn new() -> Self {
-        Self {
-            state: WidgetState::default()
-                .with_size(100, 100)
-                .with_shape(Shape::Circle)
-                .with_border_width(5)
-        }
+        let state = WidgetState::default()
+            .with_size(100, 100)
+            .with_shape(Shape::Circle)
+            .with_border_width(5);
+        Self { state }
     }
 }
 

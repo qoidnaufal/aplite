@@ -3,7 +3,7 @@ use std::path::Path;
 use aplite_renderer::Shape;
 use aplite_types::ImageData;
 
-use crate::state::ViewNode;
+use crate::state::WidgetState;
 use super::{Widget};
 
 pub fn image<F: Fn() -> ImageData + 'static>(image_fn: F) -> Image {
@@ -26,24 +26,22 @@ pub fn image_reader<P: AsRef<Path>>(path: P) -> ImageData {
 }
 
 pub struct Image {
-    node: ViewNode,
+    state: WidgetState,
 }
 
 impl Image {
     pub fn new<F: Fn() -> ImageData + 'static>(image_fn: F) -> Self {
-        let node = ViewNode::default()
-            .with_size((100.0, 100.0))
+        let state = WidgetState::default()
+            .with_size(100.0, 100.0)
             .with_background_paint(image_fn())
             .with_shape(Shape::Rect);
 
-        Self {
-            node,
-        }
+        Self { state }
     }
 }
 
 impl Widget for Image {
-    fn node(&self) -> ViewNode {
-        self.node.clone()
+    fn state(&self) -> &WidgetState {
+        &self.state
     }
 }

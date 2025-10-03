@@ -1,104 +1,106 @@
-use aplite::prelude::*;
+// use aplite::prelude::*;
 
-const IMAGE_1: &str = "../../Wallpaper/milky-way-over-mountains-4k-fl-1680x1050-2045764561.jpg";
-const IMAGE_2: &str = "../../Wallpaper/1352909.jpeg";
-const IMAGE_3: &str = "../../Wallpaper/pexels-daejeung-2734512.jpg";
+// const IMAGE_1: &str = "../../Wallpaper/milky-way-over-mountains-4k-fl-1680x1050-2045764561.jpg";
+// const IMAGE_2: &str = "../../Wallpaper/1352909.jpeg";
+// const IMAGE_3: &str = "../../Wallpaper/pexels-daejeung-2734512.jpg";
 
-fn image_row(counter: SignalRead<i32>) -> impl IntoView {
-    let image1 = Image::new(|| image_reader(IMAGE_1))
-        .min_width(350.)
-        .image_aspect_ratio(AspectRatio::Defined(16, 9));
+// fn image_row(counter: SignalRead<i32>) -> impl IntoView {
+//     let image1 = Image::new(|| image_reader(IMAGE_1))
+//         .min_width(350.)
+//         .image_aspect_ratio(AspectRatio::Defined(16, 9));
 
-    let image2 = Image::new(|| image_reader(IMAGE_2))
-        .min_width(350.)
-        .image_aspect_ratio(AspectRatio::Defined(16, 9));
+//     let image2 = Image::new(|| image_reader(IMAGE_2))
+//         .min_width(350.)
+//         .image_aspect_ratio(AspectRatio::Defined(16, 9));
 
-    let image3 = Image::new(|| image_reader(IMAGE_3))
-        .min_width(350.)
-        .image_aspect_ratio(AspectRatio::Defined(16, 9));
+//     let image3 = Image::new(|| image_reader(IMAGE_3))
+//         .min_width(350.)
+//         .image_aspect_ratio(AspectRatio::Defined(16, 9));
 
-    let node1 = image1.node_ref().unwrap();
-    let node2 = image2.node_ref().unwrap();
-    let node3 = image3.node_ref().unwrap();
+//     let node1 = image1.node_ref().unwrap();
+//     let node2 = image2.node_ref().unwrap();
+//     let node3 = image3.node_ref().unwrap();
 
-    Effect::new(move |_| {
-        let num = counter.get().abs();
-        node1.hide(num > 0 && num % 2 == 0);
-        node2.hide(num > 0 && num % 3 == 0);
-        node3.hide(num > 0 && num % 5 == 0);
-    });
+//     Effect::new(move |_| {
+//         let num = counter.get().abs();
+//         node1.hide(num > 0 && num % 2 == 0);
+//         node2.hide(num > 0 && num % 3 == 0);
+//         node3.hide(num > 0 && num % 5 == 0);
+//     });
 
-    VStack::new()
-        .child(image1)
-        .child(image2)
-        .child(image3)
-        .spacing(20)
-        .shape(Shape::RoundedRect)
-        .corner_radius(CornerRadius::splat(10))
-        .padding(Padding::new(20, 20, 40, 40))
-        .border_width(5.0)
-        .border_color(Rgba::DARK_GRAY)
-}
+//     VStack::new()
+//         .child(image1)
+//         .child(image2)
+//         .child(image3)
+//         .spacing(20)
+//         .shape(Shape::RoundedRect)
+//         .corner_radius(CornerRadius::splat(10))
+//         .padding(Padding::new(20, 20, 40, 40))
+//         .border_width(5.0)
+//         .border_color(Rgba::DARK_GRAY)
+// }
 
-fn button_stack(
-    inc: impl Fn() + 'static,
-    dec: impl Fn() + 'static,
-    set_counter: SignalWrite<i32>,
-) -> impl IntoView {
-    HStack::new()
-        .child(
-            Button::new()
-                .hover_color(Rgba::BLUE)
-                .click_color(Rgba::DARK_GRAY)
-                .border_width(5.0)
-                .corner_radius(CornerRadius::splat(50))
-                .on(LeftClick, dec)
-        )
-        .child(
-            Button::new()
-                .color(Rgba::GREEN)
-                .hover_color(Rgba::LIGHT_GRAY)
-                .click_color(Rgba::DARK_GREEN)
-                .border_width(5.0)
-                .corner_radius(CornerRadius::splat(50))
-                .on(LeftClick, move || set_counter.set(0))
-        )
-        .child(
-            Button::new()
-                .color(Rgba::BLUE)
-                .hover_color(Rgba::PURPLE)
-                .border_width(5.0)
-                .corner_radius(CornerRadius::splat(50))
-                .on(LeftClick, inc)
-        )
-        .border_color(Rgba::DARK_GRAY)
-        .padding(Padding::splat(7))
-        .shape(Shape::RoundedRect)
-        .corner_radius(CornerRadius::splat(10))
-        .spacing(10)
-        .min_width(430.)
-        .align_h(AlignH::Center)
-        .align_v(AlignV::Middle)
-}
+// fn button_stack(
+//     inc: impl Fn() + 'static,
+//     dec: impl Fn() + 'static,
+//     set_counter: SignalWrite<i32>,
+// ) -> impl IntoView {
+//     HStack::new()
+//         .child(
+//             Button::new()
+//                 .hover_color(Rgba::BLUE)
+//                 .click_color(Rgba::DARK_GRAY)
+//                 .border_width(5.0)
+//                 .corner_radius(CornerRadius::splat(50))
+//                 .on(LeftClick, dec)
+//         )
+//         .child(
+//             Button::new()
+//                 .color(Rgba::GREEN)
+//                 .hover_color(Rgba::LIGHT_GRAY)
+//                 .click_color(Rgba::DARK_GREEN)
+//                 .border_width(5.0)
+//                 .corner_radius(CornerRadius::splat(50))
+//                 .on(LeftClick, move || set_counter.set(0))
+//         )
+//         .child(
+//             Button::new()
+//                 .color(Rgba::BLUE)
+//                 .hover_color(Rgba::PURPLE)
+//                 .border_width(5.0)
+//                 .corner_radius(CornerRadius::splat(50))
+//                 .on(LeftClick, inc)
+//         )
+//         .border_color(Rgba::DARK_GRAY)
+//         .padding(Padding::splat(7))
+//         .shape(Shape::RoundedRect)
+//         .corner_radius(CornerRadius::splat(10))
+//         .spacing(10)
+//         .min_width(430.)
+//         .align_h(AlignH::Center)
+//         .align_v(AlignV::Middle)
+// }
 
-fn root() -> impl IntoView {
-    let (counter, set_counter) = Signal::split(0i32);
+// fn root() -> impl IntoView {
+//     let (counter, set_counter) = Signal::split(0i32);
 
-    let inc = move || set_counter.update(|num| *num += 1);
-    let dec = move || set_counter.update(|num| *num -= 1);
+//     let inc = move || set_counter.update(|num| *num += 1);
+//     let dec = move || set_counter.update(|num| *num -= 1);
 
-    // Effect::new(move |_| eprint!("{:?}   \r", counter.get()));
+//     // Effect::new(move |_| eprint!("{:?}   \r", counter.get()));
 
-    VStack::new()
-        .child(button_stack(inc, dec, set_counter))
-        .child(image_row(counter))
-        .align_h(AlignH::Left)
-        .padding(Padding::splat(20))
-        .spacing(8)
-}
+//     VStack::new()
+//         .child(button_stack(inc, dec, set_counter))
+//         .child(image_row(counter))
+//         .align_h(AlignH::Left)
+//         .padding(Padding::splat(20))
+//         .spacing(8)
+// }
 
-fn main() -> ApliteResult {
-    Aplite::new(root)
-        .set_window_attributes(|window| window.title = "Demo".into())
-        .launch()
-}
+// fn main() -> ApliteResult {
+//     Aplite::new(root)
+//         .set_window_attributes(|window| window.title = "Demo".into())
+//         .launch()
+// }
+
+fn main() {}

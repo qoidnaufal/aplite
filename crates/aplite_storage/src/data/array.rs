@@ -63,6 +63,12 @@ impl<E: Entity, T> Array<E, T> {
         }
     }
 
+    pub(crate) fn get_raw(&self, entity: &E) -> Option<&UnsafeCell<T>> {
+        self.ptr
+            .get_index(entity)
+            .map(|index| &self.data[index.index()])
+    }
+
     pub fn get(&self, entity: &E) -> Option<&T> {
         self.ptr
             .get_index(entity)
@@ -162,7 +168,7 @@ impl<E: Entity, T> Array<E, T> {
 impl<E: Entity, T: 'static> Array<E, T> {
     pub(crate) fn query_one<'a, Q>(&'a self) -> Map<Iter<'a, UnsafeCell<T>>, FnMapQuery<'a, Q>>
     where
-        Q: QueryData<'a, Fetch = T>,
+        Q: QueryData<'a, Item = T>,
     {
         self.data.iter().map(map_query::<'a, Q> as FnMapQuery<'a, Q>)
     }

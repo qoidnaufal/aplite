@@ -1,27 +1,26 @@
 use aplite_renderer::Shape;
-use super::{ViewNode, Widget};
+use super::Widget;
+use crate::state::WidgetState;
 
 pub fn button() -> Button { Button::new() }
 
 pub struct Button {
-    node: ViewNode,
+    state: WidgetState,
 }
 
 impl Button {
     pub fn new() -> Self {
-        let node = ViewNode::default()
+        let state = WidgetState::default()
             .with_shape(Shape::RoundedRect)
             .hoverable()
-            .with_size((80, 30));
+            .with_size(80, 30);
 
-        Self {
-            node,
-        }
+        Self { state }
     }
 }
 
 impl Widget for Button {
-    fn node(&self) -> ViewNode {
-        self.node.clone()
+    fn state(&self) -> &WidgetState {
+        &self.state
     }
 }

@@ -2,8 +2,9 @@ use aplite_types::Rgba;
 use aplite_renderer::Shape;
 
 use crate::layout::Orientation;
+use crate::state::WidgetState;
 
-use super::{ViewNode, Widget};
+use super::{Widget, Children};
 
 pub fn v_stack<F>() -> VStack {
     VStack::new()
@@ -14,70 +15,67 @@ pub fn h_stack<F>() -> HStack {
 }
 
 pub struct VStack {
-    node: ViewNode,
-    children: Vec<Box<dyn Widget>>,
+    state: WidgetState,
+    children: Children,
 }
 
 impl VStack {
     pub fn new() -> Self {
-        let node = ViewNode::default()
-            .with_size((1, 1))
+        let state = WidgetState::default()
+            .with_size(1, 1)
             .with_background_paint(Rgba::TRANSPARENT)
             .with_border_paint(Rgba::TRANSPARENT)
             .with_shape(Shape::Rect);
 
+        let mut children = Children::new();
+        children.orientation(Orientation::Vertical);
+
         Self {
-            node,
-            children: Vec::new(),
+            state,
+            children,
         }
     }
 }
 
 impl Widget for VStack {
-    fn node(&self) -> ViewNode {
-        self.node.clone()
+    fn state(&self) -> &WidgetState {
+        &self.state
     }
 
-    fn children_ref(&self) -> Option<super::ChildrenRef<'_>> {
-        Some((&self.children).into())
-    }
-
-    fn children_mut(&mut self) -> Option<super::ChildrenMut<'_>> {
-        Some((&mut self.children).into())
+    fn children(&self) -> Option<&Children> {
+        Some(&self.children)
     }
 }
 
 pub struct HStack {
-    node: ViewNode,
-    children: Vec<Box<dyn Widget>>,
+    state: WidgetState,
+    children: Children,
 }
 
 impl HStack {
     pub fn new() -> Self {
-        let node = ViewNode::default()
-            .with_orientation(Orientation::Horizontal)
-            .with_size((1, 1))
+        let state = WidgetState::default()
+            .with_size(1, 1)
             .with_background_paint(Rgba::TRANSPARENT)
             .with_border_paint(Rgba::TRANSPARENT)
             .with_shape(Shape::Rect);
 
+        let mut children = Children::new();
+        children.orientation(Orientation::Horizontal);
+
         Self {
-            node,
-            children: Vec::new(),
+            state,
+            children,
         }
     }
 }
 
 impl Widget for HStack {
-    fn node(&self) -> ViewNode {
-        self.node.clone()
+    fn state(&self) -> &WidgetState {
+        &self.state
     }
 
-    fn children_ref(&self) -> Option<super::ChildrenRef<'_>> {
-        Some((&self.children).into())
-    }
-
-    fn children_mut(&mut self) -> Option<super::ChildrenMut<'_>> {
-        Some((&mut self.children).into())
+    fn children(&self) -> Option<&Children> {
+        Some(&self.children)
     }
 }

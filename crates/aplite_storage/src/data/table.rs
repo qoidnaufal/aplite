@@ -33,6 +33,14 @@ impl<E: Entity + 'static> Table<E> {
         }
     }
 
+    pub fn register<C: Component>(&mut self, entity: &E, component: C) {
+        component.register(entity, self);
+    }
+
+    pub fn remove<C: Component>(&mut self, entity: E) -> Result<C::Item, InvalidComponent> {
+        C::remove(entity, self)
+    }
+
     pub fn insert<T: 'static>(&mut self, entity: &E, value: T) {
         if let Some(array) = self.inner
             .entry(TypeId::of::<T>())
@@ -43,18 +51,18 @@ impl<E: Entity + 'static> Table<E> {
         }
     }
 
-    pub fn get<T: 'static>(&self, entity: &E) -> Option<&T> {
+    pub fn fetch_one<'a, Q: QueryData<'a>>(&'a self, entity: &E) -> Option<Q::Output> {
         self.inner
-            .get(&TypeId::of::<T>())
-            .and_then(|any| any.downcast_ref::<Array<E, T>>())
-            .and_then(|dense| dense.get(entity))
+            .get(&TypeId::of::<Q::Item>())
+            .and_then(|any| any.downcast_ref::<Array<E, Q::Item>>())
+            .and_then(|arr| {
+                arr.get_raw(entity)
+                    .map(|cell| Q::get(cell))
+            })
     }
 
-    pub fn get_mut<T: 'static>(&mut self, entity: &E) -> Option<&mut T> {
-        self.inner
-            .get_mut(&TypeId::of::<T>())
-            .and_then(|any| any.downcast_mut::<Array<E, T>>())
-            .and_then(|dense| dense.get_mut(entity))
+    pub fn fetch<'a, Q: Queryable<'a>>(&'a self, entity: &E) -> Option<Q::Fetch> {
+        Q::fetch(entity, self)
     }
 
     pub fn query_one<'a, Q: QueryData<'a>>(&'a self) -> QueryOne<'a, Q> {
@@ -63,14 +71,6 @@ impl<E: Entity + 'static> Table<E> {
 
     pub fn query<'a, Q: Queryable<'a>>(&'a self) -> Query<'a, Q> {
         Query::new(self)
-    }
-
-    pub fn register<C: Component>(&mut self, entity: &E, component: C) {
-        component.register(entity, self);
-    }
-
-    pub fn remove<C: Component>(&mut self, entity: E) -> Result<C::Item, InvalidComponent> {
-        C::remove(entity, self)
     }
 }
 
@@ -123,14 +123,23 @@ mod table_test {
         }
     }
 
-    // #[test]
-    // fn removal() {
-    //     let mut cx = Context::default();
-    //     for i in 0..10 {
-    //         cx.insert((i.to_string(), i, i as f32));
-    //     }
+    #[test]
+    fn fetch_component() {
+        let mut cx = Context::default();
+        for i in 0..10 {
+            let id = cx.manager.create();
+            cx.table.register(&id, (i.to_string(), (i + 1) * -1, i as f32));
+        }
 
-    //     let removed = cx.table.remove::<(String, f32, i32)>(TestId(5));
-    //     assert!(removed.is_some())
-    // }
+        let entity = TestId(3);
+        let items = cx.table.fetch::<(&i32, &mut String)>(&entity);
+        assert!(items.is_some());
+
+        if let Some((i, s)) = items {
+            *s = i.pow(2).to_string();
+        }
+
+        let fetch = cx.table.fetch_one::<&String>(&entity);
+        assert!(fetch.is_some_and(|n| !n.starts_with('-')));
+    }
 }

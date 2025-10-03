@@ -54,8 +54,8 @@ impl Context {
         NODE_STORAGE.with_borrow(|s| {
             s.iter()
                 .filter_map(|(id, state)| {
-                    let id = state.borrow().flag.needs_layout().then_some(id);
-                    state.borrow_mut().flag.set_needs_layout(false);
+                    let id = state.borrow().flag.needs_relayout.then_some(id);
+                    state.borrow_mut().flag.needs_relayout = false;
                     id
                 })
                 .for_each(|id| self.pending_update.push(*id));
@@ -117,7 +117,7 @@ impl Context {
                 .filter(|member| {
                     self.state
                         .get_flag(member)
-                        .is_some_and(|flag| flag.is_visible())
+                        .is_some_and(|flag| flag.visible)
                 })
                 .find(|member| {
                     let rect = self.layout.rects.get(*member).unwrap();
@@ -135,12 +135,13 @@ impl Context {
             let rect = self.layout.rects.get_mut(&captured).unwrap();
             let flag = self.state.get_flag_mut(&captured).unwrap();
 
-            if self.cursor.is_dragging() && flag.is_dragable() {
+            if self.cursor.is_dragging() && flag.movable {
                 self.cursor.is_dragging = true;
                 let pos = self.cursor.hover.pos - self.cursor.click.offset;
 
                 rect.set_pos(pos);
-                flag.set_dirty(true);
+                flag.needs_relayout = true;
+                flag.needs_redraw = true;
 
                 self.layout.calculate_position(&captured, &self.state);
                 // TODO: dirty scissor rect

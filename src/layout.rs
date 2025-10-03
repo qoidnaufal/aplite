@@ -338,7 +338,7 @@ impl Layout {
             .iter_mut()
             .zip(widths.iter().zip(heights))
             .zip(flags)
-            .filter(|(_, flag)| flag.is_visible())
+            .filter(|(_, flag)| flag.visible)
             .for_each(|(((_, size), (width, height)), _)| {
                 if let Unit::Fixed(w) = width { size.width = *w }
                 if let Unit::Fixed(h) = height { size.height = *h }
@@ -361,7 +361,7 @@ impl Layout {
 
     pub(crate) fn update_growth_unit(&mut self, start: &WidgetId, state: &State) {
         self.tree.iter_depth(start)
-            .filter(|id| state.ptr.with(*id, |index| &state.flag[index]).is_some_and(|flag| flag.is_visible()))
+            .filter(|id| state.ptr.with(*id, |index| &state.flag[index]).is_some_and(|flag| flag.visible))
             .for_each(|id| {
                 if let Some(rules) = self.rules.get(id) {
                     let size = self.rects.get(id).unwrap().size();
@@ -419,7 +419,7 @@ impl Layout {
 
         if state.ptr
             .with(start, |index| &state.flag[index])
-            .is_some_and(|flag| flag.is_hidden()) { return size }
+            .is_some_and(|flag| !flag.visible) { return size }
 
         if let Some(rules) = self.rules.get(start) {
             let orientation = rules.orientation;
@@ -462,7 +462,7 @@ impl Layout {
 
     pub(crate) fn calculate_position(&mut self, start: &WidgetId, state: &State) {
         self.tree.iter_depth(start)
-            .filter(|id| state.get_flag(id).is_some_and(|flag| flag.is_visible()))
+            .filter(|id| state.get_flag(id).is_some_and(|flag| flag.visible))
             .for_each(|id| {
                 if let Some(parent) = self.tree.get_parent(id)
                     && let Some(rules) = self.rules.get(parent)

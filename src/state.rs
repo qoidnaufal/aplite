@@ -71,10 +71,6 @@ impl WidgetState {
         }
     }
 
-    pub(crate) fn is_visible(&self) -> bool {
-        self.flag.is_visible()
-    }
-
     /// Types which implement [`Into<Size>`] are:
     /// - (u32, u32)
     /// - (f32, f32)
@@ -146,7 +142,7 @@ impl WidgetState {
     }
 
     pub fn hoverable(mut self) -> Self {
-        self.flag.set_hoverable(true);
+        self.flag.hoverable = true;
         self
     }
 }
@@ -159,107 +155,26 @@ pub enum AspectRatio {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct Flag(u8);
+pub(crate) struct Flag {
+    pub(crate) visible: bool,
+    pub(crate) focusable: bool,
+    pub(crate) hoverable: bool,
+    pub(crate) movable: bool,
+    pub(crate) needs_repaint: bool,
+    pub(crate) needs_relayout: bool,
+    pub(crate) needs_redraw: bool,
+}
 
 impl Default for Flag {
     fn default() -> Self {
-        Self(Self::DIRTY)
-    }
-}
-
-impl Flag {
-    const HIDE: u8 = 1;
-    const DRAGABLE: u8 = 2;
-    const HOVERABLE: u8 = 4;
-    const DIRTY: u8 = 8;
-    const NEEDS_LAYOUT: u8 = 16;
-
-    #[inline(always)]
-    pub(crate) fn is_hidden(&self) -> bool {
-        self.0 & Self::HIDE == Self::HIDE
-    }
-
-    pub(crate) fn is_visible(&self) -> bool {
-        self.0 & Self::HIDE != Self::HIDE
-    }
-
-    #[inline(always)]
-    pub(crate) fn is_dragable(&self) -> bool {
-        self.0 & Self::DRAGABLE == Self::DRAGABLE
-    }
-
-    #[inline(always)]
-    pub(crate) fn is_hoverable(&self) -> bool {
-        self.0 & Self::HOVERABLE == Self::HOVERABLE
-    }
-
-    #[inline(always)]
-    pub(crate) fn is_dirty(&self) -> bool {
-        self.0 & Self::DIRTY == Self::DIRTY
-    }
-
-    #[inline(always)]
-    pub(crate) fn needs_layout(&self) -> bool {
-        self.0 & Self::NEEDS_LAYOUT == Self::NEEDS_LAYOUT
-    }
-
-    #[inline(always)]
-    pub(crate) fn toggle_hidden(&mut self) {
-        self.0 ^= Self::HIDE;
-    }
-
-    #[inline(always)]
-    pub(crate) fn toggle_draggable(&mut self) {
-        self.0 ^= Self::DRAGABLE;
-    }
-
-    #[inline(always)]
-    pub(crate) fn toggle_hoverable(&mut self) {
-        self.0 ^= Self::HOVERABLE;
-    }
-
-    #[inline(always)]
-    pub(crate) fn toggle_dirty(&mut self) {
-        self.0 ^= Self::DIRTY;
-    }
-
-    #[inline(always)]
-    pub(crate) fn toggle_needs_layout(&mut self) {
-        self.0 ^= Self::NEEDS_LAYOUT
-    }
-
-    #[inline(always)]
-    pub(crate) fn set_hidden(&mut self, hidden: bool) {
-        if self.is_hidden() ^ hidden {
-            self.toggle_hidden();
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) fn set_dragable(&mut self, dragable: bool) {
-        if self.is_dragable() ^ dragable {
-            self.toggle_draggable();
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) fn set_hoverable(&mut self, hoverable: bool) {
-        if self.is_hoverable() ^ hoverable {
-            self.toggle_hoverable();
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) fn set_dirty(&mut self, dirty: bool) {
-        if self.is_dirty() ^ dirty {
-            self.toggle_dirty();
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) fn set_needs_layout(&mut self, needs_layout: bool) {
-        if self.needs_layout() ^ needs_layout {
-            self.toggle_needs_layout();
+        Self {
+            visible: true,
+            focusable: false,
+            hoverable: false,
+            movable: false,
+            needs_repaint: true,
+            needs_relayout: true,
+            needs_redraw: true,
         }
     }
 }
@@ -415,7 +330,7 @@ impl State {
         tree.iter_depth(id)
             .for_each(|member| {
                 if let Some(flag) = self.ptr.with(member, |index| &mut self.flag[index]) {
-                    flag.set_hidden(!visible);
+                    flag.visible = visible;
                 }
             });
     }
@@ -431,7 +346,7 @@ impl State {
             .zip(&self.shape)
             .zip(&self.flag)
             .for_each(|((((((((_, rect), transform), background), border_paint), border_width), corner_radius), shape), flag)| {
-                if flag.is_visible() {
+                if flag.visible {
                     let draw_args = DrawArgs {
                         rect,
                         transform,
