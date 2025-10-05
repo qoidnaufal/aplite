@@ -13,6 +13,7 @@ pub mod prelude {
     pub use aplite_reactive::*;
     pub use aplite_renderer::Shape;
     pub use aplite_types::{Rgba, rgba8, rgba32, rgba_hex, CornerRadius};
+    pub use aplite_types::Unit::{Fixed, Grow, Fit};
 
     pub use crate::app::Aplite;
     pub use crate::context::Context;

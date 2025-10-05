@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use aplite_types::{
     Rect,
     Size,
@@ -5,7 +7,8 @@ use aplite_types::{
     Unit
 };
 use aplite_storage::{
-    Array,
+    Query,
+    Table,
     Tree,
 };
 
@@ -303,9 +306,7 @@ pub struct Border {
 
 pub(crate) struct Layout {
     pub(crate) tree: Tree<WidgetId>,
-    pub(crate) rects: Array<WidgetId, Rect>,
-
-    pub(crate) rules: Array<WidgetId, LayoutRules>,
+    pub(crate) rules: HashMap<WidgetId, LayoutRules>,
 }
 
 impl Layout {
@@ -316,13 +317,12 @@ impl Layout {
     pub(crate) fn with_capacity(capacity: usize) -> Self {
         Self {
             tree: Tree::with_capacity(capacity),
-            rects: Array::with_capacity(capacity),
-            rules: Array::default(),
+            rules: HashMap::default(),
         }
     }
 
-    pub(crate) fn calculate_layout(&mut self, start: &WidgetId, state: &State) {
-        self.update_fixed_unit(&state.width, &state.height, &state.flag);
+    pub(crate) fn calculate_layout(&self, start: &WidgetId, state: &State) {
+        update_fixed_unit(state.common.query::<(&mut Rect, &(Unit, Unit), &Flag)>());
 
         self.calculate_size(start, state);
 
@@ -331,18 +331,6 @@ impl Layout {
         self.update_growth_unit(start, state);
 
         self.calculate_position(start, state);
-    }
-
-    pub(crate) fn update_fixed_unit(&mut self, widths: &[Unit], heights: &[Unit], flags: &[Flag]) {
-        self.rects
-            .iter_mut()
-            .zip(widths.iter().zip(heights))
-            .zip(flags)
-            .filter(|(_, flag)| flag.visible)
-            .for_each(|(((_, size), (width, height)), _)| {
-                if let Unit::Fixed(w) = width { size.width = *w }
-                if let Unit::Fixed(h) = height { size.height = *h }
-            });
     }
 
     // pub(crate) fn update_constraints(&mut self) {
@@ -359,35 +347,33 @@ impl Layout {
     //         });
     // }
 
-    pub(crate) fn update_growth_unit(&mut self, start: &WidgetId, state: &State) {
+    pub(crate) fn update_growth_unit(&self, start: &WidgetId, state: &State) {
         self.tree.iter_depth(start)
-            .filter(|id| state.ptr.with(*id, |index| &state.flag[index]).is_some_and(|flag| flag.visible))
+            .filter(|id| state.common.fetch_one::<&Flag>(id).is_some_and(|flag| flag.visible))
             .for_each(|id| {
                 if let Some(rules) = self.rules.get(id) {
-                    let size = self.rects.get(id).unwrap().size();
+                    let size = state.common.fetch_one::<&Rect>(id).unwrap().size();
 
                     let (rem_w, rem_h) = self.tree.iter_children(id)
-                        .flat_map(|child| self.rects.get(child))
-                        .fold((size.width, size.height), |(w, h), cs| {
+                        .flat_map(|child| state.common.fetch_one::<&Rect>(child))
+                        .fold((size.width, size.height), |(w, h), cr| {
                             match rules.orientation {
-                                Orientation::Horizontal => (w - cs.width, h),
-                                Orientation::Vertical => (w, h - cs.height),
+                                Orientation::Horizontal => (w - cr.width, h),
+                                Orientation::Vertical => (w, h - cr.height),
                             }
                         });
 
                     let to_grow_w = self.tree.iter_children(id)
                         .filter(|child| {
-                            state.ptr
-                                .with(*child, |index| &state.width[index])
-                                .is_some_and(|unit| unit.is_grow())
+                            state.common.fetch_one::<&(Unit, Unit)>(child)
+                                .is_some_and(|(width, _)| width.is_grow())
                         })
                         .collect::<Vec<_>>();
 
                     let to_grow_h = self.tree.iter_children(id)
                         .filter(|child| {
-                            state.ptr
-                                .with(*child, |index| &state.height[index])
-                                .is_some_and(|unit| unit.is_grow())
+                            state.common.fetch_one::<&(Unit, Unit)>(child)
+                                .is_some_and(|(_, height)| height.is_grow())
                         })
                         .collect::<Vec<_>>();
 
@@ -395,7 +381,7 @@ impl Layout {
                     let count_h = to_grow_h.len() as f32;
 
                     to_grow_w.iter().for_each(|child| {
-                        let child_rect = self.rects.get_mut(child).unwrap();
+                        let child_rect = state.common.fetch_one::<&mut Rect>(child).unwrap();
                         match rules.orientation {
                             Orientation::Horizontal => child_rect.width += rem_w / count_w,
                             Orientation::Vertical => child_rect.width = rem_w,
@@ -403,7 +389,7 @@ impl Layout {
                     });
 
                     to_grow_h.iter().for_each(|child| {
-                        let child_rect = self.rects.get_mut(child).unwrap();
+                        let child_rect = state.common.fetch_one::<&mut Rect>(child).unwrap();
                         match rules.orientation {
                             Orientation::Horizontal => child_rect.height = rem_h,
                             Orientation::Vertical => child_rect.height += rem_h / count_h,
@@ -414,11 +400,11 @@ impl Layout {
     }
 
     // at the same time makes any container fit to child
-    fn calculate_size(&mut self, start: &WidgetId, state: &State) -> Size {
+    fn calculate_size(&self, start: &WidgetId, state: &State) -> Size {
         let mut size = Size::default();
 
-        if state.ptr
-            .with(start, |index| &state.flag[index])
+        if state.common
+            .fetch_one::<&Flag>(start)
             .is_some_and(|flag| !flag.visible) { return size }
 
         if let Some(rules) = self.rules.get(start) {
@@ -453,25 +439,25 @@ impl Layout {
             size.height += padding.vertical() as f32;
         }
 
-        if let Some(this_size) = self.rects.get_mut(start) {
+        if let Some(this_size) = state.common.fetch_one::<&mut Rect>(start) {
             this_size.set_size(size);
         }
 
         size
     }
 
-    pub(crate) fn calculate_position(&mut self, start: &WidgetId, state: &State) {
+    pub(crate) fn calculate_position(&self, start: &WidgetId, state: &State) {
         self.tree.iter_depth(start)
-            .filter(|id| state.get_flag(id).is_some_and(|flag| flag.visible))
+            .filter(|id| state.common.fetch_one::<&Flag>(id).is_some_and(|flag| flag.visible))
             .for_each(|id| {
                 if let Some(parent) = self.tree.get_parent(id)
                     && let Some(rules) = self.rules.get(parent)
                 {
                     let prev_rect = self.tree.get_prev_sibling(id)
-                        .and_then(|prev| self.rects.get(prev).copied());
+                        .and_then(|prev| state.common.fetch_one::<&Rect>(prev).copied());
 
-                    let parent_pos = self.rects.get(parent).copied().unwrap();
-                    let pos = self.rects.get_mut(id).unwrap();
+                    let parent_pos = state.common.fetch_one::<&Rect>(parent).copied().unwrap();
+                    let pos = state.common.fetch_one::<&mut Rect>(id).unwrap();
 
                     let orientation = rules.orientation;
                     let spacing = rules.spacing;
@@ -497,4 +483,12 @@ impl Layout {
     }
 
     pub(crate) fn update_alignment(&mut self) {}
+}
+
+pub(crate) fn update_fixed_unit<'a>(query: Query<'a, (&'a mut Rect, &'a (Unit, Unit), &'a Flag)>) {
+    query.filter(|(_, _, flag)| flag.visible)
+        .for_each(|(rect, (width, height), _)| {
+            rect.width = width.get();
+            rect.height = height.get();
+        });
 }

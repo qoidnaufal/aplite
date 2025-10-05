@@ -268,7 +268,7 @@ pub struct DrawArgs<'a> {
     pub transform: &'a Matrix3x2,
     pub background_paint: &'a PaintRef<'a>,
     pub border_paint: &'a PaintRef<'a>,
-    pub border_width: &'a u32,
+    pub border_width: &'a f32,
     pub shape: &'a Shape,
     pub corner_radius: &'a CornerRadius,
 }
@@ -292,7 +292,7 @@ impl Scene<'_> {
         let mut element = Element::new(rect.size() / self.size)
             .with_shape(*shape)
             .with_corner_radius(corner_radius)
-            .with_border_width(*border_width as f32 / self.size.width);
+            .with_border_width(*border_width / self.size.width);
 
         match border_paint {
             PaintRef::Color(rgba) => {

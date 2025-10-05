@@ -454,7 +454,7 @@ impl CircleWidget {
         let state = WidgetState::default()
             .with_size(100, 100)
             .with_shape(Shape::Circle)
-            .with_border_width(5);
+            .with_border_width(5.);
         Self { state }
     }
 }

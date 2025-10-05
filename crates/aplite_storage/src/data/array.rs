@@ -1,12 +1,10 @@
-use std::iter::{Zip, Map, FilterMap, Enumerate};
+use std::iter::{Zip, FilterMap, Enumerate};
 use std::marker::PhantomData;
 use std::slice::{Iter, IterMut};
 use std::cell::UnsafeCell;
 
 use crate::entity::Entity;
 use super::sparse_index::{SparseIndices, Index};
-use super::component::QueryData;
-use super::component::{map_query, FnMapQuery};
 
 /// A dense data storage which is guaranteed even after removal.
 /// Doesn't facilitate the creation of [`Entity`], unlike [`IndexMap`](crate::index_map::IndexMap).
@@ -63,11 +61,11 @@ impl<E: Entity, T> Array<E, T> {
         }
     }
 
-    pub(crate) fn get_raw(&self, entity: &E) -> Option<&UnsafeCell<T>> {
-        self.ptr
-            .get_index(entity)
-            .map(|index| &self.data[index.index()])
-    }
+    // pub(crate) fn get_raw(&self, entity: &E) -> Option<&UnsafeCell<T>> {
+    //     self.ptr
+    //         .get_index(entity)
+    //         .map(|index| &self.data[index.index()])
+    // }
 
     pub fn get(&self, entity: &E) -> Option<&T> {
         self.ptr
@@ -165,14 +163,14 @@ impl<E: Entity, T> Array<E, T> {
     }
 }
 
-impl<E: Entity, T: 'static> Array<E, T> {
-    pub(crate) fn query_one<'a, Q>(&'a self) -> Map<Iter<'a, UnsafeCell<T>>, FnMapQuery<'a, Q>>
-    where
-        Q: QueryData<'a, Item = T>,
-    {
-        self.data.iter().map(map_query::<'a, Q> as FnMapQuery<'a, Q>)
-    }
-}
+// impl<E: Entity, T: 'static> Array<E, T> {
+//     pub(crate) fn query_one<'a, Q>(&'a self) -> Map<Iter<'a, UnsafeCell<T>>, FnMapQuery<'a, Q>>
+//     where
+//         Q: QueryData<'a, Item = T>,
+//     {
+//         self.data.iter().map(map_query::<'a, Q> as FnMapQuery<'a, Q>)
+//     }
+// }
 
 impl<E: Entity, T> ImmutableArray<E, T> {
     pub fn get(&self, entity: &E) -> Option<&T> {

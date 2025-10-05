@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
 use aplite_types::{Rect, Size, Vec2f, ImageRef};
-use aplite_storage::{Array, Tree, EntityManager, Entity, create_entity};
+use aplite_storage::{Tree, EntityManager, Entity, create_entity};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Uv {
@@ -229,7 +229,7 @@ struct AtlasAllocator {
     bound: Rect,
     last_parent: Option<AtlasId>,
     id_manager: EntityManager<AtlasId>,
-    allocated: Array<AtlasId, Rect>,
+    allocated: HashMap<AtlasId, Rect>,
     tree: Tree<AtlasId>,
 }
 
@@ -239,7 +239,7 @@ impl AtlasAllocator {
             bound: Rect::from_size(size.into()),
             last_parent: None,
             id_manager: EntityManager::default(),
-            allocated: Array::default(),
+            allocated: HashMap::default(),
             tree: Tree::default(),
         }
     }
@@ -255,7 +255,7 @@ impl AtlasAllocator {
                     let rect = Rect::from_vec2f_size(pos, new_size);
                     let id = self.id_manager.create();
 
-                    self.allocated.insert(&id, rect);
+                    self.allocated.insert(id, rect);
                     self.tree.insert(id, Some(parent));
 
                     Some(rect)
@@ -266,7 +266,7 @@ impl AtlasAllocator {
                     let rect = Rect::from_vec2f_size(pos, new_size);
                     let id = self.id_manager.create();
 
-                    self.allocated.insert(&id, rect);
+                    self.allocated.insert(id, rect);
                     self.tree.insert(id, None);
                     self.last_parent = Some(id);
 
@@ -278,7 +278,7 @@ impl AtlasAllocator {
                 let rect = Rect::from_size(new_size);
                 let id = self.id_manager.create();
 
-                self.allocated.insert(&id, rect);
+                self.allocated.insert(id, rect);
                 self.tree.insert(id, None);
                 self.last_parent = Some(id);
         

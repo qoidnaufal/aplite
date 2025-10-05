@@ -1,13 +1,13 @@
 use aplite_reactive::*;
-use aplite_renderer::Renderer;
-use aplite_types::Vec2f;
+use aplite_renderer::{Renderer};
+use aplite_types::{Vec2f, Rect};
 use aplite_storage::{Entity, EntityManager};
 
 use crate::view::View;
 use crate::widget::{CALLBACKS, WidgetId, WidgetEvent};
 use crate::cursor::{Cursor, MouseAction, MouseButton, EmittedClickEvent};
 use crate::layout::Layout;
-use crate::state::{State, NODE_STORAGE};
+use crate::state::{State, Flag};
 
 pub struct Context {
     pub(crate) view: View,
@@ -31,7 +31,7 @@ impl Context {
         Self {
             view,
             manager: EntityManager::default(),
-            state: State::new(),
+            state: State::default(),
             layout: Layout::new(),
             cursor: Cursor::default(),
             dirty: Signal::new(false),
@@ -51,15 +51,15 @@ impl Context {
     }
 
     pub(crate) fn process_pending_update(&mut self) {
-        NODE_STORAGE.with_borrow(|s| {
-            s.iter()
-                .filter_map(|(id, state)| {
-                    let id = state.borrow().flag.needs_relayout.then_some(id);
-                    state.borrow_mut().flag.needs_relayout = false;
-                    id
-                })
-                .for_each(|id| self.pending_update.push(*id));
-        });
+        // NODE_STORAGE.with_borrow(|s| {
+        //     s.iter()
+        //         .filter_map(|(id, state)| {
+        //             let id = state.borrow().flag.needs_relayout.then_some(id);
+        //             state.borrow_mut().flag.needs_relayout = false;
+        //             id
+        //         })
+        //         .for_each(|id| self.pending_update.push(*id));
+        // });
 
         if !self.pending_update.is_empty() {
             self.pending_update
@@ -96,7 +96,7 @@ impl Context {
 
     fn detect_hover(&mut self) {
         if let Some(id) = self.cursor.hover.curr {
-            let rect = self.layout.rects.get(&id).unwrap();
+            let rect = self.state.common.fetch_one::<&Rect>(&id).unwrap();
             let contains = rect.contains(self.cursor.hover_pos());
 
             if !contains {
@@ -105,7 +105,7 @@ impl Context {
                 self.cursor.hover.curr = self.layout.tree
                     .iter_children(&id)
                     .find(|child| {
-                        let child_rect = self.layout.rects.get(*child).unwrap();
+                        let child_rect = self.state.common.fetch_one::<&Rect>(*child).unwrap();
                         child_rect.contains(self.cursor.hover_pos())
                     })
                     .or(Some(&id))
@@ -115,12 +115,12 @@ impl Context {
             self.cursor.hover.curr = self.layout.tree
                 .iter_depth(&WidgetId::root())
                 .filter(|member| {
-                    self.state
-                        .get_flag(member)
+                    self.state.common
+                        .fetch_one::<&Flag>(member)
                         .is_some_and(|flag| flag.visible)
                 })
                 .find(|member| {
-                    let rect = self.layout.rects.get(*member).unwrap();
+                    let rect = self.state.common.fetch_one::<&Rect>(*member).unwrap();
                     rect.contains(self.cursor.hover_pos())
                 })
                 .copied();
@@ -132,8 +132,9 @@ impl Context {
 
     pub(crate) fn handle_drag(&mut self) {
         if let Some(captured) = self.cursor.click.captured {
-            let rect = self.layout.rects.get_mut(&captured).unwrap();
-            let flag = self.state.get_flag_mut(&captured).unwrap();
+            let (rect, flag) = self.state.common
+                .fetch::<(&mut Rect, &mut Flag)>(&captured)
+                .unwrap();
 
             if self.cursor.is_dragging() && flag.movable {
                 self.cursor.is_dragging = true;
@@ -157,7 +158,7 @@ impl Context {
     ) {
         match self.cursor.process_click_event(action.into(), button.into()) {
             EmittedClickEvent::Captured(captured) => {
-                let pos = self.layout.rects.get(&captured).unwrap().vec2f();
+                let pos = self.state.common.fetch_one::<&Rect>(&captured).unwrap().vec2f();
                 self.cursor.click.offset = self.cursor.click.pos - pos;
             },
             EmittedClickEvent::TriggerCallback(id) => {
@@ -186,7 +187,7 @@ impl Context {
 // #########################################################
 
     pub(crate) fn render(&self, renderer: &mut Renderer) {
-        self.state.render(renderer, &self.layout);
+        self.state.render(renderer, &self.layout.tree);
 
         // let mut scene = renderer.scene();
         // self.view.widget.draw(&mut scene);

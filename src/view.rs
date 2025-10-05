@@ -4,7 +4,7 @@ use crate::layout::LayoutRules;
 
 /// wrapper over [`Widget`] trait to be stored inside [`ViewStorage`]
 pub struct View {
-    pub(crate) widget: Box<dyn IntoView>,
+    pub(crate) widget: Box<dyn Widget>,
 }
 
 impl View {
@@ -20,11 +20,11 @@ impl View {
         let state = self.widget.state();
 
         cx.layout.tree.insert(id, current);
-        cx.state.insert_state(&id, state);
+        cx.state.insert_state(&id, state.clone());
 
         if let Some(children) = self.widget.children() {
             cx.current = Some(id);
-            cx.layout.rules.insert(&id, LayoutRules::default());
+            cx.layout.rules.insert(id, LayoutRules::default());
 
             children.drain().for_each(|child| {
                 let child_view = Self { widget: child };

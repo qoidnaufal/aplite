@@ -3,10 +3,10 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use aplite_renderer::{Renderer, DrawArgs, Shape};
-use aplite_storage::{SparseIndices, Tree, Entity};
+use aplite_storage::{IntoComponent, Tree, Table};
 use aplite_types::{
     Matrix3x2,
-    // Rect,
+    Rect,
     // Size,
     CornerRadius,
     Paint,
@@ -15,7 +15,6 @@ use aplite_types::{
 };
 
 use crate::widget::WidgetId;
-use crate::layout::Layout;
 
 thread_local! {
     pub(crate) static NODE_STORAGE: RefCell<HashMap<WidgetId, Rc<RefCell<WidgetState>>>> =
@@ -24,6 +23,7 @@ thread_local! {
 
 #[derive(Clone)]
 pub struct WidgetState {
+    pub(crate) rect: Rect,
     pub(crate) width: Unit,
     pub(crate) height: Unit,
     pub(crate) transform: Matrix3x2,
@@ -32,30 +32,62 @@ pub struct WidgetState {
     pub(crate) corner_radius: CornerRadius,
     pub(crate) flag: Flag,
 
-    pub(crate) background_paint: Paint,
-    pub(crate) aspect_ratio: AspectRatio,
+    pub(crate) background: Background,
 
-    pub(crate) border_paint: Paint,
-    pub(crate) border_width: u32,
+    pub(crate) border: Border,
 }
 
 impl Default for WidgetState {
     fn default() -> Self {
         Self {
-            width: Unit::Fixed(1.),
-            height: Unit::Fixed(1.),
+            rect: Rect::default(),
+            width: Unit::default(),
+            height: Unit::default(),
             transform: Matrix3x2::identity(),
 
             shape: Shape::Rect,
             corner_radius: CornerRadius::splat(0),
             flag: Flag::default(),
 
-            background_paint: Paint::Color(Rgba::RED),
-            aspect_ratio: AspectRatio::Undefined,
+            background: Background {
+                paint: Rgba::WHITE.into(),
+                aspect_ratio: AspectRatio::Undefined,
+            },
 
-            border_paint: Paint::Color(Rgba::WHITE),
-            border_width: 0,
+            border: Border {
+                paint: Rgba::WHITE.into(),
+                width: 0.0,
+            },
         }
+    }
+}
+
+impl IntoComponent for WidgetState {
+    type Item = (Rect, (Unit, Unit), Matrix3x2, Shape, CornerRadius, Flag, Background, Border);
+
+    fn into_component(self) -> Self::Item {
+        let Self {
+            rect,
+            width,
+            height,
+            transform,
+            shape,
+            corner_radius,
+            flag,
+            background,
+            border,
+        } = self;
+
+        (
+            rect,
+            (width, height),
+            transform,
+            shape,
+            corner_radius,
+            flag,
+            background,
+            border,
+        )
     }
 }
 
@@ -65,8 +97,14 @@ impl WidgetState {
         Self {
             width: Unit::Fixed(width),
             height: Unit::Fixed(height),
-            background_paint: Paint::Color(Rgba::TRANSPARENT),
-            border_paint: Paint::Color(Rgba::TRANSPARENT),
+            background: Background {
+                paint: Rgba::TRANSPARENT.into(),
+                aspect_ratio: AspectRatio::Undefined,
+            },
+            border: Border {
+                paint: Rgba::TRANSPARENT.into(),
+                width: 0.0,
+            },
             ..Default::default()
         }
     }
@@ -86,35 +124,27 @@ impl WidgetState {
     /// Types which implement [`Into<Paint>`] are:
     /// - [`ImageData`](aplite_types::ImageData)
     /// - [`Rgba`](aplite_types::Rgba)
-    pub fn with_background_paint(self, paint: impl Into<Paint>) -> Self {
-        Self {
-            background_paint: paint.into(),
-            ..self
-        }
+    pub fn with_background_paint(mut self, paint: impl Into<Paint>) -> Self {
+        self.background.paint = paint.into();
+        self
     }
 
-    pub fn with_aspect_ratio(self, aspect_ratio: AspectRatio) -> Self {
-        Self {
-            aspect_ratio,
-            ..self
-        }
+    pub fn with_aspect_ratio(mut self, aspect_ratio: AspectRatio) -> Self {
+        self.background.aspect_ratio = aspect_ratio;
+        self
     }
 
     /// Types which implement [`Into<Paint>`] are:
     /// - [`ImageData`](aplite_types::ImageData)
     /// - [`Rgba`](aplite_types::Rgba)
-    pub fn with_border_paint(self, paint: impl Into<Paint>) -> Self {
-        Self {
-            border_paint: paint.into(),
-            ..self
-        }
+    pub fn with_border_paint(mut self, paint: impl Into<Paint>) -> Self {
+        self.border.paint = paint.into();
+        self
     }
 
-    pub fn with_border_width(self, val: u32) -> Self {
-        Self {
-            border_width: val,
-            ..self
-        }
+    pub fn with_border_width(mut self, val: f32) -> Self {
+        self.border.width = val;
+        self
     }
 
     pub fn with_shape(self, shape: Shape) -> Self {
@@ -154,8 +184,14 @@ pub enum AspectRatio {
     Undefined,
 }
 
+#[derive(Clone)]
+pub struct Background {
+    pub(crate) paint: Paint,
+    pub(crate) aspect_ratio: AspectRatio,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct Flag {
+pub struct Flag {
     pub(crate) visible: bool,
     pub(crate) focusable: bool,
     pub(crate) hoverable: bool,
@@ -179,180 +215,56 @@ impl Default for Flag {
     }
 }
 
+#[derive(Clone)]
+pub struct Border {
+    pub(crate) paint: Paint,
+    pub(crate) width: f32,
+}
+
 pub(crate) struct State {
-    pub(crate) ptr: SparseIndices<WidgetId>,
-    pub(crate) entities: Vec<WidgetId>,
+    pub(crate) common: Table<WidgetId>,
+    pub(crate) border: HashMap<WidgetId, Border>,
+}
 
-    pub(crate) transform: Vec<Matrix3x2>,
-    pub(crate) width: Vec<Unit>,
-    pub(crate) height: Vec<Unit>,
-
-    // pub(crate) min_width: Vec<Option<f32>>,
-    // pub(crate) max_width: Vec<Option<f32>>,
-
-    // pub(crate) min_height: Vec<Option<f32>>,
-    // pub(crate) max_height: Vec<Option<f32>>,
-
-    pub(crate) flag: Vec<Flag>,
-    pub(crate) shape: Vec<Shape>,
-    pub(crate) corner_radius: Vec<CornerRadius>,
-    pub(crate) background: Vec<Paint>,
-    pub(crate) border_paint: Vec<Paint>,
-    pub(crate) border_width: Vec<u32>,
+impl Default for State {
+    fn default() -> Self {
+        Self::with_capacity(0)
+    }
 }
 
 impl State {
-    pub(crate) fn new() -> Self {
-        Self::with_capacity(0)
-    }
-
     pub(crate) fn with_capacity(capacity: usize) -> Self {
         Self {
-            ptr: SparseIndices::default(),
-            entities: Vec::with_capacity(capacity),
-
-            transform: Vec::with_capacity(capacity),
-            width: Vec::with_capacity(capacity),
-            height: Vec::with_capacity(capacity),
-
-            // min_width: Vec::with_capacity(capacity),
-            // max_width: Vec::with_capacity(capacity),
-            // min_height: Vec::with_capacity(capacity),
-            // max_height: Vec::with_capacity(capacity),
-
-            flag: Vec::with_capacity(capacity),
-            shape: Vec::with_capacity(capacity),
-            corner_radius: Vec::with_capacity(capacity),
-            background: Vec::with_capacity(capacity),
-            border_paint: Vec::with_capacity(capacity),
-            border_width: Vec::with_capacity(capacity),
+            common: Table::with_capacity(capacity),
+            border: HashMap::default(),
         }
-    }
-
-    pub(crate) fn insert_state(&mut self, id: &WidgetId, state: &WidgetState) {
-        let WidgetState {
-            width,
-            height,
-            transform,
-            shape,
-            corner_radius,
-            flag,
-            background_paint,
-            border_paint,
-            border_width,
-            ..
-        } = state.clone();
-
-        self.ptr.resize_if_needed(id);
-        self.entities.push(*id);
-
-        self.transform.push(transform);
-        self.width.push(width);
-        self.height.push(height);
-
-        self.flag.push(flag);
-        self.shape.push(shape);
-        self.corner_radius.push(corner_radius);
-
-        self.background.push(background_paint);
-        self.border_paint.push(border_paint);
-        self.border_width.push(border_width);
     }
 
     pub(crate) fn insert_default_state(&mut self, id: &WidgetId) {
-        self.ptr.resize_if_needed(id);
-        self.entities.push(*id);
-
-        self.transform.push(Matrix3x2::identity());
-        self.width.push(Default::default());
-        self.height.push(Default::default());
-
-        self.flag.push(Default::default());
-        self.background.push(Paint::Color(Rgba::RED));
-        self.shape.push(Shape::RoundedRect);
-        self.corner_radius.push(CornerRadius::default());
+        let default_state = WidgetState::default();
+        self.common.register_component(id, default_state);
     }
 
-    pub(crate) fn get_flag(&self, id: &WidgetId) -> Option<&Flag> {
-        self.ptr.with(id, |index| self.flag.get(index))?
+    pub(crate) fn insert_state(&mut self, id: &WidgetId, state: WidgetState) {
+        self.common.register_component(id, state);
     }
 
-    pub(crate) fn get_flag_mut(&mut self, id: &WidgetId) -> Option<&mut Flag> {
-        self.ptr.with(id, |index| self.flag.get_mut(index))?
+    pub(crate) fn insert_children(&mut self, id: &WidgetId, children: Vec<WidgetId>) {
+        self.common.register_component(id, (children,));
     }
 
-    pub(crate) fn get_transform(&self, id: &WidgetId) -> Option<&Matrix3x2> {
-        self.ptr.with(id, |index| self.transform.get(index))?
-    }
-
-    pub(crate) fn set_width(&mut self, id: &WidgetId, width: Unit) {
-        if let Some(w) = self.ptr.with(id, |index| &mut self.width[index]) {
-            *w = width
-        }
-    }
-
-    pub(crate) fn set_height(&mut self, id: &WidgetId, height: Unit) {
-        if let Some(h) = self.ptr.with(id, |index| &mut self.height[index]) {
-            *h = height
-        }
-    }
-
-    pub(crate) fn len(&self) -> usize {
-        self.entities.len()
-    }
-
-    pub(crate) fn remove(&mut self, id: &WidgetId) {
-        if self.len() == 0 { return }
-
-        if let Some(index) = self.ptr.get_data_index(id) {
-            let last = self.entities.last().unwrap();
-
-            self.ptr.set_index(last.index(), index);
-            self.ptr.set_null(id);
-            self.entities.swap_remove(index);
-
-            self.width.swap_remove(index);
-            self.height.swap_remove(index);
-
-            // self.min_width.swap_remove(index);
-            // self.max_width.swap_remove(index);
-            // self.min_height.swap_remove(index);
-            // self.max_height.swap_remove(index);
-
-            self.flag.swap_remove(index);
-            self.background.swap_remove(index);
-            self.shape.swap_remove(index);
-            self.corner_radius.swap_remove(index);
-        }
-    }
-
-    pub(crate) fn set_visible(&mut self, tree: &Tree<WidgetId>, id: &WidgetId, visible: bool) {
-        tree.iter_depth(id)
-            .for_each(|member| {
-                if let Some(flag) = self.ptr.with(member, |index| &mut self.flag[index]) {
-                    flag.visible = visible;
-                }
-            });
-    }
-
-    pub(crate) fn render(&self, renderer: &mut Renderer, layout: &Layout) {
+    pub(crate) fn render(&self, renderer: &mut Renderer, tree: &Tree<WidgetId>) {
         let mut scene = renderer.scene();
-        layout.rects.iter()
-            .zip(&self.transform)
-            .zip(&self.background)
-            .zip(&self.border_paint)
-            .zip(&self.border_width)
-            .zip(&self.corner_radius)
-            .zip(&self.shape)
-            .zip(&self.flag)
-            .for_each(|((((((((_, rect), transform), background), border_paint), border_width), corner_radius), shape), flag)| {
+        self.common
+            .query::<(&Rect, &Matrix3x2, &Background, &Border, &Shape, &CornerRadius, &Flag)>()
+            .for_each(|(rect, transform, background, border, shape, corner_radius, flag)| {
                 if flag.visible {
                     let draw_args = DrawArgs {
                         rect,
                         transform,
-                        background_paint: &background.as_paint_ref(),
-                        border_paint: &border_paint.as_paint_ref(),
-                        border_width,
+                        background_paint: &background.paint.as_paint_ref(),
+                        border_paint: &border.paint.as_paint_ref(),
+                        border_width: &border.width,
                         shape,
                         corner_radius,
                     };
