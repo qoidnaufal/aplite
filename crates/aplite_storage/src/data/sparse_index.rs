@@ -37,6 +37,13 @@ impl<E: Entity> Default for SparseIndices<E> {
 }
 
 impl<E: Entity> SparseIndices<E> {
+    pub fn reserve(capacity: usize) -> Self {
+        Self {
+            ptr: vec![Index::null(); capacity],
+            marker: PhantomData,
+        }
+    }
+
     pub(crate) fn get_index(&self, entity: &E) -> Option<&Index> {
         self.ptr.get(entity.index()).filter(|i| !i.is_null())
     }
@@ -47,11 +54,9 @@ impl<E: Entity> SparseIndices<E> {
             .and_then(|i| (!i.is_null()).then_some(i.index()))
     }
 
-    pub fn set_index(&mut self, index: usize, data_index: usize) {
-        if index >= self.ptr.len() {
-            self.resize(index);
-        }
-        self.ptr[index] = Index::new(data_index);
+    pub fn set_index(&mut self, entity: &E, data_index: usize) {
+        self.resize_if_needed(entity);
+        self.ptr[entity.index()] = Index::new(data_index);
     }
 
     pub fn set_null(&mut self, entity: &E) {
@@ -69,7 +74,7 @@ impl<E: Entity> SparseIndices<E> {
         self.get_index(entity).is_some()
     }
 
-    pub fn resize_if_needed(&mut self, entity: &E) {
+    fn resize_if_needed(&mut self, entity: &E) {
         let index = entity.index();
         if index >= self.ptr.len() {
             self.resize(index);

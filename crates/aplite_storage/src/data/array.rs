@@ -92,16 +92,11 @@ impl<E: Entity, T> Array<E, T> {
             return;
         }
 
-        let entity_index = entity.index();
-
-        if entity_index >= self.ptr.len() {
-            self.ptr.resize(entity_index);
-        }
-
         let data_index = self.data.len();
+
+        self.ptr.set_index(entity, data_index);
         self.data.push(UnsafeCell::new(value));
         self.entities.push(*entity);
-        self.ptr.set_index(entity_index, data_index);
     }
 
     /// The contiguousness of the data is guaranteed after removal via [`Vec::swap_remove`],
@@ -115,7 +110,7 @@ impl<E: Entity, T> Array<E, T> {
             .map(|idx| {
                 let last = self.entities.last().unwrap();
 
-                self.ptr.set_index(last.index(), idx.index());
+                self.ptr.set_index(last, idx.index());
                 self.ptr.set_null(&entity);
                 self.entities.swap_remove(idx.index());
                 self.data.swap_remove(idx.index()).into_inner()

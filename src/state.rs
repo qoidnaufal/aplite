@@ -196,8 +196,6 @@ pub struct Flag {
     pub(crate) focusable: bool,
     pub(crate) hoverable: bool,
     pub(crate) movable: bool,
-    pub(crate) needs_repaint: bool,
-    pub(crate) needs_relayout: bool,
     pub(crate) needs_redraw: bool,
 }
 
@@ -208,8 +206,6 @@ impl Default for Flag {
             focusable: false,
             hoverable: false,
             movable: false,
-            needs_repaint: true,
-            needs_relayout: true,
             needs_redraw: true,
         }
     }
@@ -256,15 +252,22 @@ impl State {
     pub(crate) fn render(&self, renderer: &mut Renderer, tree: &Tree<WidgetId>) {
         let mut scene = renderer.scene();
         self.common
-            .query::<(&Rect, &Matrix3x2, &Background, &Border, &Shape, &CornerRadius, &Flag)>()
-            .for_each(|(rect, transform, background, border, shape, corner_radius, flag)| {
+            .query::<(&Rect, &Matrix3x2, &Background, &Shape, &CornerRadius, &Flag)>()
+            .iter()
+            .zip(self.common.entities())
+            .for_each(|((rect, transform, background, shape, corner_radius, flag), id)| {
                 if flag.visible {
+                    let border_state = self.border
+                        .get(id)
+                        .map(|border| (border.paint.as_paint_ref(), border.width))
+                        .unwrap_or((background.paint.as_paint_ref(), 0.0));
+
                     let draw_args = DrawArgs {
                         rect,
                         transform,
                         background_paint: &background.paint.as_paint_ref(),
-                        border_paint: &border.paint.as_paint_ref(),
-                        border_width: &border.width,
+                        border_paint: &border_state.0,
+                        border_width: &border_state.1,
                         shape,
                         corner_radius,
                     };

@@ -28,10 +28,10 @@ pub struct NodeRef<'a, E: Entity> {
     pub prev_sibling: Option<&'a E>,
 }
 
-pub struct NodeMut<'a, E: Entity> {
-    pub entity: &'a E,
-    pub parent: Option<&'a mut E>,
-    pub first_child: Option<&'a mut E>,
-    pub next_sibling: Option<&'a mut E>,
-    pub prev_sibling: Option<&'a mut E>,
-}
+// pub struct NodeMut<'a, E: Entity> {
+//     pub entity: &'a E,
+//     pub parent: Option<&'a mut E>,
+//     pub first_child: Option<&'a mut E>,
+//     pub next_sibling: Option<&'a mut E>,
+//     pub prev_sibling: Option<&'a mut E>,
+// }

@@ -95,8 +95,9 @@ impl Context {
     }
 
     fn detect_hover(&mut self) {
+        let query_rect = self.state.common.query::<&Rect>();
         if let Some(id) = self.cursor.hover.curr {
-            let rect = self.state.common.fetch_one::<&Rect>(&id).unwrap();
+            let rect = query_rect.get(&id).unwrap();
             let contains = rect.contains(self.cursor.hover_pos());
 
             if !contains {
@@ -105,7 +106,7 @@ impl Context {
                 self.cursor.hover.curr = self.layout.tree
                     .iter_children(&id)
                     .find(|child| {
-                        let child_rect = self.state.common.fetch_one::<&Rect>(*child).unwrap();
+                        let child_rect = query_rect.get(*child).unwrap();
                         child_rect.contains(self.cursor.hover_pos())
                     })
                     .or(Some(&id))
@@ -116,11 +117,11 @@ impl Context {
                 .iter_depth(&WidgetId::root())
                 .filter(|member| {
                     self.state.common
-                        .fetch_one::<&Flag>(member)
+                        .query::<&Flag>().get(*member)
                         .is_some_and(|flag| flag.visible)
                 })
                 .find(|member| {
-                    let rect = self.state.common.fetch_one::<&Rect>(*member).unwrap();
+                    let rect = query_rect.get(*member).unwrap();
                     rect.contains(self.cursor.hover_pos())
                 })
                 .copied();
@@ -133,7 +134,8 @@ impl Context {
     pub(crate) fn handle_drag(&mut self) {
         if let Some(captured) = self.cursor.click.captured {
             let (rect, flag) = self.state.common
-                .fetch::<(&mut Rect, &mut Flag)>(&captured)
+                .query::<(&mut Rect, &mut Flag)>()
+                .get(&captured)
                 .unwrap();
 
             if self.cursor.is_dragging() && flag.movable {
@@ -141,7 +143,6 @@ impl Context {
                 let pos = self.cursor.hover.pos - self.cursor.click.offset;
 
                 rect.set_pos(pos);
-                flag.needs_relayout = true;
                 flag.needs_redraw = true;
 
                 self.layout.calculate_position(&captured, &self.state);
@@ -158,7 +159,7 @@ impl Context {
     ) {
         match self.cursor.process_click_event(action.into(), button.into()) {
             EmittedClickEvent::Captured(captured) => {
-                let pos = self.state.common.fetch_one::<&Rect>(&captured).unwrap().vec2f();
+                let pos = self.state.common.query::<&Rect>().get(&captured).unwrap().vec2f();
                 self.cursor.click.offset = self.cursor.click.pos - pos;
             },
             EmittedClickEvent::TriggerCallback(id) => {

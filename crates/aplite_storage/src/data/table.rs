@@ -1,14 +1,12 @@
 use std::collections::HashMap;
 use std::any::{Any, TypeId};
 use std::cell::UnsafeCell;
-use std::marker::PhantomData;
 
 use super::sparse_index::SparseIndices;
 use super::component::{
     Component,
     IntoComponent,
     Query,
-    QueryOne,
     QueryData,
     Queryable,
 };
@@ -20,7 +18,6 @@ pub struct Table<E: Entity + 'static> {
     pub(crate) inner: HashMap<TypeId, Box<dyn Any>>,
     pub(crate) ptr: SparseIndices<E>,
     pub(crate) entities: Vec<E>,
-    marker: PhantomData<E>,
 }
 
 impl<E: Entity + 'static> Default for Table<E> {
@@ -36,24 +33,14 @@ impl<E: Entity + 'static> Table<E> {
             inner: HashMap::default(),
             ptr: SparseIndices::default(),
             entities: Vec::with_capacity(capacity),
-            marker: PhantomData,
         }
     }
 
     pub fn register_component(&mut self, entity: &E, component: impl IntoComponent) {
         let insert_index = self.entities.len();
-        self.ptr.resize_if_needed(entity);
-        self.ptr.set_index(entity.index(), insert_index);
+        self.ptr.set_index(entity, insert_index);
         self.entities.push(*entity);
         component.into_component().register(entity, self);
-    }
-
-    pub fn remove<C: Component>(&mut self, entity: E) -> Option<C::Item> {
-        C::remove(entity, self)
-    }
-
-    pub fn remove_into_component<IC: IntoComponent>(&mut self, entity: E) -> Option<<<IC as IntoComponent>::Item as Component>::Item> {
-        IC::Item::remove(entity, self)
     }
 
     pub(crate) fn insert<T: 'static>(&mut self, entity: &E, value: T) {
@@ -95,6 +82,39 @@ impl<E: Entity + 'static> Table<E> {
         }
     }
 
+    pub fn remove<C: Component>(&mut self, entity: E) -> Option<C::Item> {
+        C::remove(entity, self)
+    }
+
+    pub fn remove_into_component<IC: IntoComponent>(&mut self, entity: E)
+    -> Option<<<IC as IntoComponent>::Item as Component>::Item> {
+        IC::Item::remove(entity, self)
+    }
+
+    // pub fn fetch_one<'a, Q: Queryable<'a>>(&'a self, entity: &E) -> Option<Q::Output> {
+    //     Query::<Q>::new(self).get(entity)
+        // self.inner
+        //     .get(&TypeId::of::<Q::Item>())
+        //     .and_then(|any| any.downcast_ref::<Vec<UnsafeCell<Q::Item>>>())
+        //     .and_then(|arr| {
+        //         self.ptr
+        //             .get_index(entity)
+        //             .map(|index| Q::convert(&arr[index.index()]))
+        //     })
+    // }
+
+    // pub fn fetch<'a, Q: QueryData<'a>>(&'a self, entity: &E) -> Option<Q::Fetch> {
+    //     Q::fetch(entity, self)
+    // }
+
+    pub fn query<'a, Q: QueryData<'a>>(&'a self) -> Query<'a, Q> {
+        Query::new(self)
+    }
+
+    pub fn entities(&self) -> &[E] {
+        &self.entities
+    }
+
     pub fn len(&self) -> usize {
         self.entities.len()
     }
@@ -105,29 +125,6 @@ impl<E: Entity + 'static> Table<E> {
 
     pub fn contains(&self, entity: &E) -> bool {
         self.entities.contains(entity)
-    }
-
-    pub fn fetch_one<'a, Q: QueryData<'a>>(&'a self, entity: &E) -> Option<Q::Output> {
-        self.inner
-            .get(&TypeId::of::<Q::Item>())
-            .and_then(|any| any.downcast_ref::<Vec<UnsafeCell<Q::Item>>>())
-            .and_then(|arr| {
-                self.ptr
-                    .get_index(entity)
-                    .map(|index| Q::get(&arr[index.index()]))
-            })
-    }
-
-    pub fn fetch<'a, Q: Queryable<'a>>(&'a self, entity: &E) -> Option<Q::Fetch> {
-        Q::fetch(entity, self)
-    }
-
-    pub fn query_one<'a, Q: QueryData<'a>>(&'a self) -> QueryOne<'a, Q> {
-        QueryOne::new(self)
-    }
-
-    pub fn query<'a, Q: Queryable<'a>>(&'a self) -> Query<'a, Q> {
-        Query::new(self)
     }
 
     pub fn clear(&mut self) {
@@ -167,8 +164,8 @@ mod table_test {
             let id = cx.manager.create();
             cx.table.insert(&id, i.to_string());
         }
-        let query_one = cx.table.query_one::<&String>();
-        assert_eq!(query_one.count(), 10);
+        let query_one = cx.table.query::<&String>();
+        assert_eq!(query_one.iter().count(), 10);
     }
 
     #[test]
@@ -181,14 +178,14 @@ mod table_test {
 
         let query = cx.table.query::<(&String, &mut f32, &i32)>();
 
-        for (s, f, i) in query {
+        for (s, f, i) in query.iter() {
             *f = *i as f32;
             assert!(std::any::type_name_of_val(s).contains("String"));
             assert!(std::any::type_name_of_val(f).contains("f32"));
             assert!(std::any::type_name_of_val(i).contains("i32"));
         }
 
-        let query_f32 = cx.table.query_one::<&f32>();
+        let query_f32 = cx.table.query::<&f32>();
 
         for f in query_f32 {
             assert!(f.is_sign_negative())
@@ -204,14 +201,14 @@ mod table_test {
         }
 
         let entity = TestId(3);
-        let items = cx.table.fetch::<(&i32, &mut String)>(&entity);
+        let items = cx.table.query::<(&i32, &mut String)>().get(&entity);
         assert!(items.is_some());
 
         if let Some((i, s)) = items {
             *s = i.pow(2).to_string();
         }
 
-        let fetch = cx.table.fetch_one::<&String>(&entity);
+        let fetch = cx.table.query::<&String>().get(&entity);
         assert!(fetch.is_some_and(|n| !n.starts_with('-')));
     }
 
@@ -231,27 +228,25 @@ mod table_test {
         }
     }
 
-    #[derive(Default)]
-    struct Dummy {
-        name: String,
-        age: u8,
-        score: f32,
-    }
-
-    impl IntoComponent for Dummy {
-        type Item = (u8, String, f32);
-        fn into_component(self) -> Self::Item {
-            let Self {
-                name,
-                age,
-                score,
-            } = self;
-            (age, name, score)
-        }
-    }
-
     #[test]
     fn into_component() {
+        #[derive(Default)]
+        struct Dummy {
+            name: String,
+            age: u8,
+            score: f32,
+        }
+        impl IntoComponent for Dummy {
+            type Item = (u8, String, f32);
+            fn into_component(self) -> Self::Item {
+                let Self {
+                    name,
+                    age,
+                    score,
+                } = self;
+                (age, name, score)
+            }
+        }
         let mut cx = Context::default();
         for i in 0..10 {
             let id = cx.manager.create();
@@ -262,13 +257,12 @@ mod table_test {
             };
             cx.table.register_component(&id, dummy);
         }
-        let query = cx.table.query::<(&String, &f32, &u8)>();
-        for (s, f, u) in query {
+        let query = crate::Query::<'_, (&String, &f32, &u8)>::new(&cx.table);
+        for (s, f, u) in &query {
             assert!(std::any::type_name_of_val(s).contains("String"));
             assert!(std::any::type_name_of_val(f).contains("f32"));
             assert!(std::any::type_name_of_val(u).contains("u8"));
         }
-
         let removed = cx.table.remove_into_component::<Dummy>(TestId(6));
         assert!(removed.is_some_and(|(u, s, f)| {
             std::any::type_name_of_val(&s).contains("String") &&
@@ -277,3 +271,9 @@ mod table_test {
         }));
     }
 }
+
+// crate::create_entity! { TableId }
+
+// pub struct DataStorage<E: Entity + 'static> {
+//     tables: crate::IndexMap<TableId, Table<E>>,
+// }

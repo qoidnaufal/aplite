@@ -1,5 +1,4 @@
 use std::any::TypeId;
-use std::marker::PhantomData;
 use std::slice::Iter;
 use std::iter::Map;
 use std::cell::UnsafeCell;
@@ -7,6 +6,7 @@ use std::cell::UnsafeCell;
 use super::table::Table;
 
 use crate::entity::Entity;
+use crate::data::sparse_index::Index;
 
 pub trait Component: Sized + 'static {
     type Item;
@@ -31,146 +31,247 @@ macro_rules! component {
 
             fn remove<En: Entity + 'static>(entity: En, source: &mut Table<En>) -> Option<Self::Item> {
                 let idx = source.ptr
-                    .get_index(&entity)
-                    .cloned()
-                    .map(|idx| {
-                        let last = source.entities.last().unwrap();
+                    .get_index(&entity)?
+                    .index();
 
-                        source.ptr.set_index(last.index(), idx.index());
-                        source.ptr.set_null(&entity);
-                        source.entities.swap_remove(idx.index());
-
-                        idx
-                    })?;
-
-                Some(($(
+                let removed = Some(($(
                     source.inner
                         .get_mut(&TypeId::of::<$name>())
                         .and_then(|any| any.downcast_mut::<Vec<UnsafeCell<$name>>>())
-                        .map(|vec| vec.swap_remove(idx.index()).into_inner())?,
-                )*))
+                        .map(|vec| vec.swap_remove(idx).into_inner())?,
+                )*));
+
+                let last = source.entities.last().unwrap();
+
+                source.ptr.set_index(last, idx);
+                source.ptr.set_null(&entity);
+                source.entities.swap_remove(idx);
+
+                removed
             }
         }
     };
 }
 
 /// Query on many component type
-pub struct Query<'a, Q: Queryable<'a>> {
+pub struct Query<'a, Q: QueryData<'a>> {
+    pub(crate) ptr: &'a [Index],
+    pub(crate) inner: Option<Q::Data>,
+}
+
+impl<'a, Q: QueryData<'a>> Query<'a, Q> {
+    pub fn new<E: Entity>(source: &'a Table<E>) -> Self {
+        Self {
+            ptr: &source.ptr.ptr,
+            inner: Q::data(source),
+        }
+    }
+}
+
+pub struct QueryIter<'a, Q: QueryData<'a>> {
     pub(crate) inner: Option<Q::Iter>,
-    pub(crate) marker: PhantomData<fn() -> &'a Q>,
 }
 
-impl<'a, Q: Queryable<'a>> Query<'a, Q> {
-    pub fn new<E: Entity + 'static>(source: &'a Table<E>) -> Self {
-        Self {
-            inner: Q::query(source),
-            marker: PhantomData,
-        }
-    }
-}
-
-/// Query (and iterate) one component type
-pub struct QueryOne<'a, Q: QueryData<'a>> {
-    pub(crate) inner: Option<Map<Iter<'a, UnsafeCell<Q::Item>>, FnMapQuery<'a, Q>>>,
-}
-
-impl<'a, Q: QueryData<'a>> QueryOne<'a, Q> {
-    pub(crate) fn new<E: Entity + 'static>(table: &'a Table<E>) -> Self {
-        Self {
-            inner: table.inner.get(&TypeId::of::<Q::Item>())
-                .and_then(|any| any.downcast_ref::<Vec<UnsafeCell<Q::Item>>>())
-                .map(|arr| arr.iter().map(map_query::<'a, Q> as FnMapQuery<'a, Q>))
-        }
-    }
-}
-
-impl<'a, Q: QueryData<'a>> Iterator for QueryOne<'a, Q> {
-    type Item = Q::Output;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner
-            .as_mut()
-            .and_then(|i| i.next())
-    }
-}
-
-pub trait QueryData<'a> {
+pub trait Queryable<'a> {
     type Item: 'static;
     type Output: 'a;
 
     /// Convert `UnsafeCell<T>` to `&T` or `&mut T`.
-    fn get(fetch: &UnsafeCell<Self::Item>) -> Self::Output;
+    fn convert(fetch: &UnsafeCell<Self::Item>) -> Self::Output;
 }
 
-impl<'a, T: 'static> QueryData<'a> for &'a T {
+impl<'a, T: 'static> Queryable<'a> for &'a T {
     type Item = T;
     type Output = &'a T;
 
-    fn get(item: &UnsafeCell<Self::Item>) -> Self::Output {
+    fn convert(item: &UnsafeCell<Self::Item>) -> Self::Output {
         unsafe { &*item.get() }
     }
 }
 
-impl<'a, T: 'static> QueryData<'a> for &'a mut T {
+impl<'a, T: 'static> Queryable<'a> for &'a mut T {
     type Item = T;
     type Output = &'a mut T;
 
-    fn get(item: &UnsafeCell<Self::Item>) -> Self::Output {
+    fn convert(item: &UnsafeCell<Self::Item>) -> Self::Output {
         unsafe { &mut *item.get() }
     }
 }
 
-pub trait Queryable<'a> {
+pub trait QueryData<'a>: Sized {
+    type Data;
     type Iter;
-    type Fetch;
 
-    fn query<E: Entity + 'static>(source: &'a Table<E>) -> Option<Self::Iter>;
-    fn fetch<E: Entity + 'static>(entity: &E, source: &'a Table<E>) -> Option<Self::Fetch>;
+    fn data<E: Entity + 'static>(source: &'a Table<E>) -> Option<Self::Data>;
+    fn query<E: Entity + 'static>(source: &'a Table<E>) -> Query<'a, Self>;
 }
 
-pub(crate) fn map_query<'a, Qd: QueryData<'a>>(cell: &'a UnsafeCell<Qd::Item>) -> Qd::Output {
-    Qd::get(cell)
+pub(crate) fn map_query<'a, Q: Queryable<'a>>(cell: &'a UnsafeCell<Q::Item>) -> Q::Output {
+    Q::convert(cell)
 }
 
-pub(crate) type FnMapQuery<'a, Qd> =
-    fn(&'a UnsafeCell<<Qd as QueryData<'a>>::Item>) -> <Qd as QueryData<'a>>::Output;
+pub(crate) type FnMapQuery<'a, Q> =
+    fn(&'a UnsafeCell<<Q as Queryable<'a>>::Item>) -> <Q as Queryable<'a>>::Output;
 
 macro_rules! query {
     ($($name:ident),*) => {
-        impl<'a, $($name: QueryData<'a>),*> Queryable<'a> for ($($name,)*) {
+        impl<'a, $($name: Queryable<'a>),*> QueryData<'a> for ($($name,)*) {
+            type Data = ($(&'a Vec<UnsafeCell<$name::Item>>,)*);
             type Iter = ($(Map<Iter<'a, UnsafeCell<$name::Item>>, FnMapQuery<'a, $name>>,)*);
-            type Fetch = ($($name::Output,)*);
 
-            fn query<En: Entity + 'static>(source: &'a Table<En>) -> Option<Self::Iter> {
+            fn data<En: Entity + 'static>(source: &'a Table<En>) -> Option<Self::Data> {
                 Some(($(
                     source.inner
                         .get(&TypeId::of::<$name::Item>())
-                        .and_then(|any| any.downcast_ref::<Vec<UnsafeCell<$name::Item>>>())
-                        .map(|vec| vec.iter().map(map_query::<'a, $name> as FnMapQuery<'a, $name>))?,
+                        .and_then(|any| any.downcast_ref::<Vec<UnsafeCell<$name::Item>>>())?,
                 )*))
             }
 
-            fn fetch<En: Entity + 'static>(entity: &En, source: &'a Table<En>) -> Option<Self::Fetch> {
-                Some(($(
-                    source.inner
-                        .get(&TypeId::of::<$name::Item>())
-                        .and_then(|any| any.downcast_ref::<Vec<UnsafeCell<$name::Item>>>())
-                        .and_then(|vec| {
-                            source.ptr
-                                .get_index(entity)
-                                .map(|index| $name::get(&vec[index.index()]))
-                        })?,
-                )*))
+            fn query<En: Entity + 'static>(source: &'a Table<En>) -> Query<'a, Self> {
+                Query::new(source)
             }
         }
 
-        impl<'a, $($name: QueryData<'a>),*> Iterator for Query<'a, ($($name,)*)> {
+        impl<'a, $($name: Queryable<'a>),*> Query<'a, ($($name,)*)> {
+            pub fn iter(&self) -> QueryIter<'a, ($($name,)*)> {
+                #[allow(non_snake_case)]
+                let Some(($($name,)*)) = self.inner else {
+                    return QueryIter { inner: None }
+                };
+
+                let inner = Some(($($name.iter().map(map_query::<'a, $name> as FnMapQuery<'a, $name>),)*));
+
+                QueryIter { inner }
+            }
+
+            pub fn get<En: Entity>(&self, entity: &En) -> Option<($($name::Output,)*)> {
+                #[allow(non_snake_case)]
+                let Some(($($name,)*)) = self.inner else {
+                    return None
+                };
+
+                let index = self.ptr
+                    .get(entity.index())
+                    .and_then(|i| (!i.is_null()).then_some(i.index()))?;
+
+                Some(($($name::convert(&$name[index]),)*))
+            }
+        }
+
+        impl<'a, $($name: Queryable<'a>),*> IntoIterator for &'a Query<'a, ($($name,)*)> {
+            type IntoIter = QueryIter<'a, ($($name,)*)>;
+            type Item = ($($name::Output,)*);
+
+            fn into_iter(self) -> Self::IntoIter {
+                self.iter()
+            }
+        }
+
+        impl<'a, $($name: Queryable<'a>),*> IntoIterator for Query<'a, ($($name,)*)> {
+            type IntoIter = QueryIter<'a, ($($name,)*)>;
+            type Item = ($($name::Output,)*);
+
+            fn into_iter(self) -> Self::IntoIter {
+                #[allow(non_snake_case)]
+                let Some(($($name,)*)) = self.inner else {
+                    return QueryIter { inner: None }
+                };
+
+                let inner = Some(($($name.iter().map(map_query::<'a, $name> as FnMapQuery<'a, $name>),)*));
+
+                QueryIter { inner }
+            }
+        }
+
+        impl<'a, $($name: Queryable<'a>),*> Iterator for QueryIter<'a, ($($name,)*)> {
             type Item = ($($name::Output,)*);
 
             fn next(&mut self) -> Option<Self::Item> {
                 #[allow(non_snake_case)]
                 let Some(($($name,)*)) = self.inner.as_mut() else { return None };
                 Some(($($name.next()?,)*))
+            }
+        }
+    };
+}
+
+macro_rules! query_one {
+    ($name:ident) => {
+        impl<'a, $name: Queryable<'a>> QueryData<'a> for $name {
+            type Data = &'a Vec<UnsafeCell<$name::Item>>;
+            type Iter = Map<Iter<'a, UnsafeCell<$name::Item>>, FnMapQuery<'a, $name>>;
+
+            fn data<En: Entity + 'static>(source: &'a Table<En>) -> Option<Self::Data> {
+                Some(
+                    source.inner
+                        .get(&TypeId::of::<$name::Item>())
+                        .and_then(|any| any.downcast_ref::<Vec<UnsafeCell<$name::Item>>>())?
+                )
+            }
+
+            fn query<En: Entity + 'static>(source: &'a Table<En>) -> Query<'a, Self> {
+                Query::new(source)
+            }
+        }
+
+        impl<'a, $name: Queryable<'a>> Query<'a, $name> {
+            pub fn iter(&self) -> QueryIter<'a, $name> {
+                #[allow(non_snake_case)]
+                let Some($name) = self.inner else {
+                    return QueryIter { inner: None }
+                };
+
+                let inner = Some($name.iter().map(map_query::<'a, $name> as FnMapQuery<'a, $name>));
+
+                QueryIter { inner }
+            }
+
+            pub fn get<En: Entity>(&self, entity: &En) -> Option<$name::Output> {
+                #[allow(non_snake_case)]
+                let Some($name) = self.inner else {
+                    return None
+                };
+
+                let index = self.ptr
+                    .get(entity.index())
+                    .and_then(|i| (!i.is_null()).then_some(i.index()))?;
+
+                Some($name::convert(&$name[index]))
+            }
+        }
+
+        impl<'a, $name: Queryable<'a>> IntoIterator for &'a Query<'a, $name> {
+            type IntoIter = QueryIter<'a, $name>;
+            type Item = $name::Output;
+
+            fn into_iter(self) -> Self::IntoIter {
+                self.iter()
+            }
+        }
+
+        impl<'a, $name: Queryable<'a>> IntoIterator for Query<'a, $name> {
+            type IntoIter = QueryIter<'a, $name>;
+            type Item = $name::Output;
+
+            fn into_iter(self) -> Self::IntoIter {
+                #[allow(non_snake_case)]
+                let Some($name) = self.inner else {
+                    return QueryIter { inner: None }
+                };
+
+                let inner = Some($name.iter().map(map_query::<'a, $name> as FnMapQuery<'a, $name>));
+
+                QueryIter { inner }
+            }
+        }
+
+        impl<'a, $name: Queryable<'a>> Iterator for QueryIter<'a, $name> {
+            type Item = $name::Output;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                #[allow(non_snake_case)]
+                let Some($name) = self.inner.as_mut() else { return None };
+                Some($name.next()?)
             }
         }
     };
@@ -205,6 +306,8 @@ impl_tuple_macro!(
     U, V, W, X, Y,
     Z
 );
+
+query_one!(A);
 
 // #[derive(Debug)]
 // pub struct InvalidComponent(&'static str);
