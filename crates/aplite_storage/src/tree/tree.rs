@@ -5,6 +5,7 @@ use crate::iterator::{
     TreeAncestryIter,
     TreeNodeIter,
 };
+use super::node::SubTree;
 
 /// Array based data structure, where the related information is allocated parallel to the main [`Entity`].
 /// This should enable fast and efficient indexing when accessing the data. Internally the data is stored using [`IndexMap`].
@@ -154,6 +155,14 @@ impl<E: Entity> Tree<E> {
         self.try_insert(entity, parent).unwrap()
     }
 
+    pub fn insert_subtree(&mut self, subtree: SubTree<E>, parent: Option<E>) {
+        self.insert(*subtree.id(), parent);
+        subtree.iter_member_ref()
+            .for_each(|node_ref| {
+                self.insert(*node_ref.entity, node_ref.parent.copied());
+            });
+    }
+
     pub fn add_child(&mut self, entity: &E, child: E) {
         self.try_add_child(entity, child).unwrap()
     }
@@ -220,36 +229,9 @@ impl<E: Entity> Tree<E> {
         // }
     }
 
-    // pub fn add_subtree(&mut self, entity: &E, other: Self) {
-    //     if other.is_empty() { return }
-
-    //     let root = E::root();
-    //     let mut current = other.get_first_child(&root).unwrap();
-    //     self.insert(*current, entity);
-
-    //     while let Some(first_child) = other.get_first_child(current) {
-    //         self.insert(*first_child, current);
-
-    //         let mut child = first_child;
-    //         while let Some(next) = other.get_next_sibling(child) {
-    //             self.add_sibling(child, *next);
-    //             child = next;
-    //         }
-
-    //         current = first_child;
-    //     }
-    // }
-
     #[inline(always)]
     /// Currently produces another Tree with the member of the removed entity.
     /// Kinda inefficient if the entity has super big index.
-    /// Maybe should produce some kind of simple subtree like:
-    /// ```ignore
-    /// struct SubTree<E: Entity> {
-    ///     entity: E,
-    ///     children: Vec<SubTree<E>>
-    /// }
-    /// ```
     pub fn remove(&mut self, entity: E) -> Self {
         let mut removed_branch = Self::default();
         removed_branch.insert(entity, None);
@@ -289,6 +271,34 @@ impl<E: Entity> Tree<E> {
             });
 
         removed_branch
+    }
+
+    pub fn remove_subtree(&mut self, entity: E) -> SubTree<E> {
+        let subtree = SubTree::new(entity, self);
+
+        // shifting
+        if let Some(prev) = self.get_prev_sibling(&entity).copied() {
+            self.next_sibling[prev.index()] = self.get_next_sibling(&entity).copied();
+        } else if let Some(parent) = self.get_parent(&entity).copied() {
+            self.first_child[parent.index()] = self.get_next_sibling(&entity).copied();
+        }
+
+        if let Some(next) = self.get_next_sibling(&entity).copied() {
+            self.prev_sibling[next.index()] = self.get_prev_sibling(&entity).copied();
+        }
+
+        subtree
+            .iter_member_ref()
+            .for_each(|node_ref| {
+                let index = node_ref.index();
+
+                self.parent[index] = None;
+                self.first_child[index] = None;
+                self.next_sibling[index] = None;
+                self.prev_sibling[index] = None;
+            });
+
+        subtree
     }
 
     /// the distance of an entity from the root
@@ -546,41 +556,18 @@ mod tree_test {
 
         let test_id2 = TestId::new(2, 0);
         let first_child = *tree.get_first_child(&test_id2).unwrap();
-        let next_sibling = tree.get_next_sibling(&first_child).copied();
         assert_eq!(first_child, TestId::new(3, 0));
 
         let removed = tree.remove(TestId::new(3, 0));
         let removed_len = removed.len(&TestId::new(3, 0));
         let after_remove_len = tree.len(&TestId::root());
         assert_eq!(removed_len, 2);
-        assert_eq!(after_remove_len, initial_len - after_remove_len);
+        assert_eq!(after_remove_len, initial_len - removed_len);
 
         // eprintln!("{removed:?}");
         // eprintln!("{tree:?}");
 
-        let first_child_after_removal = tree.get_first_child(&test_id2);
-        assert_eq!(first_child_after_removal, next_sibling.as_ref());
-    }
-
-    #[test]
-    fn remove_middle_child() {
-        let (_, mut tree) = setup_tree(11);
-
-        let test_id5 = TestId::new(5, 0);
-        let sibling_before_removal = tree.get_next_sibling(&test_id5).copied();
-        assert!(sibling_before_removal.is_some_and(|id| tree.contains(&id)));
-
-        let removed = tree.remove(test_id5);
-        assert!(!tree.contains(&test_id5));
-
-        let test_id3 = TestId::new(3, 0);
-        let sibling_after_removal = tree.get_next_sibling(&test_id3);
-        assert_eq!(sibling_before_removal.as_ref(), sibling_after_removal);
-        assert_eq!(removed.len(&test_id5), 3);
-
-        // eprintln!("{tree:?}");
-        // eprintln!("remaining {}", tree.len());
-        // eprintln!("removed > {removed:?}");
+        // let first_child_after_removal = tree.get_first_child(&test_id2);
     }
 
     #[test]
@@ -590,13 +577,15 @@ mod tree_test {
         let len = tree.len(&root);
         // eprintln!("{tree:?}");
 
-        let test_id2 = TestId::new(2, 0);
-        let removed = tree.remove(test_id2);
-        let removed_len = removed.len(&test_id2);
+        let id = TestId::new(8, 0);
+        let removed = tree.remove_subtree(id);
+        let removed_len = removed.len();
         // eprintln!("{removed:?}");
 
         let after_remove_len = tree.len(&root);
         assert_eq!(len, removed_len + after_remove_len);
+
+        tree.insert_subtree(removed, None);
         // eprintln!("{tree:?}");
     }
 

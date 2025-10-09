@@ -464,3 +464,5 @@ impl Widget for CircleWidget {
         &self.state
     }
 }
+
+pub struct TestWidget {}
