@@ -98,9 +98,8 @@ impl Context {
         let query_rect = self.state.common.query::<&Rect>();
         if let Some(id) = self.cursor.hover.curr {
             let rect = query_rect.get(&id).unwrap();
-            let contains = rect.contains(self.cursor.hover_pos());
 
-            if !contains {
+            if !rect.contains(self.cursor.hover_pos()) {
                 self.cursor.hover.curr = self.layout.tree.get_parent(&id).copied();
             } else {
                 self.cursor.hover.curr = self.layout.tree

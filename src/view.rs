@@ -1,4 +1,4 @@
-use crate::widget::{Widget, WidgetId, Children};
+use crate::widget::{Widget, WidgetId};
 use crate::context::Context;
 use crate::layout::LayoutRules;
 
@@ -14,26 +14,26 @@ impl View {
         }
     }
 
-    fn build(self, cx: &mut Context) {
-        let current = cx.current.take();
-        let id = cx.create_id();
-        let state = self.widget.state();
+    // fn build(self, cx: &mut Context) {
+    //     let current = cx.current.take();
+    //     let id = cx.create_id();
+    //     let state = self.widget.state();
 
-        cx.layout.tree.insert(id, current);
-        cx.state.insert_state(&id, state.clone());
+    //     cx.layout.tree.insert(id, current);
+    //     cx.state.insert_state(&id, state.clone());
 
-        if let Some(children) = self.widget.children() {
-            cx.current = Some(id);
-            cx.layout.rules.insert(id, LayoutRules::default());
+    //     if let Some(children) = self.widget.children() {
+    //         cx.current = Some(id);
+    //         cx.layout.rules.insert(id, LayoutRules::default());
 
-            children.drain().for_each(|child| {
-                let child_view = Self { widget: child };
-                child_view.build(cx);
-            });
-        }
+    //         children.drain().for_each(|child| {
+    //             let child_view = Self { widget: child };
+    //             child_view.build(cx);
+    //         });
+    //     }
 
-        cx.current = current;
-    }
+    //     cx.current = current;
+    // }
 
     // pub(crate) fn detect_hover(&self, rects: &[Rect], cursor: &mut Cursor) {
     //     if let Some(id) = cursor.hover.curr {
@@ -149,8 +149,9 @@ impl std::fmt::Debug for Box<dyn IntoView> {
 
 impl std::fmt::Debug for &dyn IntoView {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct(std::any::type_name::<Self>())
-            .field("children", &self.children().unwrap_or(&Children::new()))
+        let scoped_name = std::any::type_name::<Self>();
+        let name = scoped_name.split("::").last().unwrap_or(scoped_name);
+        f.debug_struct(name)
             .finish()
     }
 }

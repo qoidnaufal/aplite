@@ -86,11 +86,11 @@ impl Padding {
 }
 
 #[derive(Default)]
-pub(crate) struct LayoutRules {
+pub struct LayoutRules {
+    pub(crate) padding: Padding,
     pub(crate) orientation: Orientation,
     pub(crate) align_h: AlignH,
     pub(crate) align_v: AlignV,
-    pub(crate) padding: Padding,
     pub(crate) spacing: u8,
 }
 

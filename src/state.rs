@@ -16,11 +16,6 @@ use aplite_types::{
 
 use crate::widget::WidgetId;
 
-thread_local! {
-    pub(crate) static NODE_STORAGE: RefCell<HashMap<WidgetId, Rc<RefCell<WidgetState>>>> =
-        RefCell::new(HashMap::with_capacity(1024));
-}
-
 #[derive(Clone)]
 pub struct WidgetState {
     pub(crate) rect: Rect,

@@ -274,7 +274,7 @@ impl<E: Entity> Tree<E> {
     }
 
     pub fn remove_subtree(&mut self, entity: E) -> SubTree<E> {
-        let subtree = SubTree::new(entity, self);
+        let subtree = SubTree::from_tree(entity, self);
 
         // shifting
         if let Some(prev) = self.get_prev_sibling(&entity).copied() {

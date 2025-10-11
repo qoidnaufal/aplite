@@ -63,7 +63,14 @@ pub struct SubTree<E: Entity> {
 }
 
 impl<E: Entity> SubTree<E> {
-    pub fn new(entity: E, tree: &Tree<E>) -> Self {
+    pub fn new(entity: E) -> Self {
+        Self {
+            entity,
+            nodes: Vec::new(),
+        }
+    }
+
+    pub(crate) fn from_tree(entity: E, tree: &Tree<E>) -> Self {
         let nodes = tree.iter_node(&entity)
             .skip(1)
             .map(|node_ref| node_ref.into())
@@ -78,7 +85,24 @@ impl<E: Entity> SubTree<E> {
         &self.entity
     }
 
-    pub fn push(&mut self, node: Node<E>) {
+    pub fn add_child(&mut self, child: E) {
+        let child_node = Node {
+            entity: child,
+            parent: Some(self.entity),
+            first_child: None,
+            next_sibling: None,
+            prev_sibling: self.nodes.last().map(|node| node.entity),
+        };
+        if let Some(last) = self.nodes.last_mut() {
+            last.next_sibling = Some(child);
+        }
+        self.nodes.push(child_node);
+    }
+
+    pub fn add_child_node(&mut self, node: Node<E>) {
+        if let Some(last) = self.nodes.last_mut() {
+            last.next_sibling = Some(node.entity);
+        }
         self.nodes.push(node);
     }
 

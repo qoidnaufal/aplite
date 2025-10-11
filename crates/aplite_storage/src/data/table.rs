@@ -8,7 +8,6 @@ use super::component::{
     IntoComponent,
     Query,
     QueryData,
-    Queryable,
 };
 
 use crate::entity::Entity;

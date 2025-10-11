@@ -1,9 +1,11 @@
+mod arena;
 mod data;
 mod entity;
 mod indexmap;
 mod iterator;
 mod tree;
 
+pub use arena::Arena;
 pub use entity::{Entity, EntityManager};
 pub use indexmap::{
     IndexMap,

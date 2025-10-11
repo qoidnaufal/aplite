@@ -227,16 +227,13 @@ macro_rules! query_one {
             }
 
             pub fn get<En: Entity>(&self, entity: &En) -> Option<$name::Output> {
-                #[allow(non_snake_case)]
-                let Some($name) = self.inner else {
-                    return None
-                };
+                let data = self.inner?;
 
                 let index = self.ptr
                     .get(entity.index())
                     .and_then(|i| (!i.is_null()).then_some(i.index()))?;
 
-                Some($name::convert(&$name[index]))
+                Some($name::convert(&data[index]))
             }
         }
 

@@ -5,15 +5,15 @@
 // const IMAGE_3: &str = "../../Wallpaper/pexels-daejeung-2734512.jpg";
 
 // fn image_row(counter: SignalRead<i32>) -> impl IntoView {
-//     let image1 = Image::new(|| image_reader(IMAGE_1))
+//     let image1 = image(|| image_reader(IMAGE_1))
 //         .min_width(350.)
 //         .image_aspect_ratio(AspectRatio::Defined(16, 9));
 
-//     let image2 = Image::new(|| image_reader(IMAGE_2))
+//     let image2 = image(|| image_reader(IMAGE_2))
 //         .min_width(350.)
 //         .image_aspect_ratio(AspectRatio::Defined(16, 9));
 
-//     let image3 = Image::new(|| image_reader(IMAGE_3))
+//     let image3 = image(|| image_reader(IMAGE_3))
 //         .min_width(350.)
 //         .image_aspect_ratio(AspectRatio::Defined(16, 9));
 
@@ -28,7 +28,7 @@
 //         node3.hide(num > 0 && num % 5 == 0);
 //     });
 
-//     VStack::new()
+//     vstack()
 //         .child(image1)
 //         .child(image2)
 //         .child(image3)
@@ -45,9 +45,9 @@
 //     dec: impl Fn() + 'static,
 //     set_counter: SignalWrite<i32>,
 // ) -> impl IntoView {
-//     HStack::new()
+//     h_stack()
 //         .child(
-//             Button::new()
+//             button()
 //                 .hover_color(Rgba::BLUE)
 //                 .click_color(Rgba::DARK_GRAY)
 //                 .border_width(5.0)
@@ -55,7 +55,7 @@
 //                 .on(LeftClick, dec)
 //         )
 //         .child(
-//             Button::new()
+//             button()
 //                 .color(Rgba::GREEN)
 //                 .hover_color(Rgba::LIGHT_GRAY)
 //                 .click_color(Rgba::DARK_GREEN)
@@ -64,7 +64,7 @@
 //                 .on(LeftClick, move || set_counter.set(0))
 //         )
 //         .child(
-//             Button::new()
+//             button()
 //                 .color(Rgba::BLUE)
 //                 .hover_color(Rgba::PURPLE)
 //                 .border_width(5.0)
@@ -89,7 +89,7 @@
 
 //     // Effect::new(move |_| eprint!("{:?}   \r", counter.get()));
 
-//     VStack::new()
+//     v_stack()
 //         .child(button_stack(inc, dec, set_counter))
 //         .child(image_row(counter))
 //         .align_h(AlignH::Left)

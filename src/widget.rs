@@ -1,9 +1,9 @@
-use std::cell::{RefCell, UnsafeCell};
+use std::cell::{Cell, RefCell, UnsafeCell};
 use std::collections::HashMap;
 
 use aplite_renderer::Shape;
 use aplite_types::{Rgba, CornerRadius, Size, Rect, Unit};
-use aplite_storage::{EntityManager, Entity, create_entity};
+use aplite_storage::{EntityManager, Entity, Tree, create_entity};
 
 use crate::layout::*;
 use crate::view::{IntoView, View};
@@ -22,19 +22,21 @@ pub use {
 thread_local! {
     pub(crate) static ENTITY_MANAGER: RefCell<EntityManager<WidgetId>> =
         RefCell::new(EntityManager::default());
+
+    pub(crate) static TREE: RefCell<Tree<WidgetId>> = RefCell::new(Tree::default());
 }
 
 create_entity! {
     pub WidgetId
 }
 
+pub struct Interactivity {}
+
 /// main building block to create a renderable component
 pub trait Widget {
-    fn state(&self) -> &WidgetState;
+    fn id(&self) -> &WidgetId;
 
-    fn children(&self) -> Option<&Children> {
-        None
-    }
+    fn state(&mut self) -> &mut WidgetState;
 
     // fn draw(&self, scene: &mut Scene) {
     //     let node = self.node_ref().unwrap().upgrade();
@@ -105,160 +107,42 @@ pub trait Widget {
 
 }
 
-pub struct Children {
-    children: UnsafeCell<Vec<Box<dyn IntoView>>>,
-    pub(crate) rules: LayoutRules,
-}
-
-impl std::fmt::Debug for Children {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        unsafe {
-            f.debug_list()
-                .entries(&*self.children.get())
-                .finish()
-        }
-    }
-}
-
-impl Children {
-    pub fn new() -> Self {
-        Self {
-            children: UnsafeCell::new(Vec::new()),
-            rules: LayoutRules::default(),
-        }
+pub trait ParentWidget: Widget + Sized {
+    fn child(self, child: impl IntoView + 'static) -> Self {
+        TREE.with_borrow_mut(|tree| tree.insert(*child.id(), Some(*self.id())));
+        self
     }
 
-    pub fn push(&self, child: impl IntoView + 'static) {
-        unsafe {
-            let inner = &mut *self.children.get();
-            inner.push(Box::new(child));
-        }
+    fn layout_rules(&mut self) -> &mut LayoutRules;
+
+    fn padding(mut self, padding: Padding) -> Self {
+        self.layout_rules().padding = padding;
+        self
     }
 
-    pub fn padding(&mut self, padding: Padding) {
-        self.rules.padding = padding;
+    fn spacing(mut self, spacing: u8) -> Self {
+        self.layout_rules().spacing = spacing;
+        self
     }
 
-    pub fn spacing(&mut self, spacing: u8) {
-        self.rules.spacing = spacing;
+    fn align_h(mut self, align_h: AlignH) -> Self {
+        self.layout_rules().align_h = align_h;
+        self
     }
 
-    pub fn orientation(&mut self, orientation: Orientation) {
-        self.rules.orientation = orientation;
+    fn align_v(mut self, align_v: AlignV) -> Self {
+        self.layout_rules().align_v = align_v;
+        self
     }
 
-    pub fn align_h(&mut self, align_h: AlignH) {
-        self.rules.align_h = align_h;
-    }
-
-    pub fn align_v(&mut self, align_v: AlignV) {
-        self.rules.align_v = align_v;
-    }
-
-    pub(crate) fn iter_all(&self) -> impl Iterator<Item = &dyn IntoView> {
-        unsafe {
-            let inner = &*self.children.get();
-            inner.iter().map(|child| child.as_ref())
-        }
-    }
-
-    pub(crate) fn iter_visible(&self) -> impl Iterator<Item = &Box<dyn IntoView>> {
-        unsafe {
-            let inner = &*self.children.get();
-            inner.iter()
-                .filter(|child| child.state().flag.visible)
-        }
-    }
-
-    pub(crate) fn drain(&self) -> impl Iterator<Item = Box<dyn IntoView>> {
-        unsafe {
-            let inner = &mut *self.children.get();
-            inner.drain(..)
-        }
-    }
-}
-
-pub struct ChildrenRef<'a>(&'a [Box<dyn Widget>]);
-
-impl<'a> ChildrenRef<'a> {
-    pub fn all_ref(&self) -> impl Iterator<Item = &'a dyn Widget> {
-        self.0.iter().map(|child| child.as_ref())
-    }
-
-    pub fn all_boxed(&self) -> impl Iterator<Item = &'a Box<dyn Widget>> {
-        self.0.iter()
-    }
-
-    // WARN: fix the visible filtering later
-    pub fn visible_ref(&self) -> impl Iterator<Item = &'a dyn Widget> {
-        self.0.iter().map(|child| child.as_ref())
-    }
-
-    // WARN: fix the visible filtering later
-    pub fn visible_boxed(&self) -> impl Iterator<Item = &'a Box<dyn Widget>> {
-        self.0.iter()
-    }
-}
-
-impl<'a> From<&'a Vec<Box<dyn Widget>>> for ChildrenRef<'a> {
-    fn from(value: &'a Vec<Box<dyn Widget>>) -> Self {
-        Self(value)
-    }
-}
-
-impl std::ops::Deref for ChildrenRef<'_> {
-    type Target = [Box<dyn Widget>];
-    fn deref(&self) -> &Self::Target {
-        self.0
-    }
-}
-
-impl std::fmt::Debug for ChildrenRef<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_list()
-            .entry(&self.0)
-            .finish()
-    }
-}
-
-pub struct ChildrenMut<'a>(&'a mut Vec<Box<dyn Widget>>);
-
-impl<'a> From<&'a mut Vec<Box<dyn Widget>>> for ChildrenMut<'a> {
-    fn from(value: &'a mut Vec<Box<dyn Widget>>) -> Self {
-        Self(value)
-    }
-}
-
-impl std::ops::Deref for ChildrenMut<'_> {
-    type Target = Vec<Box<dyn Widget>>;
-    fn deref(&self) -> &Self::Target {
-        self.0
-    }
-}
-
-impl std::ops::DerefMut for ChildrenMut<'_> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.0
-    }
-}
-
-impl std::fmt::Debug for ChildrenMut<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_list()
-            .entry(self.0)
-            .finish()
+    fn orientation(mut self, orientation: Orientation) -> Self {
+        self.layout_rules().orientation = orientation;
+        self
     }
 }
 
 // TODO: is immediately calculate the size here a good idea?
 pub trait WidgetExt: Widget + Sized {
-    fn child(self, child: impl IntoView + 'static) -> Self {
-        if let Some(children) = self.children() {
-            children.push(child);
-        }
-        self
-    }
-
     fn on<F>(self, event: WidgetEvent, f: F) -> Self
     where
         F: FnMut() + 'static,
@@ -302,8 +186,9 @@ pub trait WidgetExt: Widget + Sized {
         self
     }
 
-    fn shape(self, shape: Shape) -> Self {
-        let _ = shape;
+    fn shape(mut self, shape: Shape) -> Self {
+        self.state().shape = shape;
+        // let _ = shape;
         self
     }
 
@@ -350,22 +235,22 @@ pub trait WidgetExt: Widget + Sized {
 impl<T> WidgetExt for T where T: Widget + Sized {}
 
 impl Widget for Box<dyn Widget> {
-    fn state(&self) -> &WidgetState {
-        self.as_ref().state()
+    fn id(&self) -> &WidgetId {
+        self.as_ref().id()
     }
 
-    fn children(&self) -> Option<&Children> {
-        self.as_ref().children()
+    fn state(&mut self) -> &mut WidgetState {
+        self.as_mut().state()
     }
 }
 
 impl Widget for Box<&mut dyn Widget> {
-    fn state(&self) -> &WidgetState {
-        self.as_ref().state()
+    fn id(&self) -> &WidgetId {
+        self.as_ref().id()
     }
 
-    fn children(&self) -> Option<&Children> {
-        self.as_ref().children()
+    fn state(&mut self) -> &mut WidgetState {
+        self.as_mut().state()
     }
 }
 
@@ -378,7 +263,6 @@ impl std::fmt::Debug for Box<dyn Widget> {
 impl std::fmt::Debug for &dyn Widget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct(std::any::type_name::<Self>())
-            .field("children", &self.children().unwrap_or(&Children::new()))
             .finish()
     }
 }
@@ -419,50 +303,70 @@ impl CallbackStore {
 
 // -------------------------------------
 
+pub(crate) fn window(rect: Rect) -> WindowWidget {
+    WindowWidget::new(rect)
+}
+
 pub(crate) struct WindowWidget {
+    id: WidgetId,
     state: WidgetState,
-    pub(crate) children: Children,
+    layout_rules: LayoutRules,
 }
 
 impl WindowWidget {
     pub(crate) fn new(rect: Rect) -> Self {
+        let layout_rules = LayoutRules::default();
         Self {
+            id: ENTITY_MANAGER.with_borrow_mut(|m| m.create()),
             state: WidgetState::window(rect.width, rect.height),
-            children: Children::new(),
+            layout_rules,
         }
     }
 }
 
 impl Widget for WindowWidget {
-    fn state(&self) -> &WidgetState {
-        &self.state
+    fn id(&self) -> &WidgetId {
+        &self.id
     }
+    fn state(&mut self) -> &mut WidgetState {
+        &mut self.state
+    }
+}
 
-    fn children(&self) -> Option<&Children> {
-        Some(&self.children)
+impl ParentWidget for WindowWidget {
+    fn layout_rules(&mut self) -> &mut LayoutRules {
+        &mut self.layout_rules
     }
 }
 
 // -------------------------------------
 
+pub fn circle() -> CircleWidget {
+    CircleWidget::new()
+}
+
 pub struct CircleWidget {
+    id: WidgetId,
     state: WidgetState,
 }
 
 impl CircleWidget {
     pub fn new() -> Self {
+        let id = ENTITY_MANAGER.with_borrow_mut(|m| m.create());
         let state = WidgetState::default()
             .with_size(100, 100)
             .with_shape(Shape::Circle)
             .with_border_width(5.);
-        Self { state }
+        Self { id, state }
     }
 }
 
 impl Widget for CircleWidget {
-    fn state(&self) -> &WidgetState {
-        &self.state
+    fn id(&self) -> &WidgetId {
+        &self.id
+    }
+
+    fn state(&mut self) -> &mut WidgetState {
+        &mut self.state
     }
 }
-
-pub struct TestWidget {}

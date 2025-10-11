@@ -1,10 +1,10 @@
 use aplite_types::Rgba;
 use aplite_renderer::Shape;
 
-use crate::layout::Orientation;
+use crate::layout::{LayoutRules, Orientation};
 use crate::state::WidgetState;
 
-use super::{Widget, Children};
+use super::{WidgetId, Widget, ParentWidget, ENTITY_MANAGER};
 
 pub fn v_stack<F>() -> VStack {
     VStack::new()
@@ -15,8 +15,9 @@ pub fn h_stack<F>() -> HStack {
 }
 
 pub struct VStack {
+    id: WidgetId,
     state: WidgetState,
-    children: Children,
+    layout_rules: LayoutRules,
 }
 
 impl VStack {
@@ -27,29 +28,37 @@ impl VStack {
             .with_border_paint(Rgba::TRANSPARENT)
             .with_shape(Shape::Rect);
 
-        let mut children = Children::new();
-        children.orientation(Orientation::Vertical);
+        let mut layout_rules = LayoutRules::default();
+        layout_rules.orientation = Orientation::Vertical;
 
         Self {
+            id: ENTITY_MANAGER.with_borrow_mut(|m| m.create()),
             state,
-            children,
+            layout_rules,
         }
     }
 }
 
 impl Widget for VStack {
-    fn state(&self) -> &WidgetState {
-        &self.state
+    fn id(&self) -> &WidgetId {
+        &self.id
     }
 
-    fn children(&self) -> Option<&Children> {
-        Some(&self.children)
+    fn state(&mut self) -> &mut WidgetState {
+        &mut self.state
+    }
+}
+
+impl ParentWidget for VStack {
+    fn layout_rules(&mut self) -> &mut LayoutRules {
+        &mut self.layout_rules
     }
 }
 
 pub struct HStack {
+    id: WidgetId,
     state: WidgetState,
-    children: Children,
+    layout_rules: LayoutRules,
 }
 
 impl HStack {
@@ -60,22 +69,29 @@ impl HStack {
             .with_border_paint(Rgba::TRANSPARENT)
             .with_shape(Shape::Rect);
 
-        let mut children = Children::new();
-        children.orientation(Orientation::Horizontal);
+        let mut layout_rules = LayoutRules::default();
+        layout_rules.orientation = Orientation::Horizontal;
 
         Self {
+            id: ENTITY_MANAGER.with_borrow_mut(|m| m.create()),
             state,
-            children,
+            layout_rules,
         }
     }
 }
 
 impl Widget for HStack {
-    fn state(&self) -> &WidgetState {
-        &self.state
+    fn id(&self) -> &WidgetId {
+        &self.id
     }
 
-    fn children(&self) -> Option<&Children> {
-        Some(&self.children)
+    fn state(&mut self) -> &mut WidgetState {
+        &mut self.state
+    }
+}
+
+impl ParentWidget for HStack {
+    fn layout_rules(&mut self) -> &mut LayoutRules {
+        &mut self.layout_rules
     }
 }

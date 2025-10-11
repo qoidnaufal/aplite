@@ -4,7 +4,7 @@ use aplite_renderer::Shape;
 use aplite_types::ImageData;
 
 use crate::state::WidgetState;
-use super::{Widget};
+use super::{Widget, WidgetId, ENTITY_MANAGER};
 
 pub fn image<F: Fn() -> ImageData + 'static>(image_fn: F) -> Image {
     Image::new(image_fn)
@@ -26,6 +26,7 @@ pub fn image_reader<P: AsRef<Path>>(path: P) -> ImageData {
 }
 
 pub struct Image {
+    id: WidgetId,
     state: WidgetState,
 }
 
@@ -36,12 +37,19 @@ impl Image {
             .with_background_paint(image_fn())
             .with_shape(Shape::Rect);
 
-        Self { state }
+        Self {
+            id: ENTITY_MANAGER.with_borrow_mut(|m| m.create()),
+            state,
+        }
     }
 }
 
 impl Widget for Image {
-    fn state(&self) -> &WidgetState {
-        &self.state
+    fn id(&self) -> &WidgetId {
+        &self.id
+    }
+
+    fn state(&mut self) -> &mut WidgetState {
+        &mut self.state
     }
 }

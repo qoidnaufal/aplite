@@ -19,31 +19,35 @@ pub mod prelude {
     pub use crate::context::Context;
     pub use crate::cursor::Cursor;
     pub use crate::state::AspectRatio;
+
     pub use crate::layout::{
         Orientation,
         Padding,
         AlignV,
         AlignH
     };
+
     pub use crate::widget::{
         WidgetId,
         Widget,
         WidgetExt,
-        CircleWidget,
-        HStack,
-        VStack,
-        Button,
-        Image,
-        h_stack,
-        v_stack,
-        button,
-        image,
+        ParentWidget,
         image_reader,
     };
+
+    pub use crate::widget::{
+        circle,  CircleWidget,
+        h_stack, HStack,
+        v_stack, VStack,
+        button,  Button,
+        image,   Image,
+    };
+
     pub use crate::view::{
         IntoView,
         View,
     };
+
     pub use crate::widget::WidgetEvent::*;
 
     pub type ApliteResult = Result<(), ApliteError>;
