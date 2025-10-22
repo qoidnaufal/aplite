@@ -23,6 +23,10 @@ pub(crate) struct WindowHandle {
     pub(crate) window: Arc<Window>,
 }
 
+pub struct AppConfig {
+    pub allocation_size: usize,
+}
+
 pub struct Aplite {
     cx: Context,
     renderer: Option<Renderer>,

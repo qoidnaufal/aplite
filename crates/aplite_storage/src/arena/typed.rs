@@ -2,27 +2,28 @@ use std::alloc;
 use std::marker::PhantomData;
 use std::ptr::slice_from_raw_parts_mut;
 
-pub struct Arena<T> {
+use super::item::ArenaItem;
+
+pub struct TypedArena<T> {
     block: *mut u8,
     capacity: usize,
     len: usize,
     marker: PhantomData<T>,
 }
 
-impl<T> Drop for Arena<T> {
+impl<T> Drop for TypedArena<T> {
     fn drop(&mut self) {
         unsafe {
+            self.clear();
             let size = size_of::<T>() * self.capacity;
             let align = align_of::<T>();
-            let slice = slice_from_raw_parts_mut(self.block.cast::<T>(), self.len);
-            std::ptr::drop_in_place(slice);
             let layout = alloc::Layout::from_size_align_unchecked(size, align);
             alloc::dealloc(self.block, layout);
         }
     }
 }
 
-impl<T> Arena<T> {
+impl<T> TypedArena<T> {
     pub fn new(capacity: usize) -> Self {
         unsafe {
             let size = size_of::<T>() * capacity;
@@ -41,14 +42,14 @@ impl<T> Arena<T> {
         }
     }
 
-    pub fn insert(&mut self, data: T) -> Ptr<T> {
-        assert!(self.len <= self.capacity);
+    pub fn insert(&mut self, data: T) -> ArenaItem<T> {
+        assert!(self.len < self.capacity, "max capacity reached");
         unsafe {
             let ptr = self.block.add(self.len * size_of::<T>()).cast();
             self.len += 1;
             std::ptr::write(ptr, data);
 
-            Ptr { ptr }
+            ArenaItem(ptr)
         }
     }
 
@@ -60,11 +61,11 @@ impl<T> Arena<T> {
         }
     }
 
-    pub fn get_ptr(&self, index: usize) -> Ptr<T> {
-        if index >= self.len { panic!() }
+    pub fn get_ptr(&self, index: usize) -> ArenaItem<T> {
+        assert!(index < self.len);
         unsafe {
             let ptr = self.block.add(index * size_of::<T>()).cast();
-            Ptr { ptr }
+            ArenaItem(ptr)
         }
     }
 
@@ -76,6 +77,13 @@ impl<T> Arena<T> {
         }
     }
 
+    pub fn clear(&mut self) {
+        unsafe {
+            let slice = slice_from_raw_parts_mut(self.block.cast::<T>(), self.len);
+            std::ptr::drop_in_place(slice);
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.len
     }
@@ -84,51 +92,21 @@ impl<T> Arena<T> {
         self.capacity
     }
 
-    pub fn iter<'a>(&'a self) -> ArenaIter<'a, T> {
-        ArenaIter {
+    pub fn iter<'a>(&'a self) -> TypedArenaIter<'a, T> {
+        TypedArenaIter {
             inner: self,
             cursor: 0,
         }
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct Ptr<T: ?Sized> {
-    ptr: *mut T,
-}
 
-impl<T: ?Sized> Ptr<T> {
-    pub fn map<U: ?Sized>(mut self, f: impl FnOnce(&mut T) -> &mut U) -> Ptr<U> {
-        Ptr {
-            ptr: f(&mut self)
-        }
-    }
-}
-
-impl<T: ?Sized> std::ops::Deref for Ptr<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe {
-            &*self.ptr
-        }
-    }
-}
-
-impl<T: ?Sized> std::ops::DerefMut for Ptr<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe {
-            &mut *self.ptr
-        }
-    }
-}
-
-pub struct ArenaIter<'a, T> {
-    inner: &'a Arena<T>,
+pub struct TypedArenaIter<'a, T> {
+    inner: &'a TypedArena<T>,
     cursor: usize,
 }
 
-impl<'a, T> Iterator for ArenaIter<'a, T> {
+impl<'a, T> Iterator for TypedArenaIter<'a, T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {

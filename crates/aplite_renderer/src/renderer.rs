@@ -275,7 +275,7 @@ pub struct DrawArgs<'a> {
 
 // FIXME: this feels immediate mode to me, idk
 impl Scene<'_> {
-    pub fn draw(
+    fn draw(
         &mut self,
         DrawArgs {
             rect,
@@ -372,6 +372,64 @@ impl Scene<'_> {
         self.mesh.offset += 1;
     }
 
+    pub fn draw_rect(
+        &mut self,
+        rect: &Rect,
+        transform: &Matrix3x2,
+        background_paint: &PaintRef<'_>,
+        border_paint: &PaintRef<'_>,
+        border_width: &f32,
+    ) {
+        self.draw(DrawArgs {
+            rect,
+            transform,
+            background_paint,
+            border_paint,
+            border_width,
+            shape: &Shape::Rect,
+            corner_radius: &CornerRadius::splat(0),
+        });
+    }
+
+    pub fn draw_rounded_rect(
+        &mut self,
+        rect: &Rect,
+        transform: &Matrix3x2,
+        background_paint: &PaintRef<'_>,
+        border_paint: &PaintRef<'_>,
+        border_width: &f32,
+        corner_radius: &CornerRadius,
+    ) {
+        self.draw(DrawArgs {
+            rect,
+            transform,
+            background_paint,
+            border_paint,
+            border_width,
+            shape: &Shape::RoundedRect,
+            corner_radius,
+        });
+    }
+
+    pub fn draw_circle(
+        &mut self,
+        rect: &Rect,
+        transform: &Matrix3x2,
+        background_paint: &PaintRef<'_>,
+        border_paint: &PaintRef<'_>,
+        border_width: &f32,
+    ) {
+        self.draw(DrawArgs {
+            rect,
+            transform,
+            background_paint,
+            border_paint,
+            border_width,
+            shape: &Shape::Circle,
+            corner_radius: &CornerRadius::splat(0),
+        });
+    }
+
     pub fn next_draw(&mut self) {
         self.mesh.offset += 1;
     }
@@ -466,68 +524,3 @@ const fn backend() -> wgpu::Backends {
         wgpu::Backends::GL
     }
 }
-
-// pub struct Scene2<'a> {
-//     indices: Vec<u32>,
-//     vertices: Vec<crate::mesh::Vertex>,
-//     elements: Vec<Element>,
-//     transforms: Vec<Matrix3x2>,
-//     size: Size,
-//     atlas: &'a mut Atlas,
-// }
-
-// impl<'a> Scene2<'a> {
-//     pub fn draw(
-//         &mut self,
-//         rect: &Rect,
-//         transform: Matrix3x2,
-//         background_paint: PaintRef<'_>,
-//         border_paint: PaintRef<'_>,
-//         border_width: f32,
-//         shape: Shape,
-//         corner_radius: &CornerRadius,
-//     ) {
-//         let mut element = Element::new(rect.size() / self.size)
-//             .with_shape(shape)
-//             .with_corner_radius(corner_radius)
-//             .with_border_width(border_width / self.size.width);
-
-//         match border_paint {
-//             PaintRef::Color(rgba) => {
-//                 element.border = rgba.pack_u32();
-//             },
-//             PaintRef::Image(_image_ref) => {
-//                 todo!("not implemented yet")
-//             },
-//         }
-
-//         let vertices = match background_paint {
-//             PaintRef::Color(rgba) => {
-//                 element.background = rgba.pack_u32();
-//                 Vertices::new(
-//                     rect,
-//                     Uv {
-//                         min_x: 0.,
-//                         min_y: 0.,
-//                         max_x: 1.,
-//                         max_y: 1.,
-//                     },
-//                     self.size,
-//                     self.elements.len() as _,
-//                     0,
-//                 )
-//             },
-//             PaintRef::Image(image_ref) => {
-//                 let uv = self.atlas.append(image_ref).unwrap();
-//                 Vertices::new(rect, uv, self.size, self.elements.len() as _, 1)
-//             }
-//         };
-
-//         let indices = Indices::new(self.elements.len() as _);
-
-//         self.indices.extend_from_slice(indices.as_slice());
-//         self.vertices.extend_from_slice(vertices.as_slice());
-//         self.transforms.push(transform);
-//         self.elements.push(element);
-//     }
-// }

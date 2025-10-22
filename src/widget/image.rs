@@ -1,10 +1,10 @@
 use std::path::Path;
 
-use aplite_renderer::Shape;
+use aplite_renderer::{Shape, Scene, DrawArgs};
 use aplite_types::ImageData;
 
 use crate::state::WidgetState;
-use super::{Widget, WidgetId, ENTITY_MANAGER};
+use super::{Widget, WidgetId};
 
 pub fn image<F: Fn() -> ImageData + 'static>(image_fn: F) -> Image {
     Image::new(image_fn)
@@ -26,7 +26,6 @@ pub fn image_reader<P: AsRef<Path>>(path: P) -> ImageData {
 }
 
 pub struct Image {
-    id: WidgetId,
     state: WidgetState,
 }
 
@@ -38,18 +37,29 @@ impl Image {
             .with_shape(Shape::Rect);
 
         Self {
-            id: ENTITY_MANAGER.with_borrow_mut(|m| m.create()),
             state,
         }
     }
 }
 
 impl Widget for Image {
-    fn id(&self) -> &WidgetId {
-        &self.id
+    fn state_ref(&self) -> &WidgetState {
+        &self.state
     }
 
-    fn state(&mut self) -> &mut WidgetState {
+    fn state_mut(&mut self) -> &mut WidgetState {
         &mut self.state
+    }
+
+    fn draw(&self, scene: &mut Scene) {
+        if self.state.flag.visible {
+            scene.draw_rect(
+                &self.state.rect,
+                &self.state.transform,
+                &self.state.background.paint.as_paint_ref(),
+                &self.state.border.paint.as_paint_ref(),
+                &self.state.border.width,
+            );
+        }
     }
 }

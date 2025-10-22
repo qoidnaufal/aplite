@@ -1,10 +1,10 @@
-use aplite_types::Rgba;
-use aplite_renderer::Shape;
+use aplite_types::{Rgba, Unit};
+use aplite_renderer::{Shape, Scene};
 
-use crate::layout::{LayoutRules, Orientation};
-use crate::state::WidgetState;
+use crate::layout::{Layout, LayoutRules, Orientation};
+use crate::view::IntoView;
 
-use super::{WidgetId, Widget, ParentWidget, ENTITY_MANAGER};
+use super::{WidgetId, Widget};
 
 pub fn v_stack<F>() -> VStack {
     VStack::new()
@@ -16,26 +16,39 @@ pub fn h_stack<F>() -> HStack {
 
 pub struct VStack {
     id: WidgetId,
-    state: WidgetState,
+    min_width: Option<f32>,
+    min_height: Option<f32>,
+    max_width: Option<f32>,
+    max_height: Option<f32>,
+    background: Rgba,
+    border: Rgba,
+    border_width: f32,
     layout_rules: LayoutRules,
+    children: Vec<Box<dyn IntoView>>,
 }
 
 impl VStack {
     pub fn new() -> Self {
-        let state = WidgetState::default()
-            .with_size(1, 1)
-            .with_background_paint(Rgba::TRANSPARENT)
-            .with_border_paint(Rgba::TRANSPARENT)
-            .with_shape(Shape::Rect);
-
-        let mut layout_rules = LayoutRules::default();
-        layout_rules.orientation = Orientation::Vertical;
-
         Self {
-            id: ENTITY_MANAGER.with_borrow_mut(|m| m.create()),
-            state,
-            layout_rules,
+            id: WidgetId::new_id(),
+            min_width: Some(1.),
+            min_height: Some(1.),
+            max_width: None,
+            max_height: None,
+            background: Rgba::TRANSPARENT,
+            border: Rgba::TRANSPARENT,
+            border_width: 0.,
+            layout_rules: LayoutRules {
+                orientation: Orientation::Vertical,
+                ..Default::default()
+            },
+            children: Vec::new(),
         }
+    }
+
+    pub fn child(mut self, child: impl IntoView + 'static) -> Self {
+        self.children.push(Box::new(child));
+        self
     }
 }
 
@@ -44,38 +57,44 @@ impl Widget for VStack {
         &self.id
     }
 
-    fn state(&mut self) -> &mut WidgetState {
-        &mut self.state
+    fn draw(&self, scene: &mut Scene) {
+        todo!()
     }
-}
 
-impl ParentWidget for VStack {
-    fn layout_rules(&mut self) -> &mut LayoutRules {
-        &mut self.layout_rules
+    fn layout(&self, cx: &mut Layout) {
+        todo!()
     }
 }
 
 pub struct HStack {
     id: WidgetId,
-    state: WidgetState,
+    min_width: Option<f32>,
+    min_height: Option<f32>,
+    max_width: Option<f32>,
+    max_height: Option<f32>,
+    background: Rgba,
+    border: Rgba,
+    border_width: f32,
     layout_rules: LayoutRules,
+    children: Vec<Box<dyn IntoView>>,
 }
 
 impl HStack {
     pub fn new() -> Self {
-        let state = WidgetState::default()
-            .with_size(1, 1)
-            .with_background_paint(Rgba::TRANSPARENT)
-            .with_border_paint(Rgba::TRANSPARENT)
-            .with_shape(Shape::Rect);
-
-        let mut layout_rules = LayoutRules::default();
-        layout_rules.orientation = Orientation::Horizontal;
-
         Self {
-            id: ENTITY_MANAGER.with_borrow_mut(|m| m.create()),
-            state,
-            layout_rules,
+            id: WidgetId::new_id(),
+            min_width: Some(1.),
+            min_height: Some(1.),
+            max_width: None,
+            max_height: None,
+            background: Rgba::TRANSPARENT,
+            border: Rgba::TRANSPARENT,
+            border_width: 0.,
+            layout_rules: LayoutRules {
+                orientation: Orientation::Horizontal,
+                ..Default::default()
+            },
+            children: Vec::new(),
         }
     }
 }
@@ -85,13 +104,11 @@ impl Widget for HStack {
         &self.id
     }
 
-    fn state(&mut self) -> &mut WidgetState {
-        &mut self.state
+    fn layout(&self, cx: &mut Layout) {
+        todo!()
     }
-}
 
-impl ParentWidget for HStack {
-    fn layout_rules(&mut self) -> &mut LayoutRules {
-        &mut self.layout_rules
+    fn draw(&self, scene: &mut Scene) {
+        todo!()
     }
 }

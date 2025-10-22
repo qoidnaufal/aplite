@@ -1,32 +1,46 @@
-use aplite_renderer::Shape;
-use super::{Widget, WidgetId, ENTITY_MANAGER};
+use aplite_renderer::{Shape, Scene};
+
+use super::{Widget, WidgetId};
 use crate::state::WidgetState;
 
 pub fn button() -> Button { Button::new() }
 
 pub struct Button {
-    id: WidgetId,
     state: WidgetState,
 }
 
 impl Button {
     pub fn new() -> Self {
-        let id = ENTITY_MANAGER.with_borrow_mut(|m| m.create());
         let state = WidgetState::default()
             .with_shape(Shape::RoundedRect)
             .hoverable()
             .with_size(80, 30);
 
-        Self { id, state }
+        Self {
+            state
+        }
     }
 }
 
 impl Widget for Button {
-    fn id(&self) -> &WidgetId {
-        &self.id
+    fn state_ref(&self) -> &WidgetState {
+        &self.state
     }
 
-    fn state(&mut self) -> &mut WidgetState {
+    fn state_mut(&mut self) -> &mut WidgetState {
         &mut self.state
+    }
+
+    fn draw(&self, scene: &mut Scene) {
+        if self.state.flag.visible {
+            scene.draw_rounded_rect(
+                &self.state.rect,
+                &self.state.transform,
+                &self.state.background.paint.as_paint_ref(),
+                &self.state.border.paint.as_paint_ref(),
+                &self.state.border.width,
+                &self.state.corner_radius,
+            );
+        }
     }
 }

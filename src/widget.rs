@@ -1,13 +1,13 @@
-use std::cell::{Cell, RefCell, UnsafeCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
 
-use aplite_renderer::Shape;
-use aplite_types::{Rgba, CornerRadius, Size, Rect, Unit};
-use aplite_storage::{EntityManager, Entity, Tree, create_entity};
+use aplite_renderer::{Shape, Scene};
+use aplite_types::{Rgba, CornerRadius, Size, Rect, Unit, Paint, Matrix3x2};
+use aplite_storage::{Entity, EntityManager, ArenaItem, create_entity};
 
 use crate::layout::*;
 use crate::view::{IntoView, View};
-use crate::state::WidgetState;
+use crate::state::Border;
 
 mod button;
 mod image;
@@ -20,14 +20,17 @@ pub use {
 };
 
 thread_local! {
-    pub(crate) static ENTITY_MANAGER: RefCell<EntityManager<WidgetId>> =
-        RefCell::new(EntityManager::default());
-
-    pub(crate) static TREE: RefCell<Tree<WidgetId>> = RefCell::new(Tree::default());
+    static ID_MANAGER: RefCell<EntityManager<WidgetId>> = RefCell::new(EntityManager::default());
 }
 
 create_entity! {
     pub WidgetId
+}
+
+impl WidgetId {
+    pub fn new_id() -> Self {
+        ID_MANAGER.with_borrow_mut(|manager| manager.create())
+    }
 }
 
 pub struct Interactivity {}
@@ -36,109 +39,9 @@ pub struct Interactivity {}
 pub trait Widget {
     fn id(&self) -> &WidgetId;
 
-    fn state(&mut self) -> &mut WidgetState;
+    fn layout(&self, cx: &mut Layout);
 
-    // fn draw(&self, scene: &mut Scene) {
-    //     let node = self.node_ref().unwrap().upgrade();
-
-    //     if !node.borrow().flag.is_hidden() {
-    //         if node.borrow().flag.is_dirty() {
-    //             let state = node.borrow();
-
-    //             scene.draw(&aplite_renderer::DrawArgs {
-    //                 rect: &state.rect,
-    //                 transform: &state.transform,
-    //                 background_paint: &state.background_paint.as_paint_ref(),
-    //                 border_paint: &state.border_paint.as_paint_ref(),
-    //                 border_width: state.border_width.max(5.0),
-    //                 shape: state.shape,
-    //                 corner_radius: state.corner_radius,
-    //             });
-
-    //             drop(state);
-
-    //             node.borrow_mut().flag.set_dirty(false);
-    //         } else {
-    //             scene.next_draw();
-    //         }
-
-    //         if let Some(children) = self.children_ref() {
-    //             children
-    //                 .iter()
-    //                 .for_each(|child| {
-    //                     child.draw(scene);
-    //                 });
-    //         }
-    //     }
-    // }
-
-    // fn layout(&self, cx: &mut LayoutCx) -> bool {
-    //     let node = self.node_ref().unwrap().upgrade();
-    //     if node.borrow().flag.is_hidden() { return false }
-
-    //     let size = node.borrow().rect.size();
-    //     let mut this = node.borrow_mut();
-
-    //     match cx.rules.orientation {
-    //         Orientation::Vertical => {
-    //             match cx.rules.align_h {
-    //                 AlignH::Left | AlignH::Right => this.rect.x = cx.next_pos.x,
-    //                 AlignH::Center => this.rect.x = cx.next_pos.x - size.width / 2.,
-    //             }
-
-    //             this.rect.y = cx.next_pos.y;
-    //             cx.next_pos.y += cx.rules.spacing as f32 + size.height;
-    //         },
-    //         Orientation::Horizontal => {
-    //             match cx.rules.align_v {
-    //                 AlignV::Top | AlignV::Bottom => this.rect.y = cx.next_pos.y,
-    //                 AlignV::Middle => this.rect.y = cx.next_pos.y - size.height / 2.,
-    //             }
-
-    //             this.rect.x = cx.next_pos.x;
-    //             cx.next_pos.x += cx.rules.spacing as f32 + size.width;
-    //         },
-    //     }
-
-    //     this.flag.set_dirty(true);
-
-    //     true
-    // }
-
-}
-
-pub trait ParentWidget: Widget + Sized {
-    fn child(self, child: impl IntoView + 'static) -> Self {
-        TREE.with_borrow_mut(|tree| tree.insert(*child.id(), Some(*self.id())));
-        self
-    }
-
-    fn layout_rules(&mut self) -> &mut LayoutRules;
-
-    fn padding(mut self, padding: Padding) -> Self {
-        self.layout_rules().padding = padding;
-        self
-    }
-
-    fn spacing(mut self, spacing: u8) -> Self {
-        self.layout_rules().spacing = spacing;
-        self
-    }
-
-    fn align_h(mut self, align_h: AlignH) -> Self {
-        self.layout_rules().align_h = align_h;
-        self
-    }
-
-    fn align_v(mut self, align_v: AlignV) -> Self {
-        self.layout_rules().align_v = align_v;
-        self
-    }
-
-    fn orientation(mut self, orientation: Orientation) -> Self {
-        self.layout_rules().orientation = orientation;
-        self
-    }
+    fn draw(&self, scene: &mut Scene);
 }
 
 // TODO: is immediately calculate the size here a good idea?
@@ -187,8 +90,7 @@ pub trait WidgetExt: Widget + Sized {
     }
 
     fn shape(mut self, shape: Shape) -> Self {
-        self.state().shape = shape;
-        // let _ = shape;
+        let _ = shape;
         self
     }
 
@@ -239,28 +141,30 @@ impl Widget for Box<dyn Widget> {
         self.as_ref().id()
     }
 
-    fn state(&mut self) -> &mut WidgetState {
-        self.as_mut().state()
+    fn layout(&self, cx: &mut Layout) {
+        self.as_ref().layout(cx);
+    }
+
+    fn draw(&self, scene: &mut Scene) {
+        self.as_ref().draw(scene);
     }
 }
 
-impl Widget for Box<&mut dyn Widget> {
+impl Widget for ArenaItem<dyn Widget> {
     fn id(&self) -> &WidgetId {
         self.as_ref().id()
     }
 
-    fn state(&mut self) -> &mut WidgetState {
-        self.as_mut().state()
+    fn layout(&self, cx: &mut Layout) {
+        self.as_ref().layout(cx);
+    }
+
+    fn draw(&self, scene: &mut Scene) {
+        self.as_ref().draw(scene);
     }
 }
 
-impl std::fmt::Debug for Box<dyn Widget> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.as_ref().fmt(f)
-    }
-}
-
-impl std::fmt::Debug for &dyn Widget {
+impl std::fmt::Debug for dyn Widget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct(std::any::type_name::<Self>())
             .finish()
@@ -303,23 +207,25 @@ impl CallbackStore {
 
 // -------------------------------------
 
-pub(crate) fn window(rect: Rect) -> WindowWidget {
-    WindowWidget::new(rect)
+pub(crate) fn window(size: Size) -> WindowWidget {
+    WindowWidget::new(size)
 }
 
 pub(crate) struct WindowWidget {
     id: WidgetId,
-    state: WidgetState,
+    size: Size,
     layout_rules: LayoutRules,
+    children: Vec<Box<dyn IntoView>>,
 }
 
 impl WindowWidget {
-    pub(crate) fn new(rect: Rect) -> Self {
+    pub(crate) fn new(size: Size) -> Self {
         let layout_rules = LayoutRules::default();
         Self {
-            id: ENTITY_MANAGER.with_borrow_mut(|m| m.create()),
-            state: WidgetState::window(rect.width, rect.height),
+            id: WidgetId::new_id(),
+            size,
             layout_rules,
+            children: Vec::new(),
         }
     }
 }
@@ -328,14 +234,19 @@ impl Widget for WindowWidget {
     fn id(&self) -> &WidgetId {
         &self.id
     }
-    fn state(&mut self) -> &mut WidgetState {
-        &mut self.state
+
+    fn layout(&self, cx: &mut Layout) {
+        todo!()
+    }
+
+    fn draw(&self, scene: &mut Scene) {
+        todo!()
     }
 }
 
-impl ParentWidget for WindowWidget {
-    fn layout_rules(&mut self) -> &mut LayoutRules {
-        &mut self.layout_rules
+impl IntoView for WindowWidget {
+    fn into_view(self) -> View {
+        View::new(self)
     }
 }
 
@@ -347,17 +258,37 @@ pub fn circle() -> CircleWidget {
 
 pub struct CircleWidget {
     id: WidgetId,
-    state: WidgetState,
+    radius: Unit,
+    background: Rgba,
+    border: Rgba,
+    border_width: f32,
+    transform: Matrix3x2,
 }
 
 impl CircleWidget {
     pub fn new() -> Self {
-        let id = ENTITY_MANAGER.with_borrow_mut(|m| m.create());
-        let state = WidgetState::default()
-            .with_size(100, 100)
-            .with_shape(Shape::Circle)
-            .with_border_width(5.);
-        Self { id, state }
+        Self {
+            id: WidgetId::new_id(),
+            radius: Unit::Fixed(100.),
+            background: Rgba::RED,
+            border: Rgba::RED,
+            border_width: 0.0,
+            transform: Matrix3x2::identity(),
+        }
+    }
+
+    pub fn radius(self, radius: Unit) -> Self {
+        Self {
+            radius,
+            ..self
+        }
+    }
+
+    pub fn background(self, color: Rgba) -> Self {
+        Self {
+            background: color,
+            ..self
+        }
     }
 }
 
@@ -366,7 +297,35 @@ impl Widget for CircleWidget {
         &self.id
     }
 
-    fn state(&mut self) -> &mut WidgetState {
-        &mut self.state
+    fn layout(&self, cx: &mut Layout) {
+        let parent_bound = cx.parent_rect(&self.id).map(|r| (r.width, r.height));
+        let rect = cx.rects.get_or_insert(&self.id, || Rect::default());
+
+        match self.radius {
+            Unit::Fixed(r) => {
+                rect.width = r;
+                rect.height = r;
+            },
+            Unit::Grow => {
+                let grow = if let Some((w, h)) = parent_bound {
+                    w.min(h)
+                } else {
+                    cx.window_rect.width.min(cx.window_rect.height)
+                };
+                rect.width = grow;
+                rect.height = grow;
+            },
+            Unit::Fit => {},
+        }
+    }
+
+    fn draw(&self, scene: &mut Scene) {
+        todo!()
+    }
+}
+
+impl IntoView for CircleWidget {
+    fn into_view(self) -> View {
+        View::new(self)
     }
 }

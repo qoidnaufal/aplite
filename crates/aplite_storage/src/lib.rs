@@ -5,7 +5,11 @@ mod indexmap;
 mod iterator;
 mod tree;
 
-pub use arena::Arena;
+pub use arena::{
+    typed::TypedArena,
+    untyped::Arena,
+    item::ArenaItem,
+};
 pub use entity::{Entity, EntityManager};
 pub use indexmap::{
     IndexMap,
@@ -16,8 +20,9 @@ pub use tree::{
     node::{Node, NodeRef},
 };
 pub use data::{
-    array::{Array, ImmutableArray},
+    array::Array,
     component::{Query, Component, IntoComponent},
     sparse_index::SparseIndices,
     table::Table,
 };
+pub use iterator::{TreeChildIter, TreeDepthIter};

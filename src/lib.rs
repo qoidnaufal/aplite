@@ -31,7 +31,6 @@ pub mod prelude {
         WidgetId,
         Widget,
         WidgetExt,
-        ParentWidget,
         image_reader,
     };
 

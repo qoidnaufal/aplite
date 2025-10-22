@@ -1,22 +1,23 @@
 use aplite_reactive::*;
 use aplite_renderer::{Renderer};
 use aplite_types::{Vec2f, Rect};
-use aplite_storage::{Entity, EntityManager};
+use aplite_storage::{Arena, TypedArena, Array, Entity, EntityManager};
 
-use crate::view::View;
+use crate::view::{IntoView, View};
 use crate::widget::{CALLBACKS, WidgetId, WidgetEvent};
 use crate::cursor::{Cursor, MouseAction, MouseButton, EmittedClickEvent};
 use crate::layout::Layout;
-use crate::state::{State, Flag};
+use crate::state::Flag;
 
 pub struct Context {
     pub(crate) view: View,
+    pub(crate) arena: Arena,
+    pub(crate) views: Array<WidgetId, View>,
     pub(crate) manager: EntityManager<WidgetId>,
-    pub(crate) state: State,
-    pub(crate) layout: Layout,
     pub(crate) dirty: Signal<bool>,
     pub(crate) cursor: Cursor,
     pub(crate) current: Option<WidgetId>,
+    pub(crate) rect: Rect,
     pending_update: Vec<WidgetId>,
 }
 
@@ -30,20 +31,19 @@ impl Context {
     pub(crate) fn new(view: View) -> Self {
         Self {
             view,
+            arena: Arena::new(1024 * 1024),
+            views: Array::default(),
             manager: EntityManager::default(),
-            state: State::default(),
-            layout: Layout::new(),
             cursor: Cursor::default(),
             dirty: Signal::new(false),
             current: None,
+            rect: Rect::default(),
             pending_update: Vec::new(),
         }
     }
 
     pub fn create_id(&mut self) -> WidgetId {
-        let id = self.manager.create();
-        self.state.insert_default_state(&id);
-        id
+        self.manager.create()
     }
 
     pub(crate) fn toggle_dirty(&self) {
@@ -94,91 +94,36 @@ impl Context {
         self.handle_drag();
     }
 
-    fn detect_hover(&mut self) {
-        let query_rect = self.state.common.query::<&Rect>();
-        if let Some(id) = self.cursor.hover.curr {
-            let rect = query_rect.get(&id).unwrap();
+    fn detect_hover(&mut self) {}
 
-            if !rect.contains(self.cursor.hover_pos()) {
-                self.cursor.hover.curr = self.layout.tree.get_parent(&id).copied();
-            } else {
-                self.cursor.hover.curr = self.layout.tree
-                    .iter_children(&id)
-                    .find(|child| {
-                        let child_rect = query_rect.get(*child).unwrap();
-                        child_rect.contains(self.cursor.hover_pos())
-                    })
-                    .or(Some(&id))
-                    .copied();
-            }
-        } else {
-            self.cursor.hover.curr = self.layout.tree
-                .iter_depth(&WidgetId::root())
-                .filter(|member| {
-                    self.state.common
-                        .query::<&Flag>().get(*member)
-                        .is_some_and(|flag| flag.visible)
-                })
-                .find(|member| {
-                    let rect = query_rect.get(*member).unwrap();
-                    rect.contains(self.cursor.hover_pos())
-                })
-                .copied();
-        }
-
-        // let hovered = self.view.detect_hover(&self.cursor).map(Widget::id);
-        // self.cursor.hover.curr = hovered;
-    }
-
-    pub(crate) fn handle_drag(&mut self) {
-        if let Some(captured) = self.cursor.click.captured {
-            let (rect, flag) = self.state.common
-                .query::<(&mut Rect, &mut Flag)>()
-                .get(&captured)
-                .unwrap();
-
-            if self.cursor.is_dragging() && flag.movable {
-                self.cursor.is_dragging = true;
-                let pos = self.cursor.hover.pos - self.cursor.click.offset;
-
-                rect.set_pos(pos);
-                flag.needs_redraw = true;
-
-                self.layout.calculate_position(&captured, &self.state);
-                // TODO: dirty scissor rect
-                self.toggle_dirty();
-            }
-        }
-    }
+    pub(crate) fn handle_drag(&mut self) {}
 
     pub(crate) fn handle_click(
         &mut self,
         action: impl Into<MouseAction>,
         button: impl Into<MouseButton>
     ) {
-        match self.cursor.process_click_event(action.into(), button.into()) {
-            EmittedClickEvent::Captured(captured) => {
-                let pos = self.state.common.query::<&Rect>().get(&captured).unwrap().vec2f();
-                self.cursor.click.offset = self.cursor.click.pos - pos;
-            },
-            EmittedClickEvent::TriggerCallback(id) => {
-                CALLBACKS.with_borrow_mut(|cb| {
-                    if let Some(callbacks) = cb.get_mut(&id)
-                        && let MouseButton::Left = self.cursor.state.button
-                        && let Some(callback) = callbacks.get_mut(WidgetEvent::LeftClick)
-                    {
-                        callback();
-                        self.toggle_dirty();
-                    }
-                });
-            },
-            _ => {}
-        }
+        // match self.cursor.process_click_event(action.into(), button.into()) {
+        //     EmittedClickEvent::Captured(captured) => {
+        //         let pos = self.state.common.query::<&Rect>().get(&captured).unwrap().vec2f();
+        //         self.cursor.click.offset = self.cursor.click.pos - pos;
+        //     },
+        //     EmittedClickEvent::TriggerCallback(id) => {
+        //         CALLBACKS.with_borrow_mut(|cb| {
+        //             if let Some(callbacks) = cb.get_mut(&id)
+        //                 && let MouseButton::Left = self.cursor.state.button
+        //                 && let Some(callback) = callbacks.get_mut(WidgetEvent::LeftClick)
+        //             {
+        //                 callback();
+        //                 self.toggle_dirty();
+        //             }
+        //         });
+        //     },
+        //     _ => {}
+        // }
     }
 
-    pub(crate) fn calculate_layout(&mut self) {
-        self.layout.calculate_layout(&WidgetId::root(), &self.state);
-    }
+    pub(crate) fn calculate_layout(&mut self) {}
 
 // #########################################################
 // #                                                       #
@@ -186,10 +131,5 @@ impl Context {
 // #                                                       #
 // #########################################################
 
-    pub(crate) fn render(&self, renderer: &mut Renderer) {
-        self.state.render(renderer, &self.layout.tree);
-
-        // let mut scene = renderer.scene();
-        // self.view.widget.draw(&mut scene);
-    }
+    pub(crate) fn render(&self, renderer: &mut Renderer) {}
 }

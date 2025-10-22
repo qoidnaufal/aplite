@@ -37,7 +37,7 @@ pub(crate) struct Graph;
 
 impl Graph {
     pub(crate) fn insert<R: Reactive + Send + Sync + 'static>(r: R) -> Node<R> {
-        let mut graph = GRAPH.get_or_init(Default::default).write().unwrap();
+        let mut graph = Self::write();
         let id = graph.storage.insert(Box::new(r));
         Node { id, marker: PhantomData }
     }
