@@ -37,8 +37,8 @@ pub struct IdManager {
 }
 
 impl Default for IdManager {
-    /// Create a new manager with no preallocated capacity at all.
-    /// If you want to preallocate a specific initial capacity, use [`EntityManager::with_version_capacity`] or [`EntityManager::with_same_capacity`]
+    /// Create a new manager with no reserved capacity at all.
+    /// If you want to preallocate a specific initial capacity, use [`IdManager::with_capacity`]
     fn default() -> Self {
         Self::with_capacity(0)
     }
