@@ -1,10 +1,10 @@
 use std::path::Path;
 
-use aplite_renderer::{Shape, Scene, DrawArgs};
-use aplite_types::ImageData;
+use aplite_types::{ImageData, Unit};
 
-use crate::state::WidgetState;
-use super::{Widget, WidgetId};
+use crate::state::AspectRatio;
+
+use super::Widget;
 
 pub fn image<F: Fn() -> ImageData + 'static>(image_fn: F) -> Image {
     Image::new(image_fn)
@@ -26,40 +26,21 @@ pub fn image_reader<P: AsRef<Path>>(path: P) -> ImageData {
 }
 
 pub struct Image {
-    state: WidgetState,
+    width: Unit,
+    height: Unit,
+    aspect_ratio: AspectRatio,
+    data: ImageData,
 }
 
 impl Image {
     pub fn new<F: Fn() -> ImageData + 'static>(image_fn: F) -> Self {
-        let state = WidgetState::default()
-            .with_size(100.0, 100.0)
-            .with_background_paint(image_fn())
-            .with_shape(Shape::Rect);
-
         Self {
-            state,
+            width: Unit::Grow,
+            height: Unit::Grow,
+            aspect_ratio: AspectRatio::Source,
+            data: image_fn(),
         }
     }
 }
 
-impl Widget for Image {
-    fn state_ref(&self) -> &WidgetState {
-        &self.state
-    }
-
-    fn state_mut(&mut self) -> &mut WidgetState {
-        &mut self.state
-    }
-
-    fn draw(&self, scene: &mut Scene) {
-        if self.state.flag.visible {
-            scene.draw_rect(
-                &self.state.rect,
-                &self.state.transform,
-                &self.state.background.paint.as_paint_ref(),
-                &self.state.border.paint.as_paint_ref(),
-                &self.state.border.width,
-            );
-        }
-    }
-}
+impl Widget for Image {}

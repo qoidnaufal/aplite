@@ -6,7 +6,7 @@ use super::item::ArenaItem;
 pub struct Arena {
     start: *mut u8,
     offset: *mut u8,
-    elements: Vec<Element>,
+    allocated: Vec<Element>,
     size: NonZeroUsize,
 }
 
@@ -32,43 +32,41 @@ impl Arena {
             Self {
                 start,
                 offset: start,
-                elements: Vec::new(),
+                allocated: vec![],
                 size,
             }
         }
     }
 
-    pub fn insert<T>(&mut self, data: T) -> ArenaItem<T> {
-        #[inline(always)]
+    pub fn alloc<T>(&mut self, data: T) -> ArenaItem<T> {
+        #[inline]
         unsafe fn drop<T>(raw: *mut u8) {
             unsafe {
-                std::ptr::drop_in_place(raw.cast::<T>());
+                let ptr = raw.cast::<T>();
+                ptr.drop_in_place();
             }
         }
 
         unsafe {
-            let layout = alloc::Layout::new::<T>();
-            let offset = self.offset.align_offset(layout.align());
-            let raw = self.offset.add(offset);
+            let aligned_offset = self.offset.align_offset(align_of::<T>());
+            let raw = self.offset.add(aligned_offset);
+            let new_offset = raw.add(size_of::<T>());
 
-            assert!(raw <= self.start.add(self.size.get()));
-            assert!(!raw.is_null());
+            assert!(new_offset <= self.start.add(self.size.get()));
 
-            self.offset = raw.add(layout.size());
-            self.elements.push(Element {
-                raw,
-                drop: drop::<T>
-            });
+            self.offset = new_offset;
+
+            self.allocated.push(Element { raw, drop: drop::<T> });
 
             let ptr = raw.cast();
             std::ptr::write(ptr, data);
-            ArenaItem(ptr)
+            ArenaItem::new(ptr)
         }
     }
 
     // WARN: need to mark the raw pointer in ArenaItem as invalid
     pub fn clear(&mut self) {
-        self.elements.clear();
+        self.allocated.clear();
         self.offset = self.start;
     }
 

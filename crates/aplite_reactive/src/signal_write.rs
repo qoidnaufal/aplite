@@ -2,6 +2,7 @@ use crate::graph::Graph;
 use crate::signal::{Signal, SignalNode};
 use crate::signal_read::SignalRead;
 use crate::reactive_traits::*;
+use crate::subscriber::SubscriberStorage;
 
 pub struct SignalWrite<T> {
     pub(crate) node: SignalNode<T>,
@@ -25,7 +26,10 @@ impl<T: 'static> SignalWrite<T> {
 
 impl<T: 'static> Notify for SignalWrite<T> {
     fn notify(&self) {
-        Graph::with_downcast(&self.node, |node| node.notify())
+        SubscriberStorage::with_mut(&self.node.id, |set| {
+            set.drain(..)
+                .for_each(|any_subscriber| any_subscriber.notify());
+        });
     }
 }
 
@@ -33,9 +37,8 @@ impl<T: 'static> Write for SignalWrite<T> {
     type Value = T;
 
     fn write(&self, f: impl FnOnce(&mut Self::Value)) {
-        Graph::with_downcast(&self.node, |node| {
-            let mut stored = node.write().unwrap();
-            f(&mut stored.value)
+        Graph::with_downcast(&self.node, |value| {
+            f(&mut value.write().unwrap())
         })
     }
 }

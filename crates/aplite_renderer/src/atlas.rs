@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use wgpu::util::DeviceExt;
+// use wgpu::util::DeviceExt;
 
 use aplite_types::{Rect, Size, Vec2f, ImageRef};
-use aplite_storage::{Tree, EntityManager, Entity, create_entity};
+use aplite_storage::{Tree, IdManager, EntityId};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Uv {
@@ -83,7 +83,7 @@ impl Atlas {
     }
 
     // #[inline(always)]
-    // pub(crate) fn get_uv(&self, id: &AtlasId) -> Option<Rect> {
+    // pub(crate) fn get_uv(&self, id: &EntityId) -> Option<Rect> {
     //     self.allocator
     //         .get_rect(id)
     //         .map(|rect| {
@@ -99,44 +99,19 @@ impl Atlas {
     //         })
     // }
 
-    pub(crate) fn update(&mut self, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder) {
+    pub(crate) fn update(&mut self, queue: &wgpu::Queue) {
         if !self.pending_data.is_empty() {
-            self.pending_data
-                .drain(..)
+            std::mem::take(&mut self.pending_data)
+                .iter()
                 .for_each(|(rect, data)| {
-                    let data = data.upgrade().expect("Image Data shouldn't have been removed");
-                    let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-                    let width = data.width * 4;
-                    let padding = (alignment - width % alignment) % alignment;
-                    let padded_width = width + padding;
-                    let mut padded_data = Vec::with_capacity((padded_width * data.height) as usize);
+                    let data = data.upgrade().expect("ImageData need to be alive for rendering");
+                    // let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+                    // let width = data.width * 4;
+                    // let padding = (alignment - width % alignment) % alignment;
+                    // let padded_width = width + padding;
+                    // let mut padded_data = Vec::with_capacity((padded_width * data.height) as usize);
 
-                    let mut i = 0;
-                    for _ in 0..data.height {
-                        for _ in 0..width {
-                            padded_data.push(data.bytes[i]);
-                            i += 1;
-                        }
-                        while (padded_data.len() % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize) != 0 {
-                            padded_data.push(0);
-                        }
-                    }
-
-                    let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: None,
-                        contents: &padded_data,
-                        usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_WRITE,
-                    });
-
-                    encoder.copy_buffer_to_texture(
-                        wgpu::TexelCopyBufferInfo {
-                            buffer: &buffer,
-                            layout: wgpu::TexelCopyBufferLayout {
-                                offset: 0,
-                                bytes_per_row: Some(padded_width),
-                                rows_per_image: None,
-                            },
-                        },
+                    queue.write_texture(
                         wgpu::TexelCopyTextureInfo {
                             texture: &self.texture,
                             aspect: wgpu::TextureAspect::All,
@@ -147,12 +122,61 @@ impl Atlas {
                                 z: 0,
                             },
                         },
+                        &data.bytes,
+                        wgpu::TexelCopyBufferLayout {
+                            offset: 0,
+                            bytes_per_row: None,
+                            rows_per_image: None,
+                        },
                         wgpu::Extent3d {
                             width: data.width,
                             height: data.height,
                             depth_or_array_layers: 1,
                         }
                     );
+
+                    // let mut i = 0;
+                    // for _ in 0..data.height {
+                    //     for _ in 0..width {
+                    //         padded_data.push(data.bytes[i]);
+                    //         i += 1;
+                    //     }
+                    //     while (padded_data.len() % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize) != 0 {
+                    //         padded_data.push(0);
+                    //     }
+                    // }
+
+                    // let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    //     label: None,
+                    //     contents: &padded_data,
+                    //     usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_WRITE,
+                    // });
+
+                    // encoder.copy_buffer_to_texture(
+                    //     wgpu::TexelCopyBufferInfo {
+                    //         buffer: &buffer,
+                    //         layout: wgpu::TexelCopyBufferLayout {
+                    //             offset: 0,
+                    //             bytes_per_row: Some(padded_width),
+                    //             rows_per_image: None,
+                    //         },
+                    //     },
+                    //     wgpu::TexelCopyTextureInfo {
+                    //         texture: &self.texture,
+                    //         aspect: wgpu::TextureAspect::All,
+                    //         mip_level: 0,
+                    //         origin: wgpu::Origin3d {
+                    //             x: rect.x as u32,
+                    //             y: rect.y as u32,
+                    //             z: 0,
+                    //         },
+                    //     },
+                    //     wgpu::Extent3d {
+                    //         width: data.width,
+                    //         height: data.height,
+                    //         depth_or_array_layers: 1,
+                    //     }
+                    // );
 
                     let min_x = rect.x / self.allocator.bound.width;
                     let min_y = rect.y / self.allocator.bound.height;
@@ -205,12 +229,10 @@ impl Atlas {
     }
 }
 
-create_entity! { pub AtlasId }
-
 // ┬ ┴ ├ ┤ ┼ ┌ ┐ └ ┘ │ ─
 // ↓ →
 
-/// The priority if to fill the atlas horizontally first from each root.
+/// The priority is to fill the atlas horizontally first from each root.
 /// The root will be placed on the left-most and stacked vertically.
 /// Once a root is assigned, horizontally is children, vertically is siblings.
 /// # graphical representation
@@ -227,10 +249,10 @@ create_entity! { pub AtlasId }
 /// This means the total width of the first child's siblings + their childrens <= first child's rect
 struct AtlasAllocator {
     bound: Rect,
-    last_parent: Option<AtlasId>,
-    id_manager: EntityManager<AtlasId>,
-    allocated: HashMap<AtlasId, Rect>,
-    tree: Tree<AtlasId>,
+    last_parent: Option<EntityId>,
+    id_manager: IdManager,
+    allocated: HashMap<EntityId, Rect>,
+    tree: Tree,
 }
 
 impl AtlasAllocator {
@@ -238,7 +260,7 @@ impl AtlasAllocator {
         Self {
             bound: Rect::from_size(size.into()),
             last_parent: None,
-            id_manager: EntityManager::default(),
+            id_manager: IdManager::default(),
             allocated: HashMap::default(),
             tree: Tree::default(),
         }
@@ -289,8 +311,8 @@ impl AtlasAllocator {
 
     #[inline(always)]
     /// scan each roots and try to find available position within the identified root
-    fn scan(&self, new_size: Size) -> Option<(AtlasId, Vec2f)> {
-        let root = AtlasId::root();
+    fn scan(&self, new_size: Size) -> Option<(EntityId, Vec2f)> {
+        let root = EntityId::root();
         self.get_first_blocks(&root)
             .find_map(|(root, rect)| self.identify_member(root, rect, new_size))
     }
@@ -298,10 +320,10 @@ impl AtlasAllocator {
     #[inline(always)]
     fn identify_member(
         &self,
-        root: AtlasId,
+        root: EntityId,
         root_rect: &Rect,
         new_size: Size,
-    ) -> Option<(AtlasId, Vec2f)> {
+    ) -> Option<(EntityId, Vec2f)> {
         if let Some(first) = self.tree.get_first_child(&root) {
             // the first rect will set the boundary of it's siblings if any
             let first_rect = self.allocated.get(first).unwrap();
@@ -345,10 +367,10 @@ impl AtlasAllocator {
     #[inline(always)]
     fn indentify_next_sibling(
         &self,
-        current: &AtlasId,
+        current: &EntityId,
         first_rect_bound: &Rect,
         new_size: Size,
-    ) -> Option<(AtlasId, Vec2f)> {
+    ) -> Option<(EntityId, Vec2f)> {
         let current_rect = self.allocated.get(current).unwrap();
 
         let cond1 = new_size.width + current_rect.max_x() <= first_rect_bound.max_x();
@@ -372,7 +394,7 @@ impl AtlasAllocator {
     }
 
     #[inline(always)]
-    fn get_first_blocks<'a>(&'a self, root: &'a AtlasId) -> impl Iterator<Item = (AtlasId, &'a Rect)> {
+    fn get_first_blocks<'a>(&'a self, root: &'a EntityId) -> impl Iterator<Item = (EntityId, &'a Rect)> {
         self.tree
             .iter_children(root)
             .map(|id| {
@@ -383,7 +405,7 @@ impl AtlasAllocator {
             })
     }
 
-    // fn remove(&mut self, id: AtlasId) -> Option<Rect> {
+    // fn remove(&mut self, id: EntityId) -> Option<Rect> {
     //     // shifting
     //     if let Some(prev) = self.get_prev_sibling(&id).copied() {
     //         self.next_sibling[prev.index()] = self.get_next_sibling(&id).copied();
@@ -445,20 +467,20 @@ mod atlas_test {
         let ninth = allocator.alloc(Size::new(50., 50.));
         assert!(ninth.is_some());
 
-        assert_eq!(allocator.tree.iter_children(&AtlasId::root()).count(), 3);
+        assert_eq!(allocator.tree.iter_children(&EntityId::root()).count(), 3);
 
         eprintln!("{:#?}", allocator.tree);
 
-         // > AtlasId(0)
-         //   ├─ AtlasId(1)
-         //   │  ├─ AtlasId(3)
-         //   │  ├─ AtlasId(4)
-         //   │  └─ AtlasId(5)
-         //   │     ├─ AtlasId(7)
-         //   │     └─ AtlasId(8)
-         //   │        └─ AtlasId(9)
-         //   ├─ AtlasId(2)
-         //   └─ AtlasId(6)
+         // > EntityId(0)
+         //   ├─ EntityId(1)
+         //   │  ├─ EntityId(3)
+         //   │  ├─ EntityId(4)
+         //   │  └─ EntityId(5)
+         //   │     ├─ EntityId(7)
+         //   │     └─ EntityId(8)
+         //   │        └─ EntityId(9)
+         //   ├─ EntityId(2)
+         //   └─ EntityId(6)
 
     }
 }

@@ -1,3 +1,4 @@
+use aplite_storage::Table;
 use aplite_renderer::Shape;
 use aplite_types::{
     Matrix3x2,
@@ -14,12 +15,6 @@ pub enum AspectRatio {
     Defined(u8, u8),
     Source,
     Undefined,
-}
-
-#[derive(Clone)]
-pub struct Background {
-    pub(crate) paint: Paint,
-    pub(crate) aspect_ratio: AspectRatio,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -47,4 +42,8 @@ impl Default for Flag {
 pub struct Border {
     pub(crate) paint: Paint,
     pub(crate) width: f32,
+}
+
+pub struct State {
+    table: Table,
 }

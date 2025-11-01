@@ -10,69 +10,73 @@ use super::component::{
     QueryData,
 };
 
-use crate::entity::Entity;
+use crate::entity::EntityId;
 
-pub struct Table<E: Entity + 'static> {
-    /// internally it's Vec<UnsafeCell<T>>,
+pub struct Table {
+    /// internally it's `Vec<UnsafeCell<T>>`,
     pub(crate) inner: HashMap<TypeId, Box<dyn Any>>,
-    pub(crate) ptr: SparseIndices<E>,
-    pub(crate) entities: Vec<E>,
+    pub(crate) ptr: SparseIndices,
+    pub(crate) entities: Vec<EntityId>,
+    pub(crate) components: Vec<TypeId>,
 }
 
-impl<E: Entity + 'static> Default for Table<E> {
+impl Default for Table {
     fn default() -> Self {
         Self::with_capacity(0)
     }
 }
 
-impl<E: Entity + 'static> Table<E> {
+impl Table {
     /// Set the capacity for the contained entity
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             inner: HashMap::default(),
             ptr: SparseIndices::default(),
             entities: Vec::with_capacity(capacity),
+            components: Vec::new(),
         }
     }
 
-    pub fn register_component(&mut self, entity: &E, component: impl IntoComponent) {
+    pub fn register_component(&mut self, id: &EntityId, component: impl IntoComponent) {
         let insert_index = self.entities.len();
-        self.ptr.set_index(entity, insert_index);
-        self.entities.push(*entity);
-        component.into_component().register(entity, self);
+        self.ptr.set_index(id, insert_index);
+        self.entities.push(*id);
+        component.into_component().register(id, self);
     }
 
-    pub(crate) fn insert<T: 'static>(&mut self, entity: &E, value: T) {
-        if let Some(vec) = self.inner
-            .entry(TypeId::of::<T>())
+    pub(crate) fn insert<T: 'static>(&mut self, id: &EntityId, value: T) {
+        let type_id = TypeId::of::<T>();
+        let vec = self.inner
+            .entry(type_id)
             .or_insert(Box::new(Vec::<UnsafeCell<T>>::new()))
             .downcast_mut::<Vec<UnsafeCell<T>>>()
-        {
-            if let Some(index) = self.ptr.get_data_index(entity) {
-                if let Some(data) = vec.get_mut(index) {
-                    *data.get_mut() = value;
-                    return;
-                }
-            }
+            .unwrap();
 
-            vec.push(UnsafeCell::new(value));
+        if let Some(index) = self.ptr.get_data_index(id) {
+            if let Some(data) = vec.get_mut(index) {
+                *data.get_mut() = value;
+                return;
+            }
         }
+
+        vec.push(UnsafeCell::new(value));
+        self.components.push(type_id);
     }
 
-    pub fn update<T: 'static>(&mut self, entity: &E, value: T) {
+    pub fn update<T: 'static>(&mut self, id: &EntityId, value: T) {
         if let Some(any) = self.inner.get_mut(&TypeId::of::<T>()) {
             if let Some(vec) = any.downcast_mut::<Vec<UnsafeCell<T>>>() {
-                if let Some(index) = self.ptr.get_data_index(entity) {
+                if let Some(index) = self.ptr.get_data_index(id) {
                     *vec[index].get_mut() = value;
                 }
             }
         }
     }
 
-    pub fn update_unsafe<T: 'static>(&self, entity: &E, value: T) {
+    pub fn update_unsafe<T: 'static>(&self, id: &EntityId, value: T) {
         if let Some(any) = self.inner.get(&TypeId::of::<T>()) {
             if let Some(vec) = any.downcast_ref::<Vec<UnsafeCell<T>>>() {
-                if let Some(index) = self.ptr.get_data_index(entity) {
+                if let Some(index) = self.ptr.get_data_index(id) {
                     unsafe {
                         *&mut *vec[index].get() = value;
                     }
@@ -81,36 +85,20 @@ impl<E: Entity + 'static> Table<E> {
         }
     }
 
-    pub fn remove<C: Component>(&mut self, entity: E) -> Option<C::Item> {
-        C::remove(entity, self)
+    pub fn remove<C: Component>(&mut self, id: EntityId) -> Option<C::Item> {
+        C::remove(id, self)
     }
 
-    pub fn remove_into_component<IC: IntoComponent>(&mut self, entity: E)
+    pub fn remove_into_component<IC: IntoComponent>(&mut self, id: EntityId)
     -> Option<<<IC as IntoComponent>::Item as Component>::Item> {
-        IC::Item::remove(entity, self)
+        IC::Item::remove(id, self)
     }
-
-    // pub fn fetch_one<'a, Q: Queryable<'a>>(&'a self, entity: &E) -> Option<Q::Output> {
-    //     Query::<Q>::new(self).get(entity)
-        // self.inner
-        //     .get(&TypeId::of::<Q::Item>())
-        //     .and_then(|any| any.downcast_ref::<Vec<UnsafeCell<Q::Item>>>())
-        //     .and_then(|arr| {
-        //         self.ptr
-        //             .get_index(entity)
-        //             .map(|index| Q::convert(&arr[index.index()]))
-        //     })
-    // }
-
-    // pub fn fetch<'a, Q: QueryData<'a>>(&'a self, entity: &E) -> Option<Q::Fetch> {
-    //     Q::fetch(entity, self)
-    // }
 
     pub fn query<'a, Q: QueryData<'a>>(&'a self) -> Query<'a, Q> {
         Query::new(self)
     }
 
-    pub fn entities(&self) -> &[E] {
+    pub fn entities(&self) -> &[EntityId] {
         &self.entities
     }
 
@@ -122,8 +110,8 @@ impl<E: Entity + 'static> Table<E> {
         self.entities.is_empty()
     }
 
-    pub fn contains(&self, entity: &E) -> bool {
-        self.entities.contains(entity)
+    pub fn contains(&self, id: &EntityId) -> bool {
+        self.entities.contains(id)
     }
 
     pub fn clear(&mut self) {
@@ -143,17 +131,14 @@ impl<E: Entity + 'static> Table<E> {
 
 #[cfg(test)]
 mod table_test {
-    use crate::entity::{Entity, EntityManager};
-    use crate::create_entity;
+    use crate::entity::{IdManager, EntityId};
     use super::Table;
     use crate::IntoComponent;
 
-    create_entity! { TestId }
-
     #[derive(Default)]
     struct Context {
-        manager: EntityManager<TestId>,
-        table: Table<TestId>,
+        manager: IdManager,
+        table: Table,
     }
 
     #[test]
@@ -199,15 +184,15 @@ mod table_test {
             cx.table.register_component(&id, (i.to_string(), (i + 1) * -1, i as f32));
         }
 
-        let entity = TestId(3);
-        let items = cx.table.query::<(&i32, &mut String)>().get(&entity);
+        let id = EntityId::new(3, 0);
+        let items = cx.table.query::<(&i32, &mut String)>().get(&id);
         assert!(items.is_some());
 
         if let Some((i, s)) = items {
             *s = i.pow(2).to_string();
         }
 
-        let fetch = cx.table.query::<&String>().get(&entity);
+        let fetch = cx.table.query::<&String>().get(&id);
         assert!(fetch.is_some_and(|n| !n.starts_with('-')));
     }
 
@@ -262,7 +247,7 @@ mod table_test {
             assert!(std::any::type_name_of_val(f).contains("f32"));
             assert!(std::any::type_name_of_val(u).contains("u8"));
         }
-        let removed = cx.table.remove_into_component::<Dummy>(TestId(6));
+        let removed = cx.table.remove_into_component::<Dummy>(EntityId::new(6, 0));
         assert!(removed.is_some_and(|(u, s, f)| {
             std::any::type_name_of_val(&s).contains("String") &&
             std::any::type_name_of_val(&f).contains("f32") &&

@@ -1,24 +1,48 @@
+use std::rc::Rc;
+use std::cell::RefCell;
+
 use aplite_reactive::*;
 use aplite_renderer::{Renderer};
-use aplite_types::{Vec2f, Rect};
-use aplite_storage::{Arena, TypedArena, Array, Entity, EntityManager};
+use aplite_types::{Vec2f, Rect, Size};
+use aplite_storage::{Arena, Array, Tree, IdManager, EntityId};
 
-use crate::view::{IntoView, View};
-use crate::widget::{CALLBACKS, WidgetId, WidgetEvent};
-use crate::cursor::{Cursor, MouseAction, MouseButton, EmittedClickEvent};
-use crate::layout::Layout;
-use crate::state::Flag;
+use crate::view::{AnyView, IntoView, View};
+use crate::widget::Widget;
+use crate::cursor::{Cursor, MouseAction, MouseButton};
+
+pub(crate) struct ViewStorage {
+    pub(crate) arena: Arena,
+    pub(crate) id_manager: IdManager,
+    pub(crate) views: Array<AnyView>,
+    pub(crate) tree: Tree,
+}
+
+impl ViewStorage {
+    pub(crate) fn new(allocation_size: Option<usize>) -> Self {
+        let allocation_size = allocation_size.unwrap_or(1024 * 1024);
+        Self {
+            arena: Arena::new(allocation_size),
+            views: Array::default(),
+            id_manager: IdManager::default(),
+            tree: Tree::default(),
+        }
+    }
+
+    pub(crate) fn insert<IV: IntoView + 'static>(&mut self, widget: IV) -> EntityId {
+        let item = self.arena.alloc(widget.into_view()).map(|w| w as &mut dyn Widget);
+        let id = self.id_manager.create();
+        self.views.insert(&id, AnyView::new(item));
+        id
+    }
+}
 
 pub struct Context {
-    pub(crate) view: View,
-    pub(crate) arena: Arena,
-    pub(crate) views: Array<WidgetId, View>,
-    pub(crate) manager: EntityManager<WidgetId>,
+    pub(crate) storage: Rc<RefCell<ViewStorage>>,
     pub(crate) dirty: Signal<bool>,
     pub(crate) cursor: Cursor,
-    pub(crate) current: Option<WidgetId>,
+    pub(crate) current: Option<EntityId>,
     pub(crate) rect: Rect,
-    pending_update: Vec<WidgetId>,
+    pub(crate) pending_update: Vec<EntityId>,
 }
 
 // ########################################################
@@ -28,22 +52,21 @@ pub struct Context {
 // ########################################################
 
 impl Context {
-    pub(crate) fn new(view: View) -> Self {
+    pub(crate) fn new(size: Size, allocation_size: Option<usize>) -> Self {
         Self {
-            view,
-            arena: Arena::new(1024 * 1024),
-            views: Array::default(),
-            manager: EntityManager::default(),
+            storage: Rc::new(RefCell::new(ViewStorage::new(allocation_size))),
             cursor: Cursor::default(),
             dirty: Signal::new(false),
             current: None,
-            rect: Rect::default(),
+            rect: Rect::from_size(size),
             pending_update: Vec::new(),
         }
     }
 
-    pub fn create_id(&mut self) -> WidgetId {
-        self.manager.create()
+    pub fn spawn<IV: IntoView + 'static>(&mut self, widget: IV) -> View<IV> {
+        let storage = &mut *self.storage.borrow_mut();
+        let id = storage.insert(widget);
+        View::new::<IV>(id, Rc::downgrade(&self.storage))
     }
 
     pub(crate) fn toggle_dirty(&self) {
@@ -131,5 +154,9 @@ impl Context {
 // #                                                       #
 // #########################################################
 
-    pub(crate) fn render(&self, renderer: &mut Renderer) {}
+    pub(crate) fn render(&self, renderer: &mut Renderer) {
+        let mut scene = renderer.scene();
+        let storage = &*self.storage.borrow();
+        storage.views.iter().for_each(|(_, any)| any.as_ref().draw(&mut scene));
+    }
 }

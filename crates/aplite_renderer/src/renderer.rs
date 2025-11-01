@@ -206,7 +206,7 @@ impl Renderer {
                 &wgpu::CommandEncoderDescriptor { label: Some("render encoder") }
             );
 
-        self.atlas.update(&self.device, &mut encoder);
+        self.atlas.update(&self.queue);
 
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("render pass"),

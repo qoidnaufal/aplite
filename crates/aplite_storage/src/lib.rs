@@ -10,14 +10,14 @@ pub use arena::{
     untyped::Arena,
     item::ArenaItem,
 };
-pub use entity::{Entity, EntityManager};
+pub use entity::{IdManager, EntityId};
 pub use indexmap::{
     IndexMap,
     IndexMapError,
 };
 pub use tree::{
     tree::{Tree, TreeError},
-    node::{Node, NodeRef},
+    node::{Node, NodeRef, SubTree},
 };
 pub use data::{
     array::Array,

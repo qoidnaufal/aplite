@@ -1,21 +1,31 @@
+// use std::collections::HashMap;
+// use std::any::{Any, TypeId};
 use std::any::TypeId;
+
 use std::slice::Iter;
 use std::iter::Map;
 use std::cell::UnsafeCell;
 
 use super::table::Table;
 
-use crate::entity::Entity;
+use crate::entity::EntityId;
 use crate::data::sparse_index::Index;
+
+// pub struct ComponentStorage<E: Entity + 'static> {
+//     pub(crate) data: HashMap<TypeId, Box<dyn Any>>,
+//     pub(crate) tables: HashMap<TableId, Table<E>>,
+// }
 
 pub trait Component: Sized + 'static {
     type Item;
 
+    fn component_id() -> Vec<TypeId>;
+
     /// Register value(s) to the table
-    fn register<E: Entity + 'static>(self, entity: &E, table: &mut Table<E>);
+    fn register(self, id: &EntityId, table: &mut Table);
 
     /// Use this function carefully, or else this will mess up your data
-    fn remove<E: Entity + 'static>(entity: E, source: &mut Table<E>) -> Option<Self::Item>;
+    fn remove(id: EntityId, source: &mut Table) -> Option<Self::Item>;
 }
 
 macro_rules! component {
@@ -23,15 +33,21 @@ macro_rules! component {
         impl<$($name: 'static),*> Component for ($($name,)*) {
             type Item = ($($name,)*);
 
-            fn register<En: Entity + 'static>(self, entity: &En, table: &mut Table<En>) {
-                #[allow(non_snake_case)]
-                let ($($name,)*) = self;
-                $(table.insert(entity, $name);)*
+            fn component_id() -> Vec<TypeId> {
+                let mut vec = vec![];
+                $(vec.push(TypeId::of::<$name>());)*
+                vec
             }
 
-            fn remove<En: Entity + 'static>(entity: En, source: &mut Table<En>) -> Option<Self::Item> {
+            fn register(self, id: &EntityId, table: &mut Table) {
+                #[allow(non_snake_case)]
+                let ($($name,)*) = self;
+                $(table.insert(id, $name);)*
+            }
+
+            fn remove(id: EntityId, source: &mut Table) -> Option<Self::Item> {
                 let idx = source.ptr
-                    .get_index(&entity)?
+                    .get_index(&id)?
                     .index();
 
                 let removed = Some(($(
@@ -44,7 +60,7 @@ macro_rules! component {
                 let last = source.entities.last().unwrap();
 
                 source.ptr.set_index(last, idx);
-                source.ptr.set_null(&entity);
+                source.ptr.set_null(&id);
                 source.entities.swap_remove(idx);
 
                 removed
@@ -60,7 +76,7 @@ pub struct Query<'a, Q: QueryData<'a>> {
 }
 
 impl<'a, Q: QueryData<'a>> Query<'a, Q> {
-    pub fn new<E: Entity>(source: &'a Table<E>) -> Self {
+    pub fn new(source: &'a Table) -> Self {
         Self {
             ptr: &source.ptr.ptr,
             inner: Q::data(source),
@@ -77,7 +93,7 @@ pub trait Queryable<'a> {
     type Output: 'a;
 
     /// Convert `UnsafeCell<T>` to `&T` or `&mut T`.
-    fn convert(fetch: &UnsafeCell<Self::Item>) -> Self::Output;
+    fn convert(item: &UnsafeCell<Self::Item>) -> Self::Output;
 }
 
 impl<'a, T: 'static> Queryable<'a> for &'a T {
@@ -102,8 +118,8 @@ pub trait QueryData<'a>: Sized {
     type Data;
     type Iter;
 
-    fn data<E: Entity + 'static>(source: &'a Table<E>) -> Option<Self::Data>;
-    fn query<E: Entity + 'static>(source: &'a Table<E>) -> Query<'a, Self>;
+    fn data(source: &'a Table) -> Option<Self::Data>;
+    fn query(source: &'a Table) -> Query<'a, Self>;
 }
 
 pub(crate) fn map_query<'a, Q: Queryable<'a>>(cell: &'a UnsafeCell<Q::Item>) -> Q::Output {
@@ -119,7 +135,7 @@ macro_rules! query {
             type Data = ($(&'a Vec<UnsafeCell<$name::Item>>,)*);
             type Iter = ($(Map<Iter<'a, UnsafeCell<$name::Item>>, FnMapQuery<'a, $name>>,)*);
 
-            fn data<En: Entity + 'static>(source: &'a Table<En>) -> Option<Self::Data> {
+            fn data(source: &'a Table) -> Option<Self::Data> {
                 Some(($(
                     source.inner
                         .get(&TypeId::of::<$name::Item>())
@@ -127,7 +143,7 @@ macro_rules! query {
                 )*))
             }
 
-            fn query<En: Entity + 'static>(source: &'a Table<En>) -> Query<'a, Self> {
+            fn query(source: &'a Table) -> Query<'a, Self> {
                 Query::new(source)
             }
         }
@@ -144,14 +160,14 @@ macro_rules! query {
                 QueryIter { inner }
             }
 
-            pub fn get<En: Entity>(&self, entity: &En) -> Option<($($name::Output,)*)> {
+            pub fn get(&self, id: &EntityId) -> Option<($($name::Output,)*)> {
                 #[allow(non_snake_case)]
                 let Some(($($name,)*)) = self.inner else {
                     return None
                 };
 
                 let index = self.ptr
-                    .get(entity.index())
+                    .get(id.index())
                     .and_then(|i| (!i.is_null()).then_some(i.index()))?;
 
                 Some(($($name::convert(&$name[index]),)*))
@@ -201,7 +217,7 @@ macro_rules! query_one {
             type Data = &'a Vec<UnsafeCell<$name::Item>>;
             type Iter = Map<Iter<'a, UnsafeCell<$name::Item>>, FnMapQuery<'a, $name>>;
 
-            fn data<En: Entity + 'static>(source: &'a Table<En>) -> Option<Self::Data> {
+            fn data(source: &'a Table) -> Option<Self::Data> {
                 Some(
                     source.inner
                         .get(&TypeId::of::<$name::Item>())
@@ -209,7 +225,7 @@ macro_rules! query_one {
                 )
             }
 
-            fn query<En: Entity + 'static>(source: &'a Table<En>) -> Query<'a, Self> {
+            fn query(source: &'a Table) -> Query<'a, Self> {
                 Query::new(source)
             }
         }
@@ -226,11 +242,11 @@ macro_rules! query_one {
                 QueryIter { inner }
             }
 
-            pub fn get<En: Entity>(&self, entity: &En) -> Option<$name::Output> {
+            pub fn get(&self, id: &EntityId) -> Option<$name::Output> {
                 let data = self.inner?;
 
                 let index = self.ptr
-                    .get(entity.index())
+                    .get(id.index())
                     .and_then(|i| (!i.is_null()).then_some(i.index()))?;
 
                 Some($name::convert(&data[index]))
@@ -328,6 +344,10 @@ query_one!(A);
 pub trait IntoComponent: Sized + 'static {
     type Item: Component;
     fn into_component(self) -> Self::Item;
+
+    fn component_id() -> Vec<TypeId> {
+        <<Self as IntoComponent>::Item as Component>::component_id()
+    }
 }
 
 impl<T: Component> IntoComponent for T {

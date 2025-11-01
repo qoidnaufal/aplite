@@ -1,4 +1,4 @@
-// use aplite::prelude::*;
+use aplite::prelude::*;
 
 // const IMAGE_1: &str = "../../Wallpaper/milky-way-over-mountains-4k-fl-1680x1050-2045764561.jpg";
 // const IMAGE_2: &str = "../../Wallpaper/1352909.jpeg";
@@ -103,4 +103,27 @@
 //         .launch()
 // }
 
-fn main() {}
+fn counter(cx: &mut Context) {
+    let (counter, set_counter) = Signal::split(0i32);
+    let stack = cx.spawn(h_stack());
+    let button = cx.spawn(button());
+    let circle = cx.spawn(circle());
+
+    button.on(LeftClick, move || set_counter.update(|num| *num += 1));
+
+    Effect::new(move |_| println!("{}", counter.get()));
+
+    stack
+        .child(&button)
+        .child(&circle);
+}
+
+fn main() -> ApliteResult {
+    let config = AppConfig {
+        allocation_size: Some(100),
+        executor_capacity: 10,
+        window_size: (500, 500).into(),
+    };
+
+    Aplite::new(config).view(counter).launch()
+}

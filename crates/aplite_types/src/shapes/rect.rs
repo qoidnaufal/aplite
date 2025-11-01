@@ -85,7 +85,7 @@ impl Rect {
     }
 
     #[inline(always)]
-    pub fn contains(&self, p: Vec2f) -> bool {
+    pub fn contains(&self, p: &Vec2f) -> bool {
         (self.x..self.max_x()).contains(&p.x)
             && (self.y..self.max_y()).contains(&p.y)
     }

@@ -9,13 +9,12 @@ use winit::application::ApplicationHandler;
 
 use aplite_reactive::*;
 use aplite_renderer::Renderer;
-use aplite_future::block_on;
+use aplite_future::{Executor, block_on};
+use aplite_types::Size;
 
 use crate::prelude::ApliteResult;
 use crate::context::Context;
-// use crate::layout::{LayoutCx, Layout};
 use crate::error::ApliteError;
-use crate::view::IntoView;
 
 pub(crate) const DEFAULT_SCREEN_SIZE: LogicalSize<u32> = LogicalSize::new(800, 600);
 
@@ -24,7 +23,11 @@ pub(crate) struct WindowHandle {
 }
 
 pub struct AppConfig {
-    pub allocation_size: usize,
+    /// The amount of widgets on the app,
+    /// If set to None, the default is 4 * 1024
+    pub allocation_size: Option<usize>,
+    pub executor_capacity: usize,
+    pub window_size: Size,
 }
 
 pub struct Aplite {
@@ -39,11 +42,12 @@ pub struct Aplite {
 
 // user API
 impl Aplite {
-    pub fn new<IV: IntoView + 'static>(view_fn: impl FnOnce() -> IV + 'static) -> Self {
-        // Executor::init();
+    pub fn new(config: AppConfig) -> Self {
+        Executor::init(config.executor_capacity);
+
         Self {
             renderer: None,
-            cx: Context::new(view_fn().into_view()),
+            cx: Context::new(config.window_size, config.allocation_size),
             window_handle: HashMap::with_capacity(4),
             window_attributes_fn: None,
 
@@ -52,11 +56,9 @@ impl Aplite {
         }
     }
 
-    pub fn launch(mut self) -> ApliteResult {
-        let event_loop = EventLoop::new()?;
-        event_loop.run_app(&mut self)?;
-
-        Ok(())
+    pub fn view(mut self, view_fn: impl FnOnce(&mut Context) + 'static) -> Self {
+        view_fn(&mut self.cx);
+        self
     }
 
     pub fn set_window_attributes(mut self, f: fn(&mut WindowAttributes)) -> Self {
@@ -64,10 +66,12 @@ impl Aplite {
         self
     }
 
-    // pub fn with_background_color(self, color: Rgba<u8>) -> Self {
-    //     let _ = color;
-    //     self
-    // }
+    pub fn launch(&mut self) -> ApliteResult {
+        let event_loop = EventLoop::new()?;
+        event_loop.run_app(self)?;
+
+        Ok(())
+    }
 
     fn initialize_window_and_renderer(
         &mut self,

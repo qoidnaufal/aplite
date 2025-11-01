@@ -6,7 +6,7 @@
 #########################################################
 */
 
-pub trait Reactive: Track + Notify {}
+// pub trait Reactive: Track + Notify {}
 
 pub trait Track {
     fn track(&self);
@@ -18,7 +18,7 @@ pub trait Notify {
     fn notify(&self);
 }
 
-impl<T> Reactive for T where T: Track + Notify {}
+// impl<T> Reactive for T where T: Track + Notify {}
 
 /*
 #########################################################

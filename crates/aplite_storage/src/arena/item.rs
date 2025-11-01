@@ -1,16 +1,23 @@
-pub struct ArenaItem<T: ?Sized>(pub(crate) *mut T);
+use std::ptr::NonNull;
 
-impl<T: ?Sized> Clone for ArenaItem<T> {
-    fn clone(&self) -> Self {
-        Self(self.0)
-    }
+pub struct ArenaItem<T: ?Sized> {
+    raw: NonNull<T>,
+    marker: std::marker::PhantomData<T>,
 }
 
-impl<T: ?Sized> Copy for ArenaItem<T> {}
-
 impl<T: ?Sized> ArenaItem<T> {
+    pub(crate) fn new(raw: *mut T) -> Self {
+        Self {
+            raw: unsafe { NonNull::new_unchecked(raw) },
+            marker: std::marker::PhantomData
+        }
+    }
+
     pub fn map<U: ?Sized>(mut self, f: impl FnOnce(&mut T) -> &mut U) -> ArenaItem<U> {
-        ArenaItem(f(&mut self))
+        ArenaItem {
+            raw: NonNull::from_mut(f(&mut self)),
+            marker: std::marker::PhantomData,
+        }
     }
 }
 
@@ -19,7 +26,7 @@ impl<T: ?Sized> std::ops::Deref for ArenaItem<T> {
 
     fn deref(&self) -> &Self::Target {
         unsafe {
-            &*self.0
+            &*self.raw.as_ptr()
         }
     }
 }
@@ -27,7 +34,7 @@ impl<T: ?Sized> std::ops::Deref for ArenaItem<T> {
 impl<T: ?Sized> std::ops::DerefMut for ArenaItem<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe {
-            &mut *self.0
+            self.raw.as_mut()
         }
     }
 }

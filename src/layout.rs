@@ -5,14 +5,14 @@ use aplite_types::{
     Unit
 };
 use aplite_storage::{
-    create_entity,
+    EntityId,
     Array,
     Tree,
 };
 
 use crate::state::{Flag, AspectRatio};
 use crate::view::IntoView;
-use crate::widget::{Widget, WidgetId};
+use crate::widget::Widget;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlignH {
@@ -165,15 +165,24 @@ impl LayoutRules {
 }
 
 pub struct LayoutNode {
-    pub(crate) rect: Rect,
-    pub(crate) child_count: usize,
-    pub(crate) available_space: f32,
+    pub(crate) width: Unit,
+    pub(crate) height: Unit,
+    pub(crate) min_width: Option<f32>,
+    pub(crate) min_height: Option<f32>,
+    pub(crate) max_width: Option<f32>,
+    pub(crate) max_height: Option<f32>,
+}
+
+impl LayoutNode {
+    pub fn from_radius(val: Unit) -> Self {
+        todo!()
+    }
 }
 
 pub struct Layout {
     pub(crate) window_rect: Rect,
-    pub(crate) tree: Tree<WidgetId>,
-    pub(crate) rects: Array<WidgetId, Rect>,
+    pub(crate) tree: Tree,
+    pub(crate) rects: Array<Rect>,
 }
 
 impl Layout {
@@ -189,17 +198,17 @@ impl Layout {
         }
     }
 
-    pub(crate) fn get_or_insert(&mut self, id: WidgetId, parent: Option<WidgetId>, rect: impl FnOnce() -> Rect) -> &mut Rect {
+    pub(crate) fn get_or_insert(&mut self, id: EntityId, parent: Option<EntityId>, rect: impl FnOnce() -> Rect) -> &mut Rect {
         self.tree.insert(id, parent);
         self.rects.get_or_insert(&id, rect)
     }
 
-    pub(crate) fn insert(&mut self, id: WidgetId, parent: Option<WidgetId>, rect: Rect) {
+    pub(crate) fn insert(&mut self, id: EntityId, parent: Option<EntityId>, rect: Rect) {
         self.rects.insert(&id, rect);
         self.tree.insert(id, parent);
     }
 
-    pub(crate) fn parent_rect(&self, id: &WidgetId) -> Option<&Rect> {
+    pub(crate) fn parent_rect(&self, id: &EntityId) -> Option<&Rect> {
         self.tree
             .get_parent(id)
             .and_then(|parent| self.rects.get(parent))

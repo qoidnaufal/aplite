@@ -45,11 +45,11 @@ impl<T> TypedArena<T> {
     pub fn insert(&mut self, data: T) -> ArenaItem<T> {
         assert!(self.len < self.capacity, "max capacity reached");
         unsafe {
-            let ptr = self.block.add(self.len * size_of::<T>()).cast();
+            let raw = self.block.add(self.len * size_of::<T>()).cast();
             self.len += 1;
-            std::ptr::write(ptr, data);
+            std::ptr::write(raw, data);
 
-            ArenaItem(ptr)
+            ArenaItem::new(raw)
         }
     }
 
@@ -64,8 +64,8 @@ impl<T> TypedArena<T> {
     pub fn get_ptr(&self, index: usize) -> ArenaItem<T> {
         assert!(index < self.len);
         unsafe {
-            let ptr = self.block.add(index * size_of::<T>()).cast();
-            ArenaItem(ptr)
+            let raw = self.block.add(index * size_of::<T>()).cast();
+            ArenaItem::new(raw)
         }
     }
 
@@ -81,6 +81,7 @@ impl<T> TypedArena<T> {
         unsafe {
             let slice = slice_from_raw_parts_mut(self.block.cast::<T>(), self.len);
             std::ptr::drop_in_place(slice);
+            self.len = 0;
         }
     }
 

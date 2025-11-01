@@ -1,75 +1,44 @@
-use std::sync::{Arc, Weak};
-use crate::subscriber::AnySubscriber;
-use crate::reactive_traits::*;
+use crate::subscriber::{AnySubscriber, SubscriberStorage};
+use aplite_storage::EntityId;
 
-pub(crate) struct AnySource(pub(crate) Weak<dyn Source>);
+pub(crate) struct AnySource(pub(crate) EntityId);
 
 impl AnySource {
-    pub(crate) fn new<T: Source + 'static>(inner: Weak<T>) -> Self {
-        Self(inner)
-    }
-
-    pub(crate) fn upgrade(&self) -> Option<Arc<dyn Source>> {
-        self.0.upgrade()
+    pub(crate) fn new(id: EntityId) -> Self {
+        Self(id)
     }
 }
 
-pub(crate) trait Source: Track + Notify {
+pub(crate) trait Source {
     fn add_subscriber(&self, subscriber: AnySubscriber);
     fn clear_subscribers(&self);
 }
 
 impl Source for AnySource {
     fn add_subscriber(&self, subscriber: AnySubscriber) {
-        if let Some(any_source) = self.0.upgrade() {
-            any_source.add_subscriber(subscriber);
-        }
+        SubscriberStorage::insert(self.0, subscriber);
     }
 
     fn clear_subscribers(&self) {
-        if let Some(source) = self.upgrade() {
-            source.clear_subscribers();
-        }
-    }
-}
-
-impl Track for AnySource {
-    fn track(&self) {
-        if let Some(source) = self.upgrade() {
-            source.track()
-        }
-    }
-
-    fn untrack(&self) {
-        if let Some(source) = self.upgrade() {
-            source.untrack();
-        }
-    }
-}
-
-impl Notify for AnySource {
-    fn notify(&self) {
-        if let Some(source) = self.0.upgrade() {
-            source.notify();
-        }
+        SubscriberStorage::with_mut(&self.0, |set| set.clear());
     }
 }
 
 impl Clone for AnySource {
     fn clone(&self) -> Self {
-        Self(Weak::clone(&self.0))
+        Self(self.0)
     }
 }
 
 impl PartialEq for AnySource {
     fn eq(&self, other: &Self) -> bool {
-        Weak::ptr_eq(&self.0, &other.0)
+        self.0.eq(&other.0)
     }
 }
 
 impl std::fmt::Debug for AnySource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "AnySource({:#x})", &(Weak::as_ptr(&self.0).addr()))
+        write!(f, "AnySource({:?})", self.0)
     }
 }
 

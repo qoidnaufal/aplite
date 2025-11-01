@@ -7,14 +7,13 @@ use std::sync::{
     OnceLock
 };
 
-use aplite_storage::{IndexMap, Entity, create_entity};
+use aplite_storage::{IndexMap, EntityId};
 
 use crate::subscriber::AnySubscriber;
-use crate::reactive_traits::*;
 
 static GRAPH: OnceLock<RwLock<ReactiveGraph>> = OnceLock::new();
 
-type Storage = IndexMap<ReactiveId, Box<dyn Any + Send + Sync>>;
+type Storage = IndexMap<Box<dyn Any + Send + Sync>>;
 
 #[derive(Default)]
 pub(crate) struct ReactiveGraph {
@@ -36,7 +35,7 @@ unsafe impl Sync for ReactiveGraph {}
 pub(crate) struct Graph;
 
 impl Graph {
-    pub(crate) fn insert<R: Reactive + Send + Sync + 'static>(r: R) -> Node<R> {
+    pub(crate) fn insert<R: Send + Sync + 'static>(r: R) -> Node<R> {
         let mut graph = Self::write();
         let id = graph.storage.insert(Box::new(r));
         Node { id, marker: PhantomData }
@@ -64,7 +63,7 @@ impl Graph {
 
     pub(crate) fn with_downcast<R, F, U>(node: &Node<R>, f: F) -> U
     where
-        R: Reactive + 'static,
+        R: 'static,
         F: FnOnce(&R) -> U,
     {
         let graph = Self::read();
@@ -78,7 +77,7 @@ impl Graph {
 
     pub(crate) fn try_with_downcast<R, F, U>(node: &Node<R>, f: F) -> Option<U>
     where
-        R: Reactive + 'static,
+        R: 'static,
         F: FnOnce(Option<&R>) -> Option<U>,
     {
         Self::read()
@@ -94,12 +93,12 @@ impl Graph {
         prev
     }
 
-    pub(crate) fn remove<R: Reactive>(node: &Node<R>) -> Option<Box<dyn Any + Send + Sync>> {
+    pub(crate) fn remove<R>(node: &Node<R>) {
         let mut graph = Self::write();
-        graph.storage.remove(&node.id)
+        graph.storage.remove(&node.id);
     }
 
-    pub(crate) fn is_removed<R: Reactive>(node: &Node<R>) -> bool {
+    pub(crate) fn is_removed<R>(node: &Node<R>) -> bool {
         let graph = Self::read();
         graph.storage.get(&node.id).is_none()
     }
@@ -113,10 +112,8 @@ impl Graph {
 #########################################################
 */
 
-create_entity! { pub(crate) ReactiveId }
-
 pub(crate) struct Node<R> {
-    pub(crate) id: ReactiveId,
+    pub(crate) id: EntityId,
     marker: PhantomData<R>,
 }
 

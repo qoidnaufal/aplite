@@ -1,5 +1,3 @@
-use std::sync::{Arc, RwLock};
-
 use crate::signal_read::SignalRead;
 use crate::graph::{Node, Graph};
 use crate::signal_write::SignalWrite;
@@ -8,7 +6,7 @@ use crate::reactive_traits::*;
 use crate::source::*;
 use crate::subscriber::*;
 
-pub(crate) type SignalNode<T> = Node<Arc<RwLock<Value<T>>>>;
+pub(crate) type SignalNode<T> = Node<Value<T>>;
 
 pub struct Signal<T> {
     pub(crate) node: SignalNode<T>,
@@ -22,7 +20,7 @@ impl<T> Copy for Signal<T> {}
 
 impl<T: 'static> Signal<T> {
     pub fn new(value: T) -> Self {
-        let node = Graph::insert(Arc::new(RwLock::new(Value::new(value))));
+        let node = Graph::insert(Value::new(value));
 
         Self { node }
     }
@@ -46,38 +44,41 @@ impl<T: 'static> Signal<T> {
 
 impl<T: 'static> Source for Signal<T> {
     fn add_subscriber(&self, subscriber: AnySubscriber) {
-        Graph::with_downcast(&self.node, |node| node.add_subscriber(subscriber))
+        SubscriberStorage::insert(self.node.id, subscriber);
     }
 
     fn clear_subscribers(&self) {
-        Graph::with_downcast(&self.node, |node| node.clear_subscribers())
+        SubscriberStorage::with_mut(&self.node.id, |set| set.clear());
     }
 }
 
 impl<T: 'static> ToAnySource for Signal<T> {
     fn to_any_source(&self) -> AnySource {
-        Graph::with_downcast(&self.node, |node| node.to_any_source())
+        AnySource::new(self.node.id)
     }
 }
 
 impl<T: 'static> Track for Signal<T> {
     fn track(&self) {
-        Graph::with_downcast(&self.node, |node| node.track());
         Graph::with(|graph| {
             if let Some(any_subscriber) = graph.current.as_ref() {
                 any_subscriber.add_source(self.to_any_source());
+                self.add_subscriber(any_subscriber.clone());
             }
         })
     }
 
     fn untrack(&self) {
-        Graph::with_downcast(&self.node, |node| node.untrack())
+        self.clear_subscribers();
     }
 }
 
 impl<T: 'static> Notify for Signal<T> {
     fn notify(&self) {
-        Graph::with_downcast(&self.node, |node| node.notify())
+        SubscriberStorage::with_mut(&self.node.id, |set| {
+            set.drain(..)
+                .for_each(|any_subscriber| any_subscriber.notify());
+        });
     }
 }
 
@@ -85,17 +86,15 @@ impl<T: 'static> Read for Signal<T> {
     type Value = T;
 
     fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
-        Graph::with_downcast(&self.node, |node| {
-            f(&node.read().unwrap().value)
+        Graph::with_downcast(&self.node, |value| {
+            f(&value.read().unwrap())
         })
     }
 
     fn try_read<R, F: FnOnce(Option<&Self::Value>) -> Option<R>>(&self, f: F) -> Option<R> {
-        Graph::try_with_downcast(&self.node, |node| {
-            let value = node.and_then(|node| {
-                node.try_read().ok()
-            });
-            f(value.as_ref().map(|v| &v.value))
+        Graph::try_with_downcast(&self.node, |value| {
+            let guard = value.and_then(|val| val.read().ok());
+            f(guard.as_deref())
         })
     }
 }
@@ -131,9 +130,8 @@ impl<T: 'static> Write for Signal<T> {
     type Value = T;
 
     fn write(&self, f: impl FnOnce(&mut Self::Value)) {
-        Graph::with_downcast(&self.node, |node| {
-            let mut stored = node.write().unwrap();
-            f(&mut stored.value)
+        Graph::with_downcast(&self.node, |value| {
+            f(&mut value.write().unwrap())
         })
     }
 }
@@ -156,11 +154,8 @@ impl<T: 'static> Update for Signal<T> {
 
 impl<T: 'static> Dispose for Signal<T> {
     fn dispose(&self) {
-        if let Some(any) = Graph::remove(&self.node)
-        && let Some(stored_value) = any.downcast_ref::<Arc<RwLock<Value<T>>>>()
-        {
-            stored_value.untrack();
-        }
+        Graph::remove(&self.node);
+        SubscriberStorage::remove(&self.node.id);
     }
 
     fn is_disposed(&self) -> bool {

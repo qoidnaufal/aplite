@@ -13,7 +13,7 @@ pub struct Receiver(Weak<Inner>);
 
 #[derive(Default)]
 struct Inner {
-    signal: AtomicBool,
+    dirty: AtomicBool,
     waker: RwLock<Option<Waker>>,
 }
 
@@ -31,8 +31,7 @@ impl Channel {
 
 impl Sender {
     pub fn notify(&self) {
-        #[cfg(test)] eprintln!(">> notifying");
-        self.0.signal.store(true, Ordering::Relaxed);
+        self.0.dirty.store(true, Ordering::Relaxed);
         self.0.wake_by_ref();
     }
 
@@ -51,24 +50,16 @@ impl Inner {
         let mut inner = self.waker.write().unwrap();
         match inner.as_ref() {
             Some(old) if old.will_wake(new) => {},
-            _ => *inner = {
-                #[cfg(test)] eprintln!(">> storing waker");
-                Some(new.clone())
-            },
+            _ => *inner = Some(new.clone()),
         }
     }
 }
 
 impl Wake for Inner {
     fn wake(self: Arc<Self>) {
-        self.wake_by_ref();
-    }
-
-    fn wake_by_ref(self: &Arc<Self>) {
         if let Ok(mut lock) = self.waker.write()
             && let Some(waker) = lock.take()
         {
-            #[cfg(test)] eprintln!(">> waking up");
             waker.wake();
         }
     }
@@ -78,19 +69,17 @@ impl Stream for Receiver {
     type Item = ();
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if let Some(inner) = self.0.upgrade() {
-            #[cfg(test)] eprintln!(">> polled");
-            inner.set_waker(cx.waker());
+        match self.0.upgrade() {
+            Some(inner) => {
+                inner.set_waker(cx.waker());
 
-            if inner.signal.swap(false, Ordering::Relaxed) {
-                #[cfg(test)] eprintln!("\n   +++++ READYSOME +++++\n");
-                Poll::Ready(Some(()))
-            } else {
-                #[cfg(test)] eprintln!("\n   +++++  PENDING  +++++\n");
-                Poll::Pending
-            }
-        } else {
-            Poll::Ready(None)
+                if inner.dirty.swap(false, Ordering::Relaxed) {
+                    Poll::Ready(Some(()))
+                } else {
+                    Poll::Pending
+                }
+            },
+            None => Poll::Ready(None),
         }
     }
 }
@@ -108,24 +97,6 @@ impl Future for Receiver {
         self.poll_next(cx)
     }
 }
-
-// struct Recv<'a, T>
-// where
-//     T: ?Sized + Stream
-// {
-//     inner: &'a mut T
-// }
-
-// impl<T> Future for Recv<'_, T>
-// where
-//     T: ?Sized + Stream + Unpin,
-// {
-//     type Output = Option<T::Item>;
-
-//     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-//         Pin::new(&mut self.inner).poll_next(cx)
-//     }
-// }
 
 #[cfg(test)]
 mod channel_test {

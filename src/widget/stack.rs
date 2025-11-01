@@ -1,73 +1,66 @@
 use aplite_types::{Rgba, Unit};
-use aplite_renderer::{Shape, Scene};
 
-use crate::layout::{Layout, LayoutRules, Orientation};
+use crate::layout::{LayoutRules, Orientation};
 use crate::view::IntoView;
 
-use super::{WidgetId, Widget};
+use super::{Widget, ParentWidget};
 
-pub fn v_stack<F>() -> VStack {
+pub fn v_stack() -> VStack {
     VStack::new()
 }
 
-pub fn h_stack<F>() -> HStack {
+pub fn h_stack() -> HStack {
     HStack::new()
 }
 
 pub struct VStack {
-    id: WidgetId,
+    width: Unit,
+    height: Unit,
     min_width: Option<f32>,
     min_height: Option<f32>,
     max_width: Option<f32>,
     max_height: Option<f32>,
     background: Rgba,
-    border: Rgba,
+    border_color: Rgba,
     border_width: f32,
     layout_rules: LayoutRules,
-    children: Vec<Box<dyn IntoView>>,
 }
 
 impl VStack {
     pub fn new() -> Self {
         Self {
-            id: WidgetId::new_id(),
+            width: Unit::Fit,
+            height: Unit::Fit,
             min_width: Some(1.),
             min_height: Some(1.),
             max_width: None,
             max_height: None,
             background: Rgba::TRANSPARENT,
-            border: Rgba::TRANSPARENT,
+            border_color: Rgba::TRANSPARENT,
             border_width: 0.,
             layout_rules: LayoutRules {
                 orientation: Orientation::Vertical,
                 ..Default::default()
             },
-            children: Vec::new(),
         }
     }
+}
 
-    pub fn child(mut self, child: impl IntoView + 'static) -> Self {
-        self.children.push(Box::new(child));
+impl IntoView for VStack {
+    type View = Self;
+
+    fn into_view(self) -> Self::View {
         self
     }
 }
 
-impl Widget for VStack {
-    fn id(&self) -> &WidgetId {
-        &self.id
-    }
+impl Widget for VStack {}
 
-    fn draw(&self, scene: &mut Scene) {
-        todo!()
-    }
-
-    fn layout(&self, cx: &mut Layout) {
-        todo!()
-    }
-}
+impl ParentWidget for VStack {}
 
 pub struct HStack {
-    id: WidgetId,
+    width: Unit,
+    height: Unit,
     min_width: Option<f32>,
     min_height: Option<f32>,
     max_width: Option<f32>,
@@ -76,13 +69,13 @@ pub struct HStack {
     border: Rgba,
     border_width: f32,
     layout_rules: LayoutRules,
-    children: Vec<Box<dyn IntoView>>,
 }
 
 impl HStack {
     pub fn new() -> Self {
         Self {
-            id: WidgetId::new_id(),
+            width: Unit::Fit,
+            height: Unit::Fit,
             min_width: Some(1.),
             min_height: Some(1.),
             max_width: None,
@@ -94,21 +87,18 @@ impl HStack {
                 orientation: Orientation::Horizontal,
                 ..Default::default()
             },
-            children: Vec::new(),
         }
     }
 }
 
-impl Widget for HStack {
-    fn id(&self) -> &WidgetId {
-        &self.id
-    }
+impl IntoView for HStack {
+    type View = Self;
 
-    fn layout(&self, cx: &mut Layout) {
-        todo!()
-    }
-
-    fn draw(&self, scene: &mut Scene) {
-        todo!()
+    fn into_view(self) -> Self::View {
+        self
     }
 }
+
+impl Widget for HStack {}
+
+impl ParentWidget for HStack {}

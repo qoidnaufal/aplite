@@ -1,7 +1,55 @@
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, Weak, OnceLock, RwLock, RwLockWriteGuard};
+use std::collections::HashMap;
+
+use aplite_storage::EntityId;
 
 use crate::reactive_traits::*;
 use crate::source::AnySource;
+
+static SUBSCRIBER_STORAGE: OnceLock<RwLock<StorageInner>> = OnceLock::new();
+
+#[derive(Default)]
+struct StorageInner {
+    storage: HashMap<EntityId, SubscriberSet>,
+}
+
+pub(crate) struct SubscriberStorage;
+
+impl SubscriberStorage {
+    // fn read<'a>() -> RwLockReadGuard<'a, StorageInner> {
+    //     SUBSCRIBER_STORAGE.get_or_init(Default::default).read().unwrap()
+    // }
+
+    fn write<'a>() -> RwLockWriteGuard<'a, StorageInner> {
+        SUBSCRIBER_STORAGE.get_or_init(Default::default).write().unwrap()
+    }
+
+    pub(crate) fn insert(id: EntityId, subscriber: AnySubscriber) {
+        Self::write()
+            .storage
+            .entry(id)
+            .or_insert(SubscriberSet::default()).0
+            .push(subscriber);
+    }
+
+    pub(crate) fn with_mut(id: &EntityId, f: impl FnOnce(&mut Vec<AnySubscriber>)) {
+        let mut lock = Self::write();
+        if let Some(set) = lock.storage.get_mut(id) {
+            f(&mut set.0)
+        }
+    }
+
+    pub(crate) fn remove(id: &EntityId) {
+        let mut lock = Self::write();
+        lock.storage.remove(id);
+    }
+}
+
+unsafe impl Send for StorageInner {}
+unsafe impl Sync for StorageInner {}
+
+#[derive(Default)]
+pub(crate) struct SubscriberSet(pub(crate) Vec<AnySubscriber>);
 
 pub(crate) struct AnySubscriber(pub(crate) Weak<dyn Subscriber>);
 

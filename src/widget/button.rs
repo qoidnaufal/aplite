@@ -1,46 +1,38 @@
-use aplite_renderer::{Shape, Scene};
+use aplite_types::{Rgba, Unit};
 
-use super::{Widget, WidgetId};
-use crate::state::WidgetState;
+use crate::view::IntoView;
+use super::{Widget, InteractiveWidget};
 
 pub fn button() -> Button { Button::new() }
 
 pub struct Button {
-    state: WidgetState,
+    width: Unit,
+    height: Unit,
+    background: Rgba,
+    border_color: Rgba,
+    border_width: f32,
 }
 
 impl Button {
     pub fn new() -> Self {
-        let state = WidgetState::default()
-            .with_shape(Shape::RoundedRect)
-            .hoverable()
-            .with_size(80, 30);
-
         Self {
-            state
+            width: Unit::Fixed(80.),
+            height: Unit::Fixed(80.),
+            background: Rgba::RED,
+            border_color: Rgba::RED,
+            border_width: 0.0,
         }
     }
 }
 
-impl Widget for Button {
-    fn state_ref(&self) -> &WidgetState {
-        &self.state
-    }
+impl IntoView for Button {
+    type View = Self;
 
-    fn state_mut(&mut self) -> &mut WidgetState {
-        &mut self.state
-    }
-
-    fn draw(&self, scene: &mut Scene) {
-        if self.state.flag.visible {
-            scene.draw_rounded_rect(
-                &self.state.rect,
-                &self.state.transform,
-                &self.state.background.paint.as_paint_ref(),
-                &self.state.border.paint.as_paint_ref(),
-                &self.state.border.width,
-                &self.state.corner_radius,
-            );
-        }
+    fn into_view(self) -> Self::View {
+        self
     }
 }
+
+impl Widget for Button {}
+
+impl InteractiveWidget for Button {}

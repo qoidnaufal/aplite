@@ -1,19 +1,19 @@
 use std::iter::Zip;
 use std::slice::{Iter, IterMut};
 
-use crate::entity::Entity;
+use crate::entity::EntityId;
 use super::sparse_index::SparseIndices;
 
 /// A dense data storage which is guaranteed even after removal.
 /// Doesn't facilitate the creation of [`Entity`], unlike [`IndexMap`](crate::index_map::IndexMap).
 /// You'll need the assistance of [`EntityManager`](crate::entity::EntityManager) to create the key for indexing data.
-pub struct Array<E: Entity, T> {
-    pub(crate) ptr: SparseIndices<E>,
+pub struct Array<T> {
+    pub(crate) ptr: SparseIndices,
     pub(crate) data: Vec<T>,
-    pub(crate) entities: Vec<E>,
+    pub(crate) entities: Vec<EntityId>,
 }
 
-impl<E: Entity, T> Default for Array<E, T> {
+impl<T> Default for Array<T> {
     fn default() -> Self {
         Self {
             ptr: SparseIndices::default(),
@@ -23,7 +23,7 @@ impl<E: Entity, T> Default for Array<E, T> {
     }
 }
 
-impl<E: Entity, T: std::fmt::Debug> std::fmt::Debug for Array<E, T> {
+impl<T: std::fmt::Debug> std::fmt::Debug for Array<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_map()
             .entries(self.iter())
@@ -31,7 +31,7 @@ impl<E: Entity, T: std::fmt::Debug> std::fmt::Debug for Array<E, T> {
     }
 }
 
-impl<E: Entity, T> Array<E, T> {
+impl<T> Array<T> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             ptr: SparseIndices::default(),
@@ -40,26 +40,31 @@ impl<E: Entity, T> Array<E, T> {
         }
     }
 
+    pub fn reserve_capacity(&mut self, capacity: usize) {
+        self.data.reserve_exact(capacity);
+        self.entities.reserve_exact(capacity);
+    }
+
     // pub(crate) fn get_raw(&self, entity: &E) -> Option<&UnsafeCell<T>> {
     //     self.ptr
     //         .get_index(entity)
     //         .map(|index| &self.data[index.index()])
     // }
 
-    pub fn get(&self, entity: &E) -> Option<&T> {
+    pub fn get(&self, id: &EntityId) -> Option<&T> {
         self.ptr
-            .get_index(entity)
+            .get_index(id)
             .map(|index| &self.data[index.index()])
     }
 
-    pub fn get_mut(&mut self, entity: &E) -> Option<&mut T> {
+    pub fn get_mut(&mut self, id: &EntityId) -> Option<&mut T> {
         self.ptr
-            .get_index(entity)
+            .get_index(id)
             .map(|index| &mut self.data[index.index()])
     }
 
-    pub fn get_or_insert(&mut self, entity: &E, value: impl FnOnce() -> T) -> &mut T {
-        if let Some(index) = self.ptr.get_index(entity)
+    pub fn get_or_insert(&mut self, id: &EntityId, value: impl FnOnce() -> T) -> &mut T {
+        if let Some(index) = self.ptr.get_index(id)
             && !index.is_null()
         {
             return &mut self.data[index.index()]
@@ -67,16 +72,16 @@ impl<E: Entity, T> Array<E, T> {
 
         let data_index = self.data.len();
 
-        self.ptr.set_index(entity, data_index);
+        self.ptr.set_index(id, data_index);
         self.data.push(value());
-        self.entities.push(*entity);
+        self.entities.push(*id);
 
-        self.get_mut(entity).unwrap()
+        self.get_mut(id).unwrap()
     }
 
     /// Inserting or replacing the value
-    pub fn insert(&mut self, entity: &E, value: T) {
-        if let Some(index) = self.ptr.get_index(entity)
+    pub fn insert(&mut self, id: &EntityId, value: T) {
+        if let Some(index) = self.ptr.get_index(id)
             && !index.is_null()
         {
             self.data[index.index()] = value;
@@ -85,24 +90,24 @@ impl<E: Entity, T> Array<E, T> {
 
         let data_index = self.data.len();
 
-        self.ptr.set_index(entity, data_index);
+        self.ptr.set_index(id, data_index);
         self.data.push(value);
-        self.entities.push(*entity);
+        self.entities.push(*id);
     }
 
     /// The contiguousness of the data is guaranteed after removal via [`Vec::swap_remove`],
     /// but the order of the data is is not.
-    pub fn remove(&mut self, entity: E) -> Option<T> {
+    pub fn remove(&mut self, id: EntityId) -> Option<T> {
         if self.data.is_empty() { return None }
 
         self.ptr
-            .get_index(&entity)
+            .get_index(&id)
             .cloned()
             .map(|idx| {
                 let last = self.entities.last().unwrap();
 
                 self.ptr.set_index(last, idx.index());
-                self.ptr.set_null(&entity);
+                self.ptr.set_null(&id);
                 self.entities.swap_remove(idx.index());
                 self.data.swap_remove(idx.index())
             })
@@ -118,8 +123,8 @@ impl<E: Entity, T> Array<E, T> {
         self.data.is_empty()
     }
 
-    pub fn contains(&self, entity: &E) -> bool {
-        self.entities.contains(entity)
+    pub fn contains(&self, id: &EntityId) -> bool {
+        self.entities.contains(id)
     }
 
     pub fn shrink_to_fit(&mut self) {
@@ -132,15 +137,15 @@ impl<E: Entity, T> Array<E, T> {
         self.data.clear();
     }
 
-    pub fn entity_data_index(&self, entity: &E) -> Option<usize> {
-        self.ptr.get_index(entity).map(|i| i.index())
+    pub fn entity_data_index(&self, id: &EntityId) -> Option<usize> {
+        self.ptr.get_index(id).map(|i| i.index())
     }
 
-    pub fn iter(&self) -> ArrayIter<'_, E, T> {
+    pub fn iter(&self) -> ArrayIter<'_, T> {
         ArrayIter::new(self)
     }
 
-    pub fn iter_mut(&mut self) -> ArrayIterMut<'_, E, T> {
+    pub fn iter_mut(&mut self) -> ArrayIterMut<'_, T> {
         ArrayIterMut::new(self)
     }
 
@@ -166,12 +171,12 @@ impl<E: Entity, T> Array<E, T> {
 #########################################################
 */
 
-pub struct ArrayIter<'a, E: Entity, T> {
-    inner: Zip<Iter<'a, E>, Iter<'a, T>>,
+pub struct ArrayIter<'a, T> {
+    inner: Zip<Iter<'a, EntityId>, Iter<'a, T>>,
 }
 
-impl<'a, E: Entity, T> ArrayIter<'a, E, T> {
-    pub(crate) fn new(ds: &'a Array<E, T>) -> Self {
+impl<'a, T> ArrayIter<'a, T> {
+    pub(crate) fn new(ds: &'a Array<T>) -> Self {
         let inner = ds.entities
             .iter()
             .zip(ds.data.iter());
@@ -181,20 +186,20 @@ impl<'a, E: Entity, T> ArrayIter<'a, E, T> {
     }
 }
 
-impl<'a, E: Entity, T> Iterator for ArrayIter<'a, E, T> {
-    type Item = (&'a E, &'a T);
+impl<'a, T> Iterator for ArrayIter<'a, T> {
+    type Item = (&'a EntityId, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
     }
 }
 
-pub struct ArrayIterMut<'a, E: Entity, T> {
-    inner: Zip<Iter<'a, E>, IterMut<'a, T>>,
+pub struct ArrayIterMut<'a, T> {
+    inner: Zip<Iter<'a, EntityId>, IterMut<'a, T>>,
 }
 
-impl<'a, E: Entity, T> ArrayIterMut<'a, E, T> {
-    pub(crate) fn new(ds: &'a mut Array<E, T>) -> Self {
+impl<'a, T> ArrayIterMut<'a, T> {
+    pub(crate) fn new(ds: &'a mut Array<T>) -> Self {
         let inner = ds.entities
             .iter()
             .zip(ds.data.iter_mut());
@@ -204,8 +209,8 @@ impl<'a, E: Entity, T> ArrayIterMut<'a, E, T> {
     }
 }
 
-impl<'a, E: Entity, T> Iterator for ArrayIterMut<'a, E, T> {
-    type Item = (&'a E, &'a mut T);
+impl<'a, T> Iterator for ArrayIterMut<'a, T> {
+    type Item = (&'a EntityId, &'a mut T);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()

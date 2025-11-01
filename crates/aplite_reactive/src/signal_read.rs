@@ -27,17 +27,17 @@ impl<T: 'static> SignalRead<T> {
 
 impl<T: 'static> Source for SignalRead<T> {
     fn add_subscriber(&self, subscriber: AnySubscriber) {
-        Graph::with_downcast(&self.node, |node| node.add_subscriber(subscriber))
+        SubscriberStorage::insert(self.node.id, subscriber);
     }
 
     fn clear_subscribers(&self) {
-        Graph::with_downcast(&self.node, |node| node.clear_subscribers())
+        SubscriberStorage::with_mut(&self.node.id, |set| set.clear());
     }
 }
 
 impl<T: 'static> ToAnySource for SignalRead<T> {
     fn to_any_source(&self) -> AnySource {
-        Graph::with_downcast(&self.node, |node| node.to_any_source())
+        AnySource::new(self.node.id)
     }
 }
 
@@ -51,7 +51,7 @@ impl<T: 'static> Track for SignalRead<T> {
     }
 
     fn untrack(&self) {
-        Graph::with_downcast(&self.node, |node| node.untrack())
+        self.clear_subscribers();
     }
 }
 
@@ -59,17 +59,14 @@ impl<T: 'static> Read for SignalRead<T> {
     type Value = T;
 
     fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
-        Graph::with_downcast(&self.node, |node| {
-            f(&node.read().unwrap().value)
+        Graph::with_downcast(&self.node, |value| {
+            f(&value.read().unwrap())
         })
     }
 
     fn try_read<R, F: FnOnce(Option<&Self::Value>) -> Option<R>>(&self, f: F) -> Option<R> {
-        Graph::try_with_downcast(&self.node, |node| {
-            let value = node.and_then(|node| {
-                node.try_read().ok()
-            });
-            f(value.as_ref().map(|v| &v.value))
+        Graph::try_with_downcast(&self.node, |value| {
+            f(value.and_then(|val| val.read().ok()).as_deref())
         })
     }
 }

@@ -13,6 +13,8 @@ struct Worker {
 
 impl Worker {
     pub fn work(&self) {
+        // WARN: this is busy loop
+        // TODO: create better task management
         while let Ok(task) = self.rx.recv() {
             if let Ok(mut future) = task.future.write() {
                 let waker = Waker::from(Arc::clone(&task));
@@ -40,22 +42,16 @@ impl Executor {
         let (tx, rx) = sync_channel(capacity);
         let worker = Worker { rx };
 
-        SPAWNER.set(tx).expect("Executor can only be initiated once");
+        SPAWNER.set(tx).expect("Executor can only be initialized once");
 
         let worker_thread = thread::Builder::new().name("async worker".to_string());
-        worker_thread.spawn(move || worker.work()).unwrap();
+        let _ = worker_thread.spawn(move || worker.work());
     }
 
     pub fn spawn(future: impl Future<Output = ()> + 'static) {
-        let task = Arc::new(Task::new(future));
+        let spawner = SPAWNER.get().expect("Executor must be initialized once");
 
-        let spawner = SPAWNER.get_or_init(|| {
-            let (tx, rx) = sync_channel(128);
-            let worker = Worker { rx };
-            let worker_thread = thread::Builder::new().name("async worker".to_string());
-            let _ = worker_thread.spawn(move || worker.work());
-            tx
-        });
+        let task = Arc::new(Task::new(future));
 
         let _ = spawner.send(task);
     }
