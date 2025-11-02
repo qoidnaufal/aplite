@@ -1,39 +1,47 @@
 #[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct EntityId(u32);
+pub struct EntityId {
+    pub(crate) index: u32,
+    pub(crate) version: u32,
+}
 
 impl EntityId {
-    pub(crate) const VERSION_BITS: u8 = 10;
-    pub(crate) const VERSION_MASK: u16 = (1 << Self::VERSION_BITS) - 1;
-    pub(crate) const INDEX_BITS: u8 = 22;
-    pub(crate) const INDEX_MASK: u32 = (1 << Self::INDEX_BITS) - 1;
-
-    pub(crate) fn new(index: u32, version: u16) -> Self {
-        Self((version as u32) << Self::INDEX_BITS | index)
+    pub(crate) const fn new(index: u32, version: u32) -> Self {
+        Self {
+            index,
+            version,
+        }
     }
 
-    pub fn root() -> Self {
-        Self(0)
+    pub const fn root() -> Self {
+        Self {
+            index: 0,
+            version: 0,
+        }
+    }
+
+    pub fn raw(&self) -> u64 {
+        (self.version as u64) << 32 | self.index as u64
     }
 
     pub fn index(&self) -> usize {
-        (self.0 & Self::INDEX_MASK) as usize
+        self.index as usize
     }
 
-    pub(crate) fn version(&self) -> u16 {
-        (self.0 >> Self::INDEX_BITS) as u16 & Self::VERSION_MASK
+    pub const fn version(&self) -> u32 {
+        self.version
     }
 }
 
 impl std::fmt::Debug for EntityId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "EntityId({})", self.index())
+        write!(f, "EntityId({})", self.index)
     }
 }
 
 #[derive(Debug)]
 pub struct IdManager {
-    recycled: std::collections::VecDeque<u32>,
-    versions: Vec<u16>,
+    versions: Vec<u32>,
+    recycled: Vec<u32>,
 }
 
 impl Default for IdManager {
@@ -45,13 +53,11 @@ impl Default for IdManager {
 }
 
 impl IdManager {
-    const MINIMUM_FREE_INDEX: usize = 1 << EntityId::VERSION_BITS;
-
     /// Create a new manager with the specified capacity for the version manager & recycled,
-    /// Using [`EntityManager::default`] will create one with no preallocated capacity at all
+    /// Using [`IdManager::default`] will create one with no preallocated capacity at all
     pub fn with_capacity(capacity: usize) -> Self {
         let mut this = Self {
-            recycled: std::collections::VecDeque::default(),
+            recycled: Vec::default(),
             versions: Vec::with_capacity(capacity + 1),
         };
 
@@ -60,15 +66,16 @@ impl IdManager {
     }
 
     pub fn create(&mut self) -> EntityId {
-        let id = if self.recycled.len() >= (Self::MINIMUM_FREE_INDEX) {
-            self.recycled.pop_front().unwrap()
-        } else {
-            let id = self.versions.len() as u32;
-            assert!(id <= EntityId::INDEX_MASK);
-            self.versions.push(0);
-            id
-        };
-
+        let id = self.recycled
+            .pop()
+            .unwrap_or_else(|| {
+                let id = u32::try_from(self.versions.len())
+                    .ok()
+                    .expect("Created Entity should not exceed u32::MAX");
+                self.versions.push(0);
+                assert!(id <= u32::MAX);
+                id
+            });
         EntityId::new(id, self.versions[id as usize])
     }
 
@@ -79,7 +86,7 @@ impl IdManager {
     pub fn destroy(&mut self, id: EntityId) {
         let idx = id.index();
         self.versions[idx] += 1;
-        self.recycled.push_back(idx as u32);
+        self.recycled.push(idx as u32);
     }
 
     pub fn reset(&mut self) {

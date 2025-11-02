@@ -23,8 +23,8 @@ pub(crate) struct WindowHandle {
 }
 
 pub struct AppConfig {
-    /// The amount of widgets on the app,
-    /// If set to None, the default is 4 * 1024
+    /// The size preallocated to store the widgets.
+    /// If set to None, the value will be set to 1Mb (1024 * 1024).
     pub allocation_size: Option<usize>,
     pub executor_capacity: usize,
     pub window_size: Size,

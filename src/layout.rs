@@ -6,7 +6,7 @@ use aplite_types::{
 };
 use aplite_storage::{
     EntityId,
-    Array,
+    DenseMap,
     Tree,
 };
 
@@ -182,7 +182,7 @@ impl LayoutNode {
 pub struct Layout {
     pub(crate) window_rect: Rect,
     pub(crate) tree: Tree,
-    pub(crate) rects: Array<Rect>,
+    pub(crate) rects: DenseMap<Rect>,
 }
 
 impl Layout {
@@ -194,7 +194,7 @@ impl Layout {
         Self {
             window_rect,
             tree: Tree::with_capacity(capacity),
-            rects: Array::with_capacity(capacity),
+            rects: DenseMap::with_capacity(capacity),
         }
     }
 

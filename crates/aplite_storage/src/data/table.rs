@@ -3,11 +3,9 @@ use std::any::{Any, TypeId};
 use std::cell::UnsafeCell;
 
 use super::sparse_index::SparseIndices;
-use super::component::{
-    Component,
-    IntoComponent,
-    Query,
-    QueryData,
+use super::{
+    component::{Component, IntoComponent},
+    query::{Query, QueryData},
 };
 
 use crate::entity::EntityId;
@@ -15,7 +13,7 @@ use crate::entity::EntityId;
 pub struct Table {
     /// internally it's `Vec<UnsafeCell<T>>`,
     pub(crate) inner: HashMap<TypeId, Box<dyn Any>>,
-    pub(crate) ptr: SparseIndices,
+    pub(crate) indexes: SparseIndices,
     pub(crate) entities: Vec<EntityId>,
     pub(crate) components: Vec<TypeId>,
 }
@@ -31,7 +29,7 @@ impl Table {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             inner: HashMap::default(),
-            ptr: SparseIndices::default(),
+            indexes: SparseIndices::default(),
             entities: Vec::with_capacity(capacity),
             components: Vec::new(),
         }
@@ -39,7 +37,7 @@ impl Table {
 
     pub fn register_component(&mut self, id: &EntityId, component: impl IntoComponent) {
         let insert_index = self.entities.len();
-        self.ptr.set_index(id, insert_index);
+        self.indexes.set_index(id, insert_index);
         self.entities.push(*id);
         component.into_component().register(id, self);
     }
@@ -52,7 +50,7 @@ impl Table {
             .downcast_mut::<Vec<UnsafeCell<T>>>()
             .unwrap();
 
-        if let Some(index) = self.ptr.get_data_index(id) {
+        if let Some(index) = self.indexes.get_data_index(id) {
             if let Some(data) = vec.get_mut(index) {
                 *data.get_mut() = value;
                 return;
@@ -66,7 +64,7 @@ impl Table {
     pub fn update<T: 'static>(&mut self, id: &EntityId, value: T) {
         if let Some(any) = self.inner.get_mut(&TypeId::of::<T>()) {
             if let Some(vec) = any.downcast_mut::<Vec<UnsafeCell<T>>>() {
-                if let Some(index) = self.ptr.get_data_index(id) {
+                if let Some(index) = self.indexes.get_data_index(id) {
                     *vec[index].get_mut() = value;
                 }
             }
@@ -76,7 +74,7 @@ impl Table {
     pub fn update_unsafe<T: 'static>(&self, id: &EntityId, value: T) {
         if let Some(any) = self.inner.get(&TypeId::of::<T>()) {
             if let Some(vec) = any.downcast_ref::<Vec<UnsafeCell<T>>>() {
-                if let Some(index) = self.ptr.get_data_index(id) {
+                if let Some(index) = self.indexes.get_data_index(id) {
                     unsafe {
                         *&mut *vec[index].get() = value;
                     }
@@ -117,7 +115,7 @@ impl Table {
     pub fn clear(&mut self) {
         self.inner.clear();
         self.entities.clear();
-        self.ptr.reset();
+        self.indexes.reset();
     }
 }
 

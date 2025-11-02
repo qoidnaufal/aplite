@@ -1,8 +1,15 @@
-pub(crate) mod array;
 pub(crate) mod component;
+pub(crate) mod query;
 pub(crate) mod sparse_index;
 pub(crate) mod table;
 
-// pub struct DataStorage<E: crate::entity::Entity + 'static> {
-//     tables: std::collections::HashMap<Vec<std::any::TypeId>, table::Table<E>>,
-// }
+#[macro_export]
+macro_rules! impl_tuple_macro {
+    ($macro:ident, $next:tt) => {
+        $macro!{$next}
+    };
+    ($macro:ident, $next:tt, $($rest:tt),*) => {
+        $macro!{$next, $($rest),*}
+        impl_tuple_macro!{$macro, $($rest),*}
+    };
+}

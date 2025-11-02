@@ -51,3 +51,7 @@ pub mod prelude {
 
     pub type ApliteResult = Result<(), ApliteError>;
 }
+
+pub mod theme {
+    pub use aplite_types::gruvbox_dark;
+}

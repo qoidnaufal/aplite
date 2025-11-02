@@ -4,37 +4,10 @@ use std::cell::RefCell;
 use aplite_reactive::*;
 use aplite_renderer::{Renderer};
 use aplite_types::{Vec2f, Rect, Size};
-use aplite_storage::{Arena, Array, Tree, IdManager, EntityId};
+use aplite_storage::EntityId;
 
-use crate::view::{AnyView, IntoView, View};
-use crate::widget::Widget;
+use crate::view::{IntoView, View, ViewStorage};
 use crate::cursor::{Cursor, MouseAction, MouseButton};
-
-pub(crate) struct ViewStorage {
-    pub(crate) arena: Arena,
-    pub(crate) id_manager: IdManager,
-    pub(crate) views: Array<AnyView>,
-    pub(crate) tree: Tree,
-}
-
-impl ViewStorage {
-    pub(crate) fn new(allocation_size: Option<usize>) -> Self {
-        let allocation_size = allocation_size.unwrap_or(1024 * 1024);
-        Self {
-            arena: Arena::new(allocation_size),
-            views: Array::default(),
-            id_manager: IdManager::default(),
-            tree: Tree::default(),
-        }
-    }
-
-    pub(crate) fn insert<IV: IntoView + 'static>(&mut self, widget: IV) -> EntityId {
-        let item = self.arena.alloc(widget.into_view()).map(|w| w as &mut dyn Widget);
-        let id = self.id_manager.create();
-        self.views.insert(&id, AnyView::new(item));
-        id
-    }
-}
 
 pub struct Context {
     pub(crate) storage: Rc<RefCell<ViewStorage>>,

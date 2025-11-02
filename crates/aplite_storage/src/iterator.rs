@@ -4,8 +4,8 @@ use std::iter::{Enumerate, FilterMap};
 use crate::entity::EntityId;
 use crate::tree::tree::Tree;
 use crate::tree::node::NodeRef;
-use crate::indexmap::slot::{Slot, Content};
-use crate::indexmap::IndexMap;
+use crate::map::slot::Slot;
+use crate::map::index_map::IndexMap;
 
 /*
 #########################################################
@@ -16,10 +16,10 @@ use crate::indexmap::IndexMap;
 */
 
 fn index_map_filter_ref<T>((i, slot): (usize, &Slot<T>)) -> Option<(EntityId, Option<&T>)> {
-    matches!(slot.content, Content::Occupied(_))
-        .then_some((
+    slot.get_content()
+        .map(|val| (
             EntityId::new(i as u32, slot.version),
-            slot.get_content()
+            Some(val)
         ))
 }
 
@@ -73,10 +73,11 @@ impl<'a, T> DoubleEndedIterator for IndexMapIter<'a, T> {
 */
 
 fn index_map_filter_mut<T>((i, slot): (usize, &mut Slot<T>)) -> Option<(EntityId, Option<&mut T>)> {
-    matches!(slot.content, Content::Occupied(_))
-        .then_some((
-            EntityId::new(i as u32, slot.version),
-            slot.get_content_mut()
+    let version = slot.version;
+    slot.get_content_mut()
+        .map(|val| (
+            EntityId::new(i as u32, version),
+            Some(val)
         ))
 }
 
@@ -349,7 +350,7 @@ impl<'a> Iterator for TreeAncestryIter<'a> {
 mod iterator_test {
     use crate::tree::tree::Tree;
     use crate::entity::{EntityId, IdManager};
-    use crate::indexmap::IndexMap;
+    use crate::map::index_map::IndexMap;
 
     #[test]
     fn indexmap() {

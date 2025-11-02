@@ -3,10 +3,35 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::rc::Weak;
 
-use aplite_storage::{ArenaItem, EntityId};
+use aplite_storage::{Arena, ArenaItem, DenseMap, EntityId, IdManager, Tree};
 
 use crate::widget::{InteractiveWidget, ParentWidget, Widget};
-use crate::context::ViewStorage;
+
+pub(crate) struct ViewStorage {
+    pub(crate) arena: Arena,
+    pub(crate) id_manager: IdManager,
+    pub(crate) views: DenseMap<AnyView>,
+    pub(crate) tree: Tree,
+}
+
+impl ViewStorage {
+    pub(crate) fn new(allocation_size: Option<usize>) -> Self {
+        let allocation_size = allocation_size.unwrap_or(1024 * 1024);
+        Self {
+            arena: Arena::new(allocation_size),
+            views: DenseMap::default(),
+            id_manager: IdManager::default(),
+            tree: Tree::default(),
+        }
+    }
+
+    pub(crate) fn insert<IV: IntoView + 'static>(&mut self, widget: IV) -> EntityId {
+        let item = self.arena.alloc_mapped(widget.into_view(), |w| w as &mut dyn Widget);
+        let id = self.id_manager.create();
+        self.views.insert(&id, AnyView::new(item));
+        id
+    }
+}
 
 pub trait IntoView {
     type View: Widget;

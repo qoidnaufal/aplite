@@ -1,5 +1,6 @@
 use std::ptr::NonNull;
 
+#[repr(transparent)]
 pub struct ArenaItem<T: ?Sized> {
     raw: NonNull<T>,
     marker: std::marker::PhantomData<T>,

@@ -1,4 +1,8 @@
- pub const fn rgba8(r: u8, g: u8, b: u8, a: u8) -> Rgba {
+pub const fn rgb8(r: u8, g: u8, b: u8) -> Rgba {
+    Rgba::new(r, g, b, 255)
+}
+
+pub const fn rgba8(r: u8, g: u8, b: u8, a: u8) -> Rgba {
     Rgba::new(r, g, b, a)
 }
 
@@ -106,3 +110,35 @@ impl PartialEq for Rgba {
 }
 
 impl Eq for Rgba {}
+
+pub mod gruvbox_dark {
+    use super::{Rgba, rgb8};
+
+    pub const BG_0: Rgba = rgb8(0x28, 0x28, 0x28);
+    pub const BG_H: Rgba = rgb8(0x1d, 0x20, 0x21);
+    pub const BG_S: Rgba = rgb8(0x32, 0x30, 0x2f);
+
+    pub const FG_0: Rgba = rgb8(0xfb, 0xf1, 0xc7);
+    pub const FG_1: Rgba = rgb8(0xeb, 0xdb, 0xb2);
+
+    pub const RED_0: Rgba = rgb8(0xcc, 0x24, 0x1d);
+    pub const RED_1: Rgba = rgb8(0xfb, 0x49, 0x34);
+
+    pub const GREEN_0: Rgba = rgb8(0x98, 0x97, 0x1a);
+    pub const GREEN_1: Rgba = rgb8(0xb8, 0xbb, 0x26);
+
+    pub const YELLOW_0: Rgba = rgb8(0xd7, 0x99, 0x21);
+    pub const YELLOW_1: Rgba = rgb8(0xfa, 0xbd, 0x2f);
+
+    pub const BLUE_0: Rgba = rgb8(0x45, 0x85, 0x88);
+    pub const BLUE_1: Rgba = rgb8(0x83, 0xa5, 0x98);
+
+    pub const PURPLE_0: Rgba = rgb8(0xb1, 0x62, 0x86);
+    pub const PURPLE_1: Rgba = rgb8(0xd3, 0x86, 0x9b);
+
+    pub const AQUA_0: Rgba = rgb8(0x68, 0x9d, 0x6a);
+    pub const AQUA_1: Rgba = rgb8(0x8e, 0xc0, 0x7c);
+
+    pub const ORANGE_0: Rgba = rgb8(0xd6, 0x5d, 0x0e);
+    pub const ORANGE_1: Rgba = rgb8(0xfe, 0x80, 0x19);
+}

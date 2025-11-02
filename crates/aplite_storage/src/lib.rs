@@ -1,7 +1,7 @@
 mod arena;
 mod data;
 mod entity;
-mod indexmap;
+mod map;
 mod iterator;
 mod tree;
 
@@ -11,17 +11,17 @@ pub use arena::{
     item::ArenaItem,
 };
 pub use entity::{IdManager, EntityId};
-pub use indexmap::{
-    IndexMap,
-    IndexMapError,
+pub use map::{
+    index_map::{IndexMap, IndexMapError},
+    dense_map::DenseMap,
 };
 pub use tree::{
     tree::{Tree, TreeError},
     node::{Node, NodeRef, SubTree},
 };
 pub use data::{
-    array::Array,
-    component::{Query, Component, IntoComponent},
+    component::{Component, IntoComponent},
+    query::Query,
     sparse_index::SparseIndices,
     table::Table,
 };

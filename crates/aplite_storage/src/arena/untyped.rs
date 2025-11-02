@@ -6,7 +6,7 @@ use super::item::ArenaItem;
 pub struct Arena {
     start: *mut u8,
     offset: *mut u8,
-    allocated: Vec<Element>,
+    drop_calls: Vec<DropCaller>,
     size: NonZeroUsize,
 }
 
@@ -32,7 +32,7 @@ impl Arena {
             Self {
                 start,
                 offset: start,
-                allocated: vec![],
+                drop_calls: vec![],
                 size,
             }
         }
@@ -56,7 +56,7 @@ impl Arena {
 
             self.offset = new_offset;
 
-            self.allocated.push(Element { raw, drop: drop::<T> });
+            self.drop_calls.push(DropCaller { raw, drop: drop::<T> });
 
             let ptr = raw.cast();
             std::ptr::write(ptr, data);
@@ -64,9 +64,39 @@ impl Arena {
         }
     }
 
+    pub fn alloc_mapped<T, U, F>(&mut self, data: T, map: F) -> ArenaItem<U>
+    where
+        U: ?Sized,
+        F: FnOnce(&mut T) -> &mut U,
+    {
+        #[inline]
+        unsafe fn drop<T>(raw: *mut u8) {
+            unsafe {
+                let ptr = raw.cast::<T>();
+                ptr.drop_in_place();
+            }
+        }
+
+        unsafe {
+            let aligned_offset = self.offset.align_offset(align_of::<T>());
+            let raw = self.offset.add(aligned_offset);
+            let new_offset = raw.add(size_of::<T>());
+
+            assert!(new_offset <= self.start.add(self.size.get()));
+
+            self.offset = new_offset;
+
+            self.drop_calls.push(DropCaller { raw, drop: drop::<T> });
+
+            let ptr = raw.cast();
+            std::ptr::write(ptr, data);
+            ArenaItem::new(map(&mut *ptr))
+        }
+    }
+
     // WARN: need to mark the raw pointer in ArenaItem as invalid
     pub fn clear(&mut self) {
-        self.allocated.clear();
+        self.drop_calls.clear();
         self.offset = self.start;
     }
 
@@ -88,12 +118,12 @@ impl Arena {
     }
 }
 
-struct Element {
+struct DropCaller {
     raw: *mut u8,
     drop: unsafe fn(*mut u8),
 }
 
-impl Drop for Element {
+impl Drop for DropCaller {
     fn drop(&mut self) {
         unsafe {
             (self.drop)(self.raw)

@@ -1,8 +1,8 @@
 use crate::entity::EntityId;
 use crate::iterator::{IndexMapIter, IndexMapIterMut};
-use super::slot::{Slot, Content};
+use super::slot::Slot;
 
-/// Arena style non-contiguous key-value data storage. [`IndexMap`] facilitates the creation of [`Entity`].
+/// Arena style non-contiguous key-value data storage. Facilitates the creation of [`Entity`].
 pub struct IndexMap<T> {
     pub(crate) inner: Vec<Slot<T>>,
     next: u32,
@@ -12,27 +12,6 @@ pub struct IndexMap<T> {
 impl<T> Default for IndexMap<T> {
     fn default() -> Self {
         Self::new_with_capacity(0)
-    }
-}
-
-impl<T: PartialEq> IndexMap<T> {
-    pub fn insert_no_duplicate(&mut self, data: T) -> EntityId {
-        self.try_insert_no_duplicate(data).unwrap()
-    }
-
-    #[inline(always)]
-    pub fn try_insert_no_duplicate(&mut self, data: T) -> Result<EntityId, IndexMapError> {
-        if let Some((idx, slot)) = self.inner
-            .iter()
-            .enumerate()
-            .find(|(_, slot)| {
-                slot.get_content()
-                    .is_some_and(|content| content == &data)
-            }) {
-            Ok(EntityId::new(idx as u32, slot.version))
-        } else {
-            self.try_insert(data)
-        }
     }
 }
 
@@ -46,16 +25,13 @@ impl<T> IndexMap<T> {
     /// but kinda wasteful if you don't really use all the capacity.
     #[inline(always)]
     pub fn with_max_capacity() -> Self {
-        Self::new_with_capacity(EntityId::INDEX_MASK as usize)
+        Self::new_with_capacity(u32::MAX as usize)
     }
 
     #[inline(always)]
     fn new_with_capacity(capacity: usize) -> Self {
         let mut inner = Vec::with_capacity(capacity + 1);
-        inner.push(Slot {
-            version: 0,
-            content: Content::Vacant(1),
-        });
+        inner.push(Slot::new());
         Self {
             inner,
             next: 0,
@@ -72,27 +48,21 @@ impl<T> IndexMap<T> {
 
     #[inline(always)]
     pub fn try_insert(&mut self, data: T) -> Result<EntityId, IndexMapError> {
-        if self.count > EntityId::INDEX_MASK { return Err(IndexMapError::ReachedMaxId) }
+        if self.count > u32::MAX { return Err(IndexMapError::ReachedMaxId) }
 
         match self.inner.get_mut(self.next as usize) {
             // first time or after removal
-            Some(slot) => match slot.content {
-                Content::Occupied(_) => Err(IndexMapError::InternalCollision),
-                Content::Vacant(idx) => {
-                    let entity = EntityId::new(self.next, slot.version);
-                    self.next = idx;
+            Some(slot) => slot.occupy(data)
+                .map(|next| {
+                    let id = EntityId::new(self.next, slot.version);
+                    self.next = next;
                     self.count += 1;
-                    slot.content = Content::Occupied(data);
-
-                    Ok(entity)
-                },
-            }
+                    id
+                })
+                .ok_or(IndexMapError::InvalidSlot),
             None => {
                 let entity = EntityId::new(self.next, 0);
-                self.inner.push(Slot {
-                    version: 0,
-                    content: Content::Occupied(data),
-                });
+                self.inner.push(Slot::with_data(data));
                 self.count += 1;
                 self.next += 1;
 
@@ -111,10 +81,10 @@ impl<T> IndexMap<T> {
     #[inline(always)]
     pub fn try_replace(&mut self, id: &EntityId, data: T) -> Result<T, IndexMapError> {
         match self.inner.get_mut(id.index()) {
-            Some(slot) if id.version() == slot.version => {
+            Some(slot) if id.version == slot.version => {
                 slot.get_content_mut()
                     .ok_or(IndexMapError::InvalidSlot)
-                    .map(|prev| std::mem::replace(prev, data))
+                    .map(|prev| core::mem::replace(prev, data))
             },
             _ => Err(IndexMapError::InvalidId),
         }
@@ -125,7 +95,7 @@ impl<T> IndexMap<T> {
         self.inner
             .get(id.index())
             .and_then(|slot| {
-                if slot.version == id.version() {
+                if slot.version == id.version {
                     slot.get_content()
                 } else {
                     None
@@ -138,7 +108,7 @@ impl<T> IndexMap<T> {
         self.inner
             .get_mut(id.index())
             .and_then(|slot| {
-                if slot.version == id.version() {
+                if id.version == slot.version {
                     slot.get_content_mut()
                 } else {
                     None
@@ -148,32 +118,23 @@ impl<T> IndexMap<T> {
 
     #[inline(always)]
     pub fn remove(&mut self, id: &EntityId) -> Option<T> {
-        if let Some(slot) = self.inner.get_mut(id.index())
-            && slot.version == id.version()
-        {
-            let ret = std::mem::replace(&mut slot.content, Content::Vacant(self.next));
-            slot.version += 1;
-            self.next = id.index() as u32;
-            self.count -= 1;
-
-            if self.inner.len() as u32 - self.count > 4 {
-                self.inner.shrink_to_fit();
-            }
-
-            match ret {
-                Content::Occupied(data) => Some(data),
-                Content::Vacant(_) => None,
-            }
-        } else {
-            None
-        }
+        self.inner
+            .get_mut(id.index())
+            .and_then(|slot| {
+                (slot.version == id.version).then_some({
+                    slot.try_replace_with(self.next).inspect(|_| {
+                        self.next = id.index;
+                        self.count -= 1;
+                    })
+                })?
+            })
     }
 
     #[inline(always)]
     pub fn contains(&self, id: &EntityId) -> bool {
         self.inner
             .get(id.index())
-            .is_some_and(|slot| slot.version == id.version())
+            .is_some_and(|slot| slot.version == id.version)
     }
 
     #[inline(always)]
@@ -185,10 +146,7 @@ impl<T> IndexMap<T> {
     #[inline(always)]
     pub fn clear(&mut self) {
         self.inner.clear();
-        self.inner.push(Slot {
-            version: 0,
-            content: Content::Vacant(1),
-        });
+        self.inner.push(Slot::new());
         self.next = 0;
         self.count = 0;
     }
@@ -218,20 +176,9 @@ impl<T> std::ops::Index<EntityId> for IndexMap<T> {
     }
 }
 
-impl<T: Clone> Clone for IndexMap<T> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-            next: self.next,
-            count: self.count,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub enum IndexMapError {
     ReachedMaxId,
-    InternalCollision,
     InvalidId,
     InvalidSlot,
 }
@@ -245,7 +192,7 @@ impl std::fmt::Display for IndexMapError {
 impl std::error::Error for IndexMapError {}
 
 #[cfg(test)]
-mod index_test {
+mod index_map_test {
     use super::*;
 
     #[test]
@@ -281,25 +228,5 @@ mod index_test {
         }
 
         assert_ne!(created_ids, new_ids);
-    }
-
-    #[test]
-    fn no_duplicate() {
-        let mut storage = IndexMap::<String>::with_capacity(10);
-        let mut created_ids = vec![];
-
-        for i in 0..10 {
-            let data = if i > 0 && i % 3 == 0 {
-                "Double".to_string()
-            } else {
-                i.to_string()
-            };
-            let id = storage.insert_no_duplicate(data);
-            if !created_ids.contains(&id) {
-                created_ids.push(id);
-            }
-        }
-
-        assert_eq!(storage.len(), created_ids.len());
     }
 }
