@@ -5,8 +5,8 @@ use aplite_types::{
     Unit
 };
 use aplite_storage::{
-    EntityId,
-    DenseMap,
+    Entity,
+    SparseSet,
     Tree,
 };
 
@@ -182,7 +182,7 @@ impl LayoutNode {
 pub struct Layout {
     pub(crate) window_rect: Rect,
     pub(crate) tree: Tree,
-    pub(crate) rects: DenseMap<Rect>,
+    pub(crate) rects: SparseSet<Rect>,
 }
 
 impl Layout {
@@ -194,21 +194,21 @@ impl Layout {
         Self {
             window_rect,
             tree: Tree::with_capacity(capacity),
-            rects: DenseMap::with_capacity(capacity),
+            rects: SparseSet::with_capacity(capacity),
         }
     }
 
-    pub(crate) fn get_or_insert(&mut self, id: EntityId, parent: Option<EntityId>, rect: impl FnOnce() -> Rect) -> &mut Rect {
+    pub(crate) fn get_or_insert(&mut self, id: Entity, parent: Option<Entity>, rect: impl FnOnce() -> Rect) -> &mut Rect {
         self.tree.insert(id, parent);
         self.rects.get_or_insert(&id, rect)
     }
 
-    pub(crate) fn insert(&mut self, id: EntityId, parent: Option<EntityId>, rect: Rect) {
+    pub(crate) fn insert(&mut self, id: Entity, parent: Option<Entity>, rect: Rect) {
         self.rects.insert(&id, rect);
         self.tree.insert(id, parent);
     }
 
-    pub(crate) fn parent_rect(&self, id: &EntityId) -> Option<&Rect> {
+    pub(crate) fn parent_rect(&self, id: &Entity) -> Option<&Rect> {
         self.tree
             .get_parent(id)
             .and_then(|parent| self.rects.get(parent))

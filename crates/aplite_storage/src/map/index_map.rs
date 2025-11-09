@@ -1,4 +1,4 @@
-use crate::entity::EntityId;
+use crate::entity::Entity;
 use crate::iterator::{IndexMapIter, IndexMapIterMut};
 use super::slot::Slot;
 
@@ -42,26 +42,26 @@ impl<T> IndexMap<T> {
     /// Panic if the generated [`Entity`] has reached [`u64::MAX`], or there's an internal error.
     /// Use [`try_insert`](IndexMap::try_insert) if you want to handle the error manually
     #[inline(always)]
-    pub fn insert(&mut self, data: T) -> EntityId {
+    pub fn insert(&mut self, data: T) -> Entity {
         self.try_insert(data).unwrap()
     }
 
     #[inline(always)]
-    pub fn try_insert(&mut self, data: T) -> Result<EntityId, IndexMapError> {
-        if self.count > u32::MAX { return Err(IndexMapError::ReachedMaxId) }
+    pub fn try_insert(&mut self, data: T) -> Result<Entity, IndexMapError> {
+        if self.count == u32::MAX { return Err(IndexMapError::ReachedMaxId) }
 
         match self.inner.get_mut(self.next as usize) {
             // first time or after removal
             Some(slot) => slot.occupy(data)
                 .map(|next| {
-                    let id = EntityId::new(self.next, slot.version);
+                    let id = Entity::new(self.next, slot.version);
                     self.next = next;
                     self.count += 1;
                     id
                 })
                 .ok_or(IndexMapError::InvalidSlot),
             None => {
-                let entity = EntityId::new(self.next, 0);
+                let entity = Entity::new(self.next, 0);
                 self.inner.push(Slot::with_data(data));
                 self.count += 1;
                 self.next += 1;
@@ -74,12 +74,12 @@ impl<T> IndexMap<T> {
     /// Return None if the index is invalid.
     /// Use [`try_replace`](IndexMap::try_replace()) if you want to handle the error manually
     #[inline(always)]
-    pub fn replace(&mut self, id: &EntityId, data: T) -> Option<T> {
+    pub fn replace(&mut self, id: &Entity, data: T) -> Option<T> {
         self.try_replace(id, data).ok()
     }
 
     #[inline(always)]
-    pub fn try_replace(&mut self, id: &EntityId, data: T) -> Result<T, IndexMapError> {
+    pub fn try_replace(&mut self, id: &Entity, data: T) -> Result<T, IndexMapError> {
         match self.inner.get_mut(id.index()) {
             Some(slot) if id.version == slot.version => {
                 slot.get_content_mut()
@@ -91,7 +91,7 @@ impl<T> IndexMap<T> {
     }
 
     #[inline(always)]
-    pub fn get(&self, id: &EntityId) -> Option<&T> {
+    pub fn get(&self, id: &Entity) -> Option<&T> {
         self.inner
             .get(id.index())
             .and_then(|slot| {
@@ -104,7 +104,7 @@ impl<T> IndexMap<T> {
     }
 
     #[inline(always)]
-    pub fn get_mut(&mut self, id: &EntityId) -> Option<&mut T> {
+    pub fn get_mut(&mut self, id: &Entity) -> Option<&mut T> {
         self.inner
             .get_mut(id.index())
             .and_then(|slot| {
@@ -117,7 +117,7 @@ impl<T> IndexMap<T> {
     }
 
     #[inline(always)]
-    pub fn remove(&mut self, id: &EntityId) -> Option<T> {
+    pub fn remove(&mut self, id: &Entity) -> Option<T> {
         self.inner
             .get_mut(id.index())
             .and_then(|slot| {
@@ -131,7 +131,7 @@ impl<T> IndexMap<T> {
     }
 
     #[inline(always)]
-    pub fn contains(&self, id: &EntityId) -> bool {
+    pub fn contains(&self, id: &Entity) -> bool {
         self.inner
             .get(id.index())
             .is_some_and(|slot| slot.version == id.version)
@@ -169,9 +169,9 @@ where
     }
 }
 
-impl<T> std::ops::Index<EntityId> for IndexMap<T> {
+impl<T> std::ops::Index<Entity> for IndexMap<T> {
     type Output = T;
-    fn index(&self, index: EntityId) -> &Self::Output {
+    fn index(&self, index: Entity) -> &Self::Output {
         self.get(&index).unwrap()
     }
 }

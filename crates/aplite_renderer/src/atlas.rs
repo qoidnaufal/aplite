@@ -3,7 +3,7 @@ use std::collections::HashMap;
 // use wgpu::util::DeviceExt;
 
 use aplite_types::{Rect, Size, Vec2f, ImageRef};
-use aplite_storage::{Tree, IdManager, EntityId};
+use aplite_storage::{Tree, EntityManager, Entity};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Uv {
@@ -249,9 +249,9 @@ impl Atlas {
 /// This means the total width of the first child's siblings + their childrens <= first child's rect
 struct AtlasAllocator {
     bound: Rect,
-    last_parent: Option<EntityId>,
-    id_manager: IdManager,
-    allocated: HashMap<EntityId, Rect>,
+    last_parent: Option<Entity>,
+    id_manager: EntityManager,
+    allocated: HashMap<Entity, Rect>,
     tree: Tree,
 }
 
@@ -260,7 +260,7 @@ impl AtlasAllocator {
         Self {
             bound: Rect::from_size(size.into()),
             last_parent: None,
-            id_manager: IdManager::default(),
+            id_manager: EntityManager::default(),
             allocated: HashMap::default(),
             tree: Tree::default(),
         }
@@ -311,8 +311,8 @@ impl AtlasAllocator {
 
     #[inline(always)]
     /// scan each roots and try to find available position within the identified root
-    fn scan(&self, new_size: Size) -> Option<(EntityId, Vec2f)> {
-        let root = EntityId::root();
+    fn scan(&self, new_size: Size) -> Option<(Entity, Vec2f)> {
+        let root = Entity::new(0, 0);
         self.get_first_blocks(&root)
             .find_map(|(root, rect)| self.identify_member(root, rect, new_size))
     }
@@ -320,10 +320,10 @@ impl AtlasAllocator {
     #[inline(always)]
     fn identify_member(
         &self,
-        root: EntityId,
+        root: Entity,
         root_rect: &Rect,
         new_size: Size,
-    ) -> Option<(EntityId, Vec2f)> {
+    ) -> Option<(Entity, Vec2f)> {
         if let Some(first) = self.tree.get_first_child(&root) {
             // the first rect will set the boundary of it's siblings if any
             let first_rect = self.allocated.get(first).unwrap();
@@ -367,10 +367,10 @@ impl AtlasAllocator {
     #[inline(always)]
     fn indentify_next_sibling(
         &self,
-        current: &EntityId,
+        current: &Entity,
         first_rect_bound: &Rect,
         new_size: Size,
-    ) -> Option<(EntityId, Vec2f)> {
+    ) -> Option<(Entity, Vec2f)> {
         let current_rect = self.allocated.get(current).unwrap();
 
         let cond1 = new_size.width + current_rect.max_x() <= first_rect_bound.max_x();
@@ -394,7 +394,7 @@ impl AtlasAllocator {
     }
 
     #[inline(always)]
-    fn get_first_blocks<'a>(&'a self, root: &'a EntityId) -> impl Iterator<Item = (EntityId, &'a Rect)> {
+    fn get_first_blocks<'a>(&'a self, root: &'a Entity) -> impl Iterator<Item = (Entity, &'a Rect)> {
         self.tree
             .iter_children(root)
             .map(|id| {
@@ -467,7 +467,7 @@ mod atlas_test {
         let ninth = allocator.alloc(Size::new(50., 50.));
         assert!(ninth.is_some());
 
-        assert_eq!(allocator.tree.iter_children(&EntityId::root()).count(), 3);
+        assert_eq!(allocator.tree.iter_children(&Entity::new(0, 0)).count(), 3);
 
         eprintln!("{:#?}", allocator.tree);
 

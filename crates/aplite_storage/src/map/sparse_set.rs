@@ -1,29 +1,29 @@
 use std::iter::Zip;
 use std::slice::{Iter, IterMut};
 
-use crate::entity::EntityId;
+use crate::entity::Entity;
 use crate::data::sparse_index::SparseIndices;
 
 /// A dense data storage which is guaranteed even after removal.
 /// Doesn't facilitate the creation of [`Entity`], unlike [`IndexMap`](crate::indexmap::IndexMap).
 /// You'll need the assistance of [`EntityManager`](crate::entity::EntityManager) to create the key for indexing data.
-pub struct DenseMap<T> {
-    pub(crate) indexes: SparseIndices,
+pub struct SparseSet<T> {
     pub(crate) data: Vec<T>,
-    pub(crate) entities: Vec<EntityId>,
+    pub(crate) indexes: SparseIndices,
+    pub(crate) entities: Vec<Entity>,
 }
 
-impl<T> Default for DenseMap<T> {
+impl<T> Default for SparseSet<T> {
     fn default() -> Self {
         Self {
-            indexes: SparseIndices::default(),
             data: Vec::default(),
+            indexes: SparseIndices::default(),
             entities: Vec::default(),
         }
     }
 }
 
-impl<T: std::fmt::Debug> std::fmt::Debug for DenseMap<T> {
+impl<T: std::fmt::Debug> std::fmt::Debug for SparseSet<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_map()
             .entries(self.iter())
@@ -31,7 +31,7 @@ impl<T: std::fmt::Debug> std::fmt::Debug for DenseMap<T> {
     }
 }
 
-impl<T> DenseMap<T> {
+impl<T> SparseSet<T> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             indexes: SparseIndices::default(),
@@ -51,19 +51,19 @@ impl<T> DenseMap<T> {
     //         .map(|index| &self.data[index.index()])
     // }
 
-    pub fn get(&self, id: &EntityId) -> Option<&T> {
+    pub fn get(&self, id: &Entity) -> Option<&T> {
         self.indexes
             .get_index(id)
             .map(|index| &self.data[index.index()])
     }
 
-    pub fn get_mut(&mut self, id: &EntityId) -> Option<&mut T> {
+    pub fn get_mut(&mut self, id: &Entity) -> Option<&mut T> {
         self.indexes
             .get_index(id)
             .map(|index| &mut self.data[index.index()])
     }
 
-    pub fn get_or_insert(&mut self, id: &EntityId, value: impl FnOnce() -> T) -> &mut T {
+    pub fn get_or_insert(&mut self, id: &Entity, value: impl FnOnce() -> T) -> &mut T {
         if let Some(index) = self.indexes.get_index(id)
             && !index.is_null()
         {
@@ -80,7 +80,7 @@ impl<T> DenseMap<T> {
     }
 
     /// Inserting or replacing the value
-    pub fn insert(&mut self, id: &EntityId, value: T) {
+    pub fn insert(&mut self, id: &Entity, value: T) {
         if let Some(index) = self.indexes.get_index(id)
             && !index.is_null()
         {
@@ -97,7 +97,7 @@ impl<T> DenseMap<T> {
 
     /// The contiguousness of the data is guaranteed after removal via [`Vec::swap_remove`],
     /// but the order of the data is is not.
-    pub fn remove(&mut self, id: EntityId) -> Option<T> {
+    pub fn remove(&mut self, id: Entity) -> Option<T> {
         if self.data.is_empty() { return None }
 
         self.indexes
@@ -123,7 +123,7 @@ impl<T> DenseMap<T> {
         self.data.is_empty()
     }
 
-    pub fn contains(&self, id: &EntityId) -> bool {
+    pub fn contains(&self, id: &Entity) -> bool {
         self.entities.contains(id)
     }
 
@@ -137,7 +137,7 @@ impl<T> DenseMap<T> {
         self.data.clear();
     }
 
-    pub fn entity_data_index(&self, id: &EntityId) -> Option<usize> {
+    pub fn entity_data_index(&self, id: &Entity) -> Option<usize> {
         self.indexes.get_index(id).map(|i| i.index())
     }
 
@@ -172,11 +172,11 @@ impl<T> DenseMap<T> {
 */
 
 pub struct ArrayIter<'a, T> {
-    inner: Zip<Iter<'a, EntityId>, Iter<'a, T>>,
+    inner: Zip<Iter<'a, Entity>, Iter<'a, T>>,
 }
 
 impl<'a, T> ArrayIter<'a, T> {
-    pub(crate) fn new(ds: &'a DenseMap<T>) -> Self {
+    pub(crate) fn new(ds: &'a SparseSet<T>) -> Self {
         let inner = ds.entities
             .iter()
             .zip(ds.data.iter());
@@ -187,7 +187,7 @@ impl<'a, T> ArrayIter<'a, T> {
 }
 
 impl<'a, T> Iterator for ArrayIter<'a, T> {
-    type Item = (&'a EntityId, &'a T);
+    type Item = (&'a Entity, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
@@ -195,11 +195,11 @@ impl<'a, T> Iterator for ArrayIter<'a, T> {
 }
 
 pub struct ArrayIterMut<'a, T> {
-    inner: Zip<Iter<'a, EntityId>, IterMut<'a, T>>,
+    inner: Zip<Iter<'a, Entity>, IterMut<'a, T>>,
 }
 
 impl<'a, T> ArrayIterMut<'a, T> {
-    pub(crate) fn new(ds: &'a mut DenseMap<T>) -> Self {
+    pub(crate) fn new(ds: &'a mut SparseSet<T>) -> Self {
         let inner = ds.entities
             .iter()
             .zip(ds.data.iter_mut());
@@ -210,7 +210,7 @@ impl<'a, T> ArrayIterMut<'a, T> {
 }
 
 impl<'a, T> Iterator for ArrayIterMut<'a, T> {
-    type Item = (&'a EntityId, &'a mut T);
+    type Item = (&'a Entity, &'a mut T);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()

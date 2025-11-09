@@ -1,4 +1,4 @@
-use aplite_storage::Table;
+use aplite_storage::ComponentTable;
 use aplite_renderer::Shape;
 use aplite_types::{
     Matrix3x2,
@@ -45,5 +45,5 @@ pub struct Border {
 }
 
 pub struct State {
-    table: Table,
+    table: ComponentTable,
 }

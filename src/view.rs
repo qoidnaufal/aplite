@@ -3,14 +3,14 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::rc::Weak;
 
-use aplite_storage::{Arena, ArenaItem, DenseMap, EntityId, IdManager, Tree};
+use aplite_storage::{Arena, ArenaItem, SparseSet, Entity, EntityManager, Tree};
 
 use crate::widget::{InteractiveWidget, ParentWidget, Widget};
 
 pub(crate) struct ViewStorage {
     pub(crate) arena: Arena,
-    pub(crate) id_manager: IdManager,
-    pub(crate) views: DenseMap<AnyView>,
+    pub(crate) id_manager: EntityManager,
+    pub(crate) views: SparseSet<AnyView>,
     pub(crate) tree: Tree,
 }
 
@@ -19,13 +19,13 @@ impl ViewStorage {
         let allocation_size = allocation_size.unwrap_or(1024 * 1024);
         Self {
             arena: Arena::new(allocation_size),
-            views: DenseMap::default(),
-            id_manager: IdManager::default(),
+            views: SparseSet::default(),
+            id_manager: EntityManager::default(),
             tree: Tree::default(),
         }
     }
 
-    pub(crate) fn insert<IV: IntoView + 'static>(&mut self, widget: IV) -> EntityId {
+    pub(crate) fn insert<IV: IntoView + 'static>(&mut self, widget: IV) -> Entity {
         let item = self.arena.alloc_mapped(widget.into_view(), |w| w as &mut dyn Widget);
         let id = self.id_manager.create();
         self.views.insert(&id, AnyView::new(item));
@@ -39,7 +39,7 @@ pub trait IntoView {
 }
 
 pub struct View<IV: IntoView> {
-    id: EntityId,
+    id: Entity,
     cx: Weak<RefCell<ViewStorage>>,
     marker: PhantomData<IV>,
 }
@@ -55,7 +55,7 @@ impl<IV: IntoView> Clone for View<IV> {
 }
 
 impl<IV: IntoView + 'static> View<IV> {
-    pub(crate) fn new<T: IntoView + 'static>(id: EntityId, cx: Weak<RefCell<ViewStorage>>) -> Self {
+    pub(crate) fn new<T: IntoView + 'static>(id: Entity, cx: Weak<RefCell<ViewStorage>>) -> Self {
         Self {
             id,
             cx,
@@ -63,7 +63,7 @@ impl<IV: IntoView + 'static> View<IV> {
         }
     }
 
-    pub(crate) fn id(&self) -> &EntityId {
+    pub(crate) fn id(&self) -> &Entity {
         &self.id
     }
 
@@ -129,7 +129,7 @@ where
 }
 
 thread_local! {
-    pub(crate) static CALLBACKS: RefCell<HashMap<EntityId, CallbackStore>>
+    pub(crate) static CALLBACKS: RefCell<HashMap<Entity, CallbackStore>>
         = RefCell::new(Default::default());
 }
 

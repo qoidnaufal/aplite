@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use aplite_reactive::*;
 use aplite_renderer::{Renderer};
 use aplite_types::{Vec2f, Rect, Size};
-use aplite_storage::EntityId;
+use aplite_storage::Entity;
 
 use crate::view::{IntoView, View, ViewStorage};
 use crate::cursor::{Cursor, MouseAction, MouseButton};
@@ -13,9 +13,9 @@ pub struct Context {
     pub(crate) storage: Rc<RefCell<ViewStorage>>,
     pub(crate) dirty: Signal<bool>,
     pub(crate) cursor: Cursor,
-    pub(crate) current: Option<EntityId>,
+    pub(crate) current: Option<Entity>,
     pub(crate) rect: Rect,
-    pub(crate) pending_update: Vec<EntityId>,
+    pub(crate) pending_update: Vec<Entity>,
 }
 
 // ########################################################

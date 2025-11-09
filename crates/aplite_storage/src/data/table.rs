@@ -1,119 +1,98 @@
 use std::collections::HashMap;
-use std::any::{Any, TypeId};
-use std::cell::UnsafeCell;
+use std::any::TypeId;
+
+use crate::entity::Entity;
+use crate::map::hash::TypeIdMap;
 
 use super::sparse_index::SparseIndices;
-use super::{
-    component::{Component, IntoComponent},
-    query::{Query, QueryData},
+use super::query::{Query, QueryData};
+use super::component::{
+    Component,
+    ComponentBundle,
+    ComponentId,
+    ComponentBitSet,
+    ComponentArray
 };
 
-use crate::entity::EntityId;
-
-pub struct Table {
-    /// internally it's `Vec<UnsafeCell<T>>`,
-    pub(crate) inner: HashMap<TypeId, Box<dyn Any>>,
+pub struct ComponentTable {
+    pub(crate) data_storage: TypeIdMap<ComponentArray>,
     pub(crate) indexes: SparseIndices,
-    pub(crate) entities: Vec<EntityId>,
-    pub(crate) components: Vec<TypeId>,
+    pub(crate) entities: Vec<Entity>,
+    pub(crate) component_id: TypeIdMap<ComponentId>,
+
+    // FIXME: this should be used to store which Vec<Entity>,
+    // or archetype are stored with the corresponding bitset
+    pub(crate) component_bitset: HashMap<Entity, ComponentBitSet>,
+
+    capacity: usize,
 }
 
-impl Default for Table {
+impl Default for ComponentTable {
     fn default() -> Self {
         Self::with_capacity(0)
     }
 }
 
-impl Table {
+impl ComponentTable {
     /// Set the capacity for the contained entity
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            inner: HashMap::default(),
+            data_storage: TypeIdMap::default(),
             indexes: SparseIndices::default(),
             entities: Vec::with_capacity(capacity),
-            components: Vec::new(),
+            component_id: TypeIdMap::default(),
+            component_bitset: HashMap::new(),
+            capacity,
         }
     }
 
-    pub fn register_component(&mut self, id: &EntityId, component: impl IntoComponent) {
-        let insert_index = self.entities.len();
-        self.indexes.set_index(id, insert_index);
-        self.entities.push(*id);
-        component.into_component().register(id, self);
-    }
-
-    pub(crate) fn insert<T: 'static>(&mut self, id: &EntityId, value: T) {
+    pub(crate) fn register_component<T: Component>(&mut self) -> ComponentId {
         let type_id = TypeId::of::<T>();
-        let vec = self.inner
-            .entry(type_id)
-            .or_insert(Box::new(Vec::<UnsafeCell<T>>::new()))
-            .downcast_mut::<Vec<UnsafeCell<T>>>()
-            .unwrap();
 
-        if let Some(index) = self.indexes.get_data_index(id) {
-            if let Some(data) = vec.get_mut(index) {
-                *data.get_mut() = value;
-                return;
-            }
+        if let Some(id) = self.component_id.get(&type_id) {
+            return *id;
         }
 
-        vec.push(UnsafeCell::new(value));
-        self.components.push(type_id);
+        let len = self.data_storage.len();
+        let component_id = ComponentId(1 << len);
+
+        self.data_storage.insert(type_id, ComponentArray::new::<T>(self.capacity.max(1)));
+        self.component_id.insert(type_id, component_id);
+
+        component_id
     }
 
-    pub fn update<T: 'static>(&mut self, id: &EntityId, value: T) {
-        if let Some(any) = self.inner.get_mut(&TypeId::of::<T>()) {
-            if let Some(vec) = any.downcast_mut::<Vec<UnsafeCell<T>>>() {
-                if let Some(index) = self.indexes.get_data_index(id) {
-                    *vec[index].get_mut() = value;
-                }
-            }
-        }
+    pub fn insert<T: Component>(&mut self, id: &Entity, component: T) {
+        let component_id = self.register_component::<T>();
+
+        let type_id = TypeId::of::<T>();
+        let array = self.data_storage.get_mut(&type_id).unwrap();
+        let len = array.len();
+
+        array.push(component);
+        self.indexes.set_index(id, len);
+        self.entities.push(*id);
+
+        self.component_bitset
+            .entry(*id)
+            .or_insert(ComponentBitSet(0))
+            .0 |= component_id.0
     }
 
-    pub fn update_unsafe<T: 'static>(&self, id: &EntityId, value: T) {
-        if let Some(any) = self.inner.get(&TypeId::of::<T>()) {
-            if let Some(vec) = any.downcast_ref::<Vec<UnsafeCell<T>>>() {
-                if let Some(index) = self.indexes.get_data_index(id) {
-                    unsafe {
-                        *&mut *vec[index].get() = value;
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn remove<C: Component>(&mut self, id: EntityId) -> Option<C::Item> {
-        C::remove(id, self)
-    }
-
-    pub fn remove_into_component<IC: IntoComponent>(&mut self, id: EntityId)
-    -> Option<<<IC as IntoComponent>::Item as Component>::Item> {
-        IC::Item::remove(id, self)
+    pub fn insert_bundle<T: ComponentBundle>(&mut self, id: &Entity, bundle: T) {
+        bundle.insert_bundle(id, self);
     }
 
     pub fn query<'a, Q: QueryData<'a>>(&'a self) -> Query<'a, Q> {
-        Query::new(self)
+        todo!()
     }
 
-    pub fn entities(&self) -> &[EntityId] {
-        &self.entities
-    }
-
-    pub fn len(&self) -> usize {
-        self.entities.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.entities.is_empty()
-    }
-
-    pub fn contains(&self, id: &EntityId) -> bool {
+    pub fn contains(&self, id: &Entity) -> bool {
         self.entities.contains(id)
     }
 
     pub fn clear(&mut self) {
-        self.inner.clear();
+        self.data_storage.clear();
         self.entities.clear();
         self.indexes.reset();
     }
@@ -129,133 +108,61 @@ impl Table {
 
 #[cfg(test)]
 mod table_test {
-    use crate::entity::{IdManager, EntityId};
-    use super::Table;
-    use crate::IntoComponent;
+    use crate::entity::{EntityManager};
+    use super::ComponentTable;
+    use crate::data::component::{Component};
 
     #[derive(Default)]
     struct Context {
-        manager: IdManager,
-        table: Table,
+        manager: EntityManager,
+        table: ComponentTable,
     }
 
-    #[test]
-    fn query_one() {
-        let mut cx = Context::default();
-        for i in 0..10 {
-            let id = cx.manager.create();
-            cx.table.insert(&id, i.to_string());
-        }
-        let query_one = cx.table.query::<&String>();
-        assert_eq!(query_one.iter().count(), 10);
-    }
+    struct Name(String); impl Component for Name {}
+    struct Age(u32); impl Component for Age {}
+    struct Location(f32, f32); impl Component for Location {}
 
     #[test]
-    fn query() {
+    fn insert_get() {
         let mut cx = Context::default();
-        for i in 0..10 {
+
+        for i in 0..5u32 {
             let id = cx.manager.create();
-            cx.table.register_component(&id, (i.to_string(), (i + 1) * -1, i as f32));
+            cx.table.insert_bundle(&id, (Name(i.to_string()), Age(i), Location(i as _, i as _)));
         }
 
-        let query = cx.table.query::<(&String, &mut f32, &i32)>();
-
-        for (s, f, i) in query.iter() {
-            *f = *i as f32;
-            assert!(std::any::type_name_of_val(s).contains("String"));
-            assert!(std::any::type_name_of_val(f).contains("f32"));
-            assert!(std::any::type_name_of_val(i).contains("i32"));
-        }
-
-        let query_f32 = cx.table.query::<&f32>();
-
-        for f in query_f32 {
-            assert!(f.is_sign_negative())
-        }
-    }
-
-    #[test]
-    fn fetch_component() {
-        let mut cx = Context::default();
-        for i in 0..10 {
+        for i in 0..2u32 {
             let id = cx.manager.create();
-            cx.table.register_component(&id, (i.to_string(), (i + 1) * -1, i as f32));
+            cx.table.insert(&id, Age(i));
         }
 
-        let id = EntityId::new(3, 0);
-        let items = cx.table.query::<(&i32, &mut String)>().get(&id);
-        assert!(items.is_some());
+        println!("{:#?}", cx.table.component_bitset);
 
-        if let Some((i, s)) = items {
-            *s = i.pow(2).to_string();
-        }
+        let ages_array = cx.table.data_storage.get(&std::any::TypeId::of::<Age>()).unwrap();
+        let ages_vec = ages_array.iter::<Age>()
+            .map(|cell| &unsafe { &*cell.get() }.0)
+            .collect::<Vec<_>>();
 
-        let fetch = cx.table.query::<&String>().get(&id);
-        assert!(fetch.is_some_and(|n| !n.starts_with('-')));
-    }
+        println!("{ages_vec:#?}");
 
-    #[test]
-    fn insert_tuple_component() {
-        let mut cx = Context::default();
-        for i in 0..10 {
-            let id = cx.manager.create();
-            cx.table.register_component(&id, (i.to_string(), (i, i + 1)));
-        }
+        let names_array = cx.table.data_storage.get(&std::any::TypeId::of::<Name>()).unwrap();
+        let names_vec = names_array.iter::<Name>()
+            .map(|cell| &unsafe { &*cell.get() }.0)
+            .collect::<Vec<_>>();
 
-        let query = cx.table.query::<(&String, &(i32, i32))>();
+        println!("{names_vec:#?}");
 
-        for (s, t) in query {
-            assert!(std::any::type_name_of_val(s).contains("String"));
-            assert_eq!(std::any::type_name_of_val(t), "(i32, i32)");
-        }
-    }
+        let location_array = cx.table.data_storage.get(&std::any::TypeId::of::<Location>()).unwrap();
+        let location_vec = location_array.iter::<Location>()
+            .map(|cell| unsafe {
+                let loc = &*cell.get();
+                (loc.0, loc.1)
+            })
+            .collect::<Vec<_>>();
 
-    #[test]
-    fn into_component() {
-        #[derive(Default)]
-        struct Dummy {
-            name: String,
-            age: u8,
-            score: f32,
-        }
-        impl IntoComponent for Dummy {
-            type Item = (u8, String, f32);
-            fn into_component(self) -> Self::Item {
-                let Self {
-                    name,
-                    age,
-                    score,
-                } = self;
-                (age, name, score)
-            }
-        }
-        let mut cx = Context::default();
-        for i in 0..10 {
-            let id = cx.manager.create();
-            let dummy = Dummy {
-                name: i.to_string(),
-                age: i,
-                score: i as _,
-            };
-            cx.table.register_component(&id, dummy);
-        }
-        let query = crate::Query::<'_, (&String, &f32, &u8)>::new(&cx.table);
-        for (s, f, u) in &query {
-            assert!(std::any::type_name_of_val(s).contains("String"));
-            assert!(std::any::type_name_of_val(f).contains("f32"));
-            assert!(std::any::type_name_of_val(u).contains("u8"));
-        }
-        let removed = cx.table.remove_into_component::<Dummy>(EntityId::new(6, 0));
-        assert!(removed.is_some_and(|(u, s, f)| {
-            std::any::type_name_of_val(&s).contains("String") &&
-            std::any::type_name_of_val(&f).contains("f32") &&
-            std::any::type_name_of_val(&u).contains("u8")
-        }));
+        println!("{location_vec:#?}");
+
+        let indices = &cx.table.indexes.indices;
+        println!("{indices:?}");
     }
 }
-
-// crate::create_entity! { TableId }
-
-// pub struct DataStorage<E: Entity + 'static> {
-//     tables: crate::IndexMap<TableId, Table<E>>,
-// }

@@ -10,10 +10,10 @@ pub use arena::{
     untyped::Arena,
     item::ArenaItem,
 };
-pub use entity::{IdManager, EntityId};
+pub use entity::{EntityManager, Entity};
 pub use map::{
     index_map::{IndexMap, IndexMapError},
-    dense_map::DenseMap,
+    sparse_set::SparseSet,
 };
 pub use tree::{
     tree::{Tree, TreeError},
@@ -23,6 +23,6 @@ pub use data::{
     component::{Component, IntoComponent},
     query::Query,
     sparse_index::SparseIndices,
-    table::Table,
+    table::ComponentTable,
 };
 pub use iterator::{TreeChildIter, TreeDepthIter};

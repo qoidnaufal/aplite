@@ -2,7 +2,7 @@ use aplite_renderer::Scene;
 use aplite_types::{Rgba, Size, Unit};
 use aplite_storage::{
     ArenaItem,
-    EntityId,
+    Entity,
 };
 
 use crate::layout::*;
@@ -57,7 +57,7 @@ pub(crate) fn window(size: Size) -> WindowWidget {
 }
 
 pub(crate) struct WindowWidget {
-    id: EntityId,
+    id: Entity,
     size: Size,
     layout_rules: LayoutRules,
 }
@@ -66,7 +66,7 @@ impl WindowWidget {
     pub(crate) fn new(size: Size) -> Self {
         let layout_rules = LayoutRules::default();
         Self {
-            id: EntityId::root(),
+            id: Entity::new(0, 0),
             size,
             layout_rules,
         }
