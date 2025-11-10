@@ -1,7 +1,7 @@
 use std::slice::{Iter, IterMut};
 use std::iter::{Enumerate, FilterMap};
 
-use crate::entity::Entity;
+use crate::entity::{Entity, EntityId};
 use crate::tree::tree::Tree;
 use crate::tree::node::NodeRef;
 use crate::map::slot::Slot;
@@ -134,7 +134,7 @@ pub struct TreeNodeIter<'a> {
 }
 
 impl<'a> TreeNodeIter<'a> {
-    pub(crate) fn new(tree: &'a Tree, id: &'a Entity) -> Self {
+    pub(crate) fn new(tree: &'a Tree, id: &'a EntityId) -> Self {
         Self {
             inner: TreeDepthIter::new(tree, id)
         }
@@ -147,13 +147,13 @@ impl<'a> Iterator for TreeNodeIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         self.inner
             .next()
-            .map(|entity| {
+            .map(|id| {
                 NodeRef {
-                    entity,
-                    parent: self.inner.tree.get_parent(entity),
-                    first_child: self.inner.tree.get_first_child(entity),
-                    next_sibling: self.inner.tree.get_next_sibling(entity),
-                    prev_sibling: self.inner.tree.get_prev_sibling(entity),
+                    entity: id,
+                    parent: self.inner.tree.get_parent(id),
+                    first_child: self.inner.tree.get_first_child(id),
+                    next_sibling: self.inner.tree.get_next_sibling(id),
+                    prev_sibling: self.inner.tree.get_prev_sibling(id),
                 }
             })
     }
@@ -169,12 +169,12 @@ impl<'a> Iterator for TreeNodeIter<'a> {
 
 pub struct TreeChildIter<'a> {
     tree: &'a Tree,
-    next: Option<&'a Entity>,
-    back: Option<&'a Entity>,
+    next: Option<&'a EntityId>,
+    back: Option<&'a EntityId>,
 }
 
 impl<'a> TreeChildIter<'a> {
-    pub(crate) fn new(tree: &'a Tree, id: &'a Entity) -> Self {
+    pub(crate) fn new(tree: &'a Tree, id: &'a EntityId) -> Self {
         let next = tree.get_first_child(id);
         let back = tree.get_last_child(id);
         Self {
@@ -186,7 +186,7 @@ impl<'a> TreeChildIter<'a> {
 }
 
 impl<'a> Iterator for TreeChildIter<'a> {
-    type Item = &'a Entity;
+    type Item = &'a EntityId;
 
     fn next(&mut self) -> Option<Self::Item> {
         let next = self.next.take();
@@ -219,12 +219,12 @@ impl<'a> DoubleEndedIterator for TreeChildIter<'a> {
 /// Depth first traversal
 pub struct TreeDepthIter<'a> {
     tree: &'a Tree,
-    id: &'a Entity,
-    next: Option<&'a Entity>,
+    id: &'a EntityId,
+    next: Option<&'a EntityId>,
 }
 
 impl<'a> TreeDepthIter<'a> {
-    pub(crate) fn new(tree: &'a Tree, id: &'a Entity) -> Self {
+    pub(crate) fn new(tree: &'a Tree, id: &'a EntityId) -> Self {
         Self {
             tree,
             id,
@@ -234,7 +234,7 @@ impl<'a> TreeDepthIter<'a> {
 }
 
 impl<'a> Iterator for TreeDepthIter<'a> {
-    type Item = &'a Entity;
+    type Item = &'a EntityId;
 
     fn next(&mut self) -> Option<Self::Item> {
         let next = self.next.take();
@@ -275,11 +275,11 @@ impl<'a> Iterator for TreeDepthIter<'a> {
 
 pub struct TreeAncestryIter<'a> {
     tree: &'a Tree,
-    id: &'a Entity,
+    id: &'a EntityId,
 }
 
 impl<'a> TreeAncestryIter<'a> {
-    pub(crate) fn new(tree: &'a Tree, id: &'a Entity) -> Self {
+    pub(crate) fn new(tree: &'a Tree, id: &'a EntityId) -> Self {
         Self {
             tree,
             id,
@@ -288,7 +288,7 @@ impl<'a> TreeAncestryIter<'a> {
 }
 
 impl<'a> Iterator for TreeAncestryIter<'a> {
-    type Item = &'a Entity;
+    type Item = &'a EntityId;
 
     fn next(&mut self) -> Option<Self::Item> {
         let next = self.tree.get_parent(self.id);
@@ -349,7 +349,7 @@ impl<'a> Iterator for TreeAncestryIter<'a> {
 #[cfg(test)]
 mod iterator_test {
     use crate::tree::tree::Tree;
-    use crate::entity::{Entity, EntityManager};
+    use crate::entity::{EntityId, EntityManager};
     use crate::map::index_map::IndexMap;
 
     #[test]
@@ -379,12 +379,12 @@ mod iterator_test {
 
         let mut ids = vec![];
         for _ in 0..10 {
-            let id = manager.create();
-            tree.insert(id, None);
+            let id = manager.create().id;
+            tree.insert_as_root(id);
             ids.push(id);
         }
 
-        let len = tree.iter_node(&Entity::new(0, 0)).count();
+        let len = tree.iter_node(&EntityId::new(0)).count();
         assert_eq!(ids.len(), len)
     }
 

@@ -74,14 +74,14 @@ impl<T> IndexMap<T> {
     /// Return None if the index is invalid.
     /// Use [`try_replace`](IndexMap::try_replace()) if you want to handle the error manually
     #[inline(always)]
-    pub fn replace(&mut self, id: &Entity, data: T) -> Option<T> {
-        self.try_replace(id, data).ok()
+    pub fn replace(&mut self, entity: &Entity, data: T) -> Option<T> {
+        self.try_replace(entity, data).ok()
     }
 
     #[inline(always)]
-    pub fn try_replace(&mut self, id: &Entity, data: T) -> Result<T, IndexMapError> {
-        match self.inner.get_mut(id.index()) {
-            Some(slot) if id.version == slot.version => {
+    pub fn try_replace(&mut self, entity: &Entity, data: T) -> Result<T, IndexMapError> {
+        match self.inner.get_mut(entity.index()) {
+            Some(slot) if entity.version.0 == slot.version => {
                 slot.get_content_mut()
                     .ok_or(IndexMapError::InvalidSlot)
                     .map(|prev| core::mem::replace(prev, data))
@@ -91,11 +91,11 @@ impl<T> IndexMap<T> {
     }
 
     #[inline(always)]
-    pub fn get(&self, id: &Entity) -> Option<&T> {
+    pub fn get(&self, entity: &Entity) -> Option<&T> {
         self.inner
-            .get(id.index())
+            .get(entity.index())
             .and_then(|slot| {
-                if slot.version == id.version {
+                if slot.version == entity.version.0 {
                     slot.get_content()
                 } else {
                     None
@@ -104,11 +104,11 @@ impl<T> IndexMap<T> {
     }
 
     #[inline(always)]
-    pub fn get_mut(&mut self, id: &Entity) -> Option<&mut T> {
+    pub fn get_mut(&mut self, entity: &Entity) -> Option<&mut T> {
         self.inner
-            .get_mut(id.index())
+            .get_mut(entity.index())
             .and_then(|slot| {
-                if id.version == slot.version {
+                if entity.version.0 == slot.version {
                     slot.get_content_mut()
                 } else {
                     None
@@ -117,13 +117,13 @@ impl<T> IndexMap<T> {
     }
 
     #[inline(always)]
-    pub fn remove(&mut self, id: &Entity) -> Option<T> {
+    pub fn remove(&mut self, entity: &Entity) -> Option<T> {
         self.inner
-            .get_mut(id.index())
+            .get_mut(entity.index())
             .and_then(|slot| {
-                (slot.version == id.version).then_some({
+                (slot.version == entity.version.0).then_some({
                     slot.try_replace_with(self.next).inspect(|_| {
-                        self.next = id.index;
+                        self.next = entity.id.0;
                         self.count -= 1;
                     })
                 })?
@@ -131,10 +131,10 @@ impl<T> IndexMap<T> {
     }
 
     #[inline(always)]
-    pub fn contains(&self, id: &Entity) -> bool {
+    pub fn contains(&self, entity: &Entity) -> bool {
         self.inner
-            .get(id.index())
-            .is_some_and(|slot| slot.version == id.version)
+            .get(entity.index())
+            .is_some_and(|slot| slot.version == entity.version.0)
     }
 
     #[inline(always)]

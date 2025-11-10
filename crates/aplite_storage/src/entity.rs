@@ -1,33 +1,80 @@
-#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct EntityId(pub(crate) u32);
+
+impl EntityId {
+    #[inline(always)]
+    pub(crate) const fn new(val: u32) -> Self {
+        Self(val)
+    }
+
+    #[inline(always)]
+    pub const fn index(&self) -> usize {
+        self.0 as usize
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct EntityVersion(pub(crate) u32);
+
+impl EntityVersion {
+    #[inline(always)]
+    const fn new(val: u32) -> Self {
+        Self(val)
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Entity {
-    pub(crate) index: u32,
-    pub(crate) version: u32,
+    pub(crate) id: EntityId,
+    pub(crate) version: EntityVersion,
 }
 
 impl Entity {
     pub const fn new(index: u32, version: u32) -> Self {
         Self {
-            index,
-            version,
+            id: EntityId::new(index),
+            version: EntityVersion::new(version),
         }
     }
 
-    pub fn index(&self) -> usize {
-        self.index as usize
+    pub const fn id(&self) -> &EntityId {
+        &self.id
     }
 
-    pub const fn version(&self) -> u32 {
-        self.version
+    pub const fn version(&self) -> &EntityVersion {
+        &self.version
     }
 
-    pub fn raw(&self) -> u64 {
-        (self.version as u64) << 32 | self.index as u64
+    pub const fn index(&self) -> usize {
+        self.id.index()
+    }
+
+    pub const fn raw(&self) -> u64 {
+        (self.version.0 as u64) << 32 | self.id.0 as u64
+    }
+}
+
+impl std::hash::Hash for EntityId {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write_u64(self.0 as _);
+    }
+}
+
+impl std::hash::Hash for Entity {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write_u64(self.id.0 as _);
+    }
+}
+
+impl std::fmt::Debug for EntityId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "EntityId({})", self.0)
     }
 }
 
 impl std::fmt::Debug for Entity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "EntityId({})", self.index)
+        write!(f, "Entity({})", self.raw())
     }
 }
 
@@ -71,7 +118,7 @@ impl EntityManager {
 
     pub fn is_alive(&self, id: &Entity) -> bool {
         let version = self.versions[id.index()];
-        version < u32::MAX && version == id.version
+        version < u32::MAX && version == id.version.0
     }
 
     pub fn destroy(&mut self, id: Entity) {

@@ -1,7 +1,7 @@
 use std::iter::Zip;
 use std::slice::{Iter, IterMut};
 
-use crate::entity::Entity;
+use crate::entity::EntityId;
 use crate::data::sparse_index::SparseIndices;
 
 /// A dense data storage which is guaranteed even after removal.
@@ -10,7 +10,7 @@ use crate::data::sparse_index::SparseIndices;
 pub struct SparseSet<T> {
     pub(crate) data: Vec<T>,
     pub(crate) indexes: SparseIndices,
-    pub(crate) entities: Vec<Entity>,
+    pub(crate) entities: Vec<EntityId>,
 }
 
 impl<T> Default for SparseSet<T> {
@@ -51,19 +51,19 @@ impl<T> SparseSet<T> {
     //         .map(|index| &self.data[index.index()])
     // }
 
-    pub fn get(&self, id: &Entity) -> Option<&T> {
+    pub fn get(&self, id: &EntityId) -> Option<&T> {
         self.indexes
             .get_index(id)
             .map(|index| &self.data[index.index()])
     }
 
-    pub fn get_mut(&mut self, id: &Entity) -> Option<&mut T> {
+    pub fn get_mut(&mut self, id: &EntityId) -> Option<&mut T> {
         self.indexes
             .get_index(id)
             .map(|index| &mut self.data[index.index()])
     }
 
-    pub fn get_or_insert(&mut self, id: &Entity, value: impl FnOnce() -> T) -> &mut T {
+    pub fn get_or_insert(&mut self, id: &EntityId, value: impl FnOnce() -> T) -> &mut T {
         if let Some(index) = self.indexes.get_index(id)
             && !index.is_null()
         {
@@ -80,7 +80,7 @@ impl<T> SparseSet<T> {
     }
 
     /// Inserting or replacing the value
-    pub fn insert(&mut self, id: &Entity, value: T) {
+    pub fn insert(&mut self, id: &EntityId, value: T) {
         if let Some(index) = self.indexes.get_index(id)
             && !index.is_null()
         {
@@ -97,7 +97,7 @@ impl<T> SparseSet<T> {
 
     /// The contiguousness of the data is guaranteed after removal via [`Vec::swap_remove`],
     /// but the order of the data is is not.
-    pub fn remove(&mut self, id: Entity) -> Option<T> {
+    pub fn remove(&mut self, id: EntityId) -> Option<T> {
         if self.data.is_empty() { return None }
 
         self.indexes
@@ -123,7 +123,7 @@ impl<T> SparseSet<T> {
         self.data.is_empty()
     }
 
-    pub fn contains(&self, id: &Entity) -> bool {
+    pub fn contains(&self, id: &EntityId) -> bool {
         self.entities.contains(id)
     }
 
@@ -137,7 +137,7 @@ impl<T> SparseSet<T> {
         self.data.clear();
     }
 
-    pub fn entity_data_index(&self, id: &Entity) -> Option<usize> {
+    pub fn entity_data_index(&self, id: &EntityId) -> Option<usize> {
         self.indexes.get_index(id).map(|i| i.index())
     }
 
@@ -172,7 +172,7 @@ impl<T> SparseSet<T> {
 */
 
 pub struct ArrayIter<'a, T> {
-    inner: Zip<Iter<'a, Entity>, Iter<'a, T>>,
+    inner: Zip<Iter<'a, EntityId>, Iter<'a, T>>,
 }
 
 impl<'a, T> ArrayIter<'a, T> {
@@ -187,7 +187,7 @@ impl<'a, T> ArrayIter<'a, T> {
 }
 
 impl<'a, T> Iterator for ArrayIter<'a, T> {
-    type Item = (&'a Entity, &'a T);
+    type Item = (&'a EntityId, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
@@ -195,7 +195,7 @@ impl<'a, T> Iterator for ArrayIter<'a, T> {
 }
 
 pub struct ArrayIterMut<'a, T> {
-    inner: Zip<Iter<'a, Entity>, IterMut<'a, T>>,
+    inner: Zip<Iter<'a, EntityId>, IterMut<'a, T>>,
 }
 
 impl<'a, T> ArrayIterMut<'a, T> {
@@ -210,7 +210,7 @@ impl<'a, T> ArrayIterMut<'a, T> {
 }
 
 impl<'a, T> Iterator for ArrayIterMut<'a, T> {
-    type Item = (&'a Entity, &'a mut T);
+    type Item = (&'a EntityId, &'a mut T);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()

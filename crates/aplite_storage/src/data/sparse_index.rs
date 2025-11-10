@@ -1,4 +1,4 @@
-use crate::entity::Entity;
+use crate::entity::EntityId;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Index(usize);
@@ -50,37 +50,37 @@ impl SparseIndices {
         }
     }
 
-    pub(crate) fn get_index(&self, id: &Entity) -> Option<&Index> {
+    pub(crate) fn get_index(&self, id: &EntityId) -> Option<&Index> {
         self.indices.get(id.index()).filter(|i| !i.is_null())
     }
 
-    pub fn get_data_index(&self, id: &Entity) -> Option<usize> {
+    pub fn get_data_index(&self, id: &EntityId) -> Option<usize> {
         self.indices
             .get(id.index())
             .and_then(|i| (!i.is_null()).then_some(i.index()))
     }
 
-    pub fn set_index(&mut self, id: &Entity, data_index: usize) {
+    pub fn set_index(&mut self, id: &EntityId, data_index: usize) {
         self.resize_if_needed(id);
         self.indices[id.index()] = Index::new(data_index);
     }
 
-    pub fn set_null(&mut self, id: &Entity) {
+    pub fn set_null(&mut self, id: &EntityId) {
         self.indices[id.index()] = Index::null()
     }
 
-    pub fn with<F, T>(&self, id: &Entity, f: F) -> Option<T>
+    pub fn with<F, T>(&self, id: &EntityId, f: F) -> Option<T>
     where
         F: FnOnce(usize) -> T
     {
         self.get_index(id).map(|index| f(index.index()))
     }
 
-    pub fn contains(&self, id: &Entity) -> bool {
+    pub fn contains(&self, id: &EntityId) -> bool {
         self.get_index(id).is_some()
     }
 
-    fn resize_if_needed(&mut self, id: &Entity) {
+    fn resize_if_needed(&mut self, id: &EntityId) {
         let index = id.index();
         if index >= self.indices.len() {
             self.resize(index);

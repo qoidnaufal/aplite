@@ -2,9 +2,12 @@ use std::hash::{Hasher, BuildHasher};
 use std::any::TypeId;
 use std::collections::HashMap;
 
-pub(crate) type TypeIdMap<V> = HashMap<TypeId, V, NullHashBuilder>;
+use crate::entity::EntityId;
 
-pub(crate) struct NullHash(u64);
+pub(crate) type TypeIdMap<V> = HashMap<TypeId, V, NullHashBuilder>;
+pub type EntityIdMap<V> = HashMap<EntityId, V, NullHashBuilder>;
+
+pub struct NullHash(u64);
 
 impl Hasher for NullHash {
     fn finish(&self) -> u64 {
@@ -35,7 +38,7 @@ impl Hasher for NullHash {
 }
 
 #[derive(Default)]
-pub(crate) struct NullHashBuilder;
+pub struct NullHashBuilder;
 
 impl BuildHasher for NullHashBuilder {
     type Hasher = NullHash;

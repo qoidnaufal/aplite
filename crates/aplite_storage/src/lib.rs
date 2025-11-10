@@ -10,10 +10,11 @@ pub use arena::{
     untyped::Arena,
     item::ArenaItem,
 };
-pub use entity::{EntityManager, Entity};
+pub use entity::{EntityManager, Entity, EntityId, EntityVersion};
 pub use map::{
     index_map::{IndexMap, IndexMapError},
     sparse_set::SparseSet,
+    hash::EntityIdMap,
 };
 pub use tree::{
     tree::{Tree, TreeError},

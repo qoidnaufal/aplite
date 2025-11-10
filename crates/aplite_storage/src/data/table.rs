@@ -62,7 +62,7 @@ impl ComponentTable {
         component_id
     }
 
-    pub fn insert<T: Component>(&mut self, id: &Entity, component: T) {
+    pub fn insert<T: Component>(&mut self, entity: &Entity, component: T) {
         let component_id = self.register_component::<T>();
 
         let type_id = TypeId::of::<T>();
@@ -70,11 +70,11 @@ impl ComponentTable {
         let len = array.len();
 
         array.push(component);
-        self.indexes.set_index(id, len);
-        self.entities.push(*id);
+        self.indexes.set_index(entity.id(), len);
+        self.entities.push(*entity);
 
         self.component_bitset
-            .entry(*id)
+            .entry(*entity)
             .or_insert(ComponentBitSet(0))
             .0 |= component_id.0
     }
