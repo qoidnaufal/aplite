@@ -27,9 +27,9 @@ impl ViewStorage {
 
     pub(crate) fn insert<IV: IntoView + 'static>(&mut self, widget: IV) -> Entity {
         let item = self.arena.alloc_mapped(widget.into_view(), |w| w as &mut dyn Widget);
-        let id = self.id_manager.create();
-        self.views.insert(&id, AnyView::new(item));
-        id
+        let entity = self.id_manager.create();
+        self.views.insert(entity.id(), AnyView::new(item));
+        entity
     }
 }
 
@@ -39,15 +39,15 @@ pub trait IntoView {
 }
 
 pub struct View<IV: IntoView> {
-    id: Entity,
-    cx: Weak<RefCell<ViewStorage>>,
+    pub(crate) entity: Entity,
+    pub(crate) cx: Weak<RefCell<ViewStorage>>,
     marker: PhantomData<IV>,
 }
 
 impl<IV: IntoView> Clone for View<IV> {
     fn clone(&self) -> Self {
         Self {
-            id: self.id,
+            entity: self.entity,
             cx: Weak::clone(&self.cx),
             marker: PhantomData,
         }
@@ -55,16 +55,12 @@ impl<IV: IntoView> Clone for View<IV> {
 }
 
 impl<IV: IntoView + 'static> View<IV> {
-    pub(crate) fn new<T: IntoView + 'static>(id: Entity, cx: Weak<RefCell<ViewStorage>>) -> Self {
+    pub(crate) fn new<T: IntoView + 'static>(entity: Entity, cx: Weak<RefCell<ViewStorage>>) -> Self {
         Self {
-            id,
+            entity,
             cx,
             marker: PhantomData,
         }
-    }
-
-    pub(crate) fn id(&self) -> &Entity {
-        &self.id
     }
 
     pub(crate) fn with_storage_ref<R>(&self, f: impl FnOnce(&ViewStorage) -> R) -> R {
@@ -79,14 +75,14 @@ impl<IV: IntoView + 'static> View<IV> {
 
     pub fn with<R>(&self, f: impl FnOnce(&IV::View) -> R) -> R {
         self.with_storage_ref(|s| {
-            let anyview = s.views.get(&self.id).unwrap();
+            let anyview = s.views.get(self.entity.id()).unwrap();
             f(anyview.downcast_ref::<IV>())
         })
     }
 
     pub fn with_mut<R>(&self, f: impl FnOnce(&mut IV::View) -> R) -> R {
         self.with_storage_mut(|s| {
-            let anyview = s.views.get_mut(&self.id).unwrap();
+            let anyview = s.views.get_mut(self.entity.id()).unwrap();
             f(anyview.downcast_mut::<IV>())
         })
     }
@@ -99,7 +95,7 @@ where
 {
     pub fn child<W: IntoView + 'static>(self, child: &View<W>) -> Self {
         self.with_storage_mut(|s| {
-            s.tree.insert(child.id, Some(self.id));
+            s.tree.insert_with_parent(*child.entity.id(), self.entity.id());
         });
         self
     }
@@ -107,7 +103,7 @@ where
     pub fn map_children<R>(&self, mut f: impl FnMut(&dyn Widget) -> R + 'static) -> Vec<R> {
         self.with_storage_ref(|s| {
             s.tree
-                .iter_children(&self.id)
+                .iter_children(self.entity.id())
                 .filter_map(move |id| {
                     s.views.get(id).map(|any| f(any.as_ref()))
                 })
@@ -118,7 +114,7 @@ where
     pub fn for_each_child(&self, mut f: impl FnMut(&dyn Widget) + 'static) {
         self.with_storage_ref(|s| {
             s.tree
-                .iter_children(&self.id)
+                .iter_children(self.entity.id())
                 .for_each(move |id| {
                     if let Some(child) = s.views.get(id) {
                         f(child.as_ref())
@@ -155,9 +151,9 @@ impl CallbackStore {
         self.0[event as usize].replace(callback);
     }
 
-    pub(crate) fn get_mut(&mut self, event: WidgetEvent) -> Option<&mut Box<dyn FnMut()>> {
-        self.0[event as usize].as_mut()
-    }
+    // pub(crate) fn get_mut(&mut self, event: WidgetEvent) -> Option<&mut Box<dyn FnMut()>> {
+    //     self.0[event as usize].as_mut()
+    // }
 }
 
 impl<IV> View<IV>
@@ -168,7 +164,7 @@ where
     pub fn on(&self, event: WidgetEvent, f: impl FnMut() + 'static) {
         CALLBACKS.with(|cell| {
             let mut storage = cell.borrow_mut();
-            let callbacks = storage.entry(self.id).or_default();
+            let callbacks = storage.entry(self.entity).or_default();
             callbacks.insert(event, Box::new(f));
         });
     }

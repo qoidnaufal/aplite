@@ -1,6 +1,5 @@
 pub(crate) mod component;
 pub(crate) mod query;
-pub(crate) mod sparse_index;
 pub(crate) mod table;
 
 #[macro_export]

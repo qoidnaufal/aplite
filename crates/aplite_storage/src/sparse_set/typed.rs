@@ -1,14 +1,13 @@
+use std::cell::UnsafeCell;
 use std::iter::Zip;
 use std::slice::{Iter, IterMut};
 
 use crate::entity::EntityId;
-use crate::data::sparse_index::SparseIndices;
+use crate::sparse_set::indices::SparseIndices;
 
-/// A dense data storage which is guaranteed even after removal.
-/// Doesn't facilitate the creation of [`Entity`], unlike [`IndexMap`](crate::indexmap::IndexMap).
-/// You'll need the assistance of [`EntityManager`](crate::entity::EntityManager) to create the key for indexing data.
+/// A typed SparseSet backed by [`Vec`]
 pub struct SparseSet<T> {
-    pub(crate) data: Vec<T>,
+    pub(crate) data: Vec<UnsafeCell<T>>,
     pub(crate) indexes: SparseIndices,
     pub(crate) entities: Vec<EntityId>,
 }
@@ -54,29 +53,17 @@ impl<T> SparseSet<T> {
     pub fn get(&self, id: &EntityId) -> Option<&T> {
         self.indexes
             .get_index(id)
-            .map(|index| &self.data[index.index()])
+            .map(|index| unsafe {
+                &*self.data[index.index()].get()
+            })
     }
 
     pub fn get_mut(&mut self, id: &EntityId) -> Option<&mut T> {
         self.indexes
             .get_index(id)
-            .map(|index| &mut self.data[index.index()])
-    }
-
-    pub fn get_or_insert(&mut self, id: &EntityId, value: impl FnOnce() -> T) -> &mut T {
-        if let Some(index) = self.indexes.get_index(id)
-            && !index.is_null()
-        {
-            return &mut self.data[index.index()]
-        }
-
-        let data_index = self.data.len();
-
-        self.indexes.set_index(id, data_index);
-        self.data.push(value());
-        self.entities.push(*id);
-
-        self.get_mut(id).unwrap()
+            .map(|index| {
+                self.data[index.index()].get_mut()
+            })
     }
 
     /// Inserting or replacing the value
@@ -84,14 +71,14 @@ impl<T> SparseSet<T> {
         if let Some(index) = self.indexes.get_index(id)
             && !index.is_null()
         {
-            self.data[index.index()] = value;
+            *self.data[index.index()].get_mut() = value;
             return;
         }
 
         let data_index = self.data.len();
 
         self.indexes.set_index(id, data_index);
-        self.data.push(value);
+        self.data.push(UnsafeCell::new(value));
         self.entities.push(*id);
     }
 
@@ -109,7 +96,7 @@ impl<T> SparseSet<T> {
                 self.indexes.set_index(last, idx.index());
                 self.indexes.set_null(&id);
                 self.entities.swap_remove(idx.index());
-                self.data.swap_remove(idx.index())
+                self.data.swap_remove(idx.index()).into_inner()
             })
     }
 
@@ -127,11 +114,6 @@ impl<T> SparseSet<T> {
         self.entities.contains(id)
     }
 
-    pub fn shrink_to_fit(&mut self) {
-        self.indexes.shrink_to_fit();
-        self.data.shrink_to_fit();
-    }
-
     pub fn reset(&mut self) {
         self.indexes.reset();
         self.data.clear();
@@ -141,27 +123,18 @@ impl<T> SparseSet<T> {
         self.indexes.get_index(id).map(|i| i.index())
     }
 
-    pub fn iter(&self) -> ArrayIter<'_, T> {
-        ArrayIter::new(self)
+    pub fn iter(&self) -> SparseSetIter<'_, T> {
+        SparseSetIter::new(self)
     }
 
-    pub fn iter_mut(&mut self) -> ArrayIterMut<'_, T> {
-        ArrayIterMut::new(self)
+    pub fn iter_mut(&mut self) -> SparseSetIterMut<'_, T> {
+        SparseSetIterMut::new(self)
     }
 
     pub fn iter_data_index(&self) -> impl Iterator<Item = usize> {
         self.indexes.iter_data_index()
     }
 }
-
-// impl<E: Entity, T: 'static> Array<E, T> {
-//     pub(crate) fn query_one<'a, Q>(&'a self) -> Map<Iter<'a, UnsafeCell<T>>, FnMapQuery<'a, Q>>
-//     where
-//         Q: QueryData<'a, Item = T>,
-//     {
-//         self.data.iter().map(map_query::<'a, Q> as FnMapQuery<'a, Q>)
-//     }
-// }
 
 /*
 #########################################################
@@ -171,11 +144,11 @@ impl<T> SparseSet<T> {
 #########################################################
 */
 
-pub struct ArrayIter<'a, T> {
-    inner: Zip<Iter<'a, EntityId>, Iter<'a, T>>,
+pub struct SparseSetIter<'a, T> {
+    inner: Zip<Iter<'a, EntityId>, Iter<'a, UnsafeCell<T>>>,
 }
 
-impl<'a, T> ArrayIter<'a, T> {
+impl<'a, T> SparseSetIter<'a, T> {
     pub(crate) fn new(ds: &'a SparseSet<T>) -> Self {
         let inner = ds.entities
             .iter()
@@ -186,19 +159,19 @@ impl<'a, T> ArrayIter<'a, T> {
     }
 }
 
-impl<'a, T> Iterator for ArrayIter<'a, T> {
+impl<'a, T> Iterator for SparseSetIter<'a, T> {
     type Item = (&'a EntityId, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
+        self.inner.next().map(|(id, cell)| unsafe { (id, &*cell.get()) })
     }
 }
 
-pub struct ArrayIterMut<'a, T> {
-    inner: Zip<Iter<'a, EntityId>, IterMut<'a, T>>,
+pub struct SparseSetIterMut<'a, T> {
+    inner: Zip<Iter<'a, EntityId>, IterMut<'a, UnsafeCell<T>>>,
 }
 
-impl<'a, T> ArrayIterMut<'a, T> {
+impl<'a, T> SparseSetIterMut<'a, T> {
     pub(crate) fn new(ds: &'a mut SparseSet<T>) -> Self {
         let inner = ds.entities
             .iter()
@@ -209,10 +182,10 @@ impl<'a, T> ArrayIterMut<'a, T> {
     }
 }
 
-impl<'a, T> Iterator for ArrayIterMut<'a, T> {
+impl<'a, T> Iterator for SparseSetIterMut<'a, T> {
     type Item = (&'a EntityId, &'a mut T);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
+        self.inner.next().map(|(id, cell)| (id, cell.get_mut()))
     }
 }

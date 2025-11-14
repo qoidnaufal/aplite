@@ -4,12 +4,10 @@ use std::iter::Map;
 use std::any::TypeId;
 
 use crate::{entity::Entity, Component};
-use crate::data::component::ComponentArray;
+use crate::type_erased_array::UntypedArray;
+use crate::sparse_set::indices::Index;
 
-use super::{
-    sparse_index::Index,
-    table::ComponentTable,
-};
+use super::table::ComponentTable;
 
 /// Query on many component type
 pub struct Query<'a, Q: QueryData<'a>> {

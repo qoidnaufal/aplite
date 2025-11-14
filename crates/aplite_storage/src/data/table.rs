@@ -3,19 +3,19 @@ use std::any::TypeId;
 
 use crate::entity::Entity;
 use crate::map::hash::TypeIdMap;
+use crate::type_erased_array::UntypedArray;
+use crate::sparse_set::indices::SparseIndices;
 
-use super::sparse_index::SparseIndices;
 use super::query::{Query, QueryData};
 use super::component::{
     Component,
     ComponentBundle,
     ComponentId,
     ComponentBitSet,
-    ComponentArray
 };
 
 pub struct ComponentTable {
-    pub(crate) data_storage: TypeIdMap<ComponentArray>,
+    pub(crate) data_storage: TypeIdMap<UntypedArray>,
     pub(crate) indexes: SparseIndices,
     pub(crate) entities: Vec<Entity>,
     pub(crate) component_id: TypeIdMap<ComponentId>,
@@ -56,7 +56,7 @@ impl ComponentTable {
         let len = self.data_storage.len();
         let component_id = ComponentId(1 << len);
 
-        self.data_storage.insert(type_id, ComponentArray::new::<T>(self.capacity.max(1)));
+        self.data_storage.insert(type_id, UntypedArray::new::<T>(self.capacity.max(1)));
         self.component_id.insert(type_id, component_id);
 
         component_id

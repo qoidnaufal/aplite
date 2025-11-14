@@ -10,8 +10,6 @@ use aplite_storage::{
     Tree,
 };
 
-use crate::state::{Flag, AspectRatio};
-use crate::view::IntoView;
 use crate::widget::Widget;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -196,22 +194,6 @@ impl Layout {
             tree: Tree::with_capacity(capacity),
             rects: SparseSet::with_capacity(capacity),
         }
-    }
-
-    pub(crate) fn get_or_insert(&mut self, id: Entity, parent: Option<Entity>, rect: impl FnOnce() -> Rect) -> &mut Rect {
-        self.tree.insert(id, parent);
-        self.rects.get_or_insert(&id, rect)
-    }
-
-    pub(crate) fn insert(&mut self, id: Entity, parent: Option<Entity>, rect: Rect) {
-        self.rects.insert(&id, rect);
-        self.tree.insert(id, parent);
-    }
-
-    pub(crate) fn parent_rect(&self, id: &Entity) -> Option<&Rect> {
-        self.tree
-            .get_parent(id)
-            .and_then(|parent| self.rects.get(parent))
     }
 }
 
