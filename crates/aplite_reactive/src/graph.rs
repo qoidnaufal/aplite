@@ -7,7 +7,7 @@ use std::sync::{
     OnceLock
 };
 
-use aplite_storage::{IndexMap, Entity};
+use aplite_storage::{IndexMap, Index};
 
 use crate::subscriber::AnySubscriber;
 
@@ -113,7 +113,7 @@ impl Graph {
 */
 
 pub(crate) struct Node<R> {
-    pub(crate) id: Entity,
+    pub(crate) id: Index,
     marker: PhantomData<R>,
 }
 

@@ -93,6 +93,7 @@ name = "aplite"
 version = "0.1.0"
 dependencies = [
  "aplite_future",
+ "aplite_layout",
  "aplite_reactive",
  "aplite_renderer",
  "aplite_stats",
@@ -106,6 +107,14 @@ dependencies = [
 [[package]]
 name = "aplite_future"
 version = "0.1.0"
+
+[[package]]
+name = "aplite_layout"
+version = "0.1.0"
+dependencies = [
+ "aplite_storage",
+ "aplite_types",
+]
 
 [[package]]
 name = "aplite_reactive"

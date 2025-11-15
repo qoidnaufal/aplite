@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 // use wgpu::util::DeviceExt;
 
-use aplite_types::{Rect, Size, Vec2f, ImageRef};
+use aplite_types::{Rect, Size, Point, ImageRef};
 use aplite_storage::{Tree, EntityManager, EntityId, EntityIdMap};
 
 #[derive(Debug, Clone, Copy)]
@@ -274,7 +274,7 @@ impl AtlasAllocator {
         match self.last_root {
             Some(last_root) => {
                 if let Some((parent, pos)) = self.scan(new_size) {
-                    let rect = Rect::from_vec2f_size(pos, new_size);
+                    let rect = Rect::from_point_size(pos, new_size);
                     let id = *self.id_manager.create().id();
 
                     self.allocated.insert(id, rect);
@@ -284,8 +284,8 @@ impl AtlasAllocator {
                 } else {
                     // inserting as the next root
                     let next_y = self.allocated.get(&last_root).unwrap().max_y();
-                    let pos = Vec2f::new(0.0, next_y);
-                    let rect = Rect::from_vec2f_size(pos, new_size);
+                    let pos = Point::new(0.0, next_y);
+                    let rect = Rect::from_point_size(pos, new_size);
                     let id = *self.id_manager.create().id();
 
                     self.allocated.insert(id, rect);
@@ -311,7 +311,7 @@ impl AtlasAllocator {
 
     #[inline(always)]
     /// scan each roots and try to find available position within the identified root
-    fn scan(&self, new_size: Size) -> Option<(EntityId, Vec2f)> {
+    fn scan(&self, new_size: Size) -> Option<(EntityId, Point)> {
         self.iter_roots()
             .find_map(|(root, bound_rect)| self.identify_member(root, bound_rect, new_size))
     }
@@ -333,7 +333,7 @@ impl AtlasAllocator {
         root: EntityId,
         bound_rect: &Rect,
         new_size: Size,
-    ) -> Option<(EntityId, Vec2f)> {
+    ) -> Option<(EntityId, Point)> {
         if let Some(first) = self.tree.get_first_child(&root) {
             // the first rect will set the boundary of it's siblings if any
             let first_rect = self.allocated.get(first).unwrap();
@@ -353,14 +353,14 @@ impl AtlasAllocator {
                 && new_size.height + last_rect.max_y() <= bound_rect.height)
                     .then_some((
                         root,
-                        Vec2f::new(last_rect.x, last_rect.max_y())
+                        Point::new(last_rect.x, last_rect.max_y())
                     ))
                     .or_else(|| {
                         (new_size.width + first_rect.max_x() <= self.bound.width
                             && new_size.height <= bound_rect.height)
                                 .then_some((
                                     *first,
-                                    Vec2f::new(first_rect.max_x(), bound_rect.y)
+                                    Point::new(first_rect.max_x(), bound_rect.y)
                                 ))
                     })
         } else {
@@ -368,7 +368,7 @@ impl AtlasAllocator {
             (bound_rect.max_x() + new_size.width <= self.bound.width)
                 .then_some((
                     root,
-                    Vec2f::new(bound_rect.max_x(), bound_rect.y)
+                    Point::new(bound_rect.max_x(), bound_rect.y)
                 ))
         }
     }
@@ -380,7 +380,7 @@ impl AtlasAllocator {
         current: &EntityId,
         first_rect_bound: &Rect,
         new_size: Size,
-    ) -> Option<(EntityId, Vec2f)> {
+    ) -> Option<(EntityId, Point)> {
         let current_rect = self.allocated.get(current).unwrap();
 
         let cond1 = new_size.width + current_rect.max_x() <= first_rect_bound.max_x();
@@ -399,7 +399,7 @@ impl AtlasAllocator {
 
         (cond1 && cond2).then_some((
             *current,
-            Vec2f::new(current_rect.max_x(), current_rect.y)
+            Point::new(current_rect.max_x(), current_rect.y)
         ))
     }
 
@@ -441,7 +441,7 @@ mod atlas_test {
         // parent 1
         let one = allocator.alloc(Size::new(400., 300.));
         assert!(one.is_some());
-        assert_eq!(one.unwrap().vec2f(), Vec2f::new(0., 300.));
+        assert_eq!(one.unwrap().point(), Point::new(0., 300.));
 
         let two = allocator.alloc(Size::new(300., 100.));
         assert!(two.is_some());

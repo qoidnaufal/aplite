@@ -1,9 +1,11 @@
+#[repr(C)]
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Vec2f {
     pub x: f32,
     pub y: f32,
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Vec2u {
     pub x: u32,

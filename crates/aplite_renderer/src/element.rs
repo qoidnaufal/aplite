@@ -1,4 +1,5 @@
-use aplite_types::{CornerRadius, Rgba, Size};
+use aplite_types::{CornerRadius, Size};
+use aplite_types::theme::basic;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -23,8 +24,8 @@ impl Element {
     pub fn new(size: Size) -> Self {
         Self {
             size,
-            background: Rgba::RED.into(),
-            border: Rgba::WHITE.into(),
+            background: basic::RED.into(),
+            border: basic::WHITE.into(),
             corners: 0,
             shape: 1,
             border_width: 0.0,

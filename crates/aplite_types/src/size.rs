@@ -3,15 +3,16 @@ use crate::fraction::Fraction;
 /// corresponds to [`winit::dpi::LogicalSize<T>`]
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy)]
-pub struct Size {
+pub struct Size<Marker = ()> {
     pub width: f32,
     pub height: f32,
+    marker: std::marker::PhantomData<Marker>
 }
 
 impl Size {
     #[inline(always)]
     pub const fn new(width: f32, height: f32) -> Self {
-        Self { width, height }
+        Self { width, height, marker: std::marker::PhantomData }
     }
 
     #[inline(always)]

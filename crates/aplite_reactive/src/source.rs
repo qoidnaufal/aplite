@@ -1,10 +1,10 @@
 use crate::subscriber::{AnySubscriber, SubscriberStorage};
-use aplite_storage::Entity;
+use aplite_storage::Index;
 
-pub(crate) struct AnySource(pub(crate) Entity);
+pub(crate) struct AnySource(pub(crate) Index);
 
 impl AnySource {
-    pub(crate) fn new(id: Entity) -> Self {
+    pub(crate) fn new(id: Index) -> Self {
         Self(id)
     }
 }

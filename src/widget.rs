@@ -1,5 +1,6 @@
 use aplite_renderer::Scene;
 use aplite_types::{Rgba, Size, Unit};
+use aplite_types::theme::basic;
 use aplite_storage::{
     ArenaItem,
     Entity,
@@ -99,8 +100,8 @@ impl CircleWidget {
     pub fn new() -> Self {
         Self {
             radius: Unit::Fixed(100.),
-            background: Rgba::RED,
-            border_color: Rgba::RED,
+            background: basic::RED,
+            border_color: basic::RED,
             border_width: 0.0,
         }
     }

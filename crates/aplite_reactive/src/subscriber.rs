@@ -1,7 +1,7 @@
 use std::sync::{Arc, Weak, OnceLock, RwLock, RwLockWriteGuard};
 use std::collections::HashMap;
 
-use aplite_storage::Entity;
+use aplite_storage::Index;
 
 use crate::reactive_traits::*;
 use crate::source::AnySource;
@@ -10,7 +10,7 @@ static SUBSCRIBER_STORAGE: OnceLock<RwLock<StorageInner>> = OnceLock::new();
 
 #[derive(Default)]
 struct StorageInner {
-    storage: HashMap<Entity, SubscriberSet>,
+    storage: HashMap<Index, SubscriberSet>,
 }
 
 pub(crate) struct SubscriberStorage;
@@ -24,7 +24,7 @@ impl SubscriberStorage {
         SUBSCRIBER_STORAGE.get_or_init(Default::default).write().unwrap()
     }
 
-    pub(crate) fn insert(id: Entity, subscriber: AnySubscriber) {
+    pub(crate) fn insert(id: Index, subscriber: AnySubscriber) {
         Self::write()
             .storage
             .entry(id)
@@ -32,14 +32,14 @@ impl SubscriberStorage {
             .push(subscriber);
     }
 
-    pub(crate) fn with_mut(id: &Entity, f: impl FnOnce(&mut Vec<AnySubscriber>)) {
+    pub(crate) fn with_mut(id: &Index, f: impl FnOnce(&mut Vec<AnySubscriber>)) {
         let mut lock = Self::write();
         if let Some(set) = lock.storage.get_mut(id) {
             f(&mut set.0)
         }
     }
 
-    pub(crate) fn remove(id: &Entity) {
+    pub(crate) fn remove(id: &Index) {
         let mut lock = Self::write();
         lock.storage.remove(id);
     }

@@ -1,6 +1,7 @@
 use crate::fraction::Fraction;
 use crate::size::Size;
 use crate::vector::Vec2f;
+use crate::point::Point;
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy)]
@@ -33,6 +34,11 @@ impl Rect {
     #[inline(always)]
     pub const fn from_vec2f_size(vec2f: Vec2f, size: Size) -> Self {
         Self::new(vec2f.x, vec2f.y, size.width, size.height)
+    }
+
+    #[inline(always)]
+    pub const fn from_point_size(point: Point, size: Size) -> Self {
+        Self::new(point.x, point.y, size.width, size.height)
     }
 
     #[inline(always)]

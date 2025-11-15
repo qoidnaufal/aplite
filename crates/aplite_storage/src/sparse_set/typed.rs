@@ -54,7 +54,7 @@ impl<T> SparseSet<T> {
         self.indexes
             .get_index(id)
             .map(|index| unsafe {
-                &*self.data[index.index()].get()
+                &*self.data[index].get()
             })
     }
 
@@ -62,16 +62,14 @@ impl<T> SparseSet<T> {
         self.indexes
             .get_index(id)
             .map(|index| {
-                self.data[index.index()].get_mut()
+                self.data[index].get_mut()
             })
     }
 
     /// Inserting or replacing the value
     pub fn insert(&mut self, id: &EntityId, value: T) {
-        if let Some(index) = self.indexes.get_index(id)
-            && !index.is_null()
-        {
-            *self.data[index.index()].get_mut() = value;
+        if let Some(index) = self.indexes.get_index(id) {
+            *self.data[index].get_mut() = value;
             return;
         }
 
@@ -89,14 +87,13 @@ impl<T> SparseSet<T> {
 
         self.indexes
             .get_index(&id)
-            .cloned()
             .map(|idx| {
                 let last = self.entities.last().unwrap();
 
-                self.indexes.set_index(last, idx.index());
+                self.indexes.set_index(last, idx);
                 self.indexes.set_null(&id);
-                self.entities.swap_remove(idx.index());
-                self.data.swap_remove(idx.index()).into_inner()
+                self.entities.swap_remove(idx);
+                self.data.swap_remove(idx).into_inner()
             })
     }
 
@@ -120,7 +117,7 @@ impl<T> SparseSet<T> {
     }
 
     pub fn entity_data_index(&self, id: &EntityId) -> Option<usize> {
-        self.indexes.get_index(id).map(|i| i.index())
+        self.indexes.get_index(id)
     }
 
     pub fn iter(&self) -> SparseSetIter<'_, T> {

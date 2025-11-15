@@ -118,7 +118,7 @@ fn counter(cx: &mut Context) {
         .child(&circle);
 }
 
-fn main() -> ApliteResult {
+fn main() -> aplite::ApliteResult {
     let config = AppConfig {
         allocation_size: Some(100),
         executor_capacity: 10,

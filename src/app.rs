@@ -12,7 +12,7 @@ use aplite_renderer::Renderer;
 use aplite_future::{Executor, block_on};
 use aplite_types::Size;
 
-use crate::prelude::ApliteResult;
+use crate::ApliteResult;
 use crate::context::Context;
 use crate::error::ApliteError;
 

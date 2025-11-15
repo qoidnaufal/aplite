@@ -7,12 +7,12 @@ mod state;
 mod view;
 mod widget;
 
-pub mod prelude {
-    use crate::error::ApliteError;
+pub type ApliteResult = Result<(), crate::error::ApliteError>;
 
+pub mod prelude {
     pub use aplite_reactive::*;
     pub use aplite_renderer::Shape;
-    pub use aplite_types::{Rgba, rgba8, rgba32, rgba_hex, CornerRadius};
+    pub use aplite_types::CornerRadius;
     pub use aplite_types::Unit::{Fixed, Grow, Fit};
 
     pub use crate::app::{Aplite, AppConfig};
@@ -48,10 +48,9 @@ pub mod prelude {
     };
 
     pub use crate::view::WidgetEvent::*;
-
-    pub type ApliteResult = Result<(), ApliteError>;
 }
 
-pub mod theme {
-    pub use aplite_types::gruvbox_dark;
+pub mod color {
+    pub use aplite_types::theme;
+    pub use aplite_types::{Rgba, rgba8, rgba32, rgba_hex, rgba_hex_alpha};
 }

@@ -35,7 +35,7 @@ impl UntypedSparseSet {
             .get_index(entity.id())
             .map(|index| unsafe {
                 self.data
-                    .get_raw(index.index(), self.item_layout.size())
+                    .get_raw(index, self.item_layout.size())
             })
     }
 
@@ -44,7 +44,7 @@ impl UntypedSparseSet {
             .get_index(entity.id())
             .map(|index| unsafe {
                 &*self.data
-                    .get_raw(index.index(), self.item_layout.size())
+                    .get_raw(index, self.item_layout.size())
                     .cast::<T>()
             })
     }
@@ -54,7 +54,7 @@ impl UntypedSparseSet {
             .get_index(entity.id())
             .map(|index| unsafe {
                 &mut *self.data
-                    .get_raw(index.index(), self.item_layout.size())
+                    .get_raw(index, self.item_layout.size())
                     .cast::<T>()
             })
     }
@@ -64,18 +64,16 @@ impl UntypedSparseSet {
             .get_index(entity.id())
             .map(|index| unsafe {
                 &*self.data
-                    .get_raw(index.index(), self.item_layout.size())
+                    .get_raw(index, self.item_layout.size())
                     .cast::<UnsafeCell<T>>()
             })
     }
 
     pub fn insert_no_realloc<T>(&mut self, entity: &Entity, value: T) -> Result<(), Error> {
         let size_t = self.item_layout.size();
-        if let Some(index) = self.indexes.get_index(entity.id())
-            && !index.is_null()
-        {
+        if let Some(index) = self.indexes.get_index(entity.id()) {
             unsafe {
-                let raw = self.data.get_raw(index.index(), size_t);
+                let raw = self.data.get_raw(index, size_t);
                 std::ptr::write(raw.cast(), value);
                 return Ok(())
             }
@@ -96,11 +94,9 @@ impl UntypedSparseSet {
 
     pub fn insert<T>(&mut self, entity: &Entity, value: T) {
         let size_t = self.item_layout.size();
-        if let Some(index) = self.indexes.get_index(entity.id())
-            && !index.is_null()
-        {
+        if let Some(index) = self.indexes.get_index(entity.id()) {
             unsafe {
-                let raw = self.data.get_raw(index.index(), size_t);
+                let raw = self.data.get_raw(index, size_t);
                 return std::ptr::write(raw.cast(), value);
             }
         }
@@ -117,10 +113,7 @@ impl UntypedSparseSet {
     }
 
     pub fn remove<T>(&mut self, entity: Entity) {
-        if let Some(index) = self.indexes
-            .get_index(&entity.id)
-            .map(|i| i.index())
-        {
+        if let Some(index) = self.indexes.get_index(&entity.id) {
             self.indexes.set_index(self.entities.last().unwrap(), index);
             self.indexes.set_null(&entity.id);
             self.data.swap_remove_drop::<T>(index, self.entities.len() - 1);
@@ -184,13 +177,13 @@ mod untyped_sparse_set_test {
         let last = Entity::new(4, 0);
         let to_remove = Entity::new(1, 0);
 
-        let prev_index = set.indexes.get_index(&last.id).copied();
+        let prev_index = set.indexes.get_index(&last.id);
 
         set.remove::<Obj>(to_remove);
         let removed = set.get::<Obj>(&to_remove);
         assert!(removed.is_none());
 
-        let new_index = set.indexes.get_index(&last.id).copied();
+        let new_index = set.indexes.get_index(&last.id);
         assert_ne!(prev_index, new_index);
 
         println!("quitting");

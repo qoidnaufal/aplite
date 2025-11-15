@@ -1,6 +1,7 @@
 use crate::vector::{Vec2f, Vec2u};
 
-/// The difference between [`Point`] and [`Vec2f`] is, [`Point`] has less functionality than [`Vec2f`]
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct Point {
     pub x: f32,
     pub y: f32,

@@ -10,8 +10,12 @@ pub const fn rgba32(val: u32) -> Rgba {
     Rgba::from_u32(val)
 }
 
+pub fn rgba_hex_alpha(hex: &str) -> Rgba {
+    Rgba::from_hex_alpha(hex)
+}
+
 pub fn rgba_hex(hex: &str) -> Rgba {
-    Rgba::from_hex(hex)
+    Rgba::from_hex_alpha(hex)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -23,27 +27,18 @@ pub struct Rgba {
 }
 
 impl Rgba {
-    pub const TRANSPARENT: Self = Self::new(0, 0, 0, 0);
-    pub const BLACK: Self = Self::new(0, 0, 0, 255);
-    pub const RED: Self = Self::new(255, 0, 0, 255);
-    pub const GREEN: Self = Self::new(0, 255, 0, 255);
-    pub const BLUE: Self = Self::new(0, 0, 255, 255);
-    pub const WHITE: Self = Self::new(255, 255, 255, 255);
-    pub const YELLOW: Self = Self::new(255, 255, 0, 255);
-    pub const PURPLE: Self = Self::new(111, 72, 234, 255);
-    pub const LIGHT_GRAY: Self = Rgba::new(69, 69, 69, 255);
-    pub const DARK_GRAY: Self = Self::new(30, 30, 30, 255);
-    pub const DARK_GREEN: Self = Self::new(10, 30, 15, 255);
-
     #[inline(always)]
     pub const fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self { r, g, b, a }
     }
 
     #[inline(always)]
-    pub fn from_hex(hex: &str) -> Self {
+    pub fn from_hex_alpha(hex: &str) -> Self {
         assert!(hex.get(..1).unwrap() == "#", "input doesn't start with #");
-        assert!(hex.get(1..).is_some_and(|s| s.len() == 8), "invalid input length, expected 8");
+        assert!(
+            hex.get(1..).is_some_and(|s| s.len() == 8),
+            "invalid input length, expected 8 'rrggbbaa'"
+        );
 
         let mut buf = [0; 8];
 
@@ -66,12 +61,56 @@ impl Rgba {
     }
 
     #[inline(always)]
+    pub fn from_hex(hex: &str) -> Self {
+        assert!(hex.get(..1).unwrap() == "#", "input doesn't start with #");
+        assert!(
+            hex.get(1..).is_some_and(|s| s.len() == 8),
+            "invalid input length, expected 6 'rrggbb'"
+        );
+
+        let mut buf = [0; 6];
+
+        hex.chars()
+            .skip(1)
+            .enumerate()
+            .for_each(|(i, c)| {
+                match c.to_digit(16) {
+                    Some(num) => buf[i] = num as u8,
+                    None => panic!("invalid char {}", c),
+                }
+            });
+
+        Self {
+            r: buf[0] * 16 + buf[1],
+            g: buf[2] * 16 + buf[3],
+            b: buf[4] * 16 + buf[5],
+            a: 255,
+        }
+    }
+
+    #[inline(always)]
     pub const fn from_u32(val: u32) -> Self {
         let r = (val >> 24) as u8;
         let g = ((val >> 16) & 0xFF) as u8;
         let b = ((val >> 8) & 0xFF) as u8;
         let a = (val & 0xFF) as u8;
         Self::new(r, g, b, a)
+    }
+
+    #[inline(always)]
+    pub fn with_alpha_u8(self, a: u8) -> Self {
+        Self {
+            a,
+            ..self
+        }
+    }
+
+    #[inline(always)]
+    pub fn with_alpha_f32(self, a: f32) -> Self {
+        Self {
+            a: (a.clamp(0.0, 1.0) * u8::MAX as f32) as u8,
+            ..self
+        }
     }
 
     #[inline(always)]
@@ -110,6 +149,29 @@ impl PartialEq for Rgba {
 }
 
 impl Eq for Rgba {}
+
+pub mod theme {
+    pub use super::gruvbox_dark;
+    pub use super::basic;
+}
+
+pub mod basic {
+    use super::Rgba;
+
+    pub const TRANSPARENT: Rgba = Rgba::new(0, 0, 0, 0);
+    pub const BLACK: Rgba = Rgba::new(0, 0, 0, 255);
+    pub const WHITE: Rgba = Rgba::new(255, 255, 255, 255);
+
+    pub const RED: Rgba = Rgba::new(255, 0, 0, 255);
+    pub const GREEN: Rgba = Rgba::new(0, 255, 0, 255);
+    pub const BLUE: Rgba = Rgba::new(0, 0, 255, 255);
+
+    pub const YELLOW: Rgba = Rgba::new(255, 255, 0, 255);
+    pub const PURPLE: Rgba = Rgba::new(111, 72, 234, 255);
+    pub const LIGHT_GRAY: Rgba = Rgba::new(69, 69, 69, 255);
+    pub const DARK_GRAY: Rgba = Rgba::new(30, 30, 30, 255);
+    pub const DARK_GREEN: Rgba = Rgba::new(10, 30, 15, 255);
+}
 
 pub mod gruvbox_dark {
     use super::{Rgba, rgb8};

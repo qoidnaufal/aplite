@@ -5,9 +5,27 @@ enum Content<T> {
     Next(u32),
 }
 
+impl<T: Clone> Clone for Content<T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Occupied(val) => Self::Occupied(val.clone()),
+            Self::Next(num) => Self::Next(*num),
+        }
+    }
+}
+
 pub(crate) struct Slot<T> {
     content: Content<T>,
     pub(crate) version: u32,
+}
+
+impl<T: Clone> Clone for Slot<T> {
+    fn clone(&self) -> Self {
+        Self {
+            content: self.content.clone(),
+            version: self.version,
+        }
+    }
 }
 
 impl<T> Slot<T> {
@@ -28,7 +46,7 @@ impl<T> Slot<T> {
     }
 
     #[inline(always)]
-    pub(crate) fn occupy(&mut self, data: T) -> Option<u32> {
+    pub(crate) fn try_occupy(&mut self, data: T) -> Option<u32> {
         match self.content {
             Content::Occupied(_) => None,
             Content::Next(next) => {

@@ -20,6 +20,7 @@ members = [
   "crates/aplite_stats",
   "crates/aplite_reactive",
   "crates/aplite_storage",
+  "crates/aplite_layout",
 ]
 
 [dependencies]
@@ -31,6 +32,7 @@ aplite_stats = { path = "crates/aplite_stats", default-features = false, optiona
 aplite_reactive = { path = "crates/aplite_reactive" }
 aplite_renderer = { path = "crates/aplite_renderer" }
 aplite_future = { path = "crates/aplite_future" }
+aplite_layout = { path = "crates/aplite_layout" }
 
 [dependencies.image]
 version = "0.25.8"

@@ -1,17 +1,11 @@
 use std::cell::UnsafeCell;
-use std::slice::Iter;
-use std::iter::Map;
-use std::any::TypeId;
 
-use crate::{entity::Entity, Component};
-use crate::type_erased_array::UntypedArray;
-use crate::sparse_set::indices::Index;
-
-use super::table::ComponentTable;
+use crate::Component;
+use crate::sparse_set::indices::SparseSetIndex;
 
 /// Query on many component type
 pub struct Query<'a, Q: QueryData<'a>> {
-    pub(crate) ptr: &'a [Index],
+    pub(crate) ptr: &'a [SparseSetIndex],
     marker: std::marker::PhantomData<Q>,
 }
 

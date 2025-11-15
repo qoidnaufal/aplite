@@ -1,4 +1,5 @@
 use aplite_types::{Rgba, Unit};
+use aplite_types::theme::basic;
 
 use crate::layout::{LayoutRules, Orientation};
 use crate::view::IntoView;
@@ -35,8 +36,8 @@ impl VStack {
             min_height: Some(1.),
             max_width: None,
             max_height: None,
-            background: Rgba::TRANSPARENT,
-            border_color: Rgba::TRANSPARENT,
+            background: basic::TRANSPARENT,
+            border_color: basic::TRANSPARENT,
             border_width: 0.,
             layout_rules: LayoutRules {
                 orientation: Orientation::Vertical,
@@ -80,8 +81,8 @@ impl HStack {
             min_height: Some(1.),
             max_width: None,
             max_height: None,
-            background: Rgba::TRANSPARENT,
-            border: Rgba::TRANSPARENT,
+            background: basic::TRANSPARENT,
+            border: basic::TRANSPARENT,
             border_width: 0.,
             layout_rules: LayoutRules {
                 orientation: Orientation::Horizontal,

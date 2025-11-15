@@ -25,7 +25,7 @@ pub use arena::{
     item::ArenaItem,
 };
 pub use map::{
-    index_map::{IndexMap, IndexMapError},
+    index_map::{IndexMap, Index, IndexMapError},
     hash::EntityIdMap,
 };
 pub use sparse_set::{

@@ -1,4 +1,5 @@
 use aplite_types::{Rgba, Unit};
+use aplite_types::theme::basic;
 
 use crate::view::IntoView;
 use super::{Widget, InteractiveWidget};
@@ -18,8 +19,8 @@ impl Button {
         Self {
             width: Unit::Fixed(80.),
             height: Unit::Fixed(80.),
-            background: Rgba::RED,
-            border_color: Rgba::RED,
+            background: basic::RED,
+            border_color: basic::RED,
             border_width: 0.0,
         }
     }
