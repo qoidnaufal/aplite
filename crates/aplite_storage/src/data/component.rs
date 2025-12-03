@@ -50,7 +50,7 @@ pub trait Component: Sized + 'static {}
 pub trait ComponentBundle {
     type Item;
 
-    fn insert_bundle(self, id: &Entity, table: &mut ComponentTable);
+    fn insert_bundle(self, id: Entity, table: &mut ComponentTable);
 }
 
 pub trait IntoComponent: Sized + 'static {

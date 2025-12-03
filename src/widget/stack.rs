@@ -1,7 +1,9 @@
 use aplite_renderer::Scene;
+use aplite_storage::Entity;
 
 use crate::layout::{LayoutRules, Orientation};
 use crate::context::Context;
+use crate::view::{ViewStorage, IntoView, View};
 
 use super::{Widget, ParentWidget};
 
@@ -29,8 +31,8 @@ impl VStack {
 }
 
 impl Widget for VStack {
-    fn build(self, cx: &mut Context) -> aplite_storage::Entity {
-        todo!()
+    fn build(self, cx: &mut ViewStorage) -> Entity {
+        cx.mount(self)
     }
 
     fn layout(&mut self, cx: &mut Context) {
@@ -44,6 +46,21 @@ impl Widget for VStack {
 
 impl ParentWidget for VStack {}
 
+// impl IntoView for VStack {
+//     fn into_view<'a>(self) -> View<'a> {
+//         View::new(self)
+//     }
+// }
+
+/*
+#########################################################
+#                                                       #
+#                         HStack                        #
+#                                                       #
+#########################################################
+*/
+
+#[derive(Debug)]
 pub struct HStack {
     layout_rules: LayoutRules,
 }
@@ -60,8 +77,8 @@ impl HStack {
 }
 
 impl Widget for HStack {
-    fn build(self, cx: &mut Context) -> aplite_storage::Entity {
-        todo!()
+    fn build(self, cx: &mut ViewStorage) -> Entity {
+        cx.mount(self)
     }
 
     fn layout(&mut self, cx: &mut Context) {
@@ -73,16 +90,10 @@ impl Widget for HStack {
     }
 }
 
+// impl IntoView for HStack {
+//     fn into_view<'a>(self) -> View<'a> {
+//         View::new(self)
+//     }
+// }
+
 impl ParentWidget for HStack {}
-
-impl std::fmt::Debug for VStack {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "VStack")
-    }
-}
-
-impl std::fmt::Debug for HStack {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "HStack")
-    }
-}

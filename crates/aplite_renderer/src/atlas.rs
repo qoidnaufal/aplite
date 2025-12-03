@@ -275,10 +275,10 @@ impl AtlasAllocator {
             Some(last_root) => {
                 if let Some((parent, pos)) = self.scan(new_size) {
                     let rect = Rect::from_point_size(pos, new_size);
-                    let id = *self.id_manager.create().id();
+                    let id = self.id_manager.create().id();
 
                     self.allocated.insert(id, rect);
-                    self.tree.insert_with_parent(id, &parent);
+                    self.tree.insert_with_parent(id, parent);
 
                     Some(rect)
                 } else {
@@ -286,7 +286,7 @@ impl AtlasAllocator {
                     let next_y = self.allocated.get(&last_root).unwrap().max_y();
                     let pos = Point::new(0.0, next_y);
                     let rect = Rect::from_point_size(pos, new_size);
-                    let id = *self.id_manager.create().id();
+                    let id = self.id_manager.create().id();
 
                     self.allocated.insert(id, rect);
                     self.tree.insert_as_root(id);
@@ -298,7 +298,7 @@ impl AtlasAllocator {
             None => {
                 // first insert
                 let rect = Rect::from_size(new_size);
-                let id = *self.id_manager.create().id();
+                let id = self.id_manager.create().id();
 
                 self.allocated.insert(id, rect);
                 self.tree.insert_as_root(id);
@@ -334,9 +334,9 @@ impl AtlasAllocator {
         bound_rect: &Rect,
         new_size: Size,
     ) -> Option<(EntityId, Point)> {
-        if let Some(first) = self.tree.get_first_child(&root) {
+        if let Some(first) = self.tree.get_first_child(root) {
             // the first rect will set the boundary of it's siblings if any
-            let first_rect = self.allocated.get(first).unwrap();
+            let first_rect = self.allocated.get(&first).unwrap();
 
             let mut current = first;
 
@@ -347,7 +347,7 @@ impl AtlasAllocator {
             }
 
             // assigning as the next sibling of the first child
-            let last_rect = self.allocated.get(current).unwrap();
+            let last_rect = self.allocated.get(&current).unwrap();
 
             (new_size.width <= first_rect.width
                 && new_size.height + last_rect.max_y() <= bound_rect.height)
@@ -359,7 +359,7 @@ impl AtlasAllocator {
                         (new_size.width + first_rect.max_x() <= self.bound.width
                             && new_size.height <= bound_rect.height)
                                 .then_some((
-                                    *first,
+                                    first,
                                     Point::new(first_rect.max_x(), bound_rect.y)
                                 ))
                     })
@@ -377,17 +377,17 @@ impl AtlasAllocator {
     #[inline(always)]
     fn indentify_next_sibling(
         &self,
-        current: &EntityId,
+        current: EntityId,
         first_rect_bound: &Rect,
         new_size: Size,
     ) -> Option<(EntityId, Point)> {
-        let current_rect = self.allocated.get(current).unwrap();
+        let current_rect = self.allocated.get(&current).unwrap();
 
         let cond1 = new_size.width + current_rect.max_x() <= first_rect_bound.max_x();
         let cond2 = new_size.height <= current_rect.height;
 
         if let Some(cfc) = self.tree.get_first_child(current) {
-            let cfc_rect = self.allocated.get(cfc).unwrap();
+            let cfc_rect = self.allocated.get(&cfc).unwrap();
 
             let mut curr = cfc;
             while let Some(next) = self.tree.get_next_sibling(curr) {
@@ -398,7 +398,7 @@ impl AtlasAllocator {
         }
 
         (cond1 && cond2).then_some((
-            *current,
+            current,
             Point::new(current_rect.max_x(), current_rect.y)
         ))
     }

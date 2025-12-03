@@ -39,13 +39,15 @@ pub struct Executor;
 
 impl Executor {
     pub fn init(capacity: usize) {
-        let (tx, rx) = sync_channel(capacity);
-        let worker = Worker { rx };
+        if capacity > 0 {
+            let (tx, rx) = sync_channel(capacity);
+            let worker = Worker { rx };
 
-        SPAWNER.set(tx).expect("Executor can only be initialized once");
+            SPAWNER.set(tx).expect("Executor can only be initialized once");
 
-        let worker_thread = thread::Builder::new().name("async worker".to_string());
-        let _ = worker_thread.spawn(move || worker.work());
+            let worker_thread = thread::Builder::new().name("async worker".to_string());
+            let _ = worker_thread.spawn(move || worker.work());
+        }
     }
 
     pub fn spawn(future: impl Future<Output = ()> + 'static) {

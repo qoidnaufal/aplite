@@ -42,17 +42,17 @@ impl ComponentTable {
         }
     }
 
-    pub fn insert<T: Component>(&mut self, entity: &Entity, component: T) {
+    pub fn insert<T: Component>(&mut self, entity: Entity, component: T) {
         let type_id = TypeId::of::<T>();
         let buffer = self.data.get_mut(&type_id).unwrap();
         let len = buffer.len();
 
         buffer.push(component);
         self.indexes.set_index(entity.id(), len);
-        self.entities.push(*entity);
+        self.entities.push(entity);
     }
 
-    pub fn insert_bundle<T: ComponentBundle>(&mut self, id: &Entity, bundle: T) {
+    pub fn insert_bundle<T: ComponentBundle>(&mut self, id: Entity, bundle: T) {
         bundle.insert_bundle(id, self);
     }
 
@@ -101,12 +101,12 @@ mod table_test {
 
         for i in 0..5u32 {
             let id = cx.manager.create();
-            cx.table.insert_bundle(&id, (Name(i.to_string()), Age(i), Location(i as _, i as _)));
+            cx.table.insert_bundle(id, (Name(i.to_string()), Age(i), Location(i as _, i as _)));
         }
 
         for i in 0..2u32 {
             let id = cx.manager.create();
-            cx.table.insert(&id, Age(i));
+            cx.table.insert(id, Age(i));
         }
     }
 }

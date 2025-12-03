@@ -1,4 +1,4 @@
-// use aplite::prelude::*;
+use aplite::prelude::*;
 
 // const IMAGE_1: &str = "../../Wallpaper/milky-way-over-mountains-4k-fl-1680x1050-2045764561.jpg";
 // const IMAGE_2: &str = "../../Wallpaper/1352909.jpeg";
@@ -97,31 +97,41 @@
 //         .spacing(8)
 // }
 
-// fn root(cx: &mut Context) {
-//     let (counter, set_counter) = Signal::split(0i32);
+fn root() -> impl IntoView {
+    let (counter, set_counter) = Signal::split(0i32);
 
-//     let inc = move || set_counter.update(|num| *num += 1);
-//     let dec = move || set_counter.update(|num| *num -= 1);
+    let inc = move || set_counter.update(|num| *num += 1);
+    let dec = move || set_counter.update(|num| *num -= 1);
 
-//     Effect::new(move |_| eprint!("{:?}   \r", counter.get()));
+    Effect::new(move |_| eprintln!("{:?}", counter.get()));
 
-//     let button = cx.spawn(button());
-//     let h_stack = cx.spawn(h_stack());
+    let button = button();
+    let h_stack = h_stack();
 
-//     cx.add_child(&h_stack, &button);
-// }
+    h_stack
+        .with_child(button)
+        .with_child(branch_1)
+}
 
-// fn main() -> ApliteResult {
-//     let config = AppConfig {
-//         allocation_size: Some(100),
-//         executor_capacity: 1,
-//         window_size: (400, 400).into(),
-//     };
+fn branch_1() -> impl IntoView {
+    v_stack()
+        .with_child(circle)
+        .with_child(button)
+}
 
-//     Aplite::new(config)
-//         .view(root)
-//         .set_window_attributes(|window| window.title = "Demo".into())
-//         .launch()
-// }
 
-fn main() {}
+fn main() {
+    let config = AppConfig {
+        allocation_size: unsafe { std::num::NonZeroUsize::new_unchecked(100) },
+        executor_capacity: 1,
+        window_size: (400, 400).into(),
+    };
+
+    Aplite::new(config)
+        .view(root)
+        .debug_tree();
+        // .set_window_attributes(|window| window.title = "Demo".into())
+        // .launch()
+}
+
+// fn main() {}

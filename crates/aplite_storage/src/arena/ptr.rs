@@ -12,9 +12,9 @@ impl<T: ?Sized> Ptr<T> {
         }
     }
 
-    pub fn map<U: ?Sized>(&mut self, f: impl FnOnce(&mut T) -> &mut U) -> Ptr<U> {
+    pub fn map<U: ?Sized>(mut self, f: impl FnOnce(&mut T) -> &mut U) -> Ptr<U> {
         Ptr {
-            raw: NonNull::from_mut(f(self)),
+            raw: NonNull::from_mut(f(&mut self)),
         }
     }
 }

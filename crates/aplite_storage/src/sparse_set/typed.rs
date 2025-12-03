@@ -7,7 +7,7 @@ use crate::sparse_set::indices::SparseIndices;
 
 /// A typed SparseSet backed by [`Vec`]
 pub struct SparseSet<T> {
-    pub(crate) data: Vec<UnsafeCell<T>>,
+    pub(crate) data: Vec<T>,
     pub(crate) indexes: SparseIndices,
     pub(crate) entities: Vec<EntityId>,
 }
@@ -44,54 +44,60 @@ impl<T> SparseSet<T> {
         self.entities.reserve_exact(capacity);
     }
 
-    // pub(crate) fn get_raw(&self, entity: &E) -> Option<&UnsafeCell<T>> {
-    //     self.ptr
-    //         .get_index(entity)
-    //         .map(|index| &self.data[index.index()])
-    // }
-
-    pub fn get(&self, id: &EntityId) -> Option<&T> {
+    pub fn get(&self, id: EntityId) -> Option<&T> {
         self.indexes
             .get_index(id)
+            .map(|index| &self.data[index])
+    }
+
+    pub fn get_mut(&mut self, id: EntityId) -> Option<&mut T> {
+        self.indexes
+            .get_index(id)
+            .map(|index| &mut self.data[index])
+    }
+
+    pub fn get_cell(&self, entity: EntityId) -> Option<&UnsafeCell<T>> {
+        self.indexes
+            .get_index(entity)
             .map(|index| unsafe {
-                &*self.data[index].get()
+                let raw = self.data.as_ptr();
+                let cell = raw.add(index).cast::<UnsafeCell<T>>();
+                &*cell
             })
     }
 
-    pub fn get_mut(&mut self, id: &EntityId) -> Option<&mut T> {
+    pub fn get_raw(&mut self, entity: EntityId) -> Option<*mut T> {
         self.indexes
-            .get_index(id)
-            .map(|index| {
-                self.data[index].get_mut()
-            })
+            .get_index(entity)
+            .map(|index| &mut self.data[index] as *mut T)
     }
 
     /// Inserting or replacing the value
-    pub fn insert(&mut self, id: &EntityId, value: T) {
+    pub fn insert(&mut self, id: EntityId, value: T) {
         if let Some(index) = self.indexes.get_index(id) {
-            *self.data[index].get_mut() = value;
+            self.data[index] = value;
             return;
         }
 
         let data_index = self.data.len();
 
         self.indexes.set_index(id, data_index);
-        self.data.push(UnsafeCell::new(value));
-        self.entities.push(*id);
+        self.data.push(value);
+        self.entities.push(id);
     }
 
     /// The contiguousness of the data is guaranteed after removal via [`Vec::swap_remove`],
     /// but the order of the data is is not.
     pub fn remove(&mut self, id: EntityId) -> Option<T> {
         self.indexes
-            .get_index(&id)
+            .get_index(id)
             .map(|index| {
                 let last = self.entities.last().unwrap();
 
-                self.indexes.set_index(last, index);
-                self.indexes.set_null(&id);
+                self.indexes.set_index(*last, index);
+                self.indexes.set_null(id);
                 self.entities.swap_remove(index);
-                self.data.swap_remove(index).into_inner()
+                self.data.swap_remove(index)
             })
     }
 
@@ -114,7 +120,7 @@ impl<T> SparseSet<T> {
         self.data.clear();
     }
 
-    pub fn entity_data_index(&self, id: &EntityId) -> Option<usize> {
+    pub fn entity_data_index(&self, id: EntityId) -> Option<usize> {
         self.indexes.get_index(id)
     }
 
@@ -140,7 +146,7 @@ impl<T> SparseSet<T> {
 */
 
 pub struct SparseSetIter<'a, T> {
-    inner: Zip<Iter<'a, EntityId>, Iter<'a, UnsafeCell<T>>>,
+    inner: Zip<Iter<'a, EntityId>, Iter<'a, T>>,
 }
 
 impl<'a, T> SparseSetIter<'a, T> {
@@ -158,12 +164,12 @@ impl<'a, T> Iterator for SparseSetIter<'a, T> {
     type Item = (&'a EntityId, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|(id, cell)| unsafe { (id, &*cell.get()) })
+        self.inner.next()
     }
 }
 
 pub struct SparseSetIterMut<'a, T> {
-    inner: Zip<Iter<'a, EntityId>, IterMut<'a, UnsafeCell<T>>>,
+    inner: Zip<Iter<'a, EntityId>, IterMut<'a, T>>,
 }
 
 impl<'a, T> SparseSetIterMut<'a, T> {
@@ -181,6 +187,49 @@ impl<'a, T> Iterator for SparseSetIterMut<'a, T> {
     type Item = (&'a EntityId, &'a mut T);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|(id, cell)| (id, cell.get_mut()))
+        self.inner.next()
+    }
+}
+
+#[cfg(test)]
+mod typed_sparse_set {
+    use super::*;
+
+    struct Obj {
+        name: String,
+        age: u32,
+    }
+
+    impl std::fmt::Debug for Obj {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("Obj")
+                .field("name", &self.name)
+                .field("age", &self.age)
+                .finish()
+        }
+    }
+
+    impl From<u32> for Obj {
+        fn from(value: u32) -> Self {
+            Self {
+                name: value.to_string(),
+                age: value,
+            }
+        }
+    }
+
+    #[test]
+    fn cell_test() {
+        let mut set = SparseSet::<Obj>::with_capacity(5);
+        for i in 0..5 {
+            let id = EntityId::new(i);
+            set.insert(id, i.into());
+        }
+
+        let cell_1 = set.get_cell(EntityId::new(1));
+        assert!(cell_1.is_some());
+        unsafe {
+            println!("{:?}", &*cell_1.unwrap().get())
+        }
     }
 }

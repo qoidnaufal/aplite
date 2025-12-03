@@ -2,8 +2,6 @@ use std::num::NonZeroUsize;
 use std::any::TypeId;
 
 use aplite_storage::{
-    Arena,
-    CpuBuffer,
     Entity,
     EntityManager,
     Ptr,
@@ -14,7 +12,6 @@ use aplite_storage::{
 };
 
 use crate::widget::{ParentWidget, Widget};
-use crate::context::Context;
 
 pub struct ViewStorage {
     pub(crate) current: Option<Entity>,
@@ -43,49 +40,69 @@ impl ViewStorage {
         prev
     }
 
-    pub(crate) fn mount<IV: IntoView + 'static>(&mut self, widget: IV) -> Entity {
+    pub fn mount<IV: IntoView + 'static>(&mut self, widget: IV) -> Entity {
         let type_id = TypeId::of::<IV>();
         let entity = self.id_manager.create();
         let sparse_set = self.arena
             .entry(type_id)
             .or_insert(UntypedSparseSet::new::<IV>());
 
-        // let ptr = self.arena.alloc_mapped(widget, |w| w as &mut dyn Widget);
-
-        // self.views.insert(entity.id(), AnyView::new(ptr));
-        sparse_set.insert(&entity, widget);
+        let ptr = sparse_set.insert(entity, widget).map(|iv| iv as &mut dyn Widget);
+        self.views.insert(entity.id(), AnyView::new(ptr));
         self.type_ids.insert(entity.id(), type_id);
-        self.tree.insert(*entity.id(), self.current.as_ref().map(Entity::id));
+        self.tree.insert(entity.id(), self.current.as_ref().map(Entity::id));
 
         entity
     }
-}
 
-pub trait IntoView: Widget + Sized {
-    fn into_view<'a>(self) -> View<'a>;
-}
+    pub(crate) fn get<IV: IntoView>(&self, entity: Entity) -> Option<&IV> {
+        self.arena
+            .get(&TypeId::of::<IV>())
+            .and_then(|sparse_set| sparse_set.get(entity))
+    }
 
-impl<T> IntoView for T where T: Widget {
-    fn into_view<'a>(self) -> View<'a> {
-        View::new(self)
+    pub(crate) fn get_mut<IV: IntoView>(&mut self, entity: Entity) -> Option<&mut IV> {
+        self.arena
+            .get_mut(&TypeId::of::<IV>())
+            .and_then(|sparse_set| sparse_set.get_mut(entity))
+    }
+
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &dyn Widget> {
+        self.tree
+            .iter_depth(self.current.as_ref().map(|entity| entity.id()).unwrap())
+            .filter_map(|entity_id| {
+                self.views
+                    .get(entity_id)
+                    .map(|any_view| any_view.as_ref())
+            })
+    }
+
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut dyn Widget> {
+        self.tree
+            .iter_depth(self.current.map(|entity| entity.id()).unwrap())
+            .filter_map(|entity_id| {
+                self.views
+                    .get_raw(entity_id)
+                    .map(|any_view| unsafe { (&mut *any_view).as_mut() })
+            })
     }
 }
 
-pub struct View<'a>(Box<dyn FnOnce(&mut Context) -> Entity + 'a>);
+pub struct View<'a>(Box<dyn FnOnce(&mut ViewStorage) -> Entity + 'a>);
 
 impl<'a> View<'a> {
-    fn new<IV: IntoView>(widget: IV) -> Self {
+    pub(crate) fn new<IV: IntoView>(widget: IV) -> Self {
         Self(Box::new(|cx| widget.build(cx)))
     }
 
-    pub(crate) fn build(self, cx: &mut Context) -> Entity {
+    pub(crate) fn build(self, cx: &mut ViewStorage) -> Entity {
         (self.0)(cx)
     }
 }
 
 impl<'a> std::fmt::Debug for View<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let inner = self.0.as_ref() as *const dyn FnOnce(&mut Context) -> Entity;
+        let inner = self.0.as_ref() as *const dyn FnOnce(&mut ViewStorage) -> Entity;
         f.debug_struct("View")
             .field("addr", &inner.addr())
             .finish()
@@ -137,3 +154,24 @@ impl std::ops::DerefMut for AnyView {
         std::ops::DerefMut::deref_mut(&mut self.ptr)
     }
 }
+
+pub trait IntoView: Widget + Sized + 'static {
+    fn into_view<'a>(self) -> View<'a>;
+}
+
+
+impl<T> IntoView for T where T: Widget + Sized + 'static {
+    fn into_view<'a>(self) -> View<'a> {
+        View::new(self)
+    }
+}
+
+// impl<F, IV> IntoView for F
+// where
+//     F: FnOnce() -> IV + 'static,
+//     IV: IntoView,
+// {
+//     fn into_view<'a>(self) -> View<'a> {
+//         self().into_view()
+//     }
+// }

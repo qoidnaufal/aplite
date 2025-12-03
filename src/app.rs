@@ -16,6 +16,7 @@ use aplite_types::Size;
 use crate::prelude::ApliteResult;
 use crate::context::Context;
 use crate::error::ApliteError;
+use crate::view::IntoView;
 
 pub(crate) const DEFAULT_SCREEN_SIZE: LogicalSize<u32> = LogicalSize::new(800, 600);
 
@@ -55,8 +56,15 @@ impl Aplite {
         }
     }
 
-    pub fn view(mut self, view_fn: impl FnOnce(&mut Context) + 'static) -> Self {
-        view_fn(&mut self.cx);
+    pub fn view<IV: IntoView>(mut self, view: IV) -> Self {
+        let view = view.into_view();
+        let root = view.build(&mut self.cx.storage);
+        self.cx.storage.set_root_id(Some(root));
+        self
+    }
+
+    pub fn debug_tree(self) -> Self {
+        println!("{:?}", self.cx.storage.tree);
         self
     }
 

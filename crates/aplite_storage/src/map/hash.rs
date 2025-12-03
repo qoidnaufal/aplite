@@ -1,3 +1,4 @@
+use std::collections::hash_map::{Entry, Iter, IterMut, Keys};
 use std::hash::{Hasher, BuildHasher};
 use std::any::TypeId;
 use std::collections::HashMap;
@@ -76,7 +77,7 @@ impl<V> TypeIdMap<V> {
         self.0.retain(f);
     }
 
-    pub fn entry(&mut self, key: TypeId) -> std::collections::hash_map::Entry<'_, TypeId, V> {
+    pub fn entry(&mut self, key: TypeId) -> Entry<'_, TypeId, V> {
         self.0.entry(key)
     }
 
@@ -88,7 +89,7 @@ impl<V> TypeIdMap<V> {
         self.0.get_mut(k)
     }
 
-    pub fn keys(&self) -> std::collections::hash_map::Keys<'_, TypeId, V> {
+    pub fn keys(&self) -> Keys<'_, TypeId, V> {
         self.0.keys()
     }
 
@@ -100,11 +101,11 @@ impl<V> TypeIdMap<V> {
         self.0.clear();
     }
 
-    pub fn iter(&self) -> std::collections::hash_map::Iter<'_, TypeId, V> {
+    pub fn iter(&self) -> Iter<'_, TypeId, V> {
         self.0.iter()
     }
 
-    pub fn iter_mut(&mut self) -> std::collections::hash_map::IterMut<'_, TypeId, V> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, TypeId, V> {
         self.0.iter_mut()
     }
 }
@@ -128,5 +129,24 @@ impl<V> std::ops::Index<&TypeId> for TypeIdMap<V> {
 impl<V> std::ops::IndexMut<&TypeId> for TypeIdMap<V> {
     fn index_mut(&mut self, index: &TypeId) -> &mut Self::Output {
         self.get_mut(index).unwrap()
+    }
+}
+
+#[cfg(test)]
+mod hash_test {
+    use super::*;
+
+    #[test]
+    fn no_hash() {
+        let mut map = TypeIdMap::<Vec<String>>::new();
+
+        for i in 0..5 {
+            map.entry(TypeId::of::<Vec<String>>())
+                .or_default()
+                .push(i.to_string());
+        }
+
+        assert_eq!(map.len(), 1);
+        println!("{map:#?}")
     }
 }

@@ -224,6 +224,12 @@ impl<T> std::ops::Index<Index> for IndexMap<T> {
     }
 }
 
+impl<T> std::ops::IndexMut<Index> for IndexMap<T> {
+    fn index_mut(&mut self, index: Index) -> &mut Self::Output {
+        self.get_mut(&index).unwrap()
+    }
+}
+
 #[derive(Debug)]
 pub enum IndexMapError {
     ReachedMaxId,

@@ -78,8 +78,8 @@ impl CpuBuffer {
 
     fn realloc_if_needed(&mut self) {
         if self.len == self.block.capacity {
-            let new_capacity = self.block.capacity + 4;
-            self.block.realloc_unmanaged(self.item_layout, new_capacity);
+            self.block
+                .realloc_unmanaged(self.item_layout, self.block.capacity + 4);
         }
     }
 
@@ -175,19 +175,25 @@ impl RawCpuBuffer {
                 drop: mem::needs_drop::<T>().then_some(drop::<T>),
             }
         } else {
-            unsafe {
-                let layout = alloc::Layout::from_size_align_unchecked(
-                    item_layout.size() * capacity,
-                    item_layout.align()
-                );
-                let raw = std::alloc::alloc(layout);
+            let mut this = Self::with_capacity::<T>(0, item_layout);
+            this.initialize(capacity, item_layout.size(), item_layout.align());
+            this
+        }
+    }
 
-                Self {
-                    block: NonNull::new(raw).unwrap_or_else(|| alloc::handle_alloc_error(layout)),
-                    capacity,
-                    drop: mem::needs_drop::<T>().then_some(drop::<T>),
-                }
-            }
+    #[inline(always)]
+    fn initialize(&mut self, capacity: usize, size: usize, align: usize) {
+        unsafe {
+            let layout = alloc::Layout::from_size_align_unchecked(
+                size * capacity,
+                align
+            );
+
+            let raw = std::alloc::alloc(layout);
+
+            self.block = NonNull::new(raw)
+                .unwrap_or_else(|| alloc::handle_alloc_error(layout));
+            self.capacity = capacity;
         }
     }
 
@@ -199,34 +205,42 @@ impl RawCpuBuffer {
     }
 
     #[inline(always)]
-    pub(crate) fn push_unmanaged<T>(&mut self, data: T, len: usize) {
-        // let layout = alloc::Layout::new::<T>();
-
-        // let size = layout.size();
-        // let align = layout.align();
-
-        // unsafe {
-        //     let raw = self.block.add(len * size);
-        //     let aligned = raw.align_offset(align);
-        //     let ptr = raw.add(aligned).as_ptr();
-        //     std::ptr::write(ptr.cast::<T>(), data);
-        // }
-
+    pub(crate) fn push_unmanaged<T>(&mut self, data: T, len: usize) -> *mut T {
         unsafe {
-            let raw = self.block.add(len * size_of::<T>()).as_ptr();
-            std::ptr::write(raw.cast::<T>(), data);
+            let raw = self.block
+                .add(len * size_of::<T>())
+                .as_ptr()
+                .cast::<T>();
+            std::ptr::write(raw, data);
+            raw
         }
     }
 
     #[inline(always)]
     pub(crate) fn realloc_unmanaged(&mut self, item_layout: alloc::Layout, new_capacity: usize) {
-        unsafe {
-            let new_size = item_layout.size() * new_capacity;
-            let new_block = alloc::realloc(self.block.as_ptr(), item_layout, new_size);
+        if self.capacity == 0 {
+            self.initialize(
+                new_capacity,
+                item_layout.size(),
+                item_layout.align()
+            );
+        } else {
+            unsafe {
+                let new_size = item_layout.size() * new_capacity;
+                let new_block = alloc::realloc(self.block.as_ptr(), item_layout, new_size);
 
-            self.block = NonNull::new_unchecked(new_block);
-            self.capacity = new_capacity;
+                self.block = NonNull::new(new_block)
+                    .unwrap_or_else(|| {
+                        let layout = alloc::Layout::from_size_align_unchecked(
+                            new_size,
+                            item_layout.align()
+                        );
+                        alloc::handle_alloc_error(layout)
+                    });
+            }
         }
+
+        self.capacity = new_capacity;
     }
 
     #[inline(always)]
@@ -258,11 +272,13 @@ impl RawCpuBuffer {
 
     #[inline(always)]
     pub(crate) fn dealloc(&mut self, item_layout: alloc::Layout) {
-        unsafe {
-            let size = item_layout.size() * self.capacity;
-            let align = item_layout.align();
-            let layout = alloc::Layout::from_size_align_unchecked(size, align);
-            alloc::dealloc(self.block.as_ptr(), layout);
+        if self.capacity > 0 {
+            unsafe {
+                let size = item_layout.size() * self.capacity;
+                let align = item_layout.align();
+                let layout = alloc::Layout::from_size_align_unchecked(size, align);
+                alloc::dealloc(self.block.as_ptr(), layout);
+            }
         }
     }
 }

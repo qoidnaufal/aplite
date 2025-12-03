@@ -13,7 +13,7 @@ macro_rules! component_bundle {
         impl<$($name: Component),*> ComponentBundle for ($($name,)*) {
             type Item = ($($name,)*);
 
-            fn insert_bundle(self, id: &Entity, table: &mut ComponentTable) {
+            fn insert_bundle(self, id: Entity, table: &mut ComponentTable) {
                 #[allow(non_snake_case)]
                 let ($($name,)*) = self;
                 ($(table.insert(id, $name),)*);

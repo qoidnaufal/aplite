@@ -24,33 +24,30 @@ impl EntityVersion {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Entity {
-    pub(crate) id: EntityId,
-    pub(crate) version: EntityVersion,
-}
+pub struct Entity(u32);
 
 impl Entity {
+    pub(crate) const INDEX_MASK: u32 = (1 << 20) - 1;
+    pub(crate) const VERSION_MASK: u32 = (1 << 12) - 1;
+
     pub const fn new(index: u32, version: u32) -> Self {
-        Self {
-            id: EntityId::new(index),
-            version: EntityVersion::new(version),
-        }
+        Self(index | version << 20)
     }
 
-    pub const fn id(&self) -> &EntityId {
-        &self.id
+    pub const fn id(&self) -> EntityId {
+        EntityId::new(self.0 & Self::INDEX_MASK)
     }
 
-    pub const fn version(&self) -> &EntityVersion {
-        &self.version
+    pub const fn version(&self) -> EntityVersion {
+        EntityVersion::new(self.0 >> 20 & Self::VERSION_MASK)
     }
 
     pub const fn index(&self) -> usize {
-        self.id.index()
+        self.id().index()
     }
 
-    pub const fn raw(&self) -> u64 {
-        (self.version.0 as u64) << 32 | self.id.0 as u64
+    pub const fn raw(&self) -> u32 {
+        self.0
     }
 }
 
@@ -62,7 +59,7 @@ impl std::hash::Hash for EntityId {
 
 impl std::hash::Hash for Entity {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_u64(self.id.0 as _);
+        state.write_u32(self.id().0);
     }
 }
 
@@ -109,8 +106,9 @@ impl EntityManager {
                 let id = u32::try_from(self.versions.len())
                     .ok()
                     .expect("Created Entity should not exceed u32::MAX");
+
+                debug_assert!(id <= Entity::INDEX_MASK);
                 self.versions.push(0);
-                debug_assert!(id < u32::MAX);
                 id
             });
         Entity::new(id, self.versions[id as usize])
@@ -118,7 +116,7 @@ impl EntityManager {
 
     pub fn is_alive(&self, id: &Entity) -> bool {
         let version = self.versions[id.index()];
-        version < u32::MAX && version == id.version.0
+        version < Entity::VERSION_MASK && version == id.version().0
     }
 
     pub fn destroy(&mut self, id: Entity) {

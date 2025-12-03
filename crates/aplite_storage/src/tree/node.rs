@@ -11,9 +11,17 @@ pub struct Node {
 }
 
 impl Node {
+    pub(crate) fn id(&self) -> EntityId {
+        self.entity
+    }
+
+    pub(crate) fn index(&self) -> usize {
+        self.entity.index()
+    }
+
     pub(crate) fn as_node_ref(&self) -> NodeRef<'_> {
         NodeRef {
-            entity: &self.entity,
+            entity: self.entity,
             parent: self.parent.as_ref(),
             first_child: self.first_child.as_ref(),
             next_sibling: self.next_sibling.as_ref(),
@@ -24,7 +32,7 @@ impl Node {
 
 #[derive(Debug)]
 pub struct NodeRef<'a> {
-    pub entity: &'a EntityId,
+    pub entity: EntityId,
     pub parent: Option<&'a EntityId>,
     pub first_child: Option<&'a EntityId>,
     pub next_sibling: Option<&'a EntityId>,
@@ -34,18 +42,6 @@ pub struct NodeRef<'a> {
 impl NodeRef<'_> {
     pub(crate) fn index(&self) -> usize {
         self.entity.index()
-    }
-}
-
-impl From<NodeRef<'_>> for Node {
-    fn from(value: NodeRef<'_>) -> Self {
-        Self {
-            entity: *value.entity,
-            parent: value.parent.copied(),
-            first_child: value.first_child.copied(),
-            next_sibling: value.next_sibling.copied(),
-            prev_sibling: value.prev_sibling.copied(),
-        }
     }
 }
 
@@ -71,9 +67,8 @@ impl SubTree {
     }
 
     pub(crate) fn from_tree(id: EntityId, tree: &Tree) -> Self {
-        let nodes = tree.iter_node(&id)
+        let nodes = tree.iter_node(id)
             .skip(1)
-            .map(|node_ref| node_ref.into())
             .collect();
         Self {
             id,
@@ -106,10 +101,8 @@ impl SubTree {
         self.nodes.push(node);
     }
 
-    pub fn iter_member_ref(&self) -> impl Iterator<Item = NodeRef<'_>> {
-        self.nodes
-            .iter()
-            .map(|node| node.as_node_ref())
+    pub fn iter_member_ref(&self) -> impl Iterator<Item = &Node> {
+        self.nodes.iter()
     }
 
     pub fn len(&self) -> usize {

@@ -50,32 +50,32 @@ impl SparseIndices {
     }
 
     #[inline(always)]
-    pub fn get_index(&self, id: &EntityId) -> Option<usize> {
+    pub fn get_index(&self, id: EntityId) -> Option<usize> {
         self.indices
             .get(id.index())
             .and_then(SparseSetIndex::get)
     }
 
-    pub fn set_index(&mut self, id: &EntityId, data_index: usize) {
+    pub fn set_index(&mut self, id: EntityId, data_index: usize) {
         self.resize_if_needed(id);
         self.indices[id.index()] = SparseSetIndex::new(data_index);
     }
 
-    pub fn set_null(&mut self, id: &EntityId) {
+    pub fn set_null(&mut self, id: EntityId) {
         self.indices[id.index()] = SparseSetIndex::null()
     }
 
-    pub fn with<T>(&self, id: &EntityId, f: impl FnOnce(usize) -> T) -> Option<T> {
+    pub fn with<T>(&self, id: EntityId, f: impl FnOnce(usize) -> T) -> Option<T> {
         self.get_index(id).map(|index| f(index))
     }
 
-    pub fn contains(&self, id: &EntityId) -> bool {
+    pub fn contains(&self, id: EntityId) -> bool {
         self.indices
             .get(id.index())
             .is_some_and(SparseSetIndex::is_valid)
     }
 
-    fn resize_if_needed(&mut self, id: &EntityId) {
+    fn resize_if_needed(&mut self, id: EntityId) {
         let index = id.index();
         if index >= self.indices.len() {
             self.resize(index);
