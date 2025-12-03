@@ -35,17 +35,16 @@ impl Effect {
         scope.sender.notify();
 
         let scope = Arc::new(scope);
-        let any_subscriber = scope.to_any_subscriber();
+        let subscriber = scope.to_any_subscriber();
         let node = Graph::insert(scope);
 
         Executor::spawn(async move {
             let mut value = None::<R>;
-            let scope = any_subscriber;
 
             while rx.recv().await.is_some() {
-                let prev_scope = Graph::set_scope(Some(scope.clone()));
+                let prev_scope = Graph::set_scope(Some(subscriber.clone()));
 
-                scope.clear_source();
+                subscriber.clear_source();
 
                 let prev_value = value.take();
                 let new_val = f(prev_value);
@@ -53,7 +52,7 @@ impl Effect {
 
                 let _ = Graph::set_scope(prev_scope);
 
-                if scope.source_count() == 0 { break }
+                if subscriber.source_count() == 0 { break }
             }
 
             Graph::with_mut(|graph| graph.storage.remove(&node.id));

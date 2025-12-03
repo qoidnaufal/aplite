@@ -1,19 +1,18 @@
-use std::rc::Rc;
-use std::cell::RefCell;
+use std::num::NonZeroUsize;
 
 use aplite_reactive::*;
 use aplite_renderer::{Renderer};
 use aplite_types::{Vec2f, Rect, Size};
 use aplite_storage::Entity;
 
-use crate::view::{IntoView, View, ViewStorage};
+use crate::view::{IntoView, View, AnyView, ViewStorage};
 use crate::cursor::{Cursor, MouseAction, MouseButton};
+use crate::widget::{Widget, ParentWidget};
 
 pub struct Context {
-    pub(crate) storage: Rc<RefCell<ViewStorage>>,
+    pub(crate) storage: ViewStorage,
     pub(crate) dirty: Signal<bool>,
     pub(crate) cursor: Cursor,
-    pub(crate) current: Option<Entity>,
     pub(crate) rect: Rect,
     pub(crate) pending_update: Vec<Entity>,
 }
@@ -25,21 +24,22 @@ pub struct Context {
 // ########################################################
 
 impl Context {
-    pub(crate) fn new(size: Size, allocation_size: Option<usize>) -> Self {
+    pub(crate) fn new(size: Size, allocation_size: NonZeroUsize) -> Self {
         Self {
-            storage: Rc::new(RefCell::new(ViewStorage::new(allocation_size))),
+            storage: ViewStorage::new(allocation_size),
             cursor: Cursor::default(),
             dirty: Signal::new(false),
-            current: None,
             rect: Rect::from_size(size),
             pending_update: Vec::new(),
         }
     }
 
-    pub fn spawn<IV: IntoView + 'static>(&mut self, widget: IV) -> View<IV> {
-        let storage = &mut *self.storage.borrow_mut();
-        let id = storage.insert(widget);
-        View::new::<IV>(id, Rc::downgrade(&self.storage))
+    pub fn mount<IV: IntoView + 'static>(&mut self, widget: IV) -> Entity {
+        self.storage.mount(widget)
+        // let item = self.storage.arena.alloc_mapped(widget.into_view(), |w| w as &mut dyn Widget);
+        // let entity = self.storage.id_manager.create();
+        // self.storage.views.insert(entity.id(), AnyView::new(item));
+        // entity
     }
 
     pub(crate) fn toggle_dirty(&self) {
@@ -129,7 +129,6 @@ impl Context {
 
     pub(crate) fn render(&self, renderer: &mut Renderer) {
         let mut scene = renderer.scene();
-        let storage = &*self.storage.borrow();
-        storage.views.iter().for_each(|(_, any)| any.as_ref().draw(&mut scene));
+        self.storage.views.iter().for_each(|(_, any)| any.as_ref().draw(&mut scene));
     }
 }

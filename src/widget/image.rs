@@ -1,8 +1,10 @@
 use std::path::Path;
 
 use aplite_types::{ImageData, Unit};
+use aplite_renderer::Scene;
 
 use crate::state::AspectRatio;
+use crate::context::Context;
 
 use super::Widget;
 
@@ -43,4 +45,16 @@ impl Image {
     }
 }
 
-impl Widget for Image {}
+impl Widget for Image {
+    fn build(self, cx: &mut Context) -> aplite_storage::Entity {
+        todo!()
+    }
+
+    fn layout(&mut self, cx: &mut Context) {
+        todo!()
+    }
+
+    fn draw(&self, scene: &mut Scene) {
+        todo!()
+    }
+}

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::num::NonZeroUsize;
 use std::sync::{Arc, Weak};
 
 use winit::dpi::{PhysicalPosition, PhysicalSize, LogicalSize};
@@ -12,7 +13,7 @@ use aplite_renderer::Renderer;
 use aplite_future::{Executor, block_on};
 use aplite_types::Size;
 
-use crate::ApliteResult;
+use crate::prelude::ApliteResult;
 use crate::context::Context;
 use crate::error::ApliteError;
 
@@ -23,9 +24,7 @@ pub(crate) struct WindowHandle {
 }
 
 pub struct AppConfig {
-    /// The size preallocated to store the widgets.
-    /// If set to None, the value will be set to 1Mb (1024 * 1024).
-    pub allocation_size: Option<usize>,
+    pub allocation_size: NonZeroUsize,
     pub executor_capacity: usize,
     pub window_size: Size,
 }

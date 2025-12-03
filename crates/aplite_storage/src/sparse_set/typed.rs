@@ -83,17 +83,15 @@ impl<T> SparseSet<T> {
     /// The contiguousness of the data is guaranteed after removal via [`Vec::swap_remove`],
     /// but the order of the data is is not.
     pub fn remove(&mut self, id: EntityId) -> Option<T> {
-        if self.data.is_empty() { return None }
-
         self.indexes
             .get_index(&id)
-            .map(|idx| {
+            .map(|index| {
                 let last = self.entities.last().unwrap();
 
-                self.indexes.set_index(last, idx);
+                self.indexes.set_index(last, index);
                 self.indexes.set_null(&id);
-                self.entities.swap_remove(idx);
-                self.data.swap_remove(idx).into_inner()
+                self.entities.swap_remove(index);
+                self.data.swap_remove(index).into_inner()
             })
     }
 

@@ -1,13 +1,13 @@
 use std::alloc;
 use std::cell::UnsafeCell;
 
-use crate::type_erased_array::{UnsafeUntypedArray, Error};
+use crate::buffer::{RawCpuBuffer, Error};
 use crate::entity::{EntityId, Entity};
 
 use super::indices::SparseIndices;
 
 pub struct UntypedSparseSet {
-    pub(crate) data: UnsafeUntypedArray,
+    pub(crate) data: RawCpuBuffer,
     pub(crate) indexes: SparseIndices,
     pub(crate) entities: Vec<EntityId>,
     item_layout: alloc::Layout,
@@ -15,46 +15,56 @@ pub struct UntypedSparseSet {
 
 impl Drop for UntypedSparseSet {
     fn drop(&mut self) {
-        self.data.clear(self.entities.len(), self.item_layout);
+        self.clear();
         self.data.dealloc(self.item_layout);
     }
 }
 
 impl UntypedSparseSet {
+    pub fn new<T>() -> Self {
+        Self::with_capacity::<T>(0)
+    }
+
+    #[inline(always)]
     pub fn with_capacity<T>(capacity: usize) -> Self {
+        let item_layout = alloc::Layout::new::<T>();
+
         Self {
             indexes: SparseIndices::default(),
-            data: UnsafeUntypedArray::new::<T>(capacity),
+            data: RawCpuBuffer::with_capacity::<T>(capacity, item_layout),
             entities: Vec::with_capacity(capacity),
-            item_layout: alloc::Layout::new::<T>()
+            item_layout
         }
     }
 
+    #[inline(always)]
     pub fn get_raw<T>(&self, entity: &Entity) -> Option<*mut u8> {
         self.indexes
             .get_index(entity.id())
             .map(|index| unsafe {
                 self.data
-                    .get_raw(index, self.item_layout.size())
+                    .get_raw(index * self.item_layout.size())
             })
     }
 
+    #[inline(always)]
     pub fn get<T>(&self, entity: &Entity) -> Option<&T> {
         self.indexes
             .get_index(entity.id())
             .map(|index| unsafe {
                 &*self.data
-                    .get_raw(index, self.item_layout.size())
+                    .get_raw(index * self.item_layout.size())
                     .cast::<T>()
             })
     }
 
+    #[inline(always)]
     pub fn get_mut<T>(&self, entity: &Entity) -> Option<&mut T> {
         self.indexes
             .get_index(entity.id())
             .map(|index| unsafe {
                 &mut *self.data
-                    .get_raw(index, self.item_layout.size())
+                    .get_raw(index * self.item_layout.size())
                     .cast::<T>()
             })
     }
@@ -64,51 +74,45 @@ impl UntypedSparseSet {
             .get_index(entity.id())
             .map(|index| unsafe {
                 &*self.data
-                    .get_raw(index, self.item_layout.size())
+                    .get_raw(index * self.item_layout.size())
                     .cast::<UnsafeCell<T>>()
             })
     }
 
     pub fn insert_no_realloc<T>(&mut self, entity: &Entity, value: T) -> Result<(), Error> {
-        let size_t = self.item_layout.size();
-        if let Some(index) = self.indexes.get_index(entity.id()) {
-            unsafe {
-                let raw = self.data.get_raw(index, size_t);
-                std::ptr::write(raw.cast(), value);
-                return Ok(())
-            }
+        if let Some(exist) = self.get_mut(entity) {
+            *exist = value;
+            return Ok(());
         }
 
         let len = self.entities.len();
-
-        if len == self.data.capacity.get() {
+        if len == self.data.capacity {
             return Err(Error::MaxCapacityReached);
         }
 
-        self.indexes.set_index(entity.id(), len);
-        self.data.push(value, len);
-        self.entities.push(*entity.id());
+        self.insert_inner(entity, len, value);
 
         Ok(())
     }
 
     pub fn insert<T>(&mut self, entity: &Entity, value: T) {
-        let size_t = self.item_layout.size();
-        if let Some(index) = self.indexes.get_index(entity.id()) {
-            unsafe {
-                let raw = self.data.get_raw(index, size_t);
-                return std::ptr::write(raw.cast(), value);
-            }
+        if let Some(exist) = self.get_mut(entity) {
+            *exist = value;
+            return;
         }
 
         let len = self.entities.len();
-
-        if len == self.data.capacity.get() {
-            self.data.realloc(self.item_layout, len + 1);
+        if len == self.data.capacity {
+            self.data.realloc_unmanaged(self.item_layout, len + 4);
         }
 
+        self.insert_inner(entity, len, value);
+    }
+
+    #[inline(always)]
+    fn insert_inner<T>(&mut self, entity: &Entity, len: usize, value: T) {
         self.indexes.set_index(entity.id(), len);
-        self.data.push(value, len);
+        self.data.push_unmanaged(value, len);
         self.entities.push(*entity.id());
     }
 
@@ -116,9 +120,19 @@ impl UntypedSparseSet {
         if let Some(index) = self.indexes.get_index(&entity.id) {
             self.indexes.set_index(self.entities.last().unwrap(), index);
             self.indexes.set_null(&entity.id);
-            self.data.swap_remove_drop::<T>(index, self.entities.len() - 1);
+            unsafe {
+                let ptr = self.data
+                    .swap_remove_unmanaged::<T>(index, self.entities.len() - 1);
+                std::ptr::drop_in_place(ptr);
+            }
             self.entities.swap_remove(index);
         }
+    }
+
+    pub fn clear(&mut self) {
+        self.indexes.reset();
+        self.data.clear(self.entities.len());
+        self.entities.clear();
     }
 }
 

@@ -1,7 +1,7 @@
 use std::num::NonZeroUsize;
 use std::alloc;
 
-use super::item::ArenaItem;
+use super::ptr::Ptr;
 
 pub struct Arena {
     start: *mut u8,
@@ -21,8 +21,7 @@ impl Drop for Arena {
 }
 
 impl Arena {
-    pub fn new(size: usize) -> Self {
-        let size = NonZeroUsize::try_from(size).expect("Size must be non zero");
+    pub fn new(size: NonZeroUsize) -> Self {
         unsafe {
             let layout = alloc::Layout::from_size_align_unchecked(size.get(), 1);
             let start = alloc::alloc(layout);
@@ -38,7 +37,7 @@ impl Arena {
         }
     }
 
-    pub fn alloc<T>(&mut self, data: T) -> ArenaItem<T> {
+    fn alloc_raw<T>(&mut self, data: T) -> *mut T {
         #[inline]
         unsafe fn drop<T>(raw: *mut u8) {
             unsafe {
@@ -52,23 +51,35 @@ impl Arena {
             let raw = self.offset.add(aligned_offset);
             let new_offset = raw.add(size_of::<T>());
 
-            assert!(new_offset <= self.start.add(self.size.get()));
+            debug_assert!(new_offset <= self.start.add(self.size.get()));
 
             self.offset = new_offset;
-
             self.drop_calls.push(DropCaller { raw, drop: drop::<T> });
 
             let ptr = raw.cast();
-            std::ptr::write(ptr, data);
-            ArenaItem::new(ptr)
+            core::ptr::write(ptr, data);
+
+            ptr
         }
     }
 
-    pub fn alloc_mapped<T, U, F>(&mut self, data: T, map: F) -> ArenaItem<U>
+    pub fn alloc<T>(&mut self, data: T) -> Ptr<T> {
+        let raw = self.alloc_raw(data);
+        Ptr::new(raw)
+    }
+
+    pub fn alloc_mapped<T, U, F>(&mut self, data: T, map: F) -> Ptr<U>
     where
         U: ?Sized,
         F: FnOnce(&mut T) -> &mut U,
     {
+        let raw = self.alloc_raw(data);
+        unsafe {
+            Ptr::new(map(&mut *raw))
+        }
+    }
+
+    pub fn memmove<T>(&mut self, data: *const T) -> Ptr<T> {
         #[inline]
         unsafe fn drop<T>(raw: *mut u8) {
             unsafe {
@@ -82,20 +93,19 @@ impl Arena {
             let raw = self.offset.add(aligned_offset);
             let new_offset = raw.add(size_of::<T>());
 
-            assert!(new_offset <= self.start.add(self.size.get()));
+            debug_assert!(new_offset <= self.start.add(self.size.get()));
 
             self.offset = new_offset;
-
             self.drop_calls.push(DropCaller { raw, drop: drop::<T> });
 
             let ptr = raw.cast();
-            std::ptr::write(ptr, data);
-            ArenaItem::new(map(&mut *ptr))
+            core::ptr::copy_nonoverlapping(data, ptr, 1);
+            Ptr::new(ptr)
         }
     }
 
     // WARN: need to mark the raw pointer in ArenaItem as invalid
-    pub fn clear(&mut self) {
+    fn clear(&mut self) {
         self.drop_calls.clear();
         self.offset = self.start;
     }

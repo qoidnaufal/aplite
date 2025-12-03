@@ -47,29 +47,3 @@ pub(crate) fn map_query<'a, Q: Queryable<'a>>(cell: &'a UnsafeCell<Q::Item>) -> 
 
 pub(crate) type FnMapQuery<'a, Q> =
     fn(&'a UnsafeCell<<Q as Queryable<'a>>::Item>) -> <Q as Queryable<'a>>::Output;
-
-macro_rules! query {
-    ($($name:ident),*) => {
-        impl<'a, $($name: Queryable<'a>),*> QueryData<'a> for ($($name,)*) {}
-    };
-}
-
-macro_rules! query_one {
-    ($name:ident) => {
-        impl<'a, $name: Queryable<'a>> QueryData<'a> for $name {}
-    };
-}
-
-use crate::impl_tuple_macro;
-
-impl_tuple_macro!(
-    query,
-    A, B, C, D, E,
-    F, G, H, I, J
-    // K, L, M, N, O,
-    // P, Q, R, S, T,
-    // U, V, W, X, Y,
-    // Z
-);
-
-query_one!(A);

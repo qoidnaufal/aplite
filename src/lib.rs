@@ -7,8 +7,6 @@ mod state;
 mod view;
 mod widget;
 
-pub type ApliteResult = Result<(), crate::error::ApliteError>;
-
 pub mod prelude {
     pub use aplite_reactive::*;
     pub use aplite_renderer::Shape;
@@ -31,6 +29,7 @@ pub mod prelude {
         Widget,
         InteractiveWidget,
         ParentWidget,
+        WidgetEvent,
         image_reader,
     };
 
@@ -47,7 +46,7 @@ pub mod prelude {
         View,
     };
 
-    pub use crate::view::WidgetEvent::*;
+    pub type ApliteResult = Result<(), crate::error::ApliteError>;
 }
 
 pub mod color {

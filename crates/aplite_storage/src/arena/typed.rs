@@ -2,7 +2,7 @@ use std::alloc;
 use std::marker::PhantomData;
 use std::ptr::slice_from_raw_parts_mut;
 
-use super::item::ArenaItem;
+use super::ptr::Ptr;
 
 pub struct TypedArena<T> {
     block: *mut u8,
@@ -42,14 +42,14 @@ impl<T> TypedArena<T> {
         }
     }
 
-    pub fn insert(&mut self, data: T) -> ArenaItem<T> {
+    pub fn insert(&mut self, data: T) -> Ptr<T> {
         assert!(self.len < self.capacity, "max capacity reached");
         unsafe {
             let raw = self.block.add(self.len * size_of::<T>()).cast();
             self.len += 1;
             std::ptr::write(raw, data);
 
-            ArenaItem::new(raw)
+            Ptr::new(raw)
         }
     }
 
@@ -61,11 +61,11 @@ impl<T> TypedArena<T> {
         }
     }
 
-    pub fn get_ptr(&self, index: usize) -> ArenaItem<T> {
+    pub fn get_ptr(&self, index: usize) -> Ptr<T> {
         assert!(index < self.len);
         unsafe {
             let raw = self.block.add(index * size_of::<T>()).cast();
-            ArenaItem::new(raw)
+            Ptr::new(raw)
         }
     }
 

@@ -99,7 +99,7 @@ impl<'a> LayoutCx<'a> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct LayoutRules {
     pub(crate) padding: Padding,
     pub(crate) orientation: Orientation,

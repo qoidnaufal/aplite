@@ -1,4 +1,4 @@
-use aplite::prelude::*;
+// use aplite::prelude::*;
 
 // const IMAGE_1: &str = "../../Wallpaper/milky-way-over-mountains-4k-fl-1680x1050-2045764561.jpg";
 // const IMAGE_2: &str = "../../Wallpaper/1352909.jpeg";
@@ -87,7 +87,7 @@ use aplite::prelude::*;
 //     let inc = move || set_counter.update(|num| *num += 1);
 //     let dec = move || set_counter.update(|num| *num -= 1);
 
-//     // Effect::new(move |_| eprint!("{:?}   \r", counter.get()));
+//     Effect::new(move |_| eprint!("{:?}   \r", counter.get()));
 
 //     v_stack()
 //         .child(button_stack(inc, dec, set_counter))
@@ -97,33 +97,31 @@ use aplite::prelude::*;
 //         .spacing(8)
 // }
 
+// fn root(cx: &mut Context) {
+//     let (counter, set_counter) = Signal::split(0i32);
+
+//     let inc = move || set_counter.update(|num| *num += 1);
+//     let dec = move || set_counter.update(|num| *num -= 1);
+
+//     Effect::new(move |_| eprint!("{:?}   \r", counter.get()));
+
+//     let button = cx.spawn(button());
+//     let h_stack = cx.spawn(h_stack());
+
+//     cx.add_child(&h_stack, &button);
+// }
+
 // fn main() -> ApliteResult {
-//     Aplite::new(root)
+//     let config = AppConfig {
+//         allocation_size: Some(100),
+//         executor_capacity: 1,
+//         window_size: (400, 400).into(),
+//     };
+
+//     Aplite::new(config)
+//         .view(root)
 //         .set_window_attributes(|window| window.title = "Demo".into())
 //         .launch()
 // }
 
-fn counter(cx: &mut Context) {
-    let (counter, set_counter) = Signal::split(0i32);
-    let stack = cx.spawn(h_stack());
-    let button = cx.spawn(button());
-    let circle = cx.spawn(circle());
-
-    button.on(LeftClick, move || set_counter.update(|num| *num += 1));
-
-    Effect::new(move |_| println!("{}", counter.get()));
-
-    stack
-        .child(&button)
-        .child(&circle);
-}
-
-fn main() -> aplite::ApliteResult {
-    let config = AppConfig {
-        allocation_size: Some(100),
-        executor_capacity: 10,
-        window_size: (500, 500).into(),
-    };
-
-    Aplite::new(config).view(counter).launch()
-}
+fn main() {}

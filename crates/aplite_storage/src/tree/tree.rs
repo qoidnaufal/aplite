@@ -96,6 +96,11 @@ impl Tree {
         self.prev_sibling[id.index()].as_ref()
     }
 
+    #[inline(always)]
+    pub fn child_count(&self, id: &EntityId) -> usize {
+        self.iter_children(id).count()
+    }
+
     /// This method will create an allocation,
     /// If you want to avoid unnecessary allocation use [`iter_children`](Self::iter_children)
     #[inline(always)]
@@ -169,30 +174,50 @@ impl Tree {
     pub fn try_add_sibling(&mut self, id: &EntityId, sibling: EntityId) -> Result<(), TreeError> {
         if id.index() >= self.parent.len() { return Err(TreeError::InvalidEntityId) }
 
-        let Some(parent) = self.get_parent(id).copied() else { return Err(TreeError::InvalidEntityId) };
+        let Some(parent) = self.get_parent(id) else { return Err(TreeError::InvalidEntityId) };
 
-        let sibling_index = sibling.index();
-
-        self.resize_if_needed(sibling_index);
-
-        let mut current = *id;
-        while let Some(next) = self.get_next_sibling(&current) {
-            current = *next;
-        }
-
-        self.parent[sibling_index] = Some(parent);
-        self.next_sibling[current.index()] = Some(sibling);
-        self.prev_sibling[sibling_index] = Some(current);
+        let parent = *parent;
+        self.insert_with_parent(sibling, &parent);
 
         Ok(())
     }
 
+    #[inline(always)]
     pub fn insert_subtree(&mut self, subtree: SubTree, parent: Option<&EntityId>) {
         self.insert(*subtree.id(), parent);
         subtree.iter_member_ref()
             .for_each(|node_ref| {
                 self.insert(*node_ref.entity, node_ref.parent);
             });
+    }
+
+    #[inline(always)]
+    pub fn detach_if_needed(&mut self, id: &EntityId) {
+        if self.contains(id) {
+            self.detach(id);
+        }
+    }
+
+    #[inline(always)]
+    pub fn detach(&mut self, id: &EntityId) {
+        let prev = self.get_prev_sibling(id).copied();
+        let next = self.get_next_sibling(id).copied();
+
+        if let Some(prev) = prev {
+            self.next_sibling[prev.index()] = next;
+        } else if let Some(parent) = self.get_parent(id).copied() {
+            self.first_child[parent.index()] = next;
+        }
+
+        if let Some(next) = next {
+            self.prev_sibling[next.index()] = prev;
+        }
+    }
+
+    #[inline(always)]
+    pub fn set_child(&mut self, id: &EntityId, child: EntityId) {
+        self.detach(&child);
+        self.insert_with_parent(child, id);
     }
 
     #[inline(always)]
@@ -207,23 +232,7 @@ impl Tree {
                 removed_branch.insert(*node.entity, node.parent);
             });
 
-        // shifting
-        if let Some(prev) = self.get_prev_sibling(&id).copied() {
-            self.next_sibling[prev.index()] = self.get_next_sibling(&id).copied();
-        } else if let Some(parent) = self.get_parent(&id).copied() {
-            self.first_child[parent.index()] = self.get_next_sibling(&id).copied();
-        }
-
-        if let Some(next) = self.get_next_sibling(&id).copied() {
-            self.prev_sibling[next.index()] = self.get_prev_sibling(&id).copied();
-        }
-
-        let entity_index = id.index();
-
-        self.parent[entity_index] = None;
-        self.first_child[entity_index] = None;
-        self.next_sibling[entity_index] = None;
-        self.prev_sibling[entity_index] = None;
+        self.detach(&id);
 
         removed_branch
             .iter_depth(&id)
@@ -242,16 +251,7 @@ impl Tree {
     pub fn remove_subtree(&mut self, id: EntityId) -> SubTree {
         let subtree = SubTree::from_tree(id, self);
 
-        // shifting
-        if let Some(prev) = self.get_prev_sibling(&id).copied() {
-            self.next_sibling[prev.index()] = self.get_next_sibling(&id).copied();
-        } else if let Some(parent) = self.get_parent(&id).copied() {
-            self.first_child[parent.index()] = self.get_next_sibling(&id).copied();
-        }
-
-        if let Some(next) = self.get_next_sibling(&id).copied() {
-            self.prev_sibling[next.index()] = self.get_prev_sibling(&id).copied();
-        }
+        self.detach(&id);
 
         subtree
             .iter_member_ref()

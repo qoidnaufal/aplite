@@ -1,8 +1,9 @@
 use aplite_types::{Rgba, Unit};
 use aplite_types::theme::basic;
+use aplite_renderer::Scene;
 
-use crate::view::IntoView;
-use super::{Widget, InteractiveWidget};
+use crate::context::Context;
+use super::Widget;
 
 pub fn button() -> Button { Button::new() }
 
@@ -26,14 +27,18 @@ impl Button {
     }
 }
 
-impl IntoView for Button {
-    type View = Self;
+impl Widget for Button {
+    fn build(self, cx: &mut Context) -> aplite_storage::Entity {
+        todo!()
+    }
 
-    fn into_view(self) -> Self::View {
-        self
+    fn layout(&mut self, cx: &mut Context) {
+        todo!()
+    }
+
+    fn draw(&self, scene: &mut Scene) {
+        todo!()
     }
 }
 
-impl Widget for Button {}
-
-impl InteractiveWidget for Button {}
+// impl InteractiveWidget for Button {}
