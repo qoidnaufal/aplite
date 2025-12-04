@@ -91,7 +91,7 @@ impl ViewStorage {
 pub struct View<'a>(Box<dyn FnOnce(&mut ViewStorage) -> Entity + 'a>);
 
 impl<'a> View<'a> {
-    pub(crate) fn new<IV: IntoView>(widget: IV) -> Self {
+    pub fn new<IV: IntoView>(widget: IV) -> Self {
         Self(Box::new(|cx| widget.build(cx)))
     }
 
@@ -125,20 +125,6 @@ impl AnyView {
     pub(crate) fn as_mut(&mut self) -> &mut dyn Widget {
         self.ptr.as_mut()
     }
-
-    // pub(crate) fn downcast_ref<IV: IntoView>(&self) -> &IV::View {
-    //     unsafe {
-    //         let raw = self.ptr.as_ref() as *const dyn Widget as *const IV::View;
-    //         &*raw
-    //     }
-    // }
-
-    // pub(crate) fn downcast_mut<IV: IntoView>(&mut self) -> &mut IV::View {
-    //     unsafe {
-    //         let raw = self.ptr.as_mut() as *mut dyn Widget as *mut IV::View;
-    //         &mut *raw
-    //     }
-    // }
 }
 
 impl std::ops::Deref for AnyView {
@@ -155,7 +141,12 @@ impl std::ops::DerefMut for AnyView {
     }
 }
 
+/// Types that automatically implement IntoView are:
+/// - any type that implement Widget (`impl Widget for T`),
+/// - any function that produce IntoView (`FnOnce() -> IV where IV: IntoView` or `fn() -> impl IntoView`)
 pub trait IntoView: Widget + Sized + 'static {
+    /// View basically is just a build context for the widget which implements it.
+    /// Internally it's a `Box<dyn FnOnce(&mut ViewStorage) -> Entity + 'a>`
     fn into_view<'a>(self) -> View<'a>;
 }
 
