@@ -1,38 +1,50 @@
+use std::marker::PhantomData;
+
 use aplite_renderer::Scene;
 use aplite_storage::Entity;
 
 use crate::layout::{LayoutRules, Orientation};
 use crate::context::Context;
-use crate::view::{ViewStorage, IntoView, View};
+use crate::view::{IntoView, View};
+use crate::widget::Widget;
 
-use super::{Widget, ParentWidget};
-
-pub fn v_stack() -> VStack {
-    VStack::new()
+pub fn h_stack<IV: IntoView>(widget: IV) -> impl IntoView {
+    Stack::<IV, Horizontal>::new(widget)
 }
 
-pub fn h_stack() -> HStack {
-    HStack::new()
+pub fn v_stack<IV: IntoView>(widget: IV) -> impl IntoView {
+    Stack::<IV, Vertical>::new(widget)
 }
 
-pub struct VStack {
-    layout_rules: LayoutRules,
+trait StackOrientation {
+    const ORIENTATION: Orientation;
 }
 
-impl VStack {
-    pub fn new() -> Self {
+struct Horizontal; impl StackOrientation for Horizontal {
+    const ORIENTATION: Orientation = Orientation::Horizontal;
+}
+
+struct Vertical; impl StackOrientation for Vertical {
+    const ORIENTATION: Orientation = Orientation::Vertical;
+}
+
+struct Stack<IV, D> {
+    widget: IV,
+    marker: PhantomData<D>
+}
+
+impl<IV, D> Stack<IV, D> {
+    fn new(widget: IV) -> Self {
         Self {
-            layout_rules: LayoutRules {
-                orientation: Orientation::Vertical,
-                ..Default::default()
-            },
+            widget,
+            marker: PhantomData,
         }
     }
 }
 
-impl Widget for VStack {
-    fn build(self, cx: &mut ViewStorage) -> Entity {
-        cx.mount(self)
+impl<IV: IntoView, D: StackOrientation> Widget for Stack<IV, D> {
+    fn build(self, cx: &mut Context) -> Entity {
+        todo!()
     }
 
     fn layout(&mut self, cx: &mut Context) {
@@ -43,57 +55,3 @@ impl Widget for VStack {
         todo!()
     }
 }
-
-impl ParentWidget for VStack {}
-
-// impl IntoView for VStack {
-//     fn into_view<'a>(self) -> View<'a> {
-//         View::new(self)
-//     }
-// }
-
-/*
-#########################################################
-#                                                       #
-#                         HStack                        #
-#                                                       #
-#########################################################
-*/
-
-#[derive(Debug)]
-pub struct HStack {
-    layout_rules: LayoutRules,
-}
-
-impl HStack {
-    pub fn new() -> Self {
-        Self {
-            layout_rules: LayoutRules {
-                orientation: Orientation::Horizontal,
-                ..Default::default()
-            },
-        }
-    }
-}
-
-impl Widget for HStack {
-    fn build(self, cx: &mut ViewStorage) -> Entity {
-        cx.mount(self)
-    }
-
-    fn layout(&mut self, cx: &mut Context) {
-        todo!()
-    }
-
-    fn draw(&self, scene: &mut Scene) {
-        todo!()
-    }
-}
-
-// impl IntoView for HStack {
-//     fn into_view<'a>(self) -> View<'a> {
-//         View::new(self)
-//     }
-// }
-
-impl ParentWidget for HStack {}

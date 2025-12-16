@@ -6,11 +6,10 @@ use aplite_storage::Entity;
 
 use crate::state::AspectRatio;
 use crate::context::Context;
-use crate::view::{ViewStorage, IntoView, View};
+use crate::view::{IntoView, View};
+use crate::widget::Widget;
 
-use super::Widget;
-
-pub fn image<F: Fn() -> ImageData + 'static>(image_fn: F) -> Image {
+pub fn image<F: Fn() -> ImageData + 'static>(image_fn: F) -> impl IntoView {
     Image::new(image_fn)
 }
 
@@ -29,7 +28,7 @@ pub fn image_reader<P: AsRef<Path>>(path: P) -> ImageData {
     ImageData::new(img.dimensions(), &img.to_rgba8())
 }
 
-pub struct Image {
+struct Image {
     width: Unit,
     height: Unit,
     aspect_ratio: AspectRatio,
@@ -37,7 +36,7 @@ pub struct Image {
 }
 
 impl Image {
-    pub fn new<F: Fn() -> ImageData + 'static>(image_fn: F) -> Self {
+    fn new<F: Fn() -> ImageData + 'static>(image_fn: F) -> Self {
         Self {
             width: Unit::Grow,
             height: Unit::Grow,
@@ -48,7 +47,7 @@ impl Image {
 }
 
 impl Widget for Image {
-    fn build(self, cx: &mut ViewStorage) -> Entity {
+    fn build(self, cx: &mut Context) -> Entity {
         cx.mount(self)
     }
 

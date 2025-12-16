@@ -3,6 +3,7 @@ use std::task::{Context, Poll};
 
 pub trait Stream {
     type Item;
+
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>>;
 }
 
@@ -12,6 +13,7 @@ where
     T::Target: Stream,
 {
     type Item = <T::Target as Stream>::Item;
+
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         self.get_mut().as_mut().poll_next(cx)
     }

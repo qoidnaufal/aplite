@@ -19,7 +19,7 @@ pub use vector::{vec2f, vec2u};
 pub use shapes::{Rect, Circle, RoundedRect};
 
 pub use paint::color::Rgba;
-pub use paint::color::{rgba8, rgb8, rgba32, rgba_hex, rgba_hex_alpha};
+pub use paint::color::{rgba8, rgb8, rgba32, hex, hex_alpha};
 pub use paint::color::theme;
 
 pub use paint::{Paint, PaintRef};

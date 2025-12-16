@@ -1,110 +1,41 @@
-use std::num::NonZeroUsize;
-use std::any::TypeId;
+use std::any::type_name;
 
 use aplite_storage::{
     Entity,
-    EntityManager,
     Ptr,
-    SparseSet,
-    Tree,
-    TypeIdMap,
-    UntypedSparseSet
 };
 
-use crate::widget::{ParentWidget, Widget};
+use crate::context::Context;
+use crate::widget::Widget;
 
-pub struct ViewStorage {
-    pub(crate) current: Option<Entity>,
-    pub(crate) arena: TypeIdMap<UntypedSparseSet>,
-    pub(crate) id_manager: EntityManager,
-    pub(crate) views: SparseSet<AnyView>,
-    pub(crate) tree: Tree,
-    type_ids: SparseSet<TypeId>,
+pub struct View<W> {
+    widget: W
 }
 
-impl ViewStorage {
-    pub(crate) fn new(allocation_size: NonZeroUsize) -> Self {
+impl<W: Widget> View<W> {
+    pub fn new(widget: W) -> Self {
         Self {
-            current: None,
-            arena: TypeIdMap::new(),
-            views: SparseSet::default(),
-            id_manager: EntityManager::default(),
-            tree: Tree::default(),
-            type_ids: SparseSet::with_capacity(allocation_size.get()),
+            widget,
         }
     }
 
-    pub fn set_root_id(&mut self, id: Option<Entity>) -> Option<Entity> {
-        let prev = self.current.take();
-        self.current = id;
-        prev
+    pub fn as_ref(&self) -> &dyn Widget {
+        &self.widget
     }
 
-    pub fn mount<IV: IntoView + 'static>(&mut self, widget: IV) -> Entity {
-        let type_id = TypeId::of::<IV>();
-        let entity = self.id_manager.create();
-        let sparse_set = self.arena
-            .entry(type_id)
-            .or_insert(UntypedSparseSet::new::<IV>());
-
-        let ptr = sparse_set.insert(entity, widget).map(|iv| iv as &mut dyn Widget);
-        self.views.insert(entity.id(), AnyView::new(ptr));
-        self.type_ids.insert(entity.id(), type_id);
-        self.tree.insert(entity.id(), self.current.as_ref().map(Entity::id));
-
-        entity
+    pub fn as_mut(&mut self) -> &mut dyn Widget {
+        &mut self.widget
     }
 
-    pub(crate) fn get<IV: IntoView>(&self, entity: Entity) -> Option<&IV> {
-        self.arena
-            .get(&TypeId::of::<IV>())
-            .and_then(|sparse_set| sparse_set.get(entity))
-    }
-
-    pub(crate) fn get_mut<IV: IntoView>(&mut self, entity: Entity) -> Option<&mut IV> {
-        self.arena
-            .get_mut(&TypeId::of::<IV>())
-            .and_then(|sparse_set| sparse_set.get_mut(entity))
-    }
-
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &dyn Widget> {
-        self.tree
-            .iter_depth(self.current.as_ref().map(|entity| entity.id()).unwrap())
-            .filter_map(|entity_id| {
-                self.views
-                    .get(entity_id)
-                    .map(|any_view| any_view.as_ref())
-            })
-    }
-
-    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut dyn Widget> {
-        self.tree
-            .iter_depth(self.current.map(|entity| entity.id()).unwrap())
-            .filter_map(|entity_id| {
-                self.views
-                    .get_raw(entity_id)
-                    .map(|any_view| unsafe { (&mut *any_view).as_mut() })
-            })
+    pub(crate) fn build(self, cx: &mut Context) -> Entity {
+        self.widget.build(cx)
     }
 }
 
-pub struct View<'a>(Box<dyn FnOnce(&mut ViewStorage) -> Entity + 'a>);
-
-impl<'a> View<'a> {
-    pub fn new<IV: IntoView>(widget: IV) -> Self {
-        Self(Box::new(|cx| widget.build(cx)))
-    }
-
-    pub(crate) fn build(self, cx: &mut ViewStorage) -> Entity {
-        (self.0)(cx)
-    }
-}
-
-impl<'a> std::fmt::Debug for View<'a> {
+impl<W: Widget> std::fmt::Debug for View<W> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let inner = self.0.as_ref() as *const dyn FnOnce(&mut ViewStorage) -> Entity;
         f.debug_struct("View")
-            .field("addr", &inner.addr())
+            .field("kind", &type_name::<W>())
             .finish()
     }
 }
@@ -147,12 +78,12 @@ impl std::ops::DerefMut for AnyView {
 pub trait IntoView: Widget + Sized + 'static {
     /// View basically is just a build context for the widget which implements it.
     /// Internally it's a `Box<dyn FnOnce(&mut ViewStorage) -> Entity + 'a>`
-    fn into_view<'a>(self) -> View<'a>;
+    fn into_view(self) -> View<Self>;
 }
 
 
-impl<T> IntoView for T where T: Widget + Sized + 'static {
-    fn into_view<'a>(self) -> View<'a> {
+impl<W> IntoView for W where W: Widget + Sized + 'static {
+    fn into_view(self) -> View<W> {
         View::new(self)
     }
 }

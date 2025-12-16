@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 use aplite_future::{
-    Channel,
+    aplite_channel,
     Sender,
     Executor,
 };
@@ -30,7 +30,7 @@ impl Effect {
         F: FnMut(Option<R>) -> R + 'static,
         R: 'static,
     {
-        let (tx, mut rx) = Channel::new();
+        let (tx, mut rx) = aplite_channel();
         let scope = Scope::new(tx);
         scope.sender.notify();
 
@@ -176,35 +176,37 @@ mod effect_test {
         Effect::new(move |_| eprintln!("last name: {}", last.get()));
 
         Executor::spawn(async move {
-            sleep(1000).await;
+            let duration = std::time::Duration::from_millis(1000);
+
+            sleep(duration).await;
             set_first.set("Mario");
 
             set_last.set("Ballotelli");
-            sleep(1000).await;
+            sleep(duration).await;
             assert_eq!("Mario", name.borrow().as_str());
 
             use_last.set(true);
-            sleep(1000).await;
+            sleep(duration).await;
             assert_eq!("Mario Ballotelli", name.borrow().as_str());
 
             use_last.set(false);
-            sleep(1000).await;
+            sleep(duration).await;
             assert_eq!("Mario", name.borrow().as_str());
 
             set_last.set("Gomez");
-            sleep(1000).await;
+            sleep(duration).await;
             assert_eq!("Mario", name.borrow().as_str());
 
             set_last.set("Bros");
-            sleep(1000).await;
+            sleep(duration).await;
             assert_eq!("Mario", name.borrow().as_str());
 
             set_last.set("Kempes");
-            sleep(1000).await;
+            sleep(duration).await;
             assert_eq!("Mario", name.borrow().as_str());
 
             use_last.set(true);
-            sleep(1000).await;
+            sleep(duration).await;
             assert_eq!("Mario Kempes", name.borrow().as_str());
         });
 

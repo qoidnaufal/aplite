@@ -1,16 +1,24 @@
+use std::any::TypeId;
 use std::num::NonZeroUsize;
 
 use aplite_reactive::*;
 use aplite_renderer::{Renderer};
 use aplite_types::{Vec2f, Rect, Size};
-use aplite_storage::Entity;
+use aplite_storage::{Entity, EntityManager, SparseSet, Tree, TypeIdMap, UntypedSparseSet};
 
-use crate::view::{IntoView, View, AnyView, ViewStorage};
+use crate::view::{IntoView, View, AnyView};
 use crate::cursor::{Cursor, MouseAction, MouseButton};
-use crate::widget::{Widget, ParentWidget};
+use crate::widget::Widget;
+use crate::callback::CallbackStorage;
 
 pub struct Context {
-    pub(crate) storage: ViewStorage,
+    pub(crate) current: Option<Entity>,
+    pub(crate) arena: TypeIdMap<UntypedSparseSet>,
+    pub(crate) id_manager: EntityManager,
+    pub(crate) views: SparseSet<AnyView>,
+    pub(crate) tree: Tree,
+    pub(crate) type_ids: SparseSet<TypeId>,
+    pub(crate) callbacks: CallbackStorage,
     pub(crate) dirty: Signal<bool>,
     pub(crate) cursor: Cursor,
     pub(crate) rect: Rect,
@@ -26,7 +34,13 @@ pub struct Context {
 impl Context {
     pub(crate) fn new(size: Size, allocation_size: NonZeroUsize) -> Self {
         Self {
-            storage: ViewStorage::new(allocation_size),
+            current: None,
+            arena: TypeIdMap::new(),
+            views: SparseSet::default(),
+            id_manager: EntityManager::default(),
+            tree: Tree::default(),
+            type_ids: SparseSet::with_capacity(allocation_size.get()),
+            callbacks: CallbackStorage::default(),
             cursor: Cursor::default(),
             dirty: Signal::new(false),
             rect: Rect::from_size(size),
@@ -34,12 +48,57 @@ impl Context {
         }
     }
 
+    pub fn set_root_id(&mut self, id: Option<Entity>) -> Option<Entity> {
+        let prev = self.current.take();
+        self.current = id;
+        prev
+    }
+
     pub fn mount<IV: IntoView + 'static>(&mut self, widget: IV) -> Entity {
-        self.storage.mount(widget)
-        // let item = self.storage.arena.alloc_mapped(widget.into_view(), |w| w as &mut dyn Widget);
-        // let entity = self.storage.id_manager.create();
-        // self.storage.views.insert(entity.id(), AnyView::new(item));
-        // entity
+        let type_id = TypeId::of::<IV>();
+        let entity = self.id_manager.create();
+        let sparse_set = self.arena
+            .entry(type_id)
+            .or_insert(UntypedSparseSet::new::<IV>());
+
+        let ptr = sparse_set.insert(entity, widget).map(|iv| iv as &mut dyn Widget);
+        self.views.insert(entity.id(), AnyView::new(ptr));
+        self.type_ids.insert(entity.id(), type_id);
+        self.tree.insert(entity.id(), self.current.as_ref().map(Entity::id));
+
+        entity
+    }
+
+    pub(crate) fn get<IV: IntoView>(&self, entity: Entity) -> Option<&IV> {
+        self.arena
+            .get(&TypeId::of::<IV>())
+            .and_then(|sparse_set| sparse_set.get(entity))
+    }
+
+    pub(crate) fn get_mut<IV: IntoView>(&mut self, entity: Entity) -> Option<&mut IV> {
+        self.arena
+            .get_mut(&TypeId::of::<IV>())
+            .and_then(|sparse_set| sparse_set.get_mut(entity))
+    }
+
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &dyn Widget> {
+        self.tree
+            .iter_depth(self.current.as_ref().map(|entity| entity.id()).unwrap())
+            .filter_map(|entity_id| {
+                self.views
+                    .get(entity_id)
+                    .map(|any_view| any_view.as_ref())
+            })
+    }
+
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut dyn Widget> {
+        self.tree
+            .iter_depth(self.current.map(|entity| entity.id()).unwrap())
+            .filter_map(|entity_id| {
+                self.views
+                    .get_raw(entity_id)
+                    .map(|any_view| unsafe { (&mut *any_view).as_mut() })
+            })
     }
 
     pub(crate) fn toggle_dirty(&self) {
@@ -129,6 +188,6 @@ impl Context {
 
     pub(crate) fn render(&self, renderer: &mut Renderer) {
         let mut scene = renderer.scene();
-        self.storage.views.iter().for_each(|(_, any)| any.as_ref().draw(&mut scene));
+        self.views.iter().for_each(|(_, any)| any.as_ref().draw(&mut scene));
     }
 }

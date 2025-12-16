@@ -1,4 +1,5 @@
 mod app;
+mod callback;
 mod context;
 mod cursor;
 mod error;
@@ -27,22 +28,20 @@ pub mod prelude {
 
     pub use crate::widget::{
         Widget,
-        InteractiveWidget,
-        ParentWidget,
-        WidgetEvent,
         image_reader,
     };
 
+    pub use crate::callback::WidgetEvent;
+
     pub use crate::widget::{
-        circle,  CircleWidget,
-        h_stack, HStack,
-        v_stack, VStack,
-        button,  Button,
-        image,   Image,
+        circle,
+        h_stack,
+        v_stack,
+        button,
+        image,
     };
 
     pub use crate::view::{
-        ViewStorage,
         IntoView,
         View,
     };
@@ -52,5 +51,5 @@ pub mod prelude {
 
 pub mod color {
     pub use aplite_types::theme;
-    pub use aplite_types::{Rgba, rgba8, rgba32, rgba_hex, rgba_hex_alpha};
+    pub use aplite_types::{Rgba, rgba8, rgba32, hex, hex_alpha};
 }

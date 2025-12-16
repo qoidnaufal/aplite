@@ -38,21 +38,21 @@ use std::time::Duration;
 
 struct Sleep {
     start: Instant,
-    duration: u64,
+    duration: Duration,
 }
 
 impl Sleep {
     #[inline(always)]
-    fn new(millis: u64) -> Self {
+    fn new(duration: Duration) -> Self {
         Self {
             start: Instant::now(),
-            duration: millis,
+            duration,
         }
     }
 }
 
-pub async fn sleep(millis: u64) {
-    Sleep::new(millis).await
+pub async fn sleep(duration: Duration) {
+    Sleep::new(duration).await
 }
 
 impl Future for Sleep {
@@ -60,7 +60,7 @@ impl Future for Sleep {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let now = self.start.elapsed();
-        if now.as_secs() >= Duration::from_millis(self.duration).as_secs() {
+        if now.as_millis() >= self.duration.as_millis() {
             return Poll::Ready(());
         }
 

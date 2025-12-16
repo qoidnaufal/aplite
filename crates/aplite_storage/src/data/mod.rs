@@ -4,19 +4,38 @@ pub(crate) mod component;
 pub(crate) mod query;
 pub(crate) mod table;
 
-use component::{Component, ComponentBundle};
+use component::{Component, ComponentBundle, ComponentBitset};
 use query::{Queryable, QueryData};
-use table::ComponentTable;
+use table::ComponentStorage;
 
 macro_rules! component_bundle {
     ($($name:ident),*) => {
         impl<$($name: Component),*> ComponentBundle for ($($name,)*) {
             type Item = ($($name,)*);
 
-            fn insert_bundle(self, id: Entity, table: &mut ComponentTable) {
+            fn bitset(storage: &ComponentStorage) -> Option<ComponentBitset> {
+                let mut bitset = ComponentBitset::new();
+                ($(bitset.update(storage.get_component_id::<$name>()?),)*);
+                Some(bitset)
+            }
+
+            fn insert_bundle(self, id: Entity, storage: &mut ComponentStorage) {
+                if let Some(bitset) = Self::bitset(storage) {
+                    if let Some(table_id) = storage.get_table_id_from_bitset(bitset) {
+                        #[allow(non_snake_case)]
+                        let ($($name,)*) = self;
+                        ($(storage.insert_with_table_id(table_id, id, $name),)*);
+                        return;
+                    }
+                }
+
+                let mut registrator = storage.registrator();
+                ($(registrator.register_inner::<$name>(0),)*);
+                let table_id = registrator.finish();
+
                 #[allow(non_snake_case)]
                 let ($($name,)*) = self;
-                ($(table.insert(id, $name),)*);
+                ($(storage.insert_with_table_id(table_id, id, $name),)*);
             }
         }
     };

@@ -21,14 +21,9 @@ pub use tree::{
 };
 
 pub use data::{
-    component::{
-        Component,
-        IntoComponent,
-        ComponentStorage,
-        ComponentRegister,
-    },
+    component::Component,
     query::Query,
-    table::ComponentTable,
+    table::{ComponentTable, ComponentStorage, ComponentRegistrator},
 };
 
 pub use arena::{

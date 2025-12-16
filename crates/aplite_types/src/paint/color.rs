@@ -1,3 +1,5 @@
+use std::num::ParseIntError;
+
 pub const fn rgb8(r: u8, g: u8, b: u8) -> Rgba {
     Rgba::new(r, g, b, 255)
 }
@@ -10,11 +12,11 @@ pub const fn rgba32(val: u32) -> Rgba {
     Rgba::from_u32(val)
 }
 
-pub fn rgba_hex_alpha(hex: &str) -> Rgba {
+pub fn hex_alpha(hex: &str) -> Result<Rgba, ParseIntError> {
     Rgba::from_hex_alpha(hex)
 }
 
-pub fn rgba_hex(hex: &str) -> Rgba {
+pub fn hex(hex: &str) -> Result<Rgba, ParseIntError> {
     Rgba::from_hex_alpha(hex)
 }
 
@@ -33,59 +35,27 @@ impl Rgba {
     }
 
     #[inline(always)]
-    pub fn from_hex_alpha(hex: &str) -> Self {
-        assert!(hex.get(..1).unwrap() == "#", "input doesn't start with #");
-        assert!(
-            hex.get(1..).is_some_and(|s| s.len() == 8),
+    pub fn from_hex_alpha(hex: &str) -> Result<Self, ParseIntError> {
+        debug_assert!(hex.starts_with('#'), "input doesn't start with #");
+        debug_assert!(
+            hex[1..].len() == 8,
             "invalid input length, expected 8 'rrggbbaa'"
         );
 
-        let mut buf = [0; 8];
-
-        hex.chars()
-            .skip(1)
-            .enumerate()
-            .for_each(|(i, c)| {
-                match c.to_digit(16) {
-                    Some(num) => buf[i] = num as u8,
-                    None => panic!("invalid char {}", c),
-                }
-            });
-
-        Self {
-            r: buf[0] * 16 + buf[1],
-            g: buf[2] * 16 + buf[3],
-            b: buf[4] * 16 + buf[5],
-            a: buf[6] * 16 + buf[7],
-        }
+        let num = u32::from_str_radix(&hex[1..], 16)?;
+        Ok(Self::from_u32(num))
     }
 
     #[inline(always)]
-    pub fn from_hex(hex: &str) -> Self {
-        assert!(hex.get(..1).unwrap() == "#", "input doesn't start with #");
-        assert!(
-            hex.get(1..).is_some_and(|s| s.len() == 8),
+    pub fn from_hex(hex: &str) -> Result<Self, ParseIntError> {
+        debug_assert!(hex.starts_with('#'), "input doesn't start with #");
+        debug_assert!(
+            hex[1..].len() == 6,
             "invalid input length, expected 6 'rrggbb'"
         );
 
-        let mut buf = [0; 6];
-
-        hex.chars()
-            .skip(1)
-            .enumerate()
-            .for_each(|(i, c)| {
-                match c.to_digit(16) {
-                    Some(num) => buf[i] = num as u8,
-                    None => panic!("invalid char {}", c),
-                }
-            });
-
-        Self {
-            r: buf[0] * 16 + buf[1],
-            g: buf[2] * 16 + buf[3],
-            b: buf[4] * 16 + buf[5],
-            a: 255,
-        }
+        let num = u32::from_str_radix(&hex[1..], 16)? << 8;
+        Ok(Self::from_u32(num | 255))
     }
 
     #[inline(always)]

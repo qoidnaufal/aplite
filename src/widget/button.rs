@@ -4,34 +4,36 @@ use aplite_renderer::Scene;
 use aplite_storage::Entity;
 
 use crate::context::Context;
-use crate::view::{IntoView, ViewStorage, View};
-use super::Widget;
+use crate::view::{IntoView, View};
+use crate::widget::Widget;
+// use crate::callback::InteractiveWidget;
 
-pub fn button() -> Button { Button::new() }
-
-pub struct Button {
-    width: Unit,
-    height: Unit,
-    background: Rgba,
-    border_color: Rgba,
-    border_width: f32,
+pub fn button<IV, F>(content: IV, f: F) -> impl IntoView
+where
+    IV: IntoView,
+    F: FnMut() + 'static,
+{
+    Button::new(content, f)
 }
 
-impl Button {
-    pub fn new() -> Self {
+struct Button<IV, F> {
+    content: IV,
+    f: F
+}
+
+impl<IV, F> Button<IV, F> {
+    fn new(content: IV, f: F) -> Self {
         Self {
-            width: Unit::Fixed(80.),
-            height: Unit::Fixed(80.),
-            background: basic::RED,
-            border_color: basic::RED,
-            border_width: 0.0,
+            content,
+            f,
         }
     }
 }
 
-impl Widget for Button {
-    fn build(self, cx: &mut ViewStorage) -> Entity {
-        cx.mount(self)
+impl<IV: IntoView, F: FnMut() + 'static> Widget for Button<IV, F> {
+    fn build(self, cx: &mut Context) -> Entity {
+        let entity = cx.mount(self);
+        entity
     }
 
     fn layout(&mut self, cx: &mut Context) {
@@ -43,10 +45,4 @@ impl Widget for Button {
     }
 }
 
-// impl IntoView for Button {
-//     fn into_view<'a>(self) -> View<'a> {
-//         View::new(self)
-//     }
-// }
-
-// impl InteractiveWidget for Button {}
+// impl<IV: IntoView, F: FnMut() + 'static> InteractiveWidget for Button<IV, F> {}
