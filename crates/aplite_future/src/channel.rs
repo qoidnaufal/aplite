@@ -215,7 +215,7 @@ mod channel_test {
     use std::time::Duration;
     use super::*;
     use crate::executor::Executor;
-    use crate::task::sleep;
+    use crate::sleep::sleep;
 
     #[test]
     fn poll() {
