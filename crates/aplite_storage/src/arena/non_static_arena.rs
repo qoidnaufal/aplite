@@ -1,7 +1,7 @@
 use std::num::NonZeroUsize;
 use std::alloc;
 
-use super::ptr::Ptr;
+use super::ptr::ArenaPtr;
 
 pub struct Arena {
     start: *mut u8,
@@ -63,23 +63,23 @@ impl Arena {
         }
     }
 
-    pub fn alloc<T>(&mut self, data: T) -> Ptr<T> {
+    pub fn alloc<T>(&mut self, data: T) -> ArenaPtr<T> {
         let raw = self.alloc_raw(data);
-        Ptr::new(raw)
+        ArenaPtr::new(raw)
     }
 
-    pub fn alloc_mapped<T, U, F>(&mut self, data: T, map: F) -> Ptr<U>
+    pub fn alloc_mapped<T, U, F>(&mut self, data: T, map: F) -> ArenaPtr<U>
     where
         U: ?Sized,
         F: FnOnce(&mut T) -> &mut U,
     {
         let raw = self.alloc_raw(data);
         unsafe {
-            Ptr::new(map(&mut *raw))
+            ArenaPtr::new(map(&mut *raw))
         }
     }
 
-    pub fn memmove<T>(&mut self, data: *const T) -> Ptr<T> {
+    pub fn memmove<T>(&mut self, data: *const T) -> ArenaPtr<T> {
         #[inline]
         unsafe fn drop<T>(raw: *mut u8) {
             unsafe {
@@ -100,7 +100,7 @@ impl Arena {
 
             let ptr = raw.cast();
             core::ptr::copy_nonoverlapping(data, ptr, 1);
-            Ptr::new(ptr)
+            ArenaPtr::new(ptr)
         }
     }
 

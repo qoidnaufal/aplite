@@ -2,7 +2,7 @@ use std::any::type_name;
 
 use aplite_storage::{
     Entity,
-    Ptr,
+    ArenaPtr,
 };
 
 use crate::context::Context;
@@ -41,11 +41,11 @@ impl<W: Widget> std::fmt::Debug for View<W> {
 }
 
 pub(crate) struct AnyView {
-    pub(crate) ptr: Ptr<dyn Widget>,
+    pub(crate) ptr: ArenaPtr<dyn Widget>,
 }
 
 impl AnyView {
-    pub(crate) fn new(item: Ptr<dyn Widget>) -> Self {
+    pub(crate) fn new(item: ArenaPtr<dyn Widget>) -> Self {
         Self { ptr: item }
     }
 

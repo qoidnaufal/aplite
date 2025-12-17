@@ -1,4 +1,4 @@
 pub(crate) mod ptr;
-pub(crate) mod typed;
-pub(crate) mod untyped;
+pub(crate) mod non_static_arena;
+pub(crate) mod static_arena;
 

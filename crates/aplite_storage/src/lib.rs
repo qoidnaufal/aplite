@@ -27,9 +27,9 @@ pub use data::{
 };
 
 pub use arena::{
-    typed::TypedArena,
-    untyped::Arena,
-    ptr::Ptr,
+    non_static_arena::Arena,
+    static_arena::StaticArena,
+    ptr::ArenaPtr,
 };
 
 pub use map::{

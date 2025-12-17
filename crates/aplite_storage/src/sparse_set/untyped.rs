@@ -3,7 +3,7 @@ use std::cell::UnsafeCell;
 
 use crate::buffer::{RawCpuBuffer, Error};
 use crate::entity::{EntityId, Entity};
-use crate::arena::ptr::Ptr;
+use crate::arena::ptr::ArenaPtr;
 
 use super::indices::SparseIndices;
 
@@ -80,10 +80,10 @@ impl UntypedSparseSet {
             })
     }
 
-    pub fn insert_no_realloc<T>(&mut self, entity: Entity, value: T) -> Result<Ptr<T>, Error> {
+    pub fn insert_no_realloc<T>(&mut self, entity: Entity, value: T) -> Result<ArenaPtr<T>, Error> {
         if let Some(exist) = self.get_mut(entity) {
             *exist = value;
-            return Ok(Ptr::new(exist));
+            return Ok(ArenaPtr::new(exist));
         }
 
         let len = self.entities.len();
@@ -92,13 +92,13 @@ impl UntypedSparseSet {
         }
 
         let raw = self.insert_inner(entity, len, value);
-        Ok(Ptr::new(raw))
+        Ok(ArenaPtr::new(raw))
     }
 
-    pub fn insert<T>(&mut self, entity: Entity, value: T) -> Ptr<T> {
+    pub fn insert<T>(&mut self, entity: Entity, value: T) -> ArenaPtr<T> {
         if let Some(exist) = self.get_mut(entity) {
             *exist = value;
-            return Ptr::new(exist);
+            return ArenaPtr::new(exist);
         }
 
         let len = self.entities.len();
@@ -107,7 +107,7 @@ impl UntypedSparseSet {
         }
 
         let raw = self.insert_inner(entity, len, value);
-        Ptr::new(raw)
+        ArenaPtr::new(raw)
     }
 
     #[inline(always)]
