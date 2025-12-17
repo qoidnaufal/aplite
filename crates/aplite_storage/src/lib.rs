@@ -29,7 +29,7 @@ pub use data::{
 pub use arena::{
     non_static_arena::Arena,
     static_arena::StaticArena,
-    ptr::ArenaPtr,
+    ptr::{ArenaPtr, OwningPtr},
 };
 
 pub use map::{
