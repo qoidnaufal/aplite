@@ -13,7 +13,6 @@ pub fn aplite_channel() -> (Sender, Receiver) {
     (tx, rx)
 }
 
-#[derive(Clone)]
 pub struct Sender(Arc<Inner>);
 
 pub struct Receiver(Weak<Inner>);
@@ -30,12 +29,24 @@ impl Sender {
         self.0.wake_by_ref();
     }
 
-    pub fn close(&self) {
+    pub fn close(self) {
         unsafe {
-            for _ in 0..Arc::strong_count(&self.0) {
-                Arc::decrement_strong_count(Arc::as_ptr(&self.0))
-            }
+            Arc::decrement_strong_count(Arc::as_ptr(&self.0))
         }
+    }
+}
+
+impl Drop for Sender {
+    fn drop(&mut self) {
+        unsafe {
+            Arc::decrement_strong_count(Arc::as_ptr(&self.0))
+        }
+    }
+}
+
+impl Clone for Sender {
+    fn clone(&self) -> Self {
+        Self(Arc::clone(&self.0))
     }
 }
 
@@ -82,17 +93,11 @@ impl Stream for Receiver {
     }
 }
 
-impl Future for Receiver {
-    type Output = Option<()>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.poll_next(cx)
-    }
-}
-
 impl Receiver {
-    pub async fn recv(&mut self) -> Option<()> {
-        self.await
+    pub fn recv(&mut self) -> impl Future<Output = Option<<Self as Stream>::Item>> {
+        crate::stream::Recv {
+            inner: Pin::new(self),
+        }
     }
 }
 
@@ -111,7 +116,6 @@ pub fn aplite_typed_channel<T>() -> (TypedSender<T>, TypedReceiver<T>) {
     (tx, rx)
 }
 
-#[derive(Clone)]
 pub struct TypedSender<T>(Arc<TypedInner<T>>);
 
 pub struct TypedReceiver<T>(Weak<TypedInner<T>>);
@@ -136,12 +140,29 @@ impl<T> TypedSender<T> {
         self.0.wake_by_ref();
     }
 
-    pub fn close(&self) {
+    pub fn close(self) {
         unsafe {
-            for _ in 0..Arc::strong_count(&self.0) {
-                Arc::decrement_strong_count(Arc::as_ptr(&self.0))
-            }
+            Arc::decrement_strong_count(Arc::as_ptr(&self.0))
         }
+    }
+}
+
+impl<T> Drop for TypedSender<T> {
+    fn drop(&mut self) {
+        if std::mem::needs_drop::<T>()
+        && let Some(pending_data) = self.0.value.write().unwrap().take() {
+            drop(pending_data)
+        }
+
+        unsafe {
+            Arc::decrement_strong_count(Arc::as_ptr(&self.0))
+        }
+    }
+}
+
+impl<T> Clone for TypedSender<T> {
+    fn clone(&self) -> Self {
+        Self(Arc::clone(&self.0))
     }
 }
 
@@ -188,17 +209,11 @@ impl<T> Stream for TypedReceiver<T> {
     }
 }
 
-impl<T> Future for TypedReceiver<T> {
-    type Output = Option<T>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.poll_next(cx)
-    }
-}
-
 impl<T> TypedReceiver<T> {
-    pub async fn recv(&mut self) -> Option<T> {
-        self.await
+    pub fn recv(&mut self) -> impl Future<Output = Option<<Self as Stream>::Item>> {
+        crate::stream::Recv {
+            inner: Pin::new(self),
+        }
     }
 }
 

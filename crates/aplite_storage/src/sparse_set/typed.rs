@@ -14,11 +14,7 @@ pub struct SparseSet<T> {
 
 impl<T> Default for SparseSet<T> {
     fn default() -> Self {
-        Self {
-            data: Vec::default(),
-            indexes: SparseIndices::default(),
-            entities: Vec::default(),
-        }
+        Self::new()
     }
 }
 
@@ -31,6 +27,14 @@ impl<T: std::fmt::Debug> std::fmt::Debug for SparseSet<T> {
 }
 
 impl<T> SparseSet<T> {
+    pub const fn new() -> Self {
+        Self {
+            data: Vec::new(),
+            indexes: SparseIndices::new(),
+            entities: Vec::new(),
+        }
+    }
+
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             indexes: SparseIndices::default(),

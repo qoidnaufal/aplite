@@ -29,3 +29,15 @@ where
         Pin::new(&mut **self).poll_next(cx)
     }
 }
+
+pub struct Recv<'a, S> {
+    pub(crate) inner: Pin<&'a mut S>
+}
+
+impl<S: Stream> Future for Recv<'_, S> {
+    type Output = Option<<S as Stream>::Item>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.get_mut().inner.as_mut().poll_next(cx)
+    }
+}

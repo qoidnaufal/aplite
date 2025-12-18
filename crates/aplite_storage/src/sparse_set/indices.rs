@@ -1,22 +1,25 @@
+use std::num::NonZeroU32;
 use crate::entity::EntityId;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) struct SparseSetIndex(Option<u32>);
+pub(crate) struct SparseSetIndex(Option<NonZeroU32>);
 
 impl SparseSetIndex {
-    pub(crate) fn new(data_index: usize) -> Self {
-        Self(Some(data_index as _))
+    pub(crate) const fn new(data_index: usize) -> Self {
+        unsafe {
+            Self(Some(NonZeroU32::new_unchecked(data_index as u32 + 1)))
+        }
     }
 
     pub(crate) fn get(&self) -> Option<usize> {
-        self.0.map(|num| num as usize)
+        self.0.map(|num| (num.get() - 1) as usize)
     }
 
-    pub(crate) fn null() -> Self {
+    pub(crate) const fn null() -> Self {
         Self(None)
     }
 
-    pub(crate) fn is_valid(&self) -> bool {
+    pub(crate) const fn is_valid(&self) -> bool {
         self.0.is_some()
     }
 }
@@ -30,82 +33,83 @@ impl std::fmt::Debug for SparseSetIndex {
     }
 }
 
-pub struct SparseIndices {
-    pub(crate) indices: Vec<SparseSetIndex>,
-}
+#[derive(Debug)]
+pub struct SparseIndices(Vec<SparseSetIndex>);
 
 impl Default for SparseIndices {
     fn default() -> Self {
-        Self {
-            indices: Vec::new(),
-        }
+        Self::new()
     }
 }
 
 impl SparseIndices {
+    pub const fn new() -> Self {
+        Self(Vec::new())
+    }
+
     pub fn reserve(capacity: usize) -> Self {
-        Self {
-            indices: vec![SparseSetIndex::null(); capacity],
-        }
+        Self(vec![SparseSetIndex::null(); capacity])
     }
 
     #[inline(always)]
     pub fn get_index(&self, id: EntityId) -> Option<usize> {
-        self.indices
-            .get(id.index())
+        self.0.get(id.index())
             .and_then(SparseSetIndex::get)
     }
 
+    #[inline(always)]
     pub fn set_index(&mut self, id: EntityId, data_index: usize) {
         self.resize_if_needed(id);
-        self.indices[id.index()] = SparseSetIndex::new(data_index);
+        self.0[id.index()] = SparseSetIndex::new(data_index);
     }
 
+    #[inline(always)]
     pub fn set_null(&mut self, id: EntityId) {
-        self.indices[id.index()] = SparseSetIndex::null()
+        self.0[id.index()] = SparseSetIndex::null()
     }
 
+    #[inline(always)]
     pub fn with<T>(&self, id: EntityId, f: impl FnOnce(usize) -> T) -> Option<T> {
         self.get_index(id).map(|index| f(index))
     }
 
+    #[inline(always)]
     pub fn contains(&self, id: EntityId) -> bool {
-        self.indices
-            .get(id.index())
+        self.0.get(id.index())
             .is_some_and(SparseSetIndex::is_valid)
     }
 
+    #[inline(always)]
     fn resize_if_needed(&mut self, id: EntityId) {
         let index = id.index();
-        if index >= self.indices.len() {
+        if index >= self.0.len() {
             self.resize(index);
         }
     }
 
+    #[inline(always)]
     pub(crate) fn resize(&mut self, new_len: usize) {
-        self.indices.resize(new_len + 1, SparseSetIndex::null());
+        self.0.resize(new_len + 1, SparseSetIndex::null());
     }
 
-    pub fn len(&self) -> usize {
-        self.indices.len()
+    pub const fn len(&self) -> usize {
+        self.0.len()
     }
 
     pub fn reset(&mut self) {
-        self.indices.clear();
+        self.0.clear();
     }
 
     /// Iterate over the index of the associated entity
     pub fn iter_entity_index(&self) -> impl Iterator<Item = EntityId> {
-        self.indices
-            .iter()
+        self.0.iter()
             .enumerate()
             .filter_map(|(i, idx)| (idx.is_valid()).then_some(EntityId::new(i as _)))
     }
 
     /// Iterate over the position of the indexed data
     pub fn iter_data_index(&self) -> impl Iterator<Item = usize> {
-        self.indices
-            .iter()
+        self.0.iter()
             .filter_map(SparseSetIndex::get)
     }
 }

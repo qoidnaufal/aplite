@@ -6,32 +6,36 @@ use std::rc::Weak;
 #[derive(Clone, Copy)]
 pub struct ArenaPtr<T: ?Sized> {
     raw: NonNull<T>,
+    marker: std::marker::PhantomData<T>,
 }
 
 impl<T: ?Sized> ArenaPtr<T> {
     pub(crate) fn new(raw: *mut T) -> Self {
         Self {
             raw: unsafe { NonNull::new_unchecked(raw) },
+            marker: std::marker::PhantomData,
         }
     }
 
     pub fn map<U: ?Sized>(mut self, f: impl FnOnce(&mut T) -> &mut U) -> ArenaPtr<U> {
         ArenaPtr {
             raw: NonNull::from_mut(f(&mut self)),
+            marker: std::marker::PhantomData,
         }
     }
 
+    #[inline(always)]
     fn get(&self) -> &T {
         self.as_ref()
     }
 }
 
-pub struct OwningPtr<T: ?Sized> {
+pub struct ValidCheckedPtr<T: ?Sized> {
     raw: NonNull<T>,
     valid: Weak<Cell<bool>>,
 }
 
-impl<T: ?Sized> OwningPtr<T> {
+impl<T: ?Sized> ValidCheckedPtr<T> {
     pub(crate) fn new(raw: *mut T, valid: Weak<Cell<bool>>) -> Self {
         Self {
             raw: unsafe { NonNull::new_unchecked(raw) },
@@ -40,8 +44,8 @@ impl<T: ?Sized> OwningPtr<T> {
     }
 
     /// Return None if the pointer is no longer valid
-    pub fn map<U: ?Sized>(mut self, f: impl FnOnce(&mut T) -> &mut U) -> Option<OwningPtr<U>> {
-        Some(OwningPtr {
+    pub fn map<U: ?Sized>(mut self, f: impl FnOnce(&mut T) -> &mut U) -> Option<ValidCheckedPtr<U>> {
+        Some(ValidCheckedPtr {
             raw: NonNull::from_mut(f(self.get_mut()?)),
             valid: Weak::clone(&self.valid),
         })
@@ -75,7 +79,7 @@ macro_rules! impl_debug_ptr {
 }
 
 impl_debug_ptr!(ArenaPtr);
-impl_debug_ptr!(OwningPtr);
+impl_debug_ptr!(ValidCheckedPtr);
 
 impl<T: ?Sized> std::ops::Deref for ArenaPtr<T> {
     type Target = T;

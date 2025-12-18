@@ -2,7 +2,7 @@ use std::alloc;
 use std::rc::Rc;
 use std::cell::Cell;
 
-use super::ptr::OwningPtr;
+use super::ptr::ValidCheckedPtr;
 
 /// Non static Arena-style data storage which will drop all the allocated objects at the same time,
 /// not individually from the pointers produced through allocation.
@@ -75,9 +75,9 @@ impl Arena {
         }
     }
 
-    pub fn alloc<T>(&mut self, data: T) -> OwningPtr<T> {
+    pub fn alloc<T>(&mut self, data: T) -> ValidCheckedPtr<T> {
         let raw = self.alloc_raw(data);
-        OwningPtr::new(raw, Rc::downgrade(&self.valid))
+        ValidCheckedPtr::new(raw, Rc::downgrade(&self.valid))
     }
 
     // WARN: need to mark the raw pointer in ArenaItem as invalid

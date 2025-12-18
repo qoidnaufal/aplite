@@ -81,7 +81,7 @@ impl Scope {
 
 impl Drop for Scope {
     fn drop(&mut self) {
-        self.sender.close();
+        // self.sender.close();
         self.source.write().unwrap().clear();
     }
 }

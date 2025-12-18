@@ -7,7 +7,8 @@ mod map;
 mod sparse_set;
 mod tree;
 
-pub use buffer::CpuBuffer;
+pub use buffer::TypedErasedBuffer;
+
 pub use entity::{
     EntityManager,
     Entity,
@@ -29,7 +30,7 @@ pub use data::{
 pub use arena::{
     non_static_arena::Arena,
     static_arena::StaticArena,
-    ptr::{ArenaPtr, OwningPtr},
+    ptr::{ArenaPtr, ValidCheckedPtr},
 };
 
 pub use map::{
@@ -39,7 +40,7 @@ pub use map::{
 
 pub use sparse_set::{
     typed::SparseSet,
-    untyped::UntypedSparseSet,
+    type_erased::TypeErasedSparseSet,
     indices::SparseIndices,
 };
 

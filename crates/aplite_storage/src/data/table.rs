@@ -1,6 +1,6 @@
 use std::any::TypeId;
 
-use crate::buffer::CpuBuffer;
+use crate::buffer::TypedErasedBuffer;
 use crate::data::component::{Component, ComponentBitset, ComponentBundle, ComponentId};
 use crate::data::query::{Query, QueryData};
 use crate::entity::Entity;
@@ -20,10 +20,12 @@ impl TableId {
     }
 }
 
+/// This is similar to MultiArrayList in Zig, in which Entities with the same composition are stored together.
+/// Entity with different composition will produce a new ComponentTable.
 pub struct ComponentTable {
-    pub(crate) data: TypeIdMap<CpuBuffer>,
-    pub(crate) indexes: SparseIndices,
+    pub(crate) data: TypeIdMap<TypedErasedBuffer>,
     pub(crate) entities: Vec<Entity>,
+    pub(crate) indexes: SparseIndices,
 }
 
 impl Default for ComponentTable {
@@ -37,14 +39,14 @@ impl ComponentTable {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             data: TypeIdMap::default(),
-            indexes: SparseIndices::default(),
             entities: Vec::with_capacity(capacity),
+            indexes: SparseIndices::default(),
         }
     }
 
     #[inline(always)]
-    pub(crate) fn add_buffer<T: Component>(&mut self, capacity: usize) {
-        self.data.insert(T::type_id(), CpuBuffer::with_capacity::<T>(capacity));
+    pub(crate) fn add_buffer<C: Component>(&mut self, capacity: usize) {
+        self.data.insert(C::type_id(), TypedErasedBuffer::with_capacity::<C>(capacity));
     }
 
     pub fn insert<T: Component>(&mut self, entity: Entity, component: T) {
@@ -57,12 +59,35 @@ impl ComponentTable {
         self.entities.push(entity);
     }
 
-    pub fn query<'a, Q: QueryData<'a>>(&'a self) -> Query<'a, Q> {
+    // pub fn get_component_buffer<C: Component>(&self, entity: &Entity) -> Option<&TypedErasedBuffer> {}
+
+    pub fn get<C: Component>(&self, entity: &Entity) -> Option<&C> {
+        self.indexes
+            .get_index(entity.id())
+            .and_then(|index| {
+                self.version_check(entity, index).then(|| {
+                    self.data
+                        .get(&C::type_id())
+                        .and_then(|buffer| buffer.get(index))
+                })?
+            })
+    }
+
+    pub unsafe fn get_unchecked<C: Component>(&self, entity: &Entity) -> &C {
         todo!()
     }
 
-    pub fn contains(&self, id: &Entity) -> bool {
-        self.entities.contains(id)
+    #[inline(always)]
+    pub fn contains(&self, entity: &Entity) -> bool {
+        self.indexes
+            .get_index(entity.id())
+            .is_some_and(|index| {
+                self.entities[index].version() == entity.version()
+            })
+    }
+
+    fn version_check(&self, entity: &Entity, index: usize) -> bool {
+        self.entities[index].version() == entity.version()
     }
 
     pub fn clear(&mut self) {

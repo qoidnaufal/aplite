@@ -1,27 +1,26 @@
 use std::alloc;
 use std::cell::UnsafeCell;
 
-use crate::buffer::{RawCpuBuffer, Error};
+use crate::buffer::{RawBuffer, Error};
 use crate::entity::{EntityId, Entity};
 use crate::arena::ptr::ArenaPtr;
+use crate::sparse_set::indices::SparseIndices;
 
-use super::indices::SparseIndices;
-
-pub struct UntypedSparseSet {
-    pub(crate) data: RawCpuBuffer,
+pub struct TypeErasedSparseSet {
+    pub(crate) data: RawBuffer,
     pub(crate) indexes: SparseIndices,
-    pub(crate) entities: Vec<EntityId>,
+    pub(crate) keys: Vec<EntityId>,
     item_layout: alloc::Layout,
 }
 
-impl Drop for UntypedSparseSet {
+impl Drop for TypeErasedSparseSet {
     fn drop(&mut self) {
         self.clear();
         self.data.dealloc(self.item_layout);
     }
 }
 
-impl UntypedSparseSet {
+impl TypeErasedSparseSet {
     pub fn new<T>() -> Self {
         Self::with_capacity::<T>(0)
     }
@@ -32,8 +31,8 @@ impl UntypedSparseSet {
 
         Self {
             indexes: SparseIndices::default(),
-            data: RawCpuBuffer::with_capacity::<T>(capacity, item_layout),
-            entities: Vec::with_capacity(capacity),
+            data: RawBuffer::with_capacity::<T>(capacity, item_layout),
+            keys: Vec::with_capacity(capacity),
             item_layout
         }
     }
@@ -86,7 +85,7 @@ impl UntypedSparseSet {
             return Ok(ArenaPtr::new(exist));
         }
 
-        let len = self.entities.len();
+        let len = self.keys.len();
         if len >= self.data.capacity {
             return Err(Error::MaxCapacityReached);
         }
@@ -101,9 +100,9 @@ impl UntypedSparseSet {
             return ArenaPtr::new(exist);
         }
 
-        let len = self.entities.len();
+        let len = self.keys.len();
         if len >= self.data.capacity {
-            self.data.realloc_unmanaged(self.item_layout, len + 4);
+            self.data.initialize_or_realloc(self.item_layout, len + 4);
         }
 
         let raw = self.insert_inner(entity, len, value);
@@ -113,29 +112,29 @@ impl UntypedSparseSet {
     #[inline(always)]
     fn insert_inner<T>(&mut self, entity: Entity, len: usize, value: T) -> *mut T {
         self.indexes.set_index(entity.id(), len);
-        let ptr = self.data.push_unmanaged(value, len);
-        self.entities.push(entity.id());
+        let ptr = self.data.push(value, len);
+        self.keys.push(entity.id());
         ptr
     }
 
-    pub fn remove<T>(&mut self, entity: Entity) {
-        if let Some(index) = self.indexes.get_index(entity.id()) {
-            self.indexes.set_index(*self.entities.last().unwrap(), index);
+    pub fn swap_remove<T>(&mut self, entity: Entity) -> Option<T> {
+        self.indexes.get_index(entity.id()).map(|index| unsafe {
+            self.indexes.set_index(*self.keys.last().unwrap(), index);
             self.indexes.set_null(entity.id());
-            unsafe {
-                let ptr = self.data
-                    .swap_remove_unmanaged::<T>(index, self.entities.len() - 1);
-                std::ptr::drop_in_place(ptr);
-            }
-            self.entities.swap_remove(index);
-        }
+            self.keys.swap_remove(index);
+            
+            self.data
+                .swap_remove_raw(index, self.keys.len(), self.item_layout.size())
+                .cast::<T>()
+                .read()
+        })
     }
 
     pub fn clear(&mut self) {
-        if self.entities.len() > 0 {
+        if self.keys.len() > 0 {
             self.indexes.reset();
-            self.data.clear(self.entities.len());
-            self.entities.clear();
+            self.data.clear(self.keys.len());
+            self.keys.clear();
         }
     }
 }
@@ -168,7 +167,7 @@ mod untyped_sparse_set_test {
     #[test]
     fn get() -> Result<(), Error> {
         let entity = Entity::new(0, 0);
-        let mut set = UntypedSparseSet::new::<Obj>();
+        let mut set = TypeErasedSparseSet::new::<Obj>();
         set.insert(entity, Obj::new("Balo", 69));
 
         let balo = set.get::<Obj>(entity);
@@ -186,7 +185,7 @@ mod untyped_sparse_set_test {
     #[test]
     fn swap_remove() -> Result<(), Error> {
         const NUM: usize = 5;
-        let mut set = UntypedSparseSet::new::<Obj>();
+        let mut set = TypeErasedSparseSet::new::<Obj>();
         let names = ["Balo", "Nunez", "Maguirre", "Bendtner", "Haryono"];
 
         for i in 0..NUM {
@@ -199,7 +198,7 @@ mod untyped_sparse_set_test {
 
         let prev_index = set.indexes.get_index(last.id());
 
-        set.remove::<Obj>(to_remove);
+        set.swap_remove::<Obj>(to_remove);
         let removed = set.get::<Obj>(to_remove);
         assert!(removed.is_none());
 

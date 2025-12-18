@@ -1,11 +1,38 @@
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, OnceLock, RwLock};
+use std::pin::Pin;
 use std::sync::mpsc::{SyncSender, Receiver, sync_channel};
-use std::task::{Waker, Context, Poll};
+use std::task::{Wake, Waker, Context, Poll};
 use std::thread;
 
-use crate::task::Task;
-
 pub(crate) static SPAWNER: OnceLock<SyncSender<Arc<Task>>> = OnceLock::new();
+
+type PinnedFuture = Pin<Box<dyn Future<Output = ()>>>;
+
+pub(crate) struct Task {
+    pub(crate) future: RwLock<PinnedFuture>,
+}
+
+impl Task {
+    pub(crate) fn new<F>(future: F) -> Self
+    where
+        F: Future<Output = ()> + 'static,
+    {
+        Self {
+            future: RwLock::new(Box::pin(future)),
+        }
+    }
+}
+
+impl Wake for Task {
+    fn wake(self: Arc<Self>) {
+        if let Some(spawner) = SPAWNER.get() {
+            let _ = spawner.send(self);
+        }
+    }
+}
+
+unsafe impl Send for Task {}
+unsafe impl Sync for Task {}
 
 struct Worker {
     rx: Receiver<Arc<Task>>,
@@ -13,8 +40,7 @@ struct Worker {
 
 impl Worker {
     pub fn work(&self) {
-        // WARN: this is busy loop
-        // TODO: create better task management
+        // WARN: is this as busy loop?
         while let Ok(task) = self.rx.recv() {
             if let Ok(mut future) = task.future.write() {
                 let waker = Waker::from(Arc::clone(&task));

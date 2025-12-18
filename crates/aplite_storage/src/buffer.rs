@@ -21,20 +21,20 @@ impl std::error::Error for Error {}
 /// This is slower than normal `Vec<T>`, but faster than `Vec<Box<dyn Any>>`.
 /// However, this has double the size (48) compared to a normal Vec (24) which comes from the need to carry additional informations.
 /// Removal of an element is only supported via swap remove to preserve the contiguousness of the data.
-pub struct CpuBuffer {
-    block: RawCpuBuffer,
+pub struct TypedErasedBuffer {
+    raw: RawBuffer,
     len: usize,
     item_layout: alloc::Layout,
 }
 
-impl Drop for CpuBuffer {
+impl Drop for TypedErasedBuffer {
     fn drop(&mut self) {
         self.clear();
-        self.block.dealloc(self.item_layout);
+        self.raw.dealloc(self.item_layout);
     }
 }
 
-impl CpuBuffer {
+impl TypedErasedBuffer {
     pub fn new<T>() -> Self {
         Self::with_capacity::<T>(0)
     }
@@ -42,29 +42,33 @@ impl CpuBuffer {
     #[inline]
     pub fn with_capacity<T>(capacity: usize) -> Self {
         let item_layout = alloc::Layout::new::<T>();
-        let block = RawCpuBuffer::with_capacity::<T>(capacity, item_layout);
+        let block = RawBuffer::with_capacity::<T>(capacity, item_layout);
 
         Self {
-            block,
+            raw: block,
             len: 0,
             item_layout,
         }
     }
 
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.len
     }
 
-    pub fn capacity(&self) -> usize {
-        self.block.capacity
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub const fn capacity(&self) -> usize {
+        self.raw.capacity
     }
 
     pub fn push_no_realloc<T>(&mut self, data: T) -> Result<(), Error> {
-        if self.len == self.block.capacity {
+        if self.len == self.raw.capacity {
             return Err(Error::MaxCapacityReached)
         }
 
-        self.block.push_unmanaged(data, self.len);
+        self.raw.push(data, self.len);
         self.len += 1;
 
         Ok(())
@@ -72,63 +76,83 @@ impl CpuBuffer {
 
     pub fn push<T>(&mut self, data: T) {
         self.realloc_if_needed();
-        self.block.push_unmanaged(data, self.len);
+        self.raw.push(data, self.len);
         self.len += 1;
     }
 
     fn realloc_if_needed(&mut self) {
-        if self.len == self.block.capacity {
-            self.block
-                .realloc_unmanaged(self.item_layout, self.block.capacity + 4);
+        if self.len == self.raw.capacity {
+            self.raw
+                .initialize_or_realloc(self.item_layout, self.raw.capacity + 4);
         }
     }
 
-    pub fn get<'a, T>(&'a self, index: usize) -> Option<&'a T> {
-        if index >= self.len { return None }
+    pub(crate) fn clear(&mut self) {
+        self.raw.clear(self.len);
+        self.len = 0;
+    }
 
+    #[inline(always)]
+    pub const unsafe fn get_unchecked<'a, T>(&'a self, index: usize) -> &'a T {
         unsafe {
-            let raw = self.block.get_raw(index * size_of::<T>());
-            Some(&*raw.cast::<T>())
+            &*self.raw.get_raw(index * self.item_layout.size()).cast()
         }
     }
 
-    pub fn get_mut<'a, T>(&'a mut self, index: usize) -> Option<&'a mut T> {
+    pub const fn get<'a, T>(&'a self, index: usize) -> Option<&'a T> {
         if index >= self.len { return None }
 
         unsafe {
-            let raw = self.block.get_raw(index * size_of::<T>());
-            Some(&mut *raw.cast::<T>())
+            Some(self.get_unchecked(index))
+        }
+    }
+
+    #[inline(always)]
+    pub const unsafe fn get_unchecked_mut<'a, T>(&'a mut self, index: usize) -> &'a mut T {
+        unsafe {
+            &mut *self.raw.get_raw(index * self.item_layout.size()).cast()
+        }
+    }
+
+    pub const fn get_mut<'a, T>(&'a mut self, index: usize) -> Option<&'a mut T> {
+        if index >= self.len { return None }
+
+        unsafe {
+            Some(self.get_unchecked_mut(index))
+        }
+    }
+
+    #[inline(always)]
+    pub const unsafe fn get_unchecked_cell<T>(&self, index: usize) -> &UnsafeCell<T> {
+        unsafe {
+            &*self.raw.get_raw(index * self.item_layout.size()).cast::<UnsafeCell<T>>()
         }
     }
     
-    pub fn get_cell<T>(&self, index: usize) -> Option<&UnsafeCell<T>> {
+    pub const fn get_cell<T>(&self, index: usize) -> Option<&UnsafeCell<T>> {
         if index >= self.len { return None }
        
         unsafe {
-            let raw = self.block.get_raw(index * size_of::<T>());
-            let ptr = raw.cast::<UnsafeCell<T>>();
-            Some(&*ptr)
+            Some(self.get_unchecked_cell(index))
         }
     }
 
-    pub fn swap_remove<T>(&mut self, index: usize) -> Option<T> {
+    #[inline(always)]
+    fn swr<R>(&mut self, index: usize, f: impl FnOnce(*mut u8) -> R) -> Option<R> {
         index.lt(&self.len).then_some(unsafe {
             let last_index = self.len - 1;
-            let ptr = self.block.swap_remove_unmanaged::<T>(index, last_index);
+            let ptr = self.raw.swap_remove_raw(index, last_index, self.item_layout.size());
             self.len -= 1;
-            ptr.read()
+            f(ptr)
         })
     }
 
+    pub fn swap_remove<T>(&mut self, index: usize) -> Option<T> {
+        self.swr::<T>(index, |raw| unsafe { raw.cast::<T>().read() })
+    }
+
     pub fn swap_remove_and_drop<T>(&mut self, index: usize) {
-        if index < self.len {
-            unsafe {
-                let last_index = self.len - 1;
-                let ptr = self.block.swap_remove_unmanaged::<T>(index, last_index);
-                self.len -= 1;
-                std::ptr::drop_in_place(ptr);
-            }
-        }
+        self.swr::<()>(index, |raw| unsafe { raw.cast::<T>().drop_in_place() });
     }
 
     pub fn iter<'a, T>(&'a self) -> Iter<'a, T> {
@@ -142,20 +166,23 @@ impl CpuBuffer {
     pub fn iter_cell<'a, T>(&'a self) -> UnsafeCellIter<'a, T> {
         UnsafeCellIter::new(self)
     }
-
-    pub(crate) fn clear(&mut self) {
-        self.block.clear(self.len);
-        self.len = 0;
-    }
 }
 
-pub(crate) struct RawCpuBuffer {
+/*
+#########################################################
+#
+# RawBuffer
+#
+#########################################################
+*/
+
+pub(crate) struct RawBuffer {
     block: NonNull<u8>,
     pub(crate) capacity: usize,
     drop: Option<unsafe fn(*mut u8, usize)>,
 }
 
-impl RawCpuBuffer {
+impl RawBuffer {
     #[inline(always)]
     pub(crate) fn with_capacity<T>(capacity: usize, item_layout: alloc::Layout) -> Self {
         #[inline]
@@ -191,21 +218,25 @@ impl RawCpuBuffer {
 
             let raw = std::alloc::alloc(layout);
 
-            self.block = NonNull::new(raw)
-                .unwrap_or_else(|| alloc::handle_alloc_error(layout));
-            self.capacity = capacity;
+            match NonNull::new(raw) {
+                Some(new) => {
+                    self.block = new;
+                    self.capacity = capacity;
+                },
+                None => alloc::handle_alloc_error(layout),
+            }
         }
     }
 
     #[inline(always)]
-    pub(crate) unsafe fn get_raw(&self, offset: usize) -> *mut u8 {
+    pub(crate) const unsafe fn get_raw(&self, offset: usize) -> *mut u8 {
         unsafe {
             self.block.add(offset).as_ptr()
         }
     }
 
     #[inline(always)]
-    pub(crate) fn push_unmanaged<T>(&mut self, data: T, len: usize) -> *mut T {
+    pub(crate) const fn push<T>(&mut self, data: T, len: usize) -> *mut T {
         unsafe {
             let raw = self.block
                 .add(len * size_of::<T>())
@@ -217,7 +248,7 @@ impl RawCpuBuffer {
     }
 
     #[inline(always)]
-    pub(crate) fn realloc_unmanaged(&mut self, item_layout: alloc::Layout, new_capacity: usize) {
+    pub(crate) fn initialize_or_realloc(&mut self, item_layout: alloc::Layout, new_capacity: usize) {
         if self.capacity == 0 {
             self.initialize(
                 new_capacity,
@@ -229,30 +260,34 @@ impl RawCpuBuffer {
                 let new_size = item_layout.size() * new_capacity;
                 let new_block = alloc::realloc(self.block.as_ptr(), item_layout, new_size);
 
-                self.block = NonNull::new(new_block)
-                    .unwrap_or_else(|| {
-                        let layout = alloc::Layout::from_size_align_unchecked(
-                            new_size,
-                            item_layout.align()
-                        );
-                        alloc::handle_alloc_error(layout)
-                    });
+                match NonNull::new(new_block) {
+                    Some(new) => {
+                        self.block = new;
+                        self.capacity = new_capacity;
+                    },
+                    None => {
+                        alloc::handle_alloc_error(
+                            alloc::Layout::from_size_align_unchecked(
+                                new_size,
+                                item_layout.align()
+                            )
+                        )
+                    },
+                }
+
+                self.capacity = new_capacity;
             }
         }
-
-        self.capacity = new_capacity;
     }
 
     #[inline(always)]
-    #[must_use]
-    pub(crate) unsafe fn swap_remove_unmanaged<T>(&mut self, index: usize, last_index: usize) -> *mut T {
-        let size_t = size_of::<T>();
+    pub(crate) unsafe fn swap_remove_raw(&mut self, index: usize, last_index: usize, size_t: usize) -> *mut u8 {
         unsafe {
-            let last = self.get_raw(last_index * size_t).cast::<T>();
+            let last = self.get_raw(last_index * size_t);
 
             if index < last_index {
-                let to_remove = self.get_raw(index * size_t).cast::<T>();
-                std::ptr::swap_nonoverlapping(to_remove, last, 1);
+                let to_remove = self.get_raw(index * size_t);
+                std::ptr::swap_nonoverlapping(to_remove, last, size_t);
             }
 
             last
@@ -283,17 +318,27 @@ impl RawCpuBuffer {
     }
 }
 
+/*
+#########################################################
+#                                                       #
+#                       Iterator                        #
+#                                                       #
+#########################################################
+*/
+
 pub struct Iter<'a, T> {
-    source: &'a CpuBuffer,
-    next: usize,
-    marker: PhantomData<T>,
+    next: *mut T,
+    count: usize,
+    len: usize,
+    marker: PhantomData<fn() -> &'a T>,
 }
 
 impl<'a, T> Iter<'a, T> {
-    fn new(source: &'a CpuBuffer) -> Self {
+    fn new(source: &'a TypedErasedBuffer) -> Self {
         Self {
-            source,
-            next: 0,
+            next: source.raw.block.cast::<T>().as_ptr(),
+            count: 0,
+            len: source.len,
             marker: PhantomData,
         }
     }
@@ -303,23 +348,31 @@ impl<'a, T: 'a> Iterator for Iter<'a, T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.source
-            .get::<T>(self.next)
-            .inspect(|_| self.next += 1)
+        unsafe {
+            if self.count == self.len || self.len == 0 {
+                return None;
+            }
+
+            let next = &*self.next.add(self.count);
+            self.count += 1;
+            Some(next)
+        }
     }
 }
 
 pub struct IterMut<'a, T> {
-    source: &'a mut CpuBuffer,
-    next: usize,
-    marker: PhantomData<T>,
+    next: *mut T,
+    count: usize,
+    len: usize,
+    marker: PhantomData<fn() -> &'a mut T>,
 }
 
 impl<'a, T> IterMut<'a, T> {
-    fn new(source: &'a mut CpuBuffer) -> Self {
+    fn new(source: &'a mut TypedErasedBuffer) -> Self {
         Self {
-            source,
-            next: 0,
+            next: source.raw.block.cast::<T>().as_ptr(),
+            count: 0,
+            len: source.len,
             marker: PhantomData,
         }
     }
@@ -329,24 +382,31 @@ impl<'a, T: 'a> Iterator for IterMut<'a, T> {
     type Item = &'a mut T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.source
-            .get_cell::<T>(self.next)
-            .inspect(|_| self.next += 1)
-            .map(|cell| unsafe { &mut * cell.get() })
+        unsafe {
+            if self.count == self.len || self.len == 0 {
+                return None;
+            }
+
+            let next = &mut *self.next.add(self.count);
+            self.count += 1;
+            Some(next)
+        }
     }
 }
 
 pub struct UnsafeCellIter<'a, T> {
-    source: &'a CpuBuffer,
-    next: usize,
-    marker: PhantomData<UnsafeCell<T>>,
+    next: *mut UnsafeCell<T>,
+    count: usize,
+    len: usize,
+    marker: PhantomData<fn() -> &'a UnsafeCell<T>>,
 }
 
 impl<'a, T> UnsafeCellIter<'a, T> {
-    fn new(source: &'a CpuBuffer) -> Self {
+    fn new(source: &'a TypedErasedBuffer) -> Self {
         Self {
-            source,
-            next: 0,
+            next: source.raw.block.cast::<UnsafeCell<T>>().as_ptr(),
+            count: 0,
+            len: source.len,
             marker: PhantomData,
         }
     }
@@ -356,11 +416,25 @@ impl<'a, T: 'a> Iterator for UnsafeCellIter<'a, T> {
     type Item = &'a UnsafeCell<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.source
-            .get_cell::<T>(self.next)
-            .inspect(|_| self.next += 1)
+        unsafe {
+            if self.count == self.len || self.len == 0 {
+                return None;
+            }
+
+            let next = &*self.next.add(self.count);
+            self.count += 1;
+            Some(next)
+        }
     }
 }
+
+/*
+#########################################################
+#                                                       #
+#                         TEST                          #
+#                                                       #
+#########################################################
+*/
 
 #[cfg(test)]
 mod buffer_test {
@@ -380,8 +454,8 @@ mod buffer_test {
 
     #[test]
     fn push_and_get() {
-        let mut ba = CpuBuffer::with_capacity::<Obj>(1);
-        assert!(ba.block.drop.is_some());
+        let mut ba = TypedErasedBuffer::with_capacity::<Obj>(1);
+        assert!(ba.raw.drop.is_some());
 
         let balo = Obj { name: "Balo".to_string(), age: 69 };
         let nunez = Obj { name: "Nunez".to_string(), age: 888 };
@@ -404,7 +478,7 @@ mod buffer_test {
 
     #[test]
     fn remove() {
-        let mut ba = CpuBuffer::with_capacity::<Obj>(5);
+        let mut ba = TypedErasedBuffer::with_capacity::<Obj>(5);
 
         for i in 0..5 {
             ba.push(Obj { name: i.to_string(), age: i as _ });
@@ -420,7 +494,7 @@ mod buffer_test {
 
     #[test]
     fn iter() {
-        let mut ba = CpuBuffer::with_capacity::<Obj>(5);
+        let mut ba = TypedErasedBuffer::with_capacity::<Obj>(5);
 
         for i in 0..5 {
             ba.push(Obj { name: i.to_string(), age: i as _ });
@@ -444,7 +518,7 @@ mod buffer_test {
         const CAP: usize = 2;
         #[derive(Debug, PartialEq)]
         struct Zst;
-        let mut ba = CpuBuffer::with_capacity::<Zst>(CAP);
+        let mut ba = TypedErasedBuffer::with_capacity::<Zst>(CAP);
         for _ in 0..CAP {
             ba.push(Zst);
         }
@@ -459,31 +533,37 @@ mod buffer_test {
     fn speed() {
         struct NewObj {
             _name: String,
-            _age: usize,
+            age: usize,
             _addr: usize,
         }
 
         const NUM: usize = 1024 * 1024;
 
-        let mut ba = CpuBuffer::with_capacity::<NewObj>(NUM);
-        let now = std::time::Instant::now();
-        for i in 0..NUM {
-            ba.push(NewObj { _name: i.to_string(), _age: i, _addr: i });
-        }
-        println!("buffer push time for {NUM} objects: {:?}", now.elapsed());
-
         let mut vec: Vec<NewObj> = Vec::with_capacity(NUM);
-        let now = std::time::Instant::now();
         for i in 0..NUM {
-            vec.push(NewObj { _name: i.to_string(), _age: i, _addr: i });
+            vec.push(NewObj { _name: i.to_string(), age: 1, _addr: i });
         }
-        println!("vec push time for {NUM} objects: {:?}", now.elapsed());
+        let now_1 = std::time::Instant::now();
+        let sum_1 = vec.iter().map(|obj| obj.age).sum::<usize>();
+        let elapsed_1 = now_1.elapsed();
+        println!("Vec<T>            : iter.map.sum time for {sum_1} objects: {:?}", elapsed_1);
 
-        let mut vec: Vec<Box<dyn std::any::Any>> = Vec::with_capacity(NUM);
-        let now = std::time::Instant::now();
+        let mut ba = TypedErasedBuffer::with_capacity::<NewObj>(NUM);
         for i in 0..NUM {
-            vec.push(Box::new(NewObj { _name: i.to_string(), _age: i, _addr: i }));
+            ba.push(NewObj { _name: i.to_string(), age: 1, _addr: i });
         }
-        println!("Vec<Box<dyn Any>> push time for {NUM} objects: {:?}", now.elapsed());
+        let now_2 = std::time::Instant::now();
+        let sum_2 = ba.iter::<NewObj>().map(|obj| obj.age).sum::<usize>();
+        let elapsed_2 = now_2.elapsed();
+        println!("TypeErasedBuffer  : iter.map.sum time for {sum_2} objects: {:?}", elapsed_2);
+
+        let mut any_vec: Vec<Box<dyn std::any::Any>> = Vec::with_capacity(NUM);
+        for i in 0..NUM {
+            any_vec.push(Box::new(NewObj { _name: i.to_string(), age: 1, _addr: i }));
+        }
+        let now_3 = std::time::Instant::now();
+        let sum_3 = any_vec.iter().map(|any| any.downcast_ref::<NewObj>().unwrap().age).sum::<usize>();
+        let elapsed_3 = now_3.elapsed();
+        println!("Vec<Box<dyn Any>> : iter.map.sum time for {sum_3} objects: {:?}", elapsed_3);
     }
 }

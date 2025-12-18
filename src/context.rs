@@ -4,7 +4,7 @@ use std::num::NonZeroUsize;
 use aplite_reactive::*;
 use aplite_renderer::{Renderer};
 use aplite_types::{Vec2f, Rect, Size};
-use aplite_storage::{Entity, EntityManager, SparseSet, Tree, TypeIdMap, UntypedSparseSet};
+use aplite_storage::{Entity, EntityManager, SparseSet, Tree, TypeIdMap, TypeErasedSparseSet};
 
 use crate::view::{IntoView, View, AnyView};
 use crate::cursor::{Cursor, MouseAction, MouseButton};
@@ -13,7 +13,7 @@ use crate::callback::CallbackStorage;
 
 pub struct Context {
     pub(crate) current: Option<Entity>,
-    pub(crate) arena: TypeIdMap<UntypedSparseSet>,
+    pub(crate) arena: TypeIdMap<TypeErasedSparseSet>,
     pub(crate) id_manager: EntityManager,
     pub(crate) views: SparseSet<AnyView>,
     pub(crate) tree: Tree,
@@ -59,7 +59,7 @@ impl Context {
         let entity = self.id_manager.create();
         let sparse_set = self.arena
             .entry(type_id)
-            .or_insert(UntypedSparseSet::new::<IV>());
+            .or_insert(TypeErasedSparseSet::new::<IV>());
 
         let ptr = sparse_set.insert(entity, widget).map(|iv| iv as &mut dyn Widget);
         self.views.insert(entity.id(), AnyView::new(ptr));
