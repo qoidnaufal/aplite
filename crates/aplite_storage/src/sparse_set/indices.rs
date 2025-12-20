@@ -1,8 +1,11 @@
 use std::num::NonZeroU32;
-use crate::entity::EntityId;
+
+// use crate::entity::EntityId;
+// use crate::sparse_set::SparsetKey;
+// use crate::data::component::ComponentId;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) struct SparseSetIndex(Option<NonZeroU32>);
+pub(crate) struct SparseSetIndex(pub(crate) Option<NonZeroU32>);
 
 impl SparseSetIndex {
     pub(crate) const fn new(data_index: usize) -> Self {
@@ -34,7 +37,7 @@ impl std::fmt::Debug for SparseSetIndex {
 }
 
 #[derive(Debug)]
-pub struct SparseIndices(Vec<SparseSetIndex>);
+pub struct SparseIndices(pub(crate) Vec<SparseSetIndex>);
 
 impl Default for SparseIndices {
     fn default() -> Self {
@@ -52,38 +55,32 @@ impl SparseIndices {
     }
 
     #[inline(always)]
-    pub fn get_index(&self, id: EntityId) -> Option<usize> {
-        self.0.get(id.index())
+    pub fn get_index(&self, key: usize) -> Option<usize> {
+        self.0.get(key)
             .and_then(SparseSetIndex::get)
     }
 
     #[inline(always)]
-    pub fn set_index(&mut self, id: EntityId, data_index: usize) {
-        self.resize_if_needed(id);
-        self.0[id.index()] = SparseSetIndex::new(data_index);
+    pub fn set_index(&mut self, key: usize, data_index: usize) {
+        self.resize_if_needed(key);
+        self.0[key] = SparseSetIndex::new(data_index);
     }
 
     #[inline(always)]
-    pub fn set_null(&mut self, id: EntityId) {
-        self.0[id.index()] = SparseSetIndex::null()
+    pub fn set_null(&mut self, key: usize) {
+        self.0[key] = SparseSetIndex::null()
     }
 
     #[inline(always)]
-    pub fn with<T>(&self, id: EntityId, f: impl FnOnce(usize) -> T) -> Option<T> {
-        self.get_index(id).map(|index| f(index))
-    }
-
-    #[inline(always)]
-    pub fn contains(&self, id: EntityId) -> bool {
-        self.0.get(id.index())
+    pub fn contains(&self, key: usize) -> bool {
+        self.0.get(key)
             .is_some_and(SparseSetIndex::is_valid)
     }
 
     #[inline(always)]
-    fn resize_if_needed(&mut self, id: EntityId) {
-        let index = id.index();
-        if index >= self.0.len() {
-            self.resize(index);
+    fn resize_if_needed(&mut self, key: usize) {
+        if key >= self.0.len() {
+            self.resize(key);
         }
     }
 
@@ -96,18 +93,19 @@ impl SparseIndices {
         self.0.len()
     }
 
-    pub fn reset(&mut self) {
+    pub fn clear(&mut self) {
         self.0.clear();
     }
 
     /// Iterate over the index of the associated entity
-    pub fn iter_entity_index(&self) -> impl Iterator<Item = EntityId> {
-        self.0.iter()
-            .enumerate()
-            .filter_map(|(i, idx)| (idx.is_valid()).then_some(EntityId::new(i as _)))
-    }
+    // pub fn iter_entity_index(&self) -> impl Iterator<Item = EntityId> {
+    //     self.0.iter()
+    //         .enumerate()
+    //         .filter_map(|(i, idx)| (idx.is_valid()).then_some(EntityId::new(i as _)))
+    // }
 
     /// Iterate over the position of the indexed data
+    #[inline(always)]
     pub fn iter_data_index(&self) -> impl Iterator<Item = usize> {
         self.0.iter()
             .filter_map(SparseSetIndex::get)

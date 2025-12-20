@@ -4,7 +4,8 @@ use std::num::NonZeroUsize;
 use aplite_reactive::*;
 use aplite_renderer::{Renderer};
 use aplite_types::{Vec2f, Rect, Size};
-use aplite_storage::{Entity, EntityManager, SparseSet, Tree, TypeIdMap, TypeErasedSparseSet};
+use aplite_storage::{Entity, EntityId, EntityManager};
+use aplite_storage::{SparseSet, SparseTree, TypeIdMap, TypeErasedSparseSet};
 
 use crate::view::{IntoView, View, AnyView};
 use crate::cursor::{Cursor, MouseAction, MouseButton};
@@ -15,9 +16,9 @@ pub struct Context {
     pub(crate) current: Option<Entity>,
     pub(crate) arena: TypeIdMap<TypeErasedSparseSet>,
     pub(crate) id_manager: EntityManager,
-    pub(crate) views: SparseSet<AnyView>,
-    pub(crate) tree: Tree,
-    pub(crate) type_ids: SparseSet<TypeId>,
+    pub(crate) views: SparseSet<EntityId, AnyView>,
+    pub(crate) tree: SparseTree,
+    pub(crate) type_ids: SparseSet<Entity, TypeId>,
     pub(crate) callbacks: CallbackStorage,
     pub(crate) dirty: Signal<bool>,
     pub(crate) cursor: Cursor,
@@ -38,7 +39,7 @@ impl Context {
             arena: TypeIdMap::new(),
             views: SparseSet::default(),
             id_manager: EntityManager::default(),
-            tree: Tree::default(),
+            tree: SparseTree::default(),
             type_ids: SparseSet::with_capacity(allocation_size.get()),
             callbacks: CallbackStorage::default(),
             cursor: Cursor::default(),
@@ -63,7 +64,7 @@ impl Context {
 
         let ptr = sparse_set.insert(entity, widget).map(|iv| iv as &mut dyn Widget);
         self.views.insert(entity.id(), AnyView::new(ptr));
-        self.type_ids.insert(entity.id(), type_id);
+        self.type_ids.insert(entity, type_id);
         self.tree.insert(entity.id(), self.current.as_ref().map(Entity::id));
 
         entity
@@ -91,13 +92,13 @@ impl Context {
             })
     }
 
-    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut dyn Widget> {
+    pub(crate) fn for_each_mut<'a>(&'a mut self, mut f: impl FnMut(&mut dyn Widget)) {
         self.tree
             .iter_depth(self.current.map(|entity| entity.id()).unwrap())
-            .filter_map(|entity_id| {
-                self.views
-                    .get_raw(entity_id)
-                    .map(|any_view| unsafe { (&mut *any_view).as_mut() })
+            .for_each(|entity_id| {
+                if let Some(any_view) = self.views.get_mut(entity_id) {
+                    f(any_view.as_mut())
+                }
             })
     }
 
@@ -188,6 +189,6 @@ impl Context {
 
     pub(crate) fn render(&self, renderer: &mut Renderer) {
         let mut scene = renderer.scene();
-        self.views.iter().for_each(|(_, any)| any.as_ref().draw(&mut scene));
+        self.views.iter().for_each(|any| any.as_ref().draw(&mut scene));
     }
 }

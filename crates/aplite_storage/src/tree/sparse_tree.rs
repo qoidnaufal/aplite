@@ -10,14 +10,14 @@ use super::node::SubTree;
 /// Sparse array based data structure, where the related information is allocated parallel to the main [`EntityId`].
 /// This should enable fast and efficient indexing when accessing the data.
 /// This Tree can contains more than one roots.
-pub struct Tree {
+pub struct SparseTree {
     pub(crate) parent: Vec<Option<EntityId>>,
     pub(crate) first_child: Vec<Option<EntityId>>,
     pub(crate) next_sibling: Vec<Option<EntityId>>,
     pub(crate) prev_sibling: Vec<Option<EntityId>>,
 }
 
-impl Default for Tree {
+impl Default for SparseTree {
     /// This will create a default [`Tree`] without preallocating an initial capacity.
     /// If you want to specify the initial capacity, use [`Tree::with_capacity()`]
     fn default() -> Self {
@@ -25,7 +25,7 @@ impl Default for Tree {
     }
 }
 
-impl Tree {
+impl SparseTree {
     /// Create a new [`Tree`] with the specified capacity
     pub fn with_capacity(capacity: usize) -> Self {
         let mut this = Self {
@@ -421,7 +421,7 @@ impl Tree {
 */
 
 // FIXME: there are two spot which created unnecessary allocation on get_all_children + get_all_roots
-impl std::fmt::Debug for Tree {
+impl std::fmt::Debug for SparseTree {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = String::new();
         self.recursively_fill_string_buffer(None, &mut s);
@@ -456,10 +456,10 @@ mod tree_test {
     use super::*;
     use crate::{EntityId, EntityManager};
 
-    fn setup_tree(num: usize) -> (EntityManager, Tree) {
+    fn setup_tree(num: usize) -> (EntityManager, SparseTree) {
         let mut manager = EntityManager::default();
         let root = manager.create().id();
-        let mut tree = Tree::with_capacity(num);
+        let mut tree = SparseTree::with_capacity(num);
         let mut parent = Some(root);
         for i in 0..num {
             let id = manager.create().id();

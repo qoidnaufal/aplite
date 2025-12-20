@@ -7,7 +7,7 @@ mod map;
 mod sparse_set;
 mod tree;
 
-pub use buffer::TypedErasedBuffer;
+pub use buffer::TypeErasedBuffer;
 
 pub use entity::{
     EntityManager,
@@ -17,7 +17,7 @@ pub use entity::{
 };
 
 pub use tree::{
-    tree::{Tree, TreeError},
+    sparse_tree::{SparseTree, TreeError},
     node::{Node, NodeRef, SubTree},
 };
 

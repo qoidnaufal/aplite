@@ -6,8 +6,9 @@ use aplite_types::{
 };
 use aplite_storage::{
     Entity,
+    EntityId,
     SparseSet,
-    Tree,
+    SparseTree,
 };
 
 use crate::widget::Widget;
@@ -179,8 +180,8 @@ impl LayoutNode {
 
 pub struct Layout {
     pub(crate) window_rect: Rect,
-    pub(crate) tree: Tree,
-    pub(crate) rects: SparseSet<Rect>,
+    pub(crate) tree: SparseTree,
+    pub(crate) rects: SparseSet<EntityId, Rect>,
 }
 
 impl Layout {
@@ -191,7 +192,7 @@ impl Layout {
     pub(crate) fn with_capacity(window_rect: Rect, capacity: usize) -> Self {
         Self {
             window_rect,
-            tree: Tree::with_capacity(capacity),
+            tree: SparseTree::with_capacity(capacity),
             rects: SparseSet::with_capacity(capacity),
         }
     }

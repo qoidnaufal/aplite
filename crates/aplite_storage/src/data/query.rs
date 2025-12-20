@@ -1,49 +1,32 @@
-use std::cell::UnsafeCell;
-
-use crate::Component;
+use crate::data::component::{Component, ComponentTuple};
+use crate::data::table::{ComponentTable, ComponentStorage};
+use crate::buffer::TypeErasedBuffer;
 use crate::sparse_set::indices::SparseSetIndex;
 
 /// Query on many component type
 pub struct Query<'a, Q: QueryData<'a>> {
-    pub(crate) ptr: &'a [SparseSetIndex],
-    marker: std::marker::PhantomData<Q>,
+    marker: std::marker::PhantomData<fn() -> &'a Q>,
 }
 
-pub struct QueryIter<'a, Q: QueryData<'a>> {
-    marker: std::marker::PhantomData<fn() -> &'a Q>
-}
+struct QueryState {}
 
 pub trait Queryable<'a> {
     type Item: Component;
     type Output: 'a;
-
-    /// Convert `UnsafeCell<T>` to `&T` or `&mut T`.
-    fn convert(item: &UnsafeCell<Self::Item>) -> Self::Output;
 }
 
 impl<'a, T: Component> Queryable<'a> for &'a T {
     type Item = T;
     type Output = &'a T;
-
-    fn convert(item: &UnsafeCell<Self::Item>) -> Self::Output {
-        unsafe { &*item.get() }
-    }
 }
 
 impl<'a, T: Component> Queryable<'a> for &'a mut T {
     type Item = T;
     type Output = &'a mut T;
-
-    fn convert(item: &UnsafeCell<Self::Item>) -> Self::Output {
-        unsafe { &mut *item.get() }
-    }
 }
 
-pub trait QueryData<'a>: Sized {}
+pub trait QueryData<'a>: Sized {
+    type Fetch: ComponentTuple;
 
-pub(crate) fn map_query<'a, Q: Queryable<'a>>(cell: &'a UnsafeCell<Q::Item>) -> Q::Output {
-    Q::convert(cell)
+    fn get_component_table() -> &'a ComponentTable;
 }
-
-pub(crate) type FnMapQuery<'a, Q> =
-    fn(&'a UnsafeCell<<Q as Queryable<'a>>::Item>) -> <Q as Queryable<'a>>::Output;

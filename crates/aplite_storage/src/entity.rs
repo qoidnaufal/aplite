@@ -1,3 +1,5 @@
+// use std::sync::{OnceLock, RwLock};
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EntityId(pub(crate) u32);
 
@@ -30,22 +32,51 @@ impl Entity {
     pub(crate) const INDEX_MASK: u32 = (1 << 20) - 1;
     pub(crate) const VERSION_MASK: u32 = (1 << 12) - 1;
 
-    pub const fn new(index: u32, version: u32) -> Self {
+    pub(crate) const fn with_id_version(index: u32, version: u32) -> Self {
         Self(index | version << 20)
     }
 
+    // pub fn new() -> Self {
+    //     let mut manager = ENTITY_MANAGER
+    //         .get_or_init(EntityManager::init)
+    //         .write()
+    //         .unwrap();
+
+    //     manager.create()
+    // }
+
+    // pub fn destroy(self) {
+    //     let mut manager = ENTITY_MANAGER
+    //         .get_or_init(EntityManager::init)
+    //         .write()
+    //         .unwrap();
+
+    //     manager.destroy(self);
+    // }
+
+    // pub fn is_alive(&self) -> bool {
+    //     ENTITY_MANAGER.get_or_init(EntityManager::init)
+    //         .read()
+    //         .unwrap()
+    //         .is_alive(self)
+    // }
+
+    #[inline(always)]
     pub const fn id(&self) -> EntityId {
         EntityId::new(self.0 & Self::INDEX_MASK)
     }
 
+    #[inline(always)]
     pub const fn version(&self) -> EntityVersion {
         EntityVersion::new(self.0 >> 20 & Self::VERSION_MASK)
     }
 
+    #[inline(always)]
     pub const fn index(&self) -> usize {
-        self.id().index()
+        (self.0 & Self::INDEX_MASK) as usize
     }
 
+    #[inline(always)]
     pub const fn raw(&self) -> u32 {
         self.0
     }
@@ -53,7 +84,7 @@ impl Entity {
 
 impl std::hash::Hash for EntityId {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_u64(self.0 as _);
+        state.write_u32(self.0);
     }
 }
 
@@ -74,6 +105,8 @@ impl std::fmt::Debug for Entity {
         write!(f, "Entity({})", self.raw())
     }
 }
+
+// static ENTITY_MANAGER: OnceLock<RwLock<EntityManager>> = OnceLock::new();
 
 #[derive(Debug)]
 pub struct EntityManager {
@@ -99,28 +132,33 @@ impl EntityManager {
         }
     }
 
+    // fn init() -> RwLock<Self> {
+    //     RwLock::new(Self::new())
+    // }
+
     pub fn create(&mut self) -> Entity {
         let id = self.recycled
             .pop()
             .unwrap_or_else(|| {
                 let id = u32::try_from(self.versions.len())
                     .ok()
-                    .expect("Created Entity should not exceed u32::MAX");
+                    .expect("Created Entity should not exceed '(1 << 20) - 1'");
 
                 debug_assert!(id <= Entity::INDEX_MASK);
                 self.versions.push(0);
                 id
             });
-        Entity::new(id, self.versions[id as usize])
+
+        Entity::with_id_version(id, self.versions[id as usize])
     }
 
-    pub fn is_alive(&self, id: &Entity) -> bool {
-        let version = self.versions[id.index()];
-        version < Entity::VERSION_MASK && version == id.version().0
+    pub fn is_alive(&self, entity: &Entity) -> bool {
+        let version = self.versions[entity.index()];
+        version < Entity::VERSION_MASK && version == entity.version().0
     }
 
-    pub fn destroy(&mut self, id: Entity) {
-        let idx = id.index();
+    pub fn destroy(&mut self, entity: Entity) {
+        let idx = entity.index();
         if self.versions[idx] < u32::MAX {
             self.versions[idx] += 1;
             self.recycled.push(idx as u32);

@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use aplite_storage::{ComponentRegistrator, ComponentStorage, EntityIdMap};
+use aplite_storage::{Component, ComponentRegistrator, ComponentStorage, EntityIdMap};
 
 use crate::{context::Context, view::IntoView, widget::Widget};
 
@@ -76,13 +76,19 @@ impl<E: WidgetEventType> Callback<E> {
     }
 }
 
+impl<E: WidgetEventType + 'static> Component for Callback<E> {}
+
 pub trait InteractiveWidget: Widget + Sized + 'static {
-    fn on<E: WidgetEventType + 'static, F: FnMut() + 'static>(self, cx: &mut Context, f: F) -> aplite_storage::Entity {
+    fn on<E, F>(self, cx: &mut Context, f: F) -> aplite_storage::Entity
+    where
+        E: WidgetEventType + 'static,
+        F: FnMut() + 'static,
+    {
         let registrator = cx.callbacks.registrator();
         let table_id = registrator.register::<Callback<E>>().finish();
 
         let entity = self.into_view().build(cx);
-        cx.callbacks.insert_with_table_id(table_id, entity, Callback::<E>::new(f));
+        // cx.callbacks.insert_with_table_id(table_id, Callback::<E>::new(f));
 
         entity
     }

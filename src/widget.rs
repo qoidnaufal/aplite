@@ -42,8 +42,6 @@ where
 
 // -------------------------------------
 
-// -------------------------------------
-
 pub(crate) fn window(size: Size) -> WindowWidget {
     WindowWidget::new(size)
 }

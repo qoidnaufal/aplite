@@ -1,5 +1,5 @@
 use crate::entity::EntityId;
-use super::tree::Tree;
+use super::sparse_tree::SparseTree;
 
 #[derive(Debug)]
 pub struct Node {
@@ -66,7 +66,7 @@ impl SubTree {
         }
     }
 
-    pub(crate) fn from_tree(id: EntityId, tree: &Tree) -> Self {
+    pub(crate) fn from_tree(id: EntityId, tree: &SparseTree) -> Self {
         let nodes = tree.iter_node(id)
             .skip(1)
             .collect();

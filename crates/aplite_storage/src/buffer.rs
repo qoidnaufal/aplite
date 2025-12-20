@@ -4,9 +4,20 @@ use std::ptr::NonNull;
 use std::cell::UnsafeCell;
 use std::marker::PhantomData;
 
+#[derive(Debug)] pub struct MaxCapacityReached;
+
+impl std::fmt::Display for MaxCapacityReached {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::error::Error for MaxCapacityReached {}
+
 #[derive(Debug)]
 pub enum Error {
     MaxCapacityReached,
+    Uninitialized,
 }
 
 impl std::fmt::Display for Error {
@@ -18,23 +29,27 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {}
 
 /// Type erased data storage.
-/// This is slower than normal `Vec<T>`, but faster than `Vec<Box<dyn Any>>`.
-/// However, this has double the size (48) compared to a normal Vec (24) which comes from the need to carry additional informations.
-/// Removal of an element is only supported via swap remove to preserve the contiguousness of the data.
-pub struct TypedErasedBuffer {
+/// ## Performace
+/// Performance wise, with naive duration-based testing, this data structure is very competitive against std::Vec.
+/// 
+/// On push, slightly slower than Vec\<T\> but much faster than Vec<Box\<dyn Any\>>, with caveat the pushes were within the reserved capacity. A normal push (and growing the capacity dynamically) should be slower than std::Vec, because currently on every realloc, only 4 more capacity is reserved with the idea of being space efficient.
+/// It's highly advised to reserve the needed capacity, and use
+/// 
+/// On iter, slightly faster than Vec\<T\> and much faster than Vec<Box\<dyn Any\>>.
+pub struct TypeErasedBuffer {
     raw: RawBuffer,
     len: usize,
     item_layout: alloc::Layout,
 }
 
-impl Drop for TypedErasedBuffer {
+impl Drop for TypeErasedBuffer {
     fn drop(&mut self) {
         self.clear();
         self.raw.dealloc(self.item_layout);
     }
 }
 
-impl TypedErasedBuffer {
+impl TypeErasedBuffer {
     pub fn new<T>() -> Self {
         Self::with_capacity::<T>(0)
     }
@@ -63,27 +78,44 @@ impl TypedErasedBuffer {
         self.raw.capacity
     }
 
-    pub fn push_no_realloc<T>(&mut self, data: T) -> Result<(), Error> {
+    #[inline(always)]
+    /// Safety: you have to ensure buffer is already initialized or the number of elements are within [`capacity`](Self::capacity) - 1
+    unsafe fn push_unchecked<T>(&mut self, data: T) {
+        unsafe { self.raw.push(data, self.len) };
+        self.len += 1;
+    }
+
+    /// Safety: this method assumes that buffer is already initialized via [`with_capacity`](Self::with_capacity)
+    pub fn push_within_capacity<T>(&mut self, data: T) -> Result<(), MaxCapacityReached> {
         if self.len == self.raw.capacity {
-            return Err(Error::MaxCapacityReached)
+            return Err(MaxCapacityReached)
         }
 
-        self.raw.push(data, self.len);
-        self.len += 1;
+        unsafe { self.push_unchecked(data) }
 
         Ok(())
     }
 
-    pub fn push<T>(&mut self, data: T) {
-        self.realloc_if_needed();
-        self.raw.push(data, self.len);
-        self.len += 1;
+    const fn check(&self) -> Result<(), Error> {
+        if self.raw.capacity == 0 {
+            return Err(Error::Uninitialized);
+        } else if self.len == self.raw.capacity {
+            return Err(Error::MaxCapacityReached);
+        } else {
+            Ok(())
+        }
     }
 
-    fn realloc_if_needed(&mut self) {
-        if self.len == self.raw.capacity {
-            self.raw
-                .initialize_or_realloc(self.item_layout, self.raw.capacity + 4);
+    pub fn push<T>(&mut self, data: T) {
+        if let Err(err) = self.check() {
+            match err {
+                Error::MaxCapacityReached => self.raw.realloc(self.item_layout, self.raw.capacity + 4),
+                Error::Uninitialized => self.raw.initialize(4, self.item_layout.size(), self.item_layout.align()),
+            }
+        }
+
+        unsafe {
+            self.push_unchecked(data);
         }
     }
 
@@ -162,10 +194,6 @@ impl TypedErasedBuffer {
     pub fn iter_mut<'a, T>(&'a mut self) -> IterMut<'a, T> {
         IterMut::new(self)
     }
-
-    pub fn iter_cell<'a, T>(&'a self) -> UnsafeCellIter<'a, T> {
-        UnsafeCellIter::new(self)
-    }
 }
 
 /*
@@ -177,7 +205,7 @@ impl TypedErasedBuffer {
 */
 
 pub(crate) struct RawBuffer {
-    block: NonNull<u8>,
+    pub(crate) block: NonNull<u8>,
     pub(crate) capacity: usize,
     drop: Option<unsafe fn(*mut u8, usize)>,
 }
@@ -209,7 +237,7 @@ impl RawBuffer {
     }
 
     #[inline(always)]
-    fn initialize(&mut self, capacity: usize, size: usize, align: usize) {
+    pub(crate) fn initialize(&mut self, capacity: usize, size: usize, align: usize) {
         unsafe {
             let layout = alloc::Layout::from_size_align_unchecked(
                 size * capacity,
@@ -236,7 +264,7 @@ impl RawBuffer {
     }
 
     #[inline(always)]
-    pub(crate) const fn push<T>(&mut self, data: T, len: usize) -> *mut T {
+    pub(crate) const unsafe fn push<T>(&mut self, data: T, len: usize) -> *mut T {
         unsafe {
             let raw = self.block
                 .add(len * size_of::<T>())
@@ -248,35 +276,27 @@ impl RawBuffer {
     }
 
     #[inline(always)]
-    pub(crate) fn initialize_or_realloc(&mut self, item_layout: alloc::Layout, new_capacity: usize) {
-        if self.capacity == 0 {
-            self.initialize(
-                new_capacity,
-                item_layout.size(),
-                item_layout.align()
-            );
-        } else {
-            unsafe {
-                let new_size = item_layout.size() * new_capacity;
-                let new_block = alloc::realloc(self.block.as_ptr(), item_layout, new_size);
+    pub(crate) fn realloc(&mut self, item_layout: alloc::Layout, new_capacity: usize) {
+        unsafe {
+            let new_size = item_layout.size() * new_capacity;
+            let new_block = alloc::realloc(self.block.as_ptr(), item_layout, new_size);
 
-                match NonNull::new(new_block) {
-                    Some(new) => {
-                        self.block = new;
-                        self.capacity = new_capacity;
-                    },
-                    None => {
-                        alloc::handle_alloc_error(
-                            alloc::Layout::from_size_align_unchecked(
-                                new_size,
-                                item_layout.align()
-                            )
+            match NonNull::new(new_block) {
+                Some(new) => {
+                    self.block = new;
+                    self.capacity = new_capacity;
+                },
+                None => {
+                    alloc::handle_alloc_error(
+                        alloc::Layout::from_size_align_unchecked(
+                            new_size,
+                            item_layout.align()
                         )
-                    },
-                }
-
-                self.capacity = new_capacity;
+                    )
+                },
             }
+
+            self.capacity = new_capacity;
         }
     }
 
@@ -320,25 +340,60 @@ impl RawBuffer {
 
 /*
 #########################################################
-#                                                       #
-#                       Iterator                        #
-#                                                       #
+#
+# Iterator
+#
 #########################################################
 */
 
-pub struct Iter<'a, T> {
-    next: *mut T,
+struct Base<T> {
+    raw: *mut T,
     count: usize,
     len: usize,
+}
+
+impl<T> Base<T> {
+    #[inline(always)]
+    fn new(raw: *mut T, len: usize) -> Self {
+        Self {
+            raw,
+            count: 0,
+            len,
+        }
+    }
+
+    #[inline(always)]
+    unsafe fn next<R>(&mut self, f: impl FnOnce(*mut T) -> R) -> Option<R> {
+        if self.count == self.len || self.len == 0 {
+            return None;
+        }
+
+        let next = unsafe { f(self.raw.add(self.count)) };
+        self.count += 1;
+        Some(next)
+    }
+
+    #[inline(always)]
+    unsafe fn back<R>(&mut self, f: impl FnOnce(*mut T) -> R) -> Option<R> {
+        if self.len == 0 || self.len == self.count {
+            return None;
+        }
+
+        let count = self.len - self.count - 1;
+        self.count += 1;
+        unsafe { Some(f(self.raw.add(count))) }
+    }
+}
+
+pub struct Iter<'a, T> {
+    base: Base<T>,
     marker: PhantomData<fn() -> &'a T>,
 }
 
 impl<'a, T> Iter<'a, T> {
-    fn new(source: &'a TypedErasedBuffer) -> Self {
+    fn new(source: &'a TypeErasedBuffer) -> Self {
         Self {
-            next: source.raw.block.cast::<T>().as_ptr(),
-            count: 0,
-            len: source.len,
+            base: Base::new(source.raw.block.cast::<T>().as_ptr(), source.len),
             marker: PhantomData,
         }
     }
@@ -349,30 +404,28 @@ impl<'a, T: 'a> Iterator for Iter<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
-            if self.count == self.len || self.len == 0 {
-                return None;
-            }
+            self.base.next::<&'a T>(|raw| &*raw)
+        }
+    }
+}
 
-            let next = &*self.next.add(self.count);
-            self.count += 1;
-            Some(next)
+impl<'a, T: 'a> DoubleEndedIterator for Iter<'a, T> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        unsafe {
+            self.base.back::<&'a T>(|raw| &*raw)
         }
     }
 }
 
 pub struct IterMut<'a, T> {
-    next: *mut T,
-    count: usize,
-    len: usize,
+    base: Base<T>,
     marker: PhantomData<fn() -> &'a mut T>,
 }
 
 impl<'a, T> IterMut<'a, T> {
-    fn new(source: &'a mut TypedErasedBuffer) -> Self {
+    fn new(source: &'a mut TypeErasedBuffer) -> Self {
         Self {
-            next: source.raw.block.cast::<T>().as_ptr(),
-            count: 0,
-            len: source.len,
+            base: Base::new(source.raw.block.cast::<T>().as_ptr(), source.len),
             marker: PhantomData,
         }
     }
@@ -383,47 +436,15 @@ impl<'a, T: 'a> Iterator for IterMut<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
-            if self.count == self.len || self.len == 0 {
-                return None;
-            }
-
-            let next = &mut *self.next.add(self.count);
-            self.count += 1;
-            Some(next)
+            self.base.next::<&'a mut T>(|raw| &mut *raw)
         }
     }
 }
 
-pub struct UnsafeCellIter<'a, T> {
-    next: *mut UnsafeCell<T>,
-    count: usize,
-    len: usize,
-    marker: PhantomData<fn() -> &'a UnsafeCell<T>>,
-}
-
-impl<'a, T> UnsafeCellIter<'a, T> {
-    fn new(source: &'a TypedErasedBuffer) -> Self {
-        Self {
-            next: source.raw.block.cast::<UnsafeCell<T>>().as_ptr(),
-            count: 0,
-            len: source.len,
-            marker: PhantomData,
-        }
-    }
-}
-
-impl<'a, T: 'a> Iterator for UnsafeCellIter<'a, T> {
-    type Item = &'a UnsafeCell<T>;
-
-    fn next(&mut self) -> Option<Self::Item> {
+impl<'a, T: 'a> DoubleEndedIterator for IterMut<'a, T> {
+    fn next_back(&mut self) -> Option<Self::Item> {
         unsafe {
-            if self.count == self.len || self.len == 0 {
-                return None;
-            }
-
-            let next = &*self.next.add(self.count);
-            self.count += 1;
-            Some(next)
+            self.base.back(|raw| &mut *raw)
         }
     }
 }
@@ -454,7 +475,7 @@ mod buffer_test {
 
     #[test]
     fn push_and_get() {
-        let mut ba = TypedErasedBuffer::with_capacity::<Obj>(1);
+        let mut ba = TypeErasedBuffer::with_capacity::<Obj>(1);
         assert!(ba.raw.drop.is_some());
 
         let balo = Obj { name: "Balo".to_string(), age: 69 };
@@ -478,7 +499,7 @@ mod buffer_test {
 
     #[test]
     fn remove() {
-        let mut ba = TypedErasedBuffer::with_capacity::<Obj>(5);
+        let mut ba = TypeErasedBuffer::with_capacity::<Obj>(5);
 
         for i in 0..5 {
             ba.push(Obj { name: i.to_string(), age: i as _ });
@@ -493,32 +514,11 @@ mod buffer_test {
     }
 
     #[test]
-    fn iter() {
-        let mut ba = TypedErasedBuffer::with_capacity::<Obj>(5);
-
-        for i in 0..5 {
-            ba.push(Obj { name: i.to_string(), age: i as _ });
-        }
-
-        let iter = ba.iter_cell::<Obj>();
-        iter.for_each(|cell| unsafe {
-            let obj = &mut *cell.get();
-            obj.age = 0;
-        });
-
-        let mut iter2 = ba.iter_cell::<Obj>();
-        assert!(iter2.all(|cell| unsafe {
-            let obj = &*cell.get();
-            obj.age == 0
-        }))
-    }
-
-    #[test]
     fn zst() {
         const CAP: usize = 2;
         #[derive(Debug, PartialEq)]
         struct Zst;
-        let mut ba = TypedErasedBuffer::with_capacity::<Zst>(CAP);
+        let mut ba = TypeErasedBuffer::with_capacity::<Zst>(CAP);
         for _ in 0..CAP {
             ba.push(Zst);
         }
@@ -530,40 +530,46 @@ mod buffer_test {
     }
 
     #[test]
-    fn speed() {
+    fn iter_speed() {
         struct NewObj {
             _name: String,
             age: usize,
             _addr: usize,
         }
 
-        const NUM: usize = 1024 * 1024;
+        const NUM: usize = 1024 * 1024 * 4;
 
         let mut vec: Vec<NewObj> = Vec::with_capacity(NUM);
-        for i in 0..NUM {
-            vec.push(NewObj { _name: i.to_string(), age: 1, _addr: i });
-        }
-        let now_1 = std::time::Instant::now();
-        let sum_1 = vec.iter().map(|obj| obj.age).sum::<usize>();
-        let elapsed_1 = now_1.elapsed();
-        println!("Vec<T>            : iter.map.sum time for {sum_1} objects: {:?}", elapsed_1);
+        let now_1p = std::time::Instant::now();
+        for i in 0..NUM { vec.push(NewObj { _name: i.to_string(), age: 1, _addr: i }) }
+        let elapsed_1p = now_1p.elapsed();
+        println!("Vec<T>            : push time for {NUM} objects: {:?}", elapsed_1p);
 
-        let mut ba = TypedErasedBuffer::with_capacity::<NewObj>(NUM);
-        for i in 0..NUM {
-            ba.push(NewObj { _name: i.to_string(), age: 1, _addr: i });
-        }
-        let now_2 = std::time::Instant::now();
-        let sum_2 = ba.iter::<NewObj>().map(|obj| obj.age).sum::<usize>();
-        let elapsed_2 = now_2.elapsed();
-        println!("TypeErasedBuffer  : iter.map.sum time for {sum_2} objects: {:?}", elapsed_2);
+        let now_2p = std::time::Instant::now();
+        let mut ba = TypeErasedBuffer::with_capacity::<NewObj>(NUM);
+        for i in 0..NUM { ba.push(NewObj { _name: i.to_string(), age: 1, _addr: i }) }
+        let elapsed_2p = now_2p.elapsed();
+        println!("TypeErasedBuffer  : push time for {NUM} objects: {:?}", elapsed_2p);
 
+        let now_3p = std::time::Instant::now();
         let mut any_vec: Vec<Box<dyn std::any::Any>> = Vec::with_capacity(NUM);
-        for i in 0..NUM {
-            any_vec.push(Box::new(NewObj { _name: i.to_string(), age: 1, _addr: i }));
-        }
-        let now_3 = std::time::Instant::now();
+        for i in 0..NUM { any_vec.push(Box::new(NewObj { _name: i.to_string(), age: 1, _addr: i })) }
+        let elapsed_3p = now_3p.elapsed();
+        println!("Vec<Box<dyn Any>> : push time for {NUM} objects: {:?}\n", elapsed_3p);
+
+        let now_1i = std::time::Instant::now();
+        let sum_1 = vec.iter().map(|obj| obj.age).sum::<usize>();
+        let elapsed_1i = now_1i.elapsed();
+        println!("Vec<T>            : iter.map.sum time for {sum_1} objects: {:?}", elapsed_1i);
+
+        let now_2i = std::time::Instant::now();
+        let sum_2 = ba.iter::<NewObj>().map(|obj| obj.age).sum::<usize>();
+        let elapsed_2i = now_2i.elapsed();
+        println!("TypeErasedBuffer  : iter.map.sum time for {sum_2} objects: {:?}", elapsed_2i);
+
+        let now_3i = std::time::Instant::now();
         let sum_3 = any_vec.iter().map(|any| any.downcast_ref::<NewObj>().unwrap().age).sum::<usize>();
-        let elapsed_3 = now_3.elapsed();
-        println!("Vec<Box<dyn Any>> : iter.map.sum time for {sum_3} objects: {:?}", elapsed_3);
+        let elapsed_3i = now_3i.elapsed();
+        println!("Vec<Box<dyn Any>> : iter.map.sum time for {sum_3} objects: {:?}", elapsed_3i);
     }
 }

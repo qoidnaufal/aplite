@@ -1,4 +1,3 @@
-use crate::iterator::{IndexMapIter, IndexMapIterMut};
 use super::slot::Slot;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -199,10 +198,14 @@ impl<T> IndexMap<T> {
     }
 
     #[inline(always)]
-    pub fn iter(&self) -> IndexMapIter<'_, T> { self.into_iter() }
+    pub fn iter(&self) -> impl Iterator<Item = (Index, &T)> {
+        self.into_iter()
+    }
 
     #[inline(always)]
-    pub fn iter_mut(&mut self) -> IndexMapIterMut<'_, T> { self.into_iter() }
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (Index, &mut T)> {
+        self.into_iter()
+    }
 }
 
 impl<T> std::fmt::Debug for IndexMap<T>

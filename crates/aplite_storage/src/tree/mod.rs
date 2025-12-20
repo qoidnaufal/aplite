@@ -1,2 +1,2 @@
 pub(crate) mod node;
-pub(crate) mod tree;
+pub(crate) mod sparse_tree;
