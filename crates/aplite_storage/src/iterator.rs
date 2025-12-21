@@ -1,12 +1,12 @@
 use std::slice::{Iter, IterMut};
 use std::iter::{Enumerate, FilterMap};
 
-use crate::Index;
+use crate::SlotId;
 use crate::entity::EntityId;
 use crate::tree::sparse_tree::SparseTree;
 use crate::tree::node::Node;
 use crate::map::slot::Slot;
-use crate::map::index_map::IndexMap;
+use crate::map::slot_map::SlotMap;
 
 /*
 #########################################################
@@ -16,18 +16,18 @@ use crate::map::index_map::IndexMap;
 #########################################################
 */
 
-fn index_map_filter_ref<T>((i, slot): (usize, &Slot<T>)) -> Option<(Index, Option<&T>)> {
+fn index_map_filter_ref<T>((i, slot): (usize, &Slot<T>)) -> Option<(SlotId, Option<&T>)> {
     slot.get_content()
         .map(|val| (
-            Index::new(i as u32, slot.version),
+            SlotId::new(i as u32, slot.version),
             Some(val)
         ))
 }
 
-type FnIndexMapFilterRef<T> = fn((usize, &Slot<T>)) -> Option<(Index, Option<&T>)>;
+type FnIndexMapFilterRef<T> = fn((usize, &Slot<T>)) -> Option<(SlotId, Option<&T>)>;
 
-impl<'a, T> IntoIterator for &'a IndexMap<T> {
-    type Item = (Index, &'a T);
+impl<'a, T> IntoIterator for &'a SlotMap<T> {
+    type Item = (SlotId, &'a T);
     type IntoIter = IndexMapIter<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -49,7 +49,7 @@ pub struct IndexMapIter<'a, T> {
 }
 
 impl<'a, T> Iterator for IndexMapIter<'a, T> {
-    type Item = (Index, &'a T);
+    type Item = (SlotId, &'a T);
     fn next(&mut self) -> Option<Self::Item> {
         self.inner
             .next()
@@ -73,19 +73,19 @@ impl<'a, T> DoubleEndedIterator for IndexMapIter<'a, T> {
 #########################################################
 */
 
-fn index_map_filter_mut<T>((i, slot): (usize, &mut Slot<T>)) -> Option<(Index, Option<&mut T>)> {
+fn index_map_filter_mut<T>((i, slot): (usize, &mut Slot<T>)) -> Option<(SlotId, Option<&mut T>)> {
     let version = slot.version;
     slot.get_content_mut()
         .map(|val| (
-            Index::new(i as u32, version),
+            SlotId::new(i as u32, version),
             Some(val)
         ))
 }
 
-type FnIndexMapFilterMut<T> = fn((usize, &mut Slot<T>)) -> Option<(Index, Option<&mut T>)>;
+type FnIndexMapFilterMut<T> = fn((usize, &mut Slot<T>)) -> Option<(SlotId, Option<&mut T>)>;
 
-impl<'a, T> IntoIterator for &'a mut IndexMap<T> {
-    type Item = (Index, &'a mut T);
+impl<'a, T> IntoIterator for &'a mut SlotMap<T> {
+    type Item = (SlotId, &'a mut T);
     type IntoIter = IndexMapIterMut<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -105,7 +105,7 @@ pub struct IndexMapIterMut<'a, T> {
 }
 
 impl<'a, T> Iterator for IndexMapIterMut<'a, T> {
-    type Item = (Index, &'a mut T);
+    type Item = (SlotId, &'a mut T);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner
@@ -351,11 +351,11 @@ impl<'a> Iterator for TreeAncestryIter<'a> {
 mod iterator_test {
     use crate::tree::sparse_tree::SparseTree;
     use crate::entity::{EntityId, EntityManager};
-    use crate::map::index_map::IndexMap;
+    use crate::map::slot_map::SlotMap;
 
     #[test]
     fn indexmap() {
-        let mut storage = IndexMap::<usize>::with_capacity(10);
+        let mut storage = SlotMap::<usize>::with_capacity(10);
         let mut created_ids = vec![];
 
         for i in 0..10 {
@@ -366,7 +366,7 @@ mod iterator_test {
         assert_eq!(storage.len(), created_ids.len());
 
         for i in 0..3 {
-            storage.remove(&created_ids[i * 3]);
+            storage.remove(created_ids[i * 3]);
         }
 
         let remaining = storage.iter().count();

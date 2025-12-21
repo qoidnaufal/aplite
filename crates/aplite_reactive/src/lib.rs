@@ -9,6 +9,7 @@ mod subscriber;
 mod source;
 
 pub use effect::*;
+pub use graph::Scope;
 pub use signal::*;
 pub use signal_read::*;
 pub use signal_write::*;

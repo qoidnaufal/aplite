@@ -48,7 +48,7 @@ impl<T: 'static> Source for Signal<T> {
     }
 
     fn clear_subscribers(&self) {
-        SubscriberStorage::with_mut(&self.node.id, |set| set.clear());
+        SubscriberStorage::with_mut(self.node.id, |set| set.clear());
     }
 }
 
@@ -75,9 +75,8 @@ impl<T: 'static> Track for Signal<T> {
 
 impl<T: 'static> Notify for Signal<T> {
     fn notify(&self) {
-        SubscriberStorage::with_mut(&self.node.id, |set| {
-            set.drain(..)
-                .for_each(|any_subscriber| any_subscriber.notify());
+        SubscriberStorage::with_mut(self.node.id, |set| {
+            set.drain(..).for_each(AnySubscriber::notify_owned);
         });
     }
 }
@@ -107,7 +106,7 @@ impl<T: Clone + 'static> Get for Signal<T> {
     }
 
     fn try_get_untracked(&self) -> Option<Self::Value> {
-        self.try_read(|n| n.cloned())
+        self.try_read(|value| value.cloned())
     }
 }
 
@@ -155,7 +154,7 @@ impl<T: 'static> Update for Signal<T> {
 impl<T: 'static> Dispose for Signal<T> {
     fn dispose(&self) {
         Graph::remove(&self.node);
-        SubscriberStorage::remove(&self.node.id);
+        SubscriberStorage::remove(self.node.id);
     }
 
     fn is_disposed(&self) -> bool {

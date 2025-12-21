@@ -1,5 +1,3 @@
-use std::any::TypeId;
-
 use crate::buffer::TypeErasedBuffer;
 use crate::data::component::{Component, ComponentBitset, ComponentTuple, ComponentTupleExt, ComponentId};
 use crate::data::query::{Query, QueryData};
@@ -21,16 +19,10 @@ impl TableId {
     }
 }
 
-// enum TableFlavor {
-//     HashMap(TypeIdMap<TypedErasedBuffer>),
-//     SparseSet(TypeErasedSparseSet)
-// }
-
 /// This is similar to MultiArrayList in Zig, in which Entities with the same composition are stored together.
 /// Entity with different composition will produce a new ComponentTable.
 pub struct ComponentTable {
     pub(crate) data: TypeErasedSparseSet,
-    // pub(crate) data: TypeIdMap<TypedErasedBuffer>,
     pub(crate) entities: Vec<Entity>,
     pub(crate) indexes: SparseIndices,
 }
@@ -54,7 +46,6 @@ impl ComponentTable {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             data: TypeErasedSparseSet::with_capacity::<TypeErasedBuffer>(capacity),
-            // data: TypeIdMap::default(),
             entities: Vec::with_capacity(capacity),
             indexes: SparseIndices::default(),
         }
@@ -65,11 +56,6 @@ impl ComponentTable {
         self.data.insert(component_id, TypeErasedBuffer::with_capacity::<C>(capacity));
     }
 
-    // #[inline(always)]
-    // pub(crate) fn add_buffer<C: Component>(&mut self, capacity: usize) {
-    //     self.data.insert(C::type_id(), TypedErasedBuffer::with_capacity::<C>(capacity));
-    // }
-
     pub(crate) fn insert<C: Component>(&mut self, component: C, component_id: ComponentId) {
         self.data
             .get_mut::<ComponentId, TypeErasedBuffer>(component_id)
@@ -77,39 +63,13 @@ impl ComponentTable {
             .push(component);
     }
 
-    // pub fn insert<T: Component>(&mut self, component: T) {
-    //     let type_id = TypeId::of::<T>();
-    //     let buffer = self.data.get_mut(&type_id).unwrap();
-    //     buffer.push(component);
-
-    //     // let len = self.entities.len();
-    //     // self.indexes.set_index(entity.id(), len);
-    //     // self.entities.push(entity);
-    // }
-
-    // pub(crate) unsafe fn get_component_buffer_raw<C: Component>(&self) -> *const TypedErasedBuffer {
-    //     &self.data[&C::type_id()] as *const TypedErasedBuffer
-    // }
-
     pub fn get_component_buffer<C: Component>(&self, component_id: ComponentId) -> Option<&TypeErasedBuffer> {
         self.data.get(component_id)
     }
 
-    // pub fn get_component_buffer<C: Component>(&self) -> Option<&TypedErasedBuffer> {
-    //     self.data.get(&C::type_id())
-    // }
-
-    // pub unsafe fn get_component_buffer_unchecked_mut<C: Component>(&mut self) -> &mut TypedErasedBuffer {
-    //     &mut self.data[&C::type_id()]
-    // }
-
     pub fn get_component_buffer_mut<C: Component>(&mut self, component_id: ComponentId) -> Option<&mut TypeErasedBuffer> {
         self.data.get_mut(component_id)
     }
-
-    // pub fn get_component_buffer_mut<C: Component>(&mut self) -> Option<&mut TypedErasedBuffer> {
-    //     self.data.get_mut(&C::type_id())
-    // }
 
     pub fn get_component<C: Component>(&self, entity: Entity, component_id: ComponentId) -> Option<&C> {
         self.indexes
@@ -262,9 +222,9 @@ impl<'a> ComponentRegistrator<'a> {
 
 /*
 #########################################################
-#                                                       #
-#                         TEST                          #
-#                                                       #
+#
+# TEST
+#
 #########################################################
 */
 
@@ -273,13 +233,14 @@ mod component_test {
     use super::*;
     use crate::entity::*;
 
-    crate::make_component!(struct Age(0 u8));
-    crate::make_component!(struct Name(0 String));
-    crate::make_component!(struct Salary(0 usize));
-    crate::make_component!(struct Cars(0 usize));
+    crate::make_component!(struct Age(u8));
+    crate::make_component!(struct Name(String));
+    crate::make_component!(struct Salary(usize));
+    crate::make_component!(struct Cars(usize));
 
-    crate::make_component!(struct Kids(0 Name, 1 Age));
+    crate::make_component!(struct Kids((Name, Age)));
     crate::make_component!(struct Person { name: Name, age: Age });
+    // crate::make_component!(struct Pet<T> { name: Name, kind: T });
 
     // #[derive(Debug)] #[allow(unused)] struct Age(u8);       impl Component for Age {}
     // #[derive(Debug)] #[allow(unused)] struct Name(String);  impl Component for Name {}

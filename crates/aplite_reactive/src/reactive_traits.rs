@@ -6,7 +6,9 @@
 #########################################################
 */
 
-// pub trait Reactive: Track + Notify {}
+pub trait Reactive {
+    fn update_if_necessary(&self) -> bool;
+}
 
 pub trait Track {
     fn track(&self);

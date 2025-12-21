@@ -31,11 +31,6 @@ impl<IV, F> Button<IV, F> {
 }
 
 impl<IV: IntoView, F: FnMut() + 'static> Widget for Button<IV, F> {
-    fn build(self, cx: &mut Context) -> Entity {
-        let entity = cx.mount(self);
-        entity
-    }
-
     fn layout(&mut self, cx: &mut Context) {
         todo!()
     }

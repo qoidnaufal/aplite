@@ -70,6 +70,11 @@ impl TypeErasedSparseSet {
     }
 
     #[inline(always)]
+    pub fn get_data_index<K: SparsetKey>(&self, key: K) -> Option<usize> {
+        self.indexes.get_index(key.index())
+    }
+
+    #[inline(always)]
     /// Safety: you have to ensure len < capacity, and the entity does not existed yet within this sparse_set
     pub unsafe fn insert_unchecked<K: SparsetKey, V>(&mut self, key: K, value: V) -> ArenaPtr<V> {
         self.indexes.set_index(key.index(), self.len);

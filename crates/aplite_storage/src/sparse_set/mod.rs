@@ -4,6 +4,7 @@ pub(crate) mod indices;
 
 use crate::entity::{EntityId, Entity};
 use crate::data::component::ComponentId;
+use crate::map::slot_map::SlotId;
 
 pub trait SparsetKey
 where
@@ -27,5 +28,11 @@ impl SparsetKey for EntityId {
 impl SparsetKey for ComponentId {
     fn index(&self) -> usize {
         self.0 as _
+    }
+}
+
+impl SparsetKey for SlotId {
+    fn index(&self) -> usize {
+        self.index()
     }
 }

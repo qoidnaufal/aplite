@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard, PoisonError};
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard, LockResult};
 
 pub(crate) struct Value<T> {
     inner: Arc<RwLock<T>>,
@@ -14,11 +14,11 @@ impl<T: 'static> Value<T> {
         }
     }
 
-    pub(crate) fn read<'a>(&'a self) -> Result<RwLockReadGuard<'a, T>, PoisonError<RwLockReadGuard<'a, T>>> {
+    pub(crate) fn read<'a>(&'a self) -> LockResult<RwLockReadGuard<'a, T>> {
         self.inner.read()
     }
 
-    pub(crate) fn write<'a>(&'a self) -> Result<RwLockWriteGuard<'a, T>, PoisonError<RwLockWriteGuard<'a, T>>> {
+    pub(crate) fn write<'a>(&'a self) -> LockResult<RwLockWriteGuard<'a, T>> {
         self.inner.write()
     }
 }

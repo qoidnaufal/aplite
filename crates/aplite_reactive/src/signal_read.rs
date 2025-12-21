@@ -31,7 +31,7 @@ impl<T: 'static> Source for SignalRead<T> {
     }
 
     fn clear_subscribers(&self) {
-        SubscriberStorage::with_mut(&self.node.id, |set| set.clear());
+        SubscriberStorage::with_mut(self.node.id, |set| set.clear());
     }
 }
 
@@ -39,10 +39,6 @@ impl<T: 'static> ToAnySource for SignalRead<T> {
     fn to_any_source(&self) -> AnySource {
         AnySource::new(self.node.id)
     }
-}
-
-impl<T: 'static> Notify for SignalRead<T> {
-    fn notify(&self) {}
 }
 
 impl<T: 'static> Track for SignalRead<T> {

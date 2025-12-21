@@ -43,10 +43,6 @@ impl<IV, D> Stack<IV, D> {
 }
 
 impl<IV: IntoView, D: StackOrientation> Widget for Stack<IV, D> {
-    fn build(self, cx: &mut Context) -> Entity {
-        todo!()
-    }
-
     fn layout(&mut self, cx: &mut Context) {
         todo!()
     }

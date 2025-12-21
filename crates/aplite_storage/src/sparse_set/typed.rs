@@ -59,6 +59,10 @@ impl<K: SparsetKey, V> SparseSet<K, V> {
         self.inner.get_mut::<K, V>(key)
     }
 
+    pub fn get_data_index(&self, key: K) -> Option<usize> {
+        self.inner.get_data_index(key)
+    }
+
     pub unsafe fn insert_unchecked(&mut self, key: K, value: V) -> ArenaPtr<V> {
         unsafe { self.inner.insert_unchecked(key, value) }
     }

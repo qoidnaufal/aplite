@@ -34,11 +34,12 @@ pub use arena::{
 };
 
 pub use map::{
-    index_map::{IndexMap, Index, IndexMapError},
+    slot_map::{SlotMap, SlotId, IndexMapError},
     hash::{EntityIdMap, TypeIdMap},
 };
 
 pub use sparse_set::{
+    SparsetKey,
     typed::SparseSet,
     type_erased::TypeErasedSparseSet,
     indices::SparseIndices,

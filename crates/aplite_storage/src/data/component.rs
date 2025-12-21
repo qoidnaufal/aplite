@@ -77,34 +77,3 @@ pub(crate) trait ComponentTupleExt {
 
 //     fn into_component(self) -> Self::Item;
 // }
-
-#[macro_export]
-macro_rules! make_component {
-    ($vis:vis struct $name:ident($($num:tt $ty:ty),*)) => {
-        $vis struct $name($($ty),*);
-
-        impl Component for $name {}
-
-        impl std::fmt::Debug for $name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                let mut dbt = f.debug_tuple(stringify!($name));
-                $(dbt.field(&self.$num);)*
-                dbt.finish()
-            }
-        }
-    };
-
-    ($vis:vis struct $name:ident { $($field:ident: $ty:ty),* }) => {
-        $vis struct $name { $($field: $ty),* }
-
-        impl Component for $name {}
-
-        impl std::fmt::Debug for $name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                let mut dbs = f.debug_struct(stringify!($name));
-                $(dbs.field(stringify!($field), &self.$field);)*
-                dbs.finish()
-            }
-        }
-    };
-}

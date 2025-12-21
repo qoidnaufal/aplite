@@ -47,10 +47,6 @@ impl Image {
 }
 
 impl Widget for Image {
-    fn build(self, cx: &mut Context) -> Entity {
-        cx.mount(self)
-    }
-
     fn layout(&mut self, cx: &mut Context) {
         todo!()
     }

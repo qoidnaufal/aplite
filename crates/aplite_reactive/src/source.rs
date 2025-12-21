@@ -1,12 +1,18 @@
+use aplite_storage::SlotId;
 use crate::subscriber::{AnySubscriber, SubscriberStorage};
-use aplite_storage::Index;
+use crate::reactive_traits::*;
 
-pub(crate) struct AnySource(pub(crate) Index);
+#[derive(Clone, Copy)]
+pub(crate) struct AnySource(pub(crate) SlotId);
 
 impl AnySource {
-    pub(crate) fn new(id: Index) -> Self {
+    pub(crate) fn new(id: SlotId) -> Self {
         Self(id)
     }
+
+    // pub(crate) fn upgrade(&self) -> Option<Arc<dyn Source>> {
+    //     self.1.upgrade()
+    // }
 }
 
 pub(crate) trait Source {
@@ -20,15 +26,21 @@ impl Source for AnySource {
     }
 
     fn clear_subscribers(&self) {
-        SubscriberStorage::with_mut(&self.0, |set| set.clear());
+        SubscriberStorage::with_mut(self.0, |set| set.clear());
     }
 }
 
-impl Clone for AnySource {
-    fn clone(&self) -> Self {
-        Self(self.0)
+impl Reactive for AnySource {
+    fn update_if_necessary(&self) -> bool {
+        false
     }
 }
+
+// impl Clone for AnySource {
+//     fn clone(&self) -> Self {
+//         Self(self.0)
+//     }
+// }
 
 impl PartialEq for AnySource {
     fn eq(&self, other: &Self) -> bool {
@@ -46,8 +58,9 @@ pub(crate) trait ToAnySource: Source {
     fn to_any_source(&self) -> AnySource;
 }
 
-// impl ToAnySource for AnySource {
-//     fn to_any_source(&self) -> AnySource {
-//         self.clone()
-//     }
-// }
+impl ToAnySource for AnySource {
+    fn to_any_source(&self) -> AnySource {
+        *self
+        // self.clone()
+    }
+}

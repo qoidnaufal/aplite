@@ -8,6 +8,14 @@ use aplite_storage::{
 use crate::context::Context;
 use crate::widget::Widget;
 
+/*
+#########################################################
+#
+# View
+#
+#########################################################
+*/
+
 pub struct View<W> {
     widget: W
 }
@@ -26,10 +34,6 @@ impl<W: Widget> View<W> {
     pub fn as_mut(&mut self) -> &mut dyn Widget {
         &mut self.widget
     }
-
-    pub(crate) fn build(self, cx: &mut Context) -> Entity {
-        self.widget.build(cx)
-    }
 }
 
 impl<W: Widget> std::fmt::Debug for View<W> {
@@ -39,6 +43,14 @@ impl<W: Widget> std::fmt::Debug for View<W> {
             .finish()
     }
 }
+
+/*
+#########################################################
+#
+# AnyView
+#
+#########################################################
+*/
 
 pub(crate) struct AnyView {
     pub(crate) ptr: ArenaPtr<dyn Widget>,
@@ -72,6 +84,14 @@ impl std::ops::DerefMut for AnyView {
     }
 }
 
+/*
+#########################################################
+#
+# IntoView
+#
+#########################################################
+*/
+
 /// Types that automatically implement IntoView are:
 /// - any type that implement Widget (`impl Widget for T`),
 /// - any function that produce IntoView (`FnOnce() -> IV where IV: IntoView` or `fn() -> impl IntoView`)
@@ -87,13 +107,3 @@ impl<W> IntoView for W where W: Widget + Sized + 'static {
         View::new(self)
     }
 }
-
-// impl<F, IV> IntoView for F
-// where
-//     F: FnOnce() -> IV + 'static,
-//     IV: IntoView,
-// {
-//     fn into_view<'a>(self) -> View<'a> {
-//         self().into_view()
-//     }
-// }

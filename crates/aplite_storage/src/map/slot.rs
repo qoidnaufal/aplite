@@ -30,7 +30,7 @@ impl<T: Clone> Clone for Slot<T> {
 
 impl<T> Slot<T> {
     #[inline(always)]
-    pub(crate) fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             content: Content::Next(1),
             version: 0,

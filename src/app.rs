@@ -58,8 +58,8 @@ impl Aplite {
 
     pub fn view<IV: IntoView>(mut self, view: IV) -> Self {
         let view = view.into_view();
-        let root = view.build(&mut self.cx);
-        self.cx.set_root_id(Some(root));
+        // let root = view.build(&mut self.cx);
+        // self.cx.set_root_id(Some(root));
         self
     }
 

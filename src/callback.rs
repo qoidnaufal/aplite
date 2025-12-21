@@ -79,7 +79,7 @@ impl<E: WidgetEventType> Callback<E> {
 impl<E: WidgetEventType + 'static> Component for Callback<E> {}
 
 pub trait InteractiveWidget: Widget + Sized + 'static {
-    fn on<E, F>(self, cx: &mut Context, f: F) -> aplite_storage::Entity
+    fn on<E, F>(self, cx: &mut Context, f: F) -> Self
     where
         E: WidgetEventType + 'static,
         F: FnMut() + 'static,
@@ -87,9 +87,9 @@ pub trait InteractiveWidget: Widget + Sized + 'static {
         let registrator = cx.callbacks.registrator();
         let table_id = registrator.register::<Callback<E>>().finish();
 
-        let entity = self.into_view().build(cx);
+        // let entity = self.into_view().build(cx);
         // cx.callbacks.insert_with_table_id(table_id, Callback::<E>::new(f));
 
-        entity
+        self
     }
 }

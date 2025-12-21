@@ -17,30 +17,46 @@ pub use {
     stack::*,
 };
 
+/*
+#########################################################
+#
+# Widget Trait
+#
+#########################################################
+*/
+
 /// main building block to create a renderable component
 pub trait Widget {
-    fn build(self, cx: &mut Context) -> Entity;
-
     fn layout(&mut self, cx: &mut Context);
 
     fn draw(&self, scene: &mut Scene);
 }
+
+/*
+#########################################################
+#
+# ViewFn
+#
+#########################################################
+*/
 
 impl<F, IV> Widget for F
 where
     F: FnOnce() -> IV + 'static,
     IV: IntoView,
 {
-    fn build(self, storage: &mut Context) -> Entity {
-        self().into_view().build(storage)
-    }
-
     fn layout(&mut self, _: &mut Context) {}
 
     fn draw(&self, _: &mut aplite_renderer::Scene) {}
 }
 
-// -------------------------------------
+/*
+#########################################################
+#
+# WindowWidget
+#
+#########################################################
+*/
 
 pub(crate) fn window(size: Size) -> WindowWidget {
     WindowWidget::new(size)
@@ -62,10 +78,6 @@ impl WindowWidget {
 }
 
 impl Widget for WindowWidget {
-    fn build(self, cx: &mut Context) -> Entity {
-        cx.mount(self)
-    }
-
     fn layout(&mut self, cx: &mut Context) {
         todo!()
     }
@@ -75,7 +87,13 @@ impl Widget for WindowWidget {
     }
 }
 
-// -------------------------------------
+/*
+#########################################################
+#
+# Circle
+#
+#########################################################
+*/
 
 pub fn circle() -> impl IntoView {
     CircleWidget::new()
@@ -101,10 +119,6 @@ impl CircleWidget {
 }
 
 impl Widget for CircleWidget {
-    fn build(self, cx: &mut Context) -> Entity {
-        cx.mount(self)
-    }
-
     fn layout(&mut self, cx: &mut Context) {
        todo!() 
     }

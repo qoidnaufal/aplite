@@ -1,5 +1,13 @@
 // use std::sync::{OnceLock, RwLock};
 
+/*
+#########################################################
+#
+# EntityId
+#
+#########################################################
+*/
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EntityId(pub(crate) u32);
 
@@ -15,6 +23,14 @@ impl EntityId {
     }
 }
 
+/*
+#########################################################
+#
+# EntityVersion
+#
+#########################################################
+*/
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EntityVersion(pub(crate) u32);
 
@@ -25,15 +41,23 @@ impl EntityVersion {
     }
 }
 
+/*
+#########################################################
+#
+# Entity
+#
+#########################################################
+*/
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Entity(u32);
+pub struct Entity(u64);
 
 impl Entity {
-    pub(crate) const INDEX_MASK: u32 = (1 << 20) - 1;
-    pub(crate) const VERSION_MASK: u32 = (1 << 12) - 1;
+    pub(crate) const MASK32: u32 = u32::MAX;
+    pub(crate) const MASK64: u64 = (1 << 32) - 1;
 
     pub(crate) const fn with_id_version(index: u32, version: u32) -> Self {
-        Self(index | version << 20)
+        Self(index as u64 | (version as u64) << 32)
     }
 
     // pub fn new() -> Self {
@@ -63,34 +87,34 @@ impl Entity {
 
     #[inline(always)]
     pub const fn id(&self) -> EntityId {
-        EntityId::new(self.0 & Self::INDEX_MASK)
+        EntityId::new((self.0 as u32) & Self::MASK32)
     }
 
     #[inline(always)]
     pub const fn version(&self) -> EntityVersion {
-        EntityVersion::new(self.0 >> 20 & Self::VERSION_MASK)
+        EntityVersion::new((self.0 >> 32 & Self::MASK64) as u32)
     }
 
     #[inline(always)]
     pub const fn index(&self) -> usize {
-        (self.0 & Self::INDEX_MASK) as usize
+        (self.0 & Self::MASK64) as usize
     }
 
     #[inline(always)]
-    pub const fn raw(&self) -> u32 {
+    pub const fn raw(&self) -> u64 {
         self.0
     }
 }
 
 impl std::hash::Hash for EntityId {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_u32(self.0);
+        self.0.hash(state);
     }
 }
 
 impl std::hash::Hash for Entity {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_u32(self.id().0);
+        self.id().hash(state);
     }
 }
 
@@ -107,6 +131,14 @@ impl std::fmt::Debug for Entity {
 }
 
 // static ENTITY_MANAGER: OnceLock<RwLock<EntityManager>> = OnceLock::new();
+
+/*
+#########################################################
+#
+# EntityManager
+#
+#########################################################
+*/
 
 #[derive(Debug)]
 pub struct EntityManager {
@@ -144,7 +176,7 @@ impl EntityManager {
                     .ok()
                     .expect("Created Entity should not exceed '(1 << 20) - 1'");
 
-                debug_assert!(id <= Entity::INDEX_MASK);
+                debug_assert!(id <= Entity::MASK32);
                 self.versions.push(0);
                 id
             });
@@ -154,7 +186,7 @@ impl EntityManager {
 
     pub fn is_alive(&self, entity: &Entity) -> bool {
         let version = self.versions[entity.index()];
-        version < Entity::VERSION_MASK && version == entity.version().0
+        version < Entity::MASK32 && version == entity.version().0
     }
 
     pub fn destroy(&mut self, entity: Entity) {

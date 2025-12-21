@@ -5,7 +5,7 @@ use aplite_future::{
     Executor,
 };
 
-use crate::graph::{Node, Graph};
+use crate::graph::{Scope, Node, Graph};
 use crate::subscriber::{Subscriber, ToAnySubscriber, AnySubscriber};
 use crate::source::AnySource;
 use crate::reactive_traits::*;
@@ -21,127 +21,151 @@ use crate::reactive_traits::*;
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Effect {
-    node: Node<Arc<Scope>>,
+    node: Node<Arc<RwLock<EffectNode>>>,
+}
+
+impl Effect {
+    pub fn pause(&self) { }
 }
 
 impl Effect {
     pub fn new<F, R>(mut f: F) -> Self
     where
         F: FnMut(Option<R>) -> R + 'static,
-        R: 'static,
+        R: std::fmt::Debug + 'static,
     {
         let (tx, mut rx) = aplite_channel();
-        let scope = Scope::new(tx);
-        scope.sender.notify();
+        tx.notify();
 
-        let scope = Arc::new(scope);
-        let subscriber = scope.to_any_subscriber();
-        let node = Graph::insert(scope);
+        let scope = Scope::new();
+        let node = Arc::new(RwLock::new(EffectNode::new(tx)));
+        let subscriber = node.to_any_subscriber();
+        let node = Graph::insert(node);
 
         Executor::spawn(async move {
             let mut value = None::<R>;
 
             while rx.recv().await.is_some() {
-                let prev_scope = Graph::set_scope(Some(subscriber.clone()));
+                if !scope.paused() && subscriber.try_update() {
+                    subscriber.clear_sources();
 
-                subscriber.clear_source();
-
-                let prev_value = value.take();
-                let new_val = f(prev_value);
-                value = Some(new_val);
-
-                let _ = Graph::set_scope(prev_scope);
-
-                if subscriber.source_count() == 0 { break }
+                    scope.with_cleanup(|| subscriber.as_observer(|| {
+                        let prev_value = value.take();
+                        let new_val = f(prev_value);
+                        value = Some(new_val);
+                    }))
+                }
             }
 
-            Graph::with_mut(|graph| graph.storage.remove(&node.id));
+            Graph::with_mut(|graph| graph.storage.remove(node.id));
         });
 
         Self { node }
     }
 }
 
-pub struct Scope {
+pub struct EffectNode {
     pub(crate) sender: Sender,
-    pub(crate) source: RwLock<Vec<AnySource>>,
+    pub(crate) source: Vec<AnySource>,
+    pub(crate) dirty: bool,
 }
 
-unsafe impl Send for Scope {}
-unsafe impl Sync for Scope {}
+unsafe impl Send for EffectNode {}
+unsafe impl Sync for EffectNode {}
 
-impl Scope {
+impl EffectNode {
     pub fn new(sender: Sender) -> Self {
         Self {
             sender,
-            source: RwLock::new(Vec::new()),
+            source: Vec::new(),
+            dirty: true,
         }
     }
 }
 
-impl Drop for Scope {
+impl Drop for EffectNode {
     fn drop(&mut self) {
-        // self.sender.close();
-        self.source.write().unwrap().clear();
+        self.source.clear();
     }
 }
 
-impl Subscriber for Scope {
+// ----
+
+impl Subscriber for RwLock<EffectNode> {
     fn add_source(&self, source: AnySource) {
-        let mut sources = self.source.write().unwrap();
-        if !sources.contains(&source) { sources.push(source) }
+        let mut lock = self.write().unwrap();
+        if !lock.source.contains(&source) { lock.source.push(source) }
     }
 
-    fn clear_source(&self) {
-        let mut sources = self.source.write().unwrap();
-        sources.clear();
-    }
-
-    fn source_count(&self) -> usize {
-        let source = self.source.read().unwrap();
-        source.len()
+    fn clear_sources(&self) {
+        self.write().unwrap().source.clear();
     }
 }
 
-impl Subscriber for Arc<Scope> {
+impl Subscriber for Arc<RwLock<EffectNode>> {
     fn add_source(&self, source: AnySource) {
         self.as_ref().add_source(source);
     }
 
-    fn clear_source(&self) {
-        self.as_ref().clear_source();
-    }
-
-    fn source_count(&self) -> usize {
-        self.as_ref().source_count()
+    fn clear_sources(&self) {
+        self.as_ref().clear_sources();
     }
 }
 
-impl Notify for Scope {
+// ----
+
+impl Notify for RwLock<EffectNode> {
     fn notify(&self) {
-        self.sender.notify();
+        let lock = &mut *self.write().unwrap();
+        lock.dirty = true;
+        lock.sender.notify();
     }
 }
 
-impl Notify for Arc<Scope> {
+impl Notify for Arc<RwLock<EffectNode>> {
     fn notify(&self) {
         self.as_ref().notify();
     }
 }
 
-impl ToAnySubscriber for Arc<Scope> {
+// ----
+
+impl Reactive for RwLock<EffectNode> {
+    fn update_if_necessary(&self) -> bool {
+        let mut lock = self.write().unwrap();
+        if lock.dirty {
+            lock.dirty = false;
+            return true;
+        }
+
+        let sources = lock.source.clone();
+        drop(lock);
+
+        sources.iter().any(AnySource::update_if_necessary)
+    }
+}
+
+impl Reactive for Arc<RwLock<EffectNode>> {
+    fn update_if_necessary(&self) -> bool {
+        self.as_ref().update_if_necessary()
+    }
+}
+
+// ----
+
+impl ToAnySubscriber for Arc<RwLock<EffectNode>> {
     fn to_any_subscriber(&self) -> AnySubscriber {
         AnySubscriber::new(Arc::downgrade(self))
     }
 }
 
-// impl std::fmt::Debug for Scope {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         f.debug_struct("Scope")
-//             .field("source_count", &self.source.read().map(|s| s.len()).unwrap_or_default())
-//             .finish()
-//     }
-// }
+/*
+#########################################################
+#
+# Test
+#
+#########################################################
+*/
 
 #[cfg(test)]
 mod effect_test {
@@ -161,25 +185,26 @@ mod effect_test {
         let (last, set_last) = Signal::split("");
 
         let name = Rc::new(RefCell::new(String::new()));
-        let set_name = Rc::clone(&name);
+        let cloned_rc = Rc::clone(&name);
 
         Effect::new(move |_| {
             if use_last.get() {
-                *set_name.borrow_mut() = first.get().to_string() + " " + last.get();
+                *cloned_rc.borrow_mut() = first.get().to_string() + " " + last.get();
             } else {
-                *set_name.borrow_mut() = first.with(|n| n.to_string());
+                *cloned_rc.borrow_mut() = first.with(|n| n.to_string());
             }
 
-            eprintln!("full name: {}", *set_name.borrow());
+            eprintln!("full name: {}", *cloned_rc.borrow());
         });
 
         Effect::new(move |_| eprintln!("last name: {}", last.get()));
 
+        let delta = 100;
         Executor::spawn(async move {
-            let duration = std::time::Duration::from_millis(1000);
+            let duration = std::time::Duration::from_millis(delta);
 
-            sleep(duration).await;
             set_first.set("Mario");
+            sleep(duration).await;
 
             set_last.set("Ballotelli");
             sleep(duration).await;
@@ -210,6 +235,6 @@ mod effect_test {
             assert_eq!("Mario Kempes", name.borrow().as_str());
         });
 
-        std::thread::sleep(std::time::Duration::from_secs(10));
+        std::thread::sleep(std::time::Duration::from_millis(delta * 9));
     }
 }
