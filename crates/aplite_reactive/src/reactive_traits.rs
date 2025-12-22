@@ -7,6 +7,8 @@
 */
 
 pub trait Reactive {
+    fn mark_dirty(&self);
+
     fn update_if_necessary(&self) -> bool;
 }
 

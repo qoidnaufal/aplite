@@ -1,22 +1,9 @@
-use std::sync::{Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
+use std::sync::{Arc, OnceLock, RwLock, Weak};
 use aplite_storage::{SparseSet, SlotId};
 
-use crate::graph::Graph;
+use crate::graph::{Graph, Observer};
 use crate::reactive_traits::*;
 use crate::source::AnySource;
-
-/*
-#########################################################
-#
-# Core types
-#
-#########################################################
-*/
-
-#[derive(Default)]
-pub(crate) struct SubscriberSet(pub(crate) Vec<AnySubscriber>);
-
-pub(crate) struct AnySubscriber(pub(crate) Weak<dyn Subscriber>);
 
 /*
 #########################################################
@@ -25,6 +12,15 @@ pub(crate) struct AnySubscriber(pub(crate) Weak<dyn Subscriber>);
 #
 #########################################################
 */
+
+#[derive(Default)]
+pub(crate) struct SubscriberSet(pub(crate) Vec<AnySubscriber>);
+
+impl SubscriberSet {
+    pub(crate) fn any_update(&self) -> bool {
+        self.0.iter().any(AnySubscriber::update_if_necessary)
+    }
+}
 
 static SUBSCRIBER_STORAGE: OnceLock<RwLock<SubscriberStorage>> = OnceLock::new();
 
@@ -35,11 +31,7 @@ pub(crate) struct SubscriberStorage {
 }
 
 impl SubscriberStorage {
-    fn read<'a>() -> RwLockReadGuard<'a, Self> {
-        SUBSCRIBER_STORAGE.get_or_init(Default::default).read().unwrap()
-    }
-
-    fn write<'a>() -> RwLockWriteGuard<'a, Self> {
+    fn write<'a>() -> std::sync::RwLockWriteGuard<'a, Self> {
         SUBSCRIBER_STORAGE.get_or_init(Default::default).write().unwrap()
     }
 
@@ -53,10 +45,6 @@ impl SubscriberStorage {
             let mut set = lock.storage.insert(id, SubscriberSet::default());
             set.as_mut().0.push(subscriber);
         }
-    }
-
-    pub(crate) fn with<R>(id: SlotId, f: impl FnOnce(&SubscriberSet) -> R) -> Option<R> {
-        Self::read().storage.get(id).map(f)
     }
 
     pub(crate) fn with_mut(id: SlotId, f: impl FnOnce(&mut Vec<AnySubscriber>)) {
@@ -73,6 +61,14 @@ impl SubscriberStorage {
             lock.storage.swap_remove(id, last);
         }
     }
+
+    fn read<'a>() -> std::sync::RwLockReadGuard<'a, Self> {
+        SUBSCRIBER_STORAGE.get_or_init(Default::default).read().unwrap()
+    }
+
+    pub(crate) fn with<R>(id: SlotId, f: impl FnOnce(&SubscriberSet) -> R) -> Option<R> {
+        Self::read().storage.get(id).map(f)
+    }
 }
 
 unsafe impl Send for SubscriberStorage {}
@@ -81,15 +77,15 @@ unsafe impl Sync for SubscriberStorage {}
 /*
 #########################################################
 #
-# Subscriber
+# AnySubscriber
 #
 #########################################################
 */
 
-pub(crate) trait Subscriber: Notify + Reactive {
-    fn add_source(&self, source: AnySource);
-    fn clear_sources(&self);
-}
+pub(crate) struct AnySubscriber(pub(crate) Weak<dyn Subscriber>);
+
+unsafe impl Send for AnySubscriber {}
+unsafe impl Sync for AnySubscriber {}
 
 impl AnySubscriber {
     pub(crate) fn new<T: Subscriber + 'static>(weak: Weak<T>) -> Self {
@@ -100,23 +96,36 @@ impl AnySubscriber {
         self.0.upgrade()
     }
 
-    pub(crate) fn notify_owned(self) {
-        self.notify();
+    pub(crate) fn mark_dirty_owned(self) {
+        self.mark_dirty();
     }
 
     pub(crate) fn try_update(&self) -> bool {
-        let prev = Graph::set_observer(Some(self.clone()));
+        let prev = Observer::swap_observer(Some(self.clone()));
         let res = self.update_if_necessary();
-        Graph::set_observer(prev);
+        Observer::swap_observer(prev);
         res
     }
 
     pub(crate) fn as_observer<R>(&self, f: impl FnOnce() -> R) -> R {
-        let prev = Graph::set_observer(Some(self.clone()));
+        let prev = Observer::swap_observer(Some(self.clone()));
         let res = f();
-        Graph::set_observer(prev);
+        Observer::swap_observer(prev);
         res
     }
+}
+
+/*
+#########################################################
+#
+# Subscriber
+#
+#########################################################
+*/
+
+pub(crate) trait Subscriber: Reactive {
+    fn add_source(&self, source: AnySource);
+    fn clear_sources(&self);
 }
 
 impl Subscriber for AnySubscriber {
@@ -134,17 +143,15 @@ impl Subscriber for AnySubscriber {
 }
 
 impl Reactive for AnySubscriber {
+    fn mark_dirty(&self) {
+        if let Some(subscriber) = self.upgrade() {
+            subscriber.mark_dirty();
+        }
+    }
+
     fn update_if_necessary(&self) -> bool {
         self.upgrade()
             .is_some_and(|subscriber| subscriber.update_if_necessary())
-    }
-}
-
-impl Notify for AnySubscriber {
-    fn notify(&self) {
-        if let Some(subscriber) = self.upgrade() {
-            subscriber.notify();
-        }
     }
 }
 

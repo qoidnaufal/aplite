@@ -57,7 +57,7 @@ impl ReactiveScope {
             for id in node_ids {
                 graph.storage.remove(id);
             }
-        })
+        });
     }
 }
 
@@ -108,15 +108,11 @@ impl Scope {
     }
 
     pub(crate) fn cleanup(&self) {
-        self.0.write()
-            .unwrap()
-            .cleanup()
+        self.0.write().unwrap().cleanup()
     }
 
     pub(crate) fn paused(&self) -> bool {
-        self.0.read()
-            .unwrap()
-            .paused
+        self.0.read().unwrap().paused
     }
 }
 
@@ -138,24 +134,21 @@ impl WeakScope {
 /*
 #########################################################
 #
-# Graph
+# ReactiveNodeStorage
 #
 #########################################################
 */
 
 // had to use OnceLock because we don't know yet which reactive node will initialize this first
-static GRAPH: OnceLock<RwLock<ReactiveGraph>> = OnceLock::new();
+static STORAGE: OnceLock<RwLock<Graph>> = OnceLock::new();
 
 #[derive(Default)]
-pub(crate) struct ReactiveGraph {
+pub(crate) struct Graph {
     pub(crate) storage: SlotMap<Box<dyn Any + Send + Sync>>,
-    pub(crate) current: Option<AnySubscriber>,
 }
 
-unsafe impl Send for ReactiveGraph {}
-unsafe impl Sync for ReactiveGraph {}
-
-pub(crate) struct Graph;
+unsafe impl Send for Graph {}
+unsafe impl Sync for Graph {}
 
 impl Graph {
     pub(crate) fn insert<R: Send + Sync + 'static>(r: R) -> Node<R> {
@@ -165,22 +158,22 @@ impl Graph {
     }
 
     #[inline(always)]
-    fn read<'a>() -> RwLockReadGuard<'a, ReactiveGraph> {
-        GRAPH.get_or_init(Default::default).read().unwrap()
+    fn read<'a>() -> RwLockReadGuard<'a, Graph> {
+        STORAGE.get_or_init(Default::default).read().unwrap()
     }
 
     #[inline(always)]
-    fn write<'a>() -> RwLockWriteGuard<'a, ReactiveGraph> {
-        GRAPH.get_or_init(Default::default).write().unwrap()
+    fn write<'a>() -> RwLockWriteGuard<'a, Graph> {
+        STORAGE.get_or_init(Default::default).write().unwrap()
     }
 
-    #[inline(always)]
-    pub(crate) fn with<U>(f: impl FnOnce(&ReactiveGraph) -> U) -> U {
-        f(&Self::read())
-    }
+    // #[inline(always)]
+    // pub(crate) fn with<U>(f: impl FnOnce(&Graph) -> U) -> U {
+    //     f(&Self::read())
+    // }
 
     #[inline(always)]
-    pub(crate) fn with_mut<U>(f: impl FnOnce(&mut ReactiveGraph) -> U) -> U {
+    pub(crate) fn with_mut<U>(f: impl FnOnce(&mut Graph) -> U) -> U {
         f(&mut Self::write())
     }
 
@@ -209,13 +202,6 @@ impl Graph {
             .and_then(|any| f(any.as_ref().downcast_ref::<R>()))
     }
 
-    pub(crate) fn set_observer(subscriber: Option<AnySubscriber>) -> Option<AnySubscriber> {
-        let mut graph = Self::write();
-        let prev = graph.current.take();
-        graph.current = subscriber;
-        prev
-    }
-
     pub(crate) fn remove<R>(node: &Node<R>) {
         let mut graph = Self::write();
         graph.storage.remove(node.id);
@@ -224,6 +210,32 @@ impl Graph {
     pub(crate) fn is_removed<R>(node: &Node<R>) -> bool {
         let graph = Self::read();
         graph.storage.get(&node.id).is_none()
+    }
+}
+
+/*
+#########################################################
+#
+# Observer
+#
+#########################################################
+*/
+
+static OBSERVER: RwLock<Option<AnySubscriber>> = RwLock::new(None);
+
+pub(crate) struct Observer;
+
+impl Observer {
+    #[inline(always)]
+    pub(crate) fn with<U>(f: impl FnOnce(Option<&AnySubscriber>) -> U) -> U {
+        f(OBSERVER.read().unwrap().as_ref())
+    }
+
+    pub(crate) fn swap_observer(subscriber: Option<AnySubscriber>) -> Option<AnySubscriber> {
+        let mut current = OBSERVER.write().unwrap();
+        let prev = current.take();
+        *current = subscriber;
+        prev
     }
 }
 
@@ -278,58 +290,5 @@ impl<R> std::fmt::Debug for Node<R> {
         f.debug_struct(std::any::type_name::<R>())
             .field("id", &self.id)
             .finish()
-    }
-}
-
-/*
-#########################################################
-#
-# Test
-#
-#########################################################
-*/
-
-#[cfg(test)]
-mod signal_test {
-    use crate::Signal;
-    use crate::reactive_traits::*;
-
-    #[test]
-    fn signal() {
-        let (counter, set_counter) = Signal::split(0i32);
-
-        set_counter.update(|num| *num += 1);
-        assert_eq!(counter.get(), 1);
-
-        set_counter.set(-69);
-        assert_eq!(counter.get(), -69);
-
-        let r = counter.try_with(|num| num.map(ToString::to_string));
-        assert!(r.is_some());
-        assert_eq!(r.unwrap().parse(), Ok(-69));
-    }
-
-    #[test]
-    fn derive() {
-        let rw = Signal::new(0i32);
-        let (counter, set_counter) = Signal::split(0i32);
-
-        set_counter.set(69);
-        rw.update(|num| *num = counter.get());
-        assert_eq!(rw.get(), 69);
-    }
-
-    #[test]
-    #[should_panic]
-    fn dispose() {
-        let (num, set_num) = Signal::split(0i32);
-        let double = || num.get() * 2;
-
-        set_num.set(1);
-        assert_eq!(double(), 2);
-
-        num.dispose();
-        set_num.set(2);
-        assert_eq!(double(), 2);
     }
 }

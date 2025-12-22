@@ -27,7 +27,7 @@ impl<T: 'static> SignalWrite<T> {
 impl<T: 'static> Notify for SignalWrite<T> {
     fn notify(&self) {
         SubscriberStorage::with_mut(self.node.id, |set| {
-            set.drain(..).for_each(AnySubscriber::notify_owned);
+            set.drain(..).for_each(AnySubscriber::mark_dirty_owned);
         });
     }
 }

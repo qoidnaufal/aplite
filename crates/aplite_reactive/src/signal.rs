@@ -1,5 +1,5 @@
 use crate::signal_read::SignalRead;
-use crate::graph::{Node, Graph};
+use crate::graph::{Graph, Node, Observer};
 use crate::signal_write::SignalWrite;
 use crate::stored_value::Value;
 use crate::reactive_traits::*;
@@ -48,7 +48,7 @@ impl<T: 'static> Source for Signal<T> {
     }
 
     fn clear_subscribers(&self) {
-        SubscriberStorage::with_mut(self.node.id, |set| set.clear());
+        SubscriberStorage::with_mut(self.node.id, Vec::clear);
     }
 }
 
@@ -60,8 +60,8 @@ impl<T: 'static> ToAnySource for Signal<T> {
 
 impl<T: 'static> Track for Signal<T> {
     fn track(&self) {
-        Graph::with(|graph| {
-            if let Some(any_subscriber) = graph.current.as_ref() {
+        Observer::with(|current| {
+            if let Some(any_subscriber) = current {
                 any_subscriber.add_source(self.to_any_source());
                 self.add_subscriber(any_subscriber.clone());
             }
@@ -76,7 +76,7 @@ impl<T: 'static> Track for Signal<T> {
 impl<T: 'static> Notify for Signal<T> {
     fn notify(&self) {
         SubscriberStorage::with_mut(self.node.id, |set| {
-            set.drain(..).for_each(AnySubscriber::notify_owned);
+            set.drain(..).for_each(AnySubscriber::mark_dirty_owned);
         });
     }
 }
@@ -204,5 +204,57 @@ impl<T: 'static> std::fmt::Debug for Signal<T> {
             .field("id", &self.node.id)
             .field("type", &std::any::type_name::<T>())
             .finish()
+    }
+}
+
+/*
+#########################################################
+#
+# Test
+#
+#########################################################
+*/
+
+#[cfg(test)]
+mod signal_test {
+    use super::*;
+
+    #[test]
+    fn signal() {
+        let (counter, set_counter) = Signal::split(0i32);
+
+        set_counter.update(|num| *num += 1);
+        assert_eq!(counter.get(), 1);
+
+        set_counter.set(-69);
+        assert_eq!(counter.get(), -69);
+
+        let r = counter.try_with(|num| num.map(ToString::to_string));
+        assert!(r.is_some());
+        assert_eq!(r.unwrap().parse(), Ok(-69));
+    }
+
+    #[test]
+    fn derive() {
+        let rw = Signal::new(0i32);
+        let (counter, set_counter) = Signal::split(0i32);
+
+        set_counter.set(69);
+        rw.update(|num| *num = counter.get());
+        assert_eq!(rw.get(), 69);
+    }
+
+    #[test]
+    #[should_panic]
+    fn dispose() {
+        let (num, set_num) = Signal::split(0i32);
+        let double = || num.get() * 2;
+
+        set_num.set(1);
+        assert_eq!(double(), 2);
+
+        num.dispose();
+        set_num.set(2);
+        assert_eq!(double(), 2);
     }
 }

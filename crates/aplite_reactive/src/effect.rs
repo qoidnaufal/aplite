@@ -14,7 +14,7 @@ use crate::reactive_traits::*;
 /// # Example
 /// ```ignore
 /// let (counter, set_counter) = Signal::split(0i32);
-/// Effect::new(move |_| eprintln!("{}", counter.get()));
+/// Effect::new(move |_| println!("{}", counter.get()));
 ///
 /// // and then do something with the set_counter
 /// let on_click = move || set_counter.update(|num| *num += 1);
@@ -38,9 +38,9 @@ impl Effect {
         tx.notify();
 
         let scope = Scope::new();
-        let node = Arc::new(RwLock::new(EffectNode::new(tx)));
-        let subscriber = node.to_any_subscriber();
-        let node = Graph::insert(node);
+        let arc_node = Arc::new(RwLock::new(EffectNode::new(tx)));
+        let subscriber = arc_node.to_any_subscriber();
+        let node = Graph::insert(arc_node);
 
         Executor::spawn(async move {
             let mut value = None::<R>;
@@ -89,7 +89,7 @@ impl Drop for EffectNode {
     }
 }
 
-// ----
+// ---- impl Subscriber
 
 impl Subscriber for RwLock<EffectNode> {
     fn add_source(&self, source: AnySource) {
@@ -112,25 +112,15 @@ impl Subscriber for Arc<RwLock<EffectNode>> {
     }
 }
 
-// ----
-
-impl Notify for RwLock<EffectNode> {
-    fn notify(&self) {
-        let lock = &mut *self.write().unwrap();
-        lock.dirty = true;
-        lock.sender.notify();
-    }
-}
-
-impl Notify for Arc<RwLock<EffectNode>> {
-    fn notify(&self) {
-        self.as_ref().notify();
-    }
-}
-
-// ----
+// ---- impl Reactive
 
 impl Reactive for RwLock<EffectNode> {
+    fn mark_dirty(&self) {
+        let this = &mut *self.write().unwrap();
+        this.dirty = true;
+        this.sender.notify();
+    }
+
     fn update_if_necessary(&self) -> bool {
         let mut lock = self.write().unwrap();
         if lock.dirty {
@@ -146,12 +136,16 @@ impl Reactive for RwLock<EffectNode> {
 }
 
 impl Reactive for Arc<RwLock<EffectNode>> {
+    fn mark_dirty(&self) {
+        self.as_ref().mark_dirty();
+    }
+
     fn update_if_necessary(&self) -> bool {
         self.as_ref().update_if_necessary()
     }
 }
 
-// ----
+// ---- impl ToAnySubscriber
 
 impl ToAnySubscriber for Arc<RwLock<EffectNode>> {
     fn to_any_subscriber(&self) -> AnySubscriber {
