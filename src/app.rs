@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 
 use winit::dpi::{PhysicalPosition, PhysicalSize, LogicalSize};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
@@ -18,23 +18,20 @@ use crate::context::Context;
 use crate::error::ApliteError;
 use crate::view::IntoView;
 
-pub(crate) const DEFAULT_SCREEN_SIZE: LogicalSize<u32> = LogicalSize::new(800, 600);
-
 pub(crate) struct WindowHandle {
     pub(crate) window: Arc<Window>,
 }
 
 pub struct AppConfig {
+    pub window_inner_size: Size,
     pub allocation_size: NonZeroUsize,
     pub executor_capacity: usize,
-    pub window_size: Size,
 }
 
 pub struct Aplite {
     cx: Context,
     renderer: Option<Renderer>,
     window_handle: HashMap<WindowId, WindowHandle>,
-    window_attributes_fn: Option<fn(&mut WindowAttributes)>,
 
     #[cfg(feature = "render_stats")]
     stats: aplite_stats::Stats,
@@ -47,9 +44,8 @@ impl Aplite {
 
         Self {
             renderer: None,
-            cx: Context::new(config.window_size, config.allocation_size),
+            cx: Context::new(config.window_inner_size, config.allocation_size),
             window_handle: HashMap::with_capacity(4),
-            window_attributes_fn: None,
 
             #[cfg(feature = "render_stats")]
             stats: aplite_stats::Stats::new(),
@@ -57,25 +53,13 @@ impl Aplite {
     }
 
     pub fn view<IV: IntoView>(mut self, view: IV) -> Self {
-        let view = view.into_view();
-        // let root = view.build(&mut self.cx);
-        // self.cx.set_root_id(Some(root));
+        self.cx.mount(view);
         self
     }
 
-    pub fn debug_tree(self) -> Self {
-        println!("{:?}", self.cx.tree);
-        self
-    }
-
-    pub fn set_window_attributes(mut self, f: fn(&mut WindowAttributes)) -> Self {
-        self.window_attributes_fn = Some(f);
-        self
-    }
-
-    pub fn launch(&mut self) -> ApliteResult {
+    pub fn launch(mut self) -> ApliteResult {
         let event_loop = EventLoop::new()?;
-        event_loop.run_app(self)?;
+        event_loop.run_app(&mut self)?;
 
         Ok(())
     }
@@ -84,23 +68,11 @@ impl Aplite {
         &mut self,
         event_loop: &ActiveEventLoop,
     ) -> Result<(), ApliteError> {
-        let mut attributes = WindowAttributes::default()
-            .with_inner_size(DEFAULT_SCREEN_SIZE)
-            .with_title("Aplite Window");
-
-        if let Some(window_fn) = self.window_attributes_fn.take() {
-            window_fn(&mut attributes);
-        }
-        let window = event_loop.create_window(attributes)?;
+        let window_attributes = WindowAttributes::default()
+            .with_inner_size(PhysicalSize::new(self.cx.rect.width, self.cx.rect.height));
+        let window = event_loop.create_window(window_attributes)?;
         let window = Arc::new(window);
         let window_id = window.id();
-
-        // let size = window
-        //     .inner_size()
-        //     .to_logical::<f32>(window.scale_factor());
-        // let bound = Rect::from_size(Size::new(size.width, size.height));
-        // let window_widget = WindowWidget::new(&mut self.cx, bound);
-        // let mut cx = LayoutCx::new(&window_widget);
 
         // self.cx.view.widget.calculate_size(None);
         // self.cx.view.widget.calculate_layout(&mut cx);
@@ -108,25 +80,21 @@ impl Aplite {
         self.cx.calculate_layout();
         #[cfg(feature = "debug_tree")] eprintln!("{:#?}", view);
 
-        let renderer = block_on(async { Renderer::new(Arc::downgrade(&window)).await })?;
+        let renderer = block_on(async { Renderer::new(Arc::clone(&window)).await })?;
 
         self.renderer = Some(renderer);
-        self.track_window(Arc::downgrade(&window));
-
-        let window_handle = WindowHandle { window };
-        self.window_handle.insert(window_id, window_handle);
+        self.track_window(Arc::clone(&window));
+        self.window_handle.insert(window_id, WindowHandle { window });
 
         Ok(())
     }
 
     /// Track the [`Window`] with the associated root [`ViewId`] for rendering
-    fn track_window(&mut self, window: Weak<Window>) {
+    fn track_window(&self, window: Arc<Window>) {
         let dirty = self.cx.dirty;
 
-        Effect::new(move |_| {
-            if dirty.get() && let Some(window) = window.upgrade() {
-                window.request_redraw();
-            }
+        Effect::new(move |_| if dirty.get() {
+            window.request_redraw();
         });
     }
 

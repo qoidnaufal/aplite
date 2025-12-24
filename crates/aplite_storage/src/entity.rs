@@ -16,6 +16,10 @@ impl EntityId {
     pub(crate) const fn new(val: u32) -> Self {
         Self(val)
     }
+    #[inline(always)]
+    pub const fn from_usize(val: usize) -> Self {
+        Self(val as _)
+    }
 
     #[inline(always)]
     pub const fn index(&self) -> usize {

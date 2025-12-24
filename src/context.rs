@@ -4,7 +4,7 @@ use std::num::NonZeroUsize;
 use aplite_reactive::*;
 use aplite_renderer::{Renderer};
 use aplite_types::{Vec2f, Rect, Size};
-use aplite_storage::{Entity, EntityId, EntityManager};
+use aplite_storage::{ComponentStorage, ComponentTuple, Entity, EntityId, EntityManager};
 use aplite_storage::{SparseSet, SparseTree, TypeIdMap, TypeErasedSparseSet};
 
 use crate::view::{IntoView, View, AnyView};
@@ -13,12 +13,13 @@ use crate::widget::Widget;
 use crate::callback::CallbackStorage;
 
 pub struct Context {
-    pub(crate) current: Option<Entity>,
-    pub(crate) arena: TypeIdMap<TypeErasedSparseSet>,
     pub(crate) id_manager: EntityManager,
+
+    // SparseSet must always be accompanied with a Vec<Entity>
     pub(crate) views: SparseSet<EntityId, AnyView>,
-    pub(crate) tree: SparseTree,
-    pub(crate) type_ids: SparseSet<Entity, TypeId>,
+    pub(crate) entities: Vec<Entity>,
+
+    pub(crate) storage: ComponentStorage,
     pub(crate) callbacks: CallbackStorage,
     pub(crate) dirty: Signal<bool>,
     pub(crate) cursor: Cursor,
@@ -26,21 +27,21 @@ pub struct Context {
     pub(crate) pending_update: Vec<Entity>,
 }
 
-// ########################################################
-// #                                                      #
-// #                        Data                          #
-// #                                                      #
-// ########################################################
+/*
+########################################################
+#
+# Data
+#
+########################################################
+*/
 
 impl Context {
-    pub(crate) fn new(size: Size, allocation_size: NonZeroUsize) -> Self {
+    pub(crate) fn new(size: Size, _allocation_size: NonZeroUsize) -> Self {
         Self {
-            current: None,
-            arena: TypeIdMap::new(),
-            views: SparseSet::default(),
             id_manager: EntityManager::default(),
-            tree: SparseTree::default(),
-            type_ids: SparseSet::with_capacity(allocation_size.get()),
+            entities: Vec::new(),
+            storage: ComponentStorage::new(),
+            views: SparseSet::default(),
             callbacks: CallbackStorage::default(),
             cursor: Cursor::default(),
             dirty: Signal::new(false),
@@ -49,58 +50,22 @@ impl Context {
         }
     }
 
-    pub fn set_root_id(&mut self, id: Option<Entity>) -> Option<Entity> {
-        let prev = self.current.take();
-        self.current = id;
-        prev
+    pub fn create_entity(&mut self) -> Entity {
+        self.id_manager.create()
     }
 
-    pub fn mount<IV: IntoView + 'static>(&mut self, widget: IV) -> Entity {
-        let type_id = TypeId::of::<IV>();
+    pub(crate) fn register<C: ComponentTuple>(&mut self, component_tuple: C) -> Entity {
         let entity = self.id_manager.create();
-        let sparse_set = self.arena
-            .entry(type_id)
-            .or_insert(TypeErasedSparseSet::new::<IV>());
-
-        let ptr = sparse_set.insert(entity, widget).map(|iv| iv as &mut dyn Widget);
-        self.views.insert(entity.id(), AnyView::new(ptr));
-        self.type_ids.insert(entity, type_id);
-        self.tree.insert(entity.id(), self.current.as_ref().map(Entity::id));
-
+        self.storage.insert_component_tuple(entity, component_tuple);
         entity
     }
 
-    pub(crate) fn get<IV: IntoView>(&self, entity: Entity) -> Option<&IV> {
-        self.arena
-            .get(&TypeId::of::<IV>())
-            .and_then(|sparse_set| sparse_set.get(entity))
+    pub fn mount<IV: IntoView>(&mut self, widget: IV) {
+        let view = widget.into_view();
+        let entity = self.id_manager.create();
     }
 
-    pub(crate) fn get_mut<IV: IntoView>(&mut self, entity: Entity) -> Option<&mut IV> {
-        self.arena
-            .get_mut(&TypeId::of::<IV>())
-            .and_then(|sparse_set| sparse_set.get_mut(entity))
-    }
-
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &dyn Widget> {
-        self.tree
-            .iter_depth(self.current.as_ref().map(|entity| entity.id()).unwrap())
-            .filter_map(|entity_id| {
-                self.views
-                    .get(entity_id)
-                    .map(|any_view| any_view.as_ref())
-            })
-    }
-
-    pub(crate) fn for_each_mut<'a>(&'a mut self, mut f: impl FnMut(&mut dyn Widget)) {
-        self.tree
-            .iter_depth(self.current.map(|entity| entity.id()).unwrap())
-            .for_each(|entity_id| {
-                if let Some(any_view) = self.views.get_mut(entity_id) {
-                    f(any_view.as_mut())
-                }
-            })
-    }
+    pub fn layout(&mut self) {}
 
     pub(crate) fn toggle_dirty(&self) {
         self.dirty.set(true);
@@ -134,11 +99,13 @@ impl Context {
         }
     }
 
-// #########################################################
-// #                                                       #
-// #                     Cursor Event                      #
-// #                                                       #
-// #########################################################
+/*
+#########################################################
+#
+# Cursor Event
+#
+#########################################################
+*/
 
     pub(crate) fn handle_mouse_move(&mut self, pos: impl Into<Vec2f>) {
         self.cursor.hover.pos = pos.into();

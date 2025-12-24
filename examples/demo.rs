@@ -1,5 +1,42 @@
 use aplite::prelude::*;
 
+fn leaf() -> impl IntoView {
+    v_stack((
+        button("", || {}),
+        button("", || {}),
+        button("", || {}),
+    ))
+}
+
+fn root() -> impl IntoView {
+    let (counter, set_counter) = Signal::split(0i32);
+
+    let inc = move || set_counter.update(|num| *num += 1);
+    let dec = move || set_counter.update(|num| *num -= 1);
+
+    Effect::new(move |_| eprintln!("{:?}", counter.get()));
+
+    let button_1 = button("+", inc);
+    let button_2 = button("-", dec);
+
+    v_stack((
+        h_stack((button_1, button_2)),
+        show(circle, circle, move || counter.get() % 2 == 0),
+        leaf
+    ))
+}
+
+
+fn main() -> ApliteResult {
+    let config = AppConfig {
+        allocation_size: unsafe { std::num::NonZeroUsize::new_unchecked(100) },
+        executor_capacity: 1,
+        window_inner_size: (400, 400).into(),
+    };
+
+    Aplite::new(config).view(root).launch()
+}
+
 // const IMAGE_1: &str = "../../Wallpaper/milky-way-over-mountains-4k-fl-1680x1050-2045764561.jpg";
 // const IMAGE_2: &str = "../../Wallpaper/1352909.jpeg";
 // const IMAGE_3: &str = "../../Wallpaper/pexels-daejeung-2734512.jpg";
@@ -96,42 +133,3 @@ use aplite::prelude::*;
 //         .padding(Padding::splat(20))
 //         .spacing(8)
 // }
-
-fn root() -> impl IntoView {
-    let (counter, set_counter) = Signal::split(0i32);
-
-    let inc = move || set_counter.update(|num| *num += 1);
-    let dec = move || set_counter.update(|num| *num -= 1);
-
-    Effect::new(move |_| eprintln!("{:?}", counter.get()));
-
-    let button = button();
-    let h_stack = h_stack();
-
-    h_stack
-        .with_child(button)
-        .with_child(branch_1)
-}
-
-fn branch_1() -> impl IntoView {
-    v_stack()
-        .with_child(circle)
-        .with_child(button)
-}
-
-
-fn main() {
-    let config = AppConfig {
-        allocation_size: unsafe { std::num::NonZeroUsize::new_unchecked(100) },
-        executor_capacity: 1,
-        window_size: (400, 400).into(),
-    };
-
-    Aplite::new(config)
-        .view(root)
-        .debug_tree();
-        // .set_window_attributes(|window| window.title = "Demo".into())
-        // .launch()
-}
-
-// fn main() {}

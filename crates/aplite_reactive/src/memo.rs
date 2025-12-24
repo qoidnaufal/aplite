@@ -1,5 +1,5 @@
 use std::sync::{Arc, Weak, RwLock};
-use crate::graph::{Graph, Node, Observer, Scope};
+use crate::graph::{NodeStorage, Node, Observer, Scope};
 use crate::source::{AnySource, Source, ToAnySource};
 use crate::subscriber::{AnySubscriber, Subscriber, SubscriberSet, ToAnySubscriber};
 use crate::reactive_traits::*;
@@ -44,6 +44,7 @@ impl<T> MemoNode<T> {
         }
     }
 
+    #[inline(always)]
     fn read_value(&self) -> std::sync::RwLockReadGuard<'_, Option<T>> {
         self.value.read().unwrap()
     }
@@ -94,6 +95,7 @@ impl<T> Source for MemoNode<T> {
 impl<T> Reactive for MemoNode<T> {
     fn mark_dirty(&self) {
         self.state.write().unwrap().dirty = true;
+
         for sub in &self.state.read().unwrap().subscribers.0 {
             sub.mark_dirty();
         }
@@ -172,7 +174,7 @@ impl<T: 'static> Memo<T> {
             MemoNode::new(Arc::new(memoize_fn), any_subscriber)
         });
 
-        Self { node: Graph::insert(arc_node) }
+        Self { node: NodeStorage::insert(arc_node) }
     }
 }
 
@@ -186,13 +188,13 @@ impl<T> Copy for Memo<T> {}
 
 impl<T: 'static> Source for Memo<T> {
     fn add_subscriber(&self, subscriber: AnySubscriber) {
-        Graph::with_downcast(&self.node, |memo_node| {
+        NodeStorage::with_downcast(&self.node, |memo_node| {
             memo_node.add_subscriber(subscriber);
         })
     }
 
     fn clear_subscribers(&self) {
-        Graph::with_downcast(&self.node, |memo_node| {
+        NodeStorage::with_downcast(&self.node, |memo_node| {
             memo_node.clear_subscribers();
         })
     }
@@ -206,13 +208,13 @@ impl<T: 'static> ToAnySource for Memo<T> {
 
 impl<T: 'static> Subscriber for Memo<T> {
     fn add_source(&self, source: AnySource) {
-        Graph::with_downcast(&self.node, |memo_node| {
+        NodeStorage::with_downcast(&self.node, |memo_node| {
             memo_node.add_source(source);
         })
     }
 
     fn clear_sources(&self) {
-        Graph::with_downcast(&self.node, |memo_node| {
+        NodeStorage::with_downcast(&self.node, |memo_node| {
             memo_node.clear_sources();
         })
     }
@@ -220,7 +222,7 @@ impl<T: 'static> Subscriber for Memo<T> {
 
 impl<T: 'static> ToAnySubscriber for Memo<T> {
     fn to_any_subscriber(&self) -> AnySubscriber {
-        Graph::with_downcast(
+        NodeStorage::with_downcast(
             &self.node,
             |memo_node| AnySubscriber::new(Arc::downgrade(memo_node))
         )
@@ -229,13 +231,13 @@ impl<T: 'static> ToAnySubscriber for Memo<T> {
 
 impl<T: 'static> Reactive for Memo<T> {
     fn mark_dirty(&self) {
-        Graph::with_downcast(&self.node, |memo_node| {
+        NodeStorage::with_downcast(&self.node, |memo_node| {
             memo_node.mark_dirty();
         })
     }
 
     fn update_if_necessary(&self) -> bool {
-        Graph::with_downcast(&self.node, |memo_node| {
+        NodeStorage::with_downcast(&self.node, |memo_node| {
             memo_node.update_if_necessary()
         })
     }
@@ -258,13 +260,13 @@ impl<T: 'static> Read for Memo<T> {
     type Value = T;
 
     fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
-        let node = Graph::with_downcast(&self.node, Arc::clone);
+        let node = NodeStorage::with_downcast(&self.node, Arc::clone);
         node.update_if_necessary();
         f(node.read_value().as_ref().unwrap())
     }
 
     fn try_read<R, F: FnOnce(Option<&Self::Value>) -> Option<R>>(&self, f: F) -> Option<R> {
-        let node = Graph::try_with_downcast(&self.node, |opt| opt.map(Arc::clone));
+        let node = NodeStorage::try_with_downcast(&self.node, |opt| opt.map(Arc::clone));
         node.and_then(|node| {
             node.update_if_necessary();
             f(node.read_value().as_ref())

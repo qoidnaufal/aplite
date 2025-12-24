@@ -1,5 +1,3 @@
-use std::any::TypeId;
-
 use crate::data::table::ComponentStorage;
 use crate::entity::Entity;
 
@@ -36,9 +34,9 @@ impl ComponentBitset {
         self.0 |= 1 << component_id.0
     }
 
-    pub(crate) fn contains(&self, component_id: ComponentId) -> bool {
-        self.0 & 1 << component_id.0 == 1 << component_id.0
-    }
+    // pub(crate) fn contains(&self, component_id: ComponentId) -> bool {
+    //     self.0 & 1 << component_id.0 == 1 << component_id.0
+    // }
 }
 
 impl std::hash::Hash for ComponentBitset {
@@ -53,27 +51,19 @@ impl std::fmt::Debug for ComponentBitset {
     }
 }
 
-pub trait Component: Sized + 'static {
-    fn type_id() -> TypeId {
-        TypeId::of::<Self>()
-    }
-}
+pub trait Component {}
 
-// impl<T: Sized + 'static> Component for T {}
+pub trait ComponentEq: ComponentTuple {
+    fn component_eq(&self, other: &Self) -> bool;
+}
 
 pub trait ComponentTuple {
     type Item;
 
     fn insert_bundle(self, entity: Entity, storage: &mut ComponentStorage);
-    // fn for_each(&self, f: impl FnMut(Self::Item));
+    // fn for_each(&self, f: impl FnMut(&dyn Component));
 }
 
 pub(crate) trait ComponentTupleExt {
     fn bitset(storage: &ComponentStorage) -> Option<ComponentBitset>;
 }
-
-// pub trait IntoComponent: Sized + 'static {
-//     type Item: Component;
-
-//     fn into_component(self) -> Self::Item;
-// }

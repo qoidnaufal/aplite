@@ -21,44 +21,12 @@ use crate::subscriber::AnySubscriber;
 */
 
 pub(crate) struct ReactiveScope {
-    parent: Option<WeakScope>,
-    storage: SlotMap<Box<dyn Any + Send + Sync>>,
+    // parent: Option<WeakScope>,
+    // storage: SlotMap<Box<dyn Any + Send + Sync>>,
     children: Vec<WeakScope>,
     node_ids: Vec<SlotId>,
-    cleanups: Vec<Box<dyn FnOnce() + Send + Sync>>,
+    // cleanups: Vec<Box<dyn FnOnce() + Send + Sync>>,
     paused: bool,
-}
-
-impl ReactiveScope {
-    fn pause(&mut self) {
-        self.paused = true;
-    }
-
-    fn resume(&mut self) {
-        self.paused = false;
-    }
-
-    fn cleanup(&mut self) {
-        let cleanups = std::mem::take(&mut self.cleanups);
-        let children = std::mem::take(&mut self.children);
-        let node_ids = std::mem::take(&mut self.node_ids);
-
-        for cleanup_fn in cleanups {
-            cleanup_fn()
-        }
-
-        for child in children {
-            if let Some(child) = child.upgrade() {
-                child.cleanup()
-            }
-        }
-
-        Graph::with_mut(|graph| {
-            for id in node_ids {
-                graph.storage.remove(id);
-            }
-        });
-    }
 }
 
 static SCOPE: RwLock<Option<WeakScope>> = RwLock::new(None);
@@ -67,22 +35,22 @@ pub struct Scope(Arc<RwLock<ReactiveScope>>);
 
 impl Scope {
     pub fn new() -> Self {
-        let parent = SCOPE.read().unwrap().as_ref().map(WeakScope::clone);
+        let current_scope = SCOPE.read().unwrap().as_ref().map(WeakScope::clone);
 
         Self(Arc::new_cyclic(|weak| {
-            if let Some(parent) = parent.as_ref().and_then(WeakScope::upgrade) {
-                parent.0.write()
+            if let Some(current) = current_scope.as_ref().and_then(WeakScope::upgrade) {
+                current.0.write()
                     .unwrap()
                     .children
                     .push(WeakScope(weak.clone()));
             }
 
             RwLock::new(ReactiveScope {
-                parent: parent.clone(),
+                // parent: current_scope.clone(),
                 children: Vec::new(),
-                storage: SlotMap::default(),
+                // storage: SlotMap::default(),
                 node_ids: Vec::new(),
-                cleanups: Vec::new(),
+                // cleanups: Vec::new(),
                 paused: false,
             })
         }))
@@ -94,11 +62,8 @@ impl Scope {
 
     pub fn with<R>(&self, f: impl FnOnce() -> R) -> R {
         let prev = SCOPE.write().unwrap().replace(self.downgrade());
-
         let res = f();
-
         *SCOPE.write().unwrap() = prev;
-
         res
     }
 
@@ -108,7 +73,41 @@ impl Scope {
     }
 
     pub(crate) fn cleanup(&self) {
-        self.0.write().unwrap().cleanup()
+        let mut lock = self.0.write().unwrap();
+
+        // let cleanups = std::mem::take(&mut lock.cleanups);
+        let children = std::mem::take(&mut lock.children);
+        let node_ids = std::mem::take(&mut lock.node_ids);
+
+        // for cleanup_fn in cleanups {
+        //     cleanup_fn()
+        // }
+
+        for child in children {
+            if let Some(child) = child.upgrade() {
+                child.cleanup()
+            }
+        }
+
+        NodeStorage::with_mut(|graph| {
+            for id in node_ids {
+                graph.inner.remove(id);
+            }
+        });
+    }
+
+    pub fn pause(&self) {
+        let mut write_lock = self.0.write().unwrap();
+        write_lock.paused = true;
+        drop(write_lock);
+
+        let read_lock = self.0.read().unwrap();
+        read_lock.children.iter()
+            .for_each(|weak| {
+                if let Some(child_scope) = weak.upgrade() {
+                    child_scope.pause();
+                }
+            });
     }
 
     pub(crate) fn paused(&self) -> bool {
@@ -140,30 +139,30 @@ impl WeakScope {
 */
 
 // had to use OnceLock because we don't know yet which reactive node will initialize this first
-static STORAGE: OnceLock<RwLock<Graph>> = OnceLock::new();
+static STORAGE: OnceLock<RwLock<NodeStorage>> = OnceLock::new();
 
 #[derive(Default)]
-pub(crate) struct Graph {
-    pub(crate) storage: SlotMap<Box<dyn Any + Send + Sync>>,
+pub(crate) struct NodeStorage {
+    pub(crate) inner: SlotMap<Box<dyn Any + Send + Sync>>,
 }
 
-unsafe impl Send for Graph {}
-unsafe impl Sync for Graph {}
+unsafe impl Send for NodeStorage {}
+unsafe impl Sync for NodeStorage {}
 
-impl Graph {
+impl NodeStorage {
     pub(crate) fn insert<R: Send + Sync + 'static>(r: R) -> Node<R> {
-        let mut graph = Self::write();
-        let id = graph.storage.insert(Box::new(r));
+        let mut storage = Self::write();
+        let id = storage.inner.insert(Box::new(r));
         Node { id, marker: PhantomData }
     }
 
     #[inline(always)]
-    fn read<'a>() -> RwLockReadGuard<'a, Graph> {
+    fn read<'a>() -> RwLockReadGuard<'a, NodeStorage> {
         STORAGE.get_or_init(Default::default).read().unwrap()
     }
 
     #[inline(always)]
-    fn write<'a>() -> RwLockWriteGuard<'a, Graph> {
+    fn write<'a>() -> RwLockWriteGuard<'a, NodeStorage> {
         STORAGE.get_or_init(Default::default).write().unwrap()
     }
 
@@ -173,7 +172,7 @@ impl Graph {
     // }
 
     #[inline(always)]
-    pub(crate) fn with_mut<U>(f: impl FnOnce(&mut Graph) -> U) -> U {
+    pub(crate) fn with_mut<U>(f: impl FnOnce(&mut NodeStorage) -> U) -> U {
         f(&mut Self::write())
     }
 
@@ -182,9 +181,9 @@ impl Graph {
         R: 'static,
         F: FnOnce(&R) -> U,
     {
-        let graph = Self::read();
-        let r = graph
-            .storage
+        let storage = Self::read();
+        let r = storage
+            .inner
             .get(&node.id)
             .and_then(|any| any.as_ref().downcast_ref::<R>())
             .unwrap();
@@ -197,19 +196,19 @@ impl Graph {
         F: FnOnce(Option<&R>) -> Option<U>,
     {
         Self::read()
-            .storage
+            .inner
             .get(&node.id)
             .and_then(|any| f(any.as_ref().downcast_ref::<R>()))
     }
 
-    pub(crate) fn remove<R>(node: &Node<R>) {
-        let mut graph = Self::write();
-        graph.storage.remove(node.id);
+    pub(crate) fn remove<R>(node: Node<R>) {
+        let mut storage = Self::write();
+        storage.inner.remove(node.id);
     }
 
     pub(crate) fn is_removed<R>(node: &Node<R>) -> bool {
-        let graph = Self::read();
-        graph.storage.get(&node.id).is_none()
+        let storage = Self::read();
+        storage.inner.get(&node.id).is_none()
     }
 }
 

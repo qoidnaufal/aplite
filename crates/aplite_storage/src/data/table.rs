@@ -1,7 +1,9 @@
+use std::any::TypeId;
+
 use crate::buffer::TypeErasedBuffer;
 use crate::data::component::{Component, ComponentBitset, ComponentTuple, ComponentTupleExt, ComponentId};
-use crate::data::query::{Query, QueryData};
-use crate::entity::{Entity, EntityId};
+// use crate::data::query::{Query, QueryData};
+use crate::entity::Entity;
 use crate::map::hash::{TypeIdMap, BitSetMap};
 use crate::sparse_set::indices::SparseIndices;
 use crate::sparse_set::type_erased::TypeErasedSparseSet;
@@ -22,8 +24,13 @@ impl TableId {
 /// This is similar to MultiArrayList in Zig, in which Entities with the same composition are stored together.
 /// Entity with different composition will produce a new ComponentTable.
 pub struct ComponentTable {
+    /// K: ComponentId, V: TypeErasedBuffer
     pub(crate) data: TypeErasedSparseSet,
+
+    // Idk if it's going to be safe using only EntityId here
     pub(crate) entities: Vec<Entity>,
+
+    /// Key is either Entity or EntityId
     pub(crate) indexes: SparseIndices,
 }
 
@@ -45,7 +52,7 @@ impl ComponentTable {
     /// Set the capacity for the contained entity
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            data: TypeErasedSparseSet::with_capacity::<TypeErasedBuffer>(capacity),
+            data: TypeErasedSparseSet::new::<TypeErasedBuffer>(),
             entities: Vec::with_capacity(capacity),
             indexes: SparseIndices::default(),
         }
@@ -56,6 +63,7 @@ impl ComponentTable {
         self.data.insert(component_id, TypeErasedBuffer::with_capacity::<C>(capacity));
     }
 
+    #[inline(always)]
     pub(crate) fn insert<C: Component>(&mut self, component: C, component_id: ComponentId) {
         self.data
             .get_mut::<ComponentId, TypeErasedBuffer>(component_id)
@@ -83,6 +91,18 @@ impl ComponentTable {
             })
     }
 
+    pub fn get_component_mut<C: Component>(&mut self, entity: Entity, component_id: ComponentId) -> Option<&mut C> {
+        self.indexes
+            .get_index(entity.index())
+            .and_then(|index| {
+                self.version_check(entity, index).then(|| {
+                    self.data
+                        .get_mut::<ComponentId, TypeErasedBuffer>(component_id)
+                        .and_then(|buffer| buffer.get_mut(index))
+                })?
+            })
+    }
+
     #[inline(always)]
     pub fn contains(&self, entity: Entity) -> bool {
         self.indexes
@@ -93,7 +113,15 @@ impl ComponentTable {
     }
 
     fn version_check(&self, entity: Entity, index: usize) -> bool {
-        self.entities[index].version() == entity.version()
+        #[cfg(debug_assertions)]
+        {
+            self.entities[index].version() == entity.version()
+        }
+
+        #[cfg(not(debug_assertions))]
+        {
+            true
+        }
     }
 
     pub fn clear(&mut self) {
@@ -105,8 +133,8 @@ impl ComponentTable {
 
 #[derive(Default)]
 pub struct ComponentStorage {
-    tables: Vec<ComponentTable>,
-    table_ids: BitSetMap<TableId>,
+    pub(crate) tables: Vec<ComponentTable>,
+    pub(crate) table_ids: BitSetMap<TableId>,
     pub(crate) component_ids: TypeIdMap<ComponentId>
 }
 
@@ -119,21 +147,25 @@ impl ComponentStorage {
         }
     }
 
+    pub(crate) fn create_component_id<C: Component + 'static>(&mut self) -> ComponentId {
+        if let Some(id) = self.get_component_id::<C>() {
+            return id;
+        }
+
+        let component_id = ComponentId::new(self.component_ids.len());
+        self.component_ids.insert(TypeId::of::<C>(), component_id);
+
+        component_id
+    }
+
     #[inline(always)]
-    pub(crate) fn get_component_id<C: Component>(&self) -> Option<ComponentId> {
-        self.component_ids.get(&C::type_id()).copied()
+    pub(crate) fn get_component_id<C: Component + 'static>(&self) -> Option<ComponentId> {
+        self.component_ids.get(&TypeId::of::<C>()).copied()
     }
 
-    pub(crate) fn get_table_id_from_bundle<T>(&self) -> Option<TableId>
-    where
-        T: ComponentTuple,
-        T::Item: ComponentTupleExt,
-    {
-        self.table_ids.get(&self.get_bitset::<T>()?).copied()
-    }
-
-    pub fn insert_with_table_id<T: Component>(&mut self, table_id: TableId, component: T) {
-        let component_id = self.component_ids[&T::type_id()];
+    #[inline(always)]
+    pub fn insert_with_table_id<C: Component + 'static>(&mut self, table_id: TableId, component: C) {
+        let component_id = self.component_ids[&TypeId::of::<C>()];
         self.tables[table_id.index()].insert(component, component_id);
     }
 
@@ -146,15 +178,22 @@ impl ComponentStorage {
         &mut self.tables[table_id.index()]
     }
 
-    pub(crate) fn get_table_mut_from_bundle<T>(&mut self) -> Option<&mut ComponentTable>
+    // pub(crate) fn get_table_mut_from_bundle<T>(&mut self) -> Option<&mut ComponentTable>
+    // where
+    //     T: ComponentTuple,
+    //     T::Item: ComponentTupleExt,
+    // {
+    //     self.get_table_id_from_bundle::<T>()
+    //         .map(|table_id| &mut self.tables[table_id.index()])
+    // }
+
+    #[inline(always)]
+    pub(crate) fn get_table_id_from_bundle<T>(&self) -> Option<TableId>
     where
         T: ComponentTuple,
         T::Item: ComponentTupleExt,
     {
-        self.table_ids
-            .get(&self.get_bitset::<T>()?)
-            .copied()
-            .map(|table_id| &mut self.tables[table_id.index()])
+        self.table_ids.get(&self.get_bitset::<T>()?).copied()
     }
 
     #[inline(always)]
@@ -173,19 +212,6 @@ impl ComponentStorage {
             table: ComponentTable::default()
         }
     }
-
-    pub(crate) fn register_component<T: Component>(&mut self) -> ComponentId {
-        let type_id = T::type_id();
-
-        if let Some(id) = self.get_component_id::<T>() {
-            return id;
-        }
-
-        let component_id = ComponentId::new(self.component_ids.len());
-        self.component_ids.insert(type_id, component_id);
-
-        component_id
-    }
 }
 
 pub struct ComponentRegistrator<'a> {
@@ -196,18 +222,18 @@ pub struct ComponentRegistrator<'a> {
 
 impl<'a> ComponentRegistrator<'a> {
     #[inline(always)]
-    pub(crate) fn register_component<T: Component>(&mut self, capacity: usize) {
-        let component_id = self.storage.register_component::<T>();
+    pub(crate) fn register_component<T: Component + 'static>(&mut self, capacity: usize) {
+        let component_id = self.storage.create_component_id::<T>();
         self.component_bitset.update(component_id);
         self.table.add_buffer::<T>(component_id, capacity);
     }
 
-    pub fn register<T: Component>(mut self) -> Self {
+    pub fn register<T: Component + 'static>(mut self) -> Self {
         self.register_component::<T>(0);
         self
     }
 
-    pub fn register_with_capacity<T: Component>(mut self, capacity: usize) -> Self {
+    pub fn register_with_capacity<T: Component + 'static>(mut self, capacity: usize) -> Self {
         self.register_component::<T>(capacity);
         self
     }
@@ -237,35 +263,22 @@ mod component_test {
     crate::make_component!(struct Name(String));
     crate::make_component!(struct Salary(usize));
     crate::make_component!(struct Cars(usize));
-
     crate::make_component!(struct Kids((Name, Age)));
     crate::make_component!(struct Person { name: Name, age: Age });
-    // crate::make_component!(struct Pet<T> { name: Name, kind: T });
-
-    // #[derive(Debug)] #[allow(unused)] struct Age(u8);       impl Component for Age {}
-    // #[derive(Debug)] #[allow(unused)] struct Name(String);  impl Component for Name {}
-    // #[derive(Debug)] #[allow(unused)] struct Salary(usize); impl Component for Salary {}
-    // #[derive(Debug)] #[allow(unused)] struct Cars(usize);   impl Component for Cars {}
 
     #[test]
     fn register_bundle() {
         let mut storage = ComponentStorage::new();
         let mut manager = EntityManager::new();
 
-        for i in 0..10 {
-            let entity = manager.create();
-            storage.insert_component_tuple(entity, (Age(i), Name(format!("Balo_{i}"))));
-            storage.insert_component_tuple(entity, (Salary(i as _), Cars(i as _)));
-        }
+        let entity = manager.create();
+        storage.insert_component_tuple(entity, (Age(69), Name("Balo".to_string())));
+        storage.insert_component_tuple(entity, (Salary(6969), Cars(666)));
 
         let component_id = storage.get_component_id::<Cars>();
         assert!(component_id.is_some());
 
-        let table = storage.get_table_mut_from_bundle::<(Cars, Salary)>();
-        assert!(table.is_some());
-        eprintln!("{table:#?}");
-
-        let non_exist_table = storage.get_table_mut_from_bundle::<(Age, Salary, Name, Kids, Person)>();
-        assert!(non_exist_table.is_none());
+        let table_id = storage.get_table_id_from_bundle::<(Cars, Kids, Person)>();
+        assert!(table_id.is_none());
     }
 }

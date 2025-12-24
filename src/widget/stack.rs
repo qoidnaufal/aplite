@@ -1,12 +1,12 @@
 use std::marker::PhantomData;
-
 use aplite_renderer::Scene;
-use aplite_storage::Entity;
+use aplite_storage::ComponentTuple;
+use aplite_types::{Rgba, Size};
 
-use crate::layout::{LayoutRules, Orientation};
+use crate::layout::Orientation;
 use crate::context::Context;
-use crate::view::{IntoView, View};
-use crate::widget::Widget;
+use crate::view::IntoView;
+use crate::widget::{Mountable, Widget};
 
 pub fn h_stack<IV: IntoView>(widget: IV) -> impl IntoView {
     Stack::<IV, Horizontal>::new(widget)
@@ -28,12 +28,12 @@ struct Vertical; impl StackOrientation for Vertical {
     const ORIENTATION: Orientation = Orientation::Vertical;
 }
 
-struct Stack<IV, D> {
+struct Stack<IV: IntoView, SO> {
     widget: IV,
-    marker: PhantomData<D>
+    marker: PhantomData<SO>
 }
 
-impl<IV, D> Stack<IV, D> {
+impl<IV: IntoView, SO> Stack<IV, SO> {
     fn new(widget: IV) -> Self {
         Self {
             widget,
@@ -42,12 +42,21 @@ impl<IV, D> Stack<IV, D> {
     }
 }
 
-impl<IV: IntoView, D: StackOrientation> Widget for Stack<IV, D> {
-    fn layout(&mut self, cx: &mut Context) {
-        todo!()
+impl<IV: IntoView, SO: StackOrientation> Widget for Stack<IV, SO> {
+    fn layout(&self, cx: &mut Context) {
+        match SO::ORIENTATION {
+            Orientation::Horizontal => self.widget.layout(cx),
+            Orientation::Vertical => self.widget.layout(cx),
+        }
     }
 
     fn draw(&self, scene: &mut Scene) {
-        todo!()
+        self.widget.draw(scene);
+    }
+}
+
+impl<IV: IntoView, SO: StackOrientation> Mountable for Stack<IV, SO> {
+    fn build(self, cx: &mut Context) {
+        self.widget.build(cx);
     }
 }

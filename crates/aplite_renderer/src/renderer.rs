@@ -1,4 +1,4 @@
-use std::sync::Weak;
+use std::sync::Arc;
 
 use winit::window::Window;
 use winit::dpi::PhysicalSize;
@@ -36,8 +36,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub async fn new(window: Weak<Window>) -> Result<Self, InitiationError> {
-        let window = window.upgrade().unwrap();
+    pub async fn new(window: Arc<Window>) -> Result<Self, InitiationError> {
         let size = window.inner_size();
         let scale_factor = window.scale_factor();
 
@@ -134,24 +133,6 @@ impl Renderer {
     pub fn begin(&mut self) {
         self.mesh.offset = 0;
     }
-
-    // fn map(&mut self) -> bool {
-    //     let mut ready = false;
-
-    //     ready &= self.storage.transforms.map_buffer(&self.device);
-    //     ready &= self.storage.elements.map_buffer(&self.device);
-    //     ready &= self.mesh.vertices.map_buffer(&self.device);
-    //     ready &= self.mesh.indices.map_buffer(&self.device);
-
-    //     ready
-    // }
-
-    // fn unmap(&self) {
-    //     self.storage.elements.unmap();
-    //     self.storage.transforms.unmap();
-    //     self.mesh.vertices.unmap();
-    //     self.mesh.indices.unmap();
-    // }
 
     #[inline(always)]
     pub fn scene(&mut self) -> Scene<'_> {

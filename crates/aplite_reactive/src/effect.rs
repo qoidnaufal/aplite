@@ -5,7 +5,7 @@ use aplite_future::{
     Executor,
 };
 
-use crate::graph::{Scope, Node, Graph};
+use crate::graph::{Scope, Node, NodeStorage};
 use crate::subscriber::{Subscriber, ToAnySubscriber, AnySubscriber};
 use crate::source::AnySource;
 use crate::reactive_traits::*;
@@ -40,7 +40,7 @@ impl Effect {
         let scope = Scope::new();
         let arc_node = Arc::new(RwLock::new(EffectNode::new(tx)));
         let subscriber = arc_node.to_any_subscriber();
-        let node = Graph::insert(arc_node);
+        let node = NodeStorage::insert(arc_node);
 
         Executor::spawn(async move {
             let mut value = None::<R>;
@@ -56,11 +56,14 @@ impl Effect {
                     }))
                 }
             }
-
-            Graph::with_mut(|graph| graph.storage.remove(node.id));
         });
 
         Self { node }
+    }
+
+    /// for now just brute-forcefully remove the EffectNode
+    pub fn stop(self) {
+        NodeStorage::remove(self.node);
     }
 }
 
@@ -191,7 +194,7 @@ mod effect_test {
             eprintln!("full name: {}", *cloned_rc.borrow());
         });
 
-        Effect::new(move |_| eprintln!("last name: {}", last.get()));
+        let print_effect = Effect::new(move |_| eprintln!("last name: {}", last.get()));
 
         let delta = 100;
         Executor::spawn(async move {
@@ -203,6 +206,8 @@ mod effect_test {
             set_last.set("Ballotelli");
             sleep(duration).await;
             assert_eq!("Mario", name.borrow().as_str());
+
+            print_effect.stop();
 
             use_last.set(true);
             sleep(duration).await;

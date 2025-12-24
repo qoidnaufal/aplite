@@ -1,22 +1,24 @@
+use crate::shapes::Rect;
+
 #[derive(Clone, Copy)]
-pub enum Unit {
+pub enum Length {
     Fixed(f32),
     Grow,
     Fit,
 }
 
-impl Default for Unit {
+impl Default for Length {
     fn default() -> Self {
         Self::Fixed(0.0)
     }
 }
 
-impl Unit {
-    pub fn get(&self) -> f32 {
+impl Length {
+    pub fn get_width(&self, inner_bound: &Rect, outer_bound: &Rect) -> f32 {
         match self {
-            Unit::Fixed(val) => *val,
-            Unit::Grow => 0.0,
-            Unit::Fit => 0.0,
+            Length::Fixed(val) => *val,
+            Length::Grow => outer_bound.width,
+            Length::Fit => inner_bound.width,
         }
     }
 
@@ -27,33 +29,37 @@ impl Unit {
     pub fn is_fit(&self) -> bool {
         matches!(self, Self::Fit)
     }
+
+    pub fn is_fixed(&self) -> bool {
+        matches!(self, Self::Fixed(_))
+    }
 }
 
-impl From<f32> for Unit {
+impl From<f32> for Length {
     fn from(value: f32) -> Self {
         Self::Fixed(value)
     }
 }
 
-impl From<u32> for Unit {
+impl From<u32> for Length {
     fn from(value: u32) -> Self {
         Self::Fixed(value as f32)
     }
 }
 
-impl PartialEq for Unit {
+impl PartialEq for Length {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Unit::Fixed(a), Unit::Fixed(b)) => a == b,
-            (Unit::Grow, Unit::Grow) | (Unit::Fit, Unit::Fit) => true,
+            (Length::Fixed(a), Length::Fixed(b)) => a == b,
+            (Length::Grow, Length::Grow) | (Length::Fit, Length::Fit) => true,
             _ => false
         }
     }
 }
 
-impl Eq for Unit {}
+impl Eq for Length {}
 
-impl std::fmt::Debug for Unit {
+impl std::fmt::Debug for Length {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:?}")
     }

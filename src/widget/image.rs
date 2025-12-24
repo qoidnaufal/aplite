@@ -1,13 +1,12 @@
 use std::path::Path;
 
-use aplite_types::{ImageData, Unit};
+use aplite_types::{ImageData, Length};
 use aplite_renderer::Scene;
-use aplite_storage::Entity;
 
 use crate::state::AspectRatio;
 use crate::context::Context;
-use crate::view::{IntoView, View};
-use crate::widget::Widget;
+use crate::view::IntoView;
+use crate::widget::{Mountable, Widget};
 
 pub fn image<F: Fn() -> ImageData + 'static>(image_fn: F) -> impl IntoView {
     Image::new(image_fn)
@@ -29,8 +28,8 @@ pub fn image_reader<P: AsRef<Path>>(path: P) -> ImageData {
 }
 
 struct Image {
-    width: Unit,
-    height: Unit,
+    width: Length,
+    height: Length,
     aspect_ratio: AspectRatio,
     data: ImageData,
 }
@@ -38,16 +37,20 @@ struct Image {
 impl Image {
     fn new<F: Fn() -> ImageData + 'static>(image_fn: F) -> Self {
         Self {
-            width: Unit::Grow,
-            height: Unit::Grow,
+            width: Length::Grow,
+            height: Length::Grow,
             aspect_ratio: AspectRatio::Source,
             data: image_fn(),
         }
     }
 }
 
+impl Mountable for Image {
+    fn build(self, cx: &mut Context) {}
+}
+
 impl Widget for Image {
-    fn layout(&mut self, cx: &mut Context) {
+    fn layout(&self, cx: &mut Context) {
         todo!()
     }
 
@@ -55,9 +58,3 @@ impl Widget for Image {
         todo!()
     }
 }
-
-// impl IntoView for Image {
-//     fn into_view<'a>(self) -> View<'a> {
-//         View::new(self)
-//     }
-// }

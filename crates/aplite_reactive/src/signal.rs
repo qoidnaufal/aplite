@@ -1,5 +1,5 @@
 use crate::signal_read::SignalRead;
-use crate::graph::{Graph, Node, Observer};
+use crate::graph::{NodeStorage, Node, Observer};
 use crate::signal_write::SignalWrite;
 use crate::stored_value::Value;
 use crate::reactive_traits::*;
@@ -20,7 +20,7 @@ impl<T> Copy for Signal<T> {}
 
 impl<T: 'static> Signal<T> {
     pub fn new(value: T) -> Self {
-        let node = Graph::insert(Value::new(value));
+        let node = NodeStorage::insert(Value::new(value));
 
         Self { node }
     }
@@ -85,13 +85,13 @@ impl<T: 'static> Read for Signal<T> {
     type Value = T;
 
     fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
-        Graph::with_downcast(&self.node, |value| {
+        NodeStorage::with_downcast(&self.node, |value| {
             f(&value.read().unwrap())
         })
     }
 
     fn try_read<R, F: FnOnce(Option<&Self::Value>) -> Option<R>>(&self, f: F) -> Option<R> {
-        Graph::try_with_downcast(&self.node, |value| {
+        NodeStorage::try_with_downcast(&self.node, |value| {
             let guard = value.and_then(|val| val.read().ok());
             f(guard.as_deref())
         })
@@ -129,7 +129,7 @@ impl<T: 'static> Write for Signal<T> {
     type Value = T;
 
     fn write(&self, f: impl FnOnce(&mut Self::Value)) {
-        Graph::with_downcast(&self.node, |value| {
+        NodeStorage::with_downcast(&self.node, |value| {
             f(&mut value.write().unwrap())
         })
     }
@@ -153,12 +153,12 @@ impl<T: 'static> Update for Signal<T> {
 
 impl<T: 'static> Dispose for Signal<T> {
     fn dispose(&self) {
-        Graph::remove(&self.node);
+        NodeStorage::remove(self.node);
         SubscriberStorage::remove(self.node.id);
     }
 
     fn is_disposed(&self) -> bool {
-        Graph::is_removed(&self.node)
+        NodeStorage::is_removed(&self.node)
     }
 }
 

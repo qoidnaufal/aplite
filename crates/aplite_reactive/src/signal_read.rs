@@ -1,4 +1,4 @@
-use crate::graph::Graph;
+use crate::graph::NodeStorage;
 use crate::reactive_traits::*;
 use crate::signal::{Signal, SignalNode};
 use crate::signal_write::SignalWrite;
@@ -55,13 +55,13 @@ impl<T: 'static> Read for SignalRead<T> {
     type Value = T;
 
     fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
-        Graph::with_downcast(&self.node, |value| {
+        NodeStorage::with_downcast(&self.node, |value| {
             f(&value.read().unwrap())
         })
     }
 
     fn try_read<R, F: FnOnce(Option<&Self::Value>) -> Option<R>>(&self, f: F) -> Option<R> {
-        Graph::try_with_downcast(&self.node, |value| {
+        NodeStorage::try_with_downcast(&self.node, |value| {
             f(value.and_then(|val| val.read().ok()).as_deref())
         })
     }
@@ -101,7 +101,7 @@ impl<T: 'static> Dispose for SignalRead<T> {
     fn dispose(&self) { self.as_signal().dispose() }
 
     fn is_disposed(&self) -> bool {
-        Graph::is_removed(&self.node)
+        NodeStorage::is_removed(&self.node)
     }
 }
 

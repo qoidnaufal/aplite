@@ -6,6 +6,16 @@ use crate::arena::ptr::ArenaPtr;
 use crate::sparse_set::SparsetKey;
 use crate::sparse_set::indices::SparseIndices;
 
+/// Type erased but actually still uniform, to enable this SparseSet to be stored with other SparseSet for different type
+/// If you want a data structure to hold any kind of types, use Arena.
+/// # Example
+/// ```ignore
+/// let sparset_a = TypeErasedSparseSet::new::<String>();
+/// let sparset_b = TypeErasedSparseSet::new::<usize>();
+/// let mut storage = Vec::<TypeErasedSparset>::new()
+/// storage.push(a);
+/// storage.push(b);
+/// ```
 pub struct TypeErasedSparseSet {
     pub(crate) raw: RawBuffer,
     pub(crate) indexes: SparseIndices,

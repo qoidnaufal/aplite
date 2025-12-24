@@ -2,7 +2,7 @@ use aplite_types::{
     Rect,
     Vec2f,
     Size,
-    Unit
+    Length
 };
 use aplite_storage::{
     Entity,
@@ -164,8 +164,8 @@ impl LayoutRules {
 }
 
 pub struct LayoutNode {
-    pub(crate) width: Unit,
-    pub(crate) height: Unit,
+    pub(crate) width: Length,
+    pub(crate) height: Length,
     pub(crate) min_width: Option<f32>,
     pub(crate) min_height: Option<f32>,
     pub(crate) max_width: Option<f32>,
@@ -173,7 +173,7 @@ pub struct LayoutNode {
 }
 
 impl LayoutNode {
-    pub fn from_radius(val: Unit) -> Self {
+    pub fn from_radius(val: Length) -> Self {
         todo!()
     }
 }
@@ -195,15 +195,5 @@ impl Layout {
             tree: SparseTree::with_capacity(capacity),
             rects: SparseSet::with_capacity(capacity),
         }
-    }
-}
-
-pub(crate) trait LayoutTrait: Widget + 'static {
-    fn calculate_layout(&mut self, cx: &mut LayoutCx) {
-        todo!()
-    }
-
-    fn calculate_size(&self, parent: Option<&dyn Widget>) -> Size {
-        todo!()
     }
 }

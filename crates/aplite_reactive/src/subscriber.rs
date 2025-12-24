@@ -1,7 +1,7 @@
 use std::sync::{Arc, OnceLock, RwLock, Weak};
 use aplite_storage::{SparseSet, SlotId};
 
-use crate::graph::{Graph, Observer};
+use crate::graph::Observer;
 use crate::reactive_traits::*;
 use crate::source::AnySource;
 

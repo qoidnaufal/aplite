@@ -115,6 +115,10 @@ impl<K: SparsetKey, V> SparseSet<K, V> {
     pub fn iter_data_index(&self) -> impl Iterator<Item = usize> {
         self.inner.indexes.iter_data_index()
     }
+
+    pub fn iter_key_id(&self) -> impl Iterator<Item = usize> {
+        self.inner.indexes.iter_key_id()
+    }
 }
 
 /*

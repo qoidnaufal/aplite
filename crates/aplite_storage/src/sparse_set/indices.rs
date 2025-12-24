@@ -97,12 +97,11 @@ impl SparseIndices {
         self.0.clear();
     }
 
-    /// Iterate over the index of the associated entity
-    // pub fn iter_entity_index(&self) -> impl Iterator<Item = EntityId> {
-    //     self.0.iter()
-    //         .enumerate()
-    //         .filter_map(|(i, idx)| (idx.is_valid()).then_some(EntityId::new(i as _)))
-    // }
+    #[inline(always)]
+     pub fn iter_key_id(&self) -> impl Iterator<Item = usize> {
+         self.0.iter().enumerate()
+             .filter_map(|(i, idx)| idx.is_valid().then_some(i))
+     }
 
     /// Iterate over the position of the indexed data
     #[inline(always)]

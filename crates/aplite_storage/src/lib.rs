@@ -22,7 +22,7 @@ pub use tree::{
 };
 
 pub use data::{
-    component::Component,
+    component::{Component, ComponentEq, ComponentTuple},
     query::Query,
     table::{ComponentTable, ComponentStorage, ComponentRegistrator},
 };
