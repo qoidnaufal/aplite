@@ -3,7 +3,7 @@ use aplite_renderer::Scene;
 use aplite_storage::ComponentTuple;
 use aplite_types::{Rgba, Size};
 
-use crate::layout::Orientation;
+use crate::layout::{LayoutRules, Orientation};
 use crate::context::Context;
 use crate::view::IntoView;
 use crate::widget::{Mountable, Widget};

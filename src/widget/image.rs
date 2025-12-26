@@ -3,7 +3,6 @@ use std::path::Path;
 use aplite_types::{ImageData, Length};
 use aplite_renderer::Scene;
 
-use crate::state::AspectRatio;
 use crate::context::Context;
 use crate::view::IntoView;
 use crate::widget::{Mountable, Widget};
@@ -26,6 +25,14 @@ pub fn image_reader<P: AsRef<Path>>(path: P) -> ImageData {
 
     ImageData::new(img.dimensions(), &img.to_rgba8())
 }
+
+#[derive(Debug, Clone, Copy)]
+pub enum AspectRatio {
+    Defined(u8, u8),
+    Source,
+    Undefined,
+}
+
 
 struct Image {
     width: Length,

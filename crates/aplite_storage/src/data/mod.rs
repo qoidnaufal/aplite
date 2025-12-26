@@ -5,9 +5,16 @@ pub(crate) mod component;
 pub(crate) mod query;
 pub(crate) mod table;
 
-use component::{Component, ComponentEq, ComponentTuple, ComponentTupleExt, ComponentBitset};
-// use query::{Queryable, QueryData};
+use query::{Queryable, QueryData, QueryIter};
 use table::ComponentStorage;
+use component::{
+    Component,
+    ComponentEq,
+    ComponentTuple,
+    ComponentTupleExt,
+    ComponentBitset,
+    ComponentId,
+};
 
 macro_rules! impl_tuple_macro {
     ($macro:ident, $next:tt) => {
@@ -28,32 +35,32 @@ macro_rules! component_bundle {
                 #[allow(non_snake_case)]
                 let ($($name,)*) = self;
 
-                if let Some(table_id) = storage.get_table_id_from_bundle::<Self>() {
-                    ($(storage.insert_with_table_id(table_id, $name),)*);
-
-                    let table = storage.get_table_mut_from_table_id(table_id);
-                    table.indexes.set_index(entity.index(), table.entities.len());
-                    table.entities.push(entity);
-
-                    return;
-                }
-
-                let mut registrator = storage.registrator();
-                ($(registrator.register_component::<$name>(0),)*);
-
-                let table_id = registrator.finish();
-                ($(storage.insert_with_table_id(table_id, $name),)*);
-
-                let table = storage.get_table_mut_from_table_id(table_id);
-                table.indexes.set_index(entity.index(), table.entities.len());
-                table.entities.push(entity);
+                ($(storage.insert(entity, $name),)*);
             }
 
-            // fn for_each(&self, mut f: impl FnMut(&dyn Component)) {
+            // fn insert_bundle(self, entity: Entity, storage: &mut ComponentStorage) {
             //     #[allow(non_snake_case)]
             //     let ($($name,)*) = self;
 
-            //     ($(f($name),)*);
+            //     if let Some(table_id) = storage.get_table_id_from_bundle::<Self>() {
+            //         ($(storage.insert_with_table_id(table_id, $name),)*);
+
+            //         let table = storage.get_table_mut_from_table_id(table_id);
+            //         table.indexes.set_index(entity.index(), table.entities.len());
+            //         table.entities.push(entity);
+
+            //         return;
+            //     }
+
+            //     let mut registrator = storage.registrator();
+            //     ($(registrator.register_component::<$name>(0),)*);
+
+            //     let table_id = registrator.finish();
+            //     ($(storage.insert_with_table_id(table_id, $name),)*);
+
+            //     let table = storage.get_table_mut_from_table_id(table_id);
+            //     table.indexes.set_index(entity.index(), table.entities.len());
+            //     table.entities.push(entity);
             // }
         }
 
@@ -106,30 +113,6 @@ impl_tuple_macro!(
     (Z, ZZ)
 );
 
-// macro_rules! query {
-//     ($($name:ident),*) => {
-//         impl<'a, $($name: Queryable<'a>),*> QueryData<'a> for ($($name,)*) {}
-//     };
-// }
-
-// macro_rules! query_one {
-//     ($name:ident) => {
-//         impl<'a, $name: Queryable<'a>> QueryData<'a> for $name {}
-//     };
-// }
-
-// impl_tuple_macro!(
-//     query,
-//     A, B, C, D, E,
-//     F, G, H, I, J,
-//     K, L, M, N, O,
-//     P, Q, R, S, T,
-//     U, V, W, X, Y,
-//     Z
-// );
-
-// query_one!(A);
-
 #[macro_export]
 macro_rules! make_component {
     ($name:ident) => {
@@ -181,3 +164,129 @@ make_component!(Rgba);
 make_component!(Paint);
 make_component!(ImageData);
 make_component!(Matrix3x2);
+
+use table::MarkedBuffer;
+
+macro_rules! query {
+    ($($name:ident),*) => {
+        impl<'a, $($name),*> QueryData<'a> for ($($name,)*)
+        where
+            $($name: Queryable),*,
+            $($name::Item: 'static),*,
+        {
+            type Items = ($(<$name as Queryable>::Item,)*);
+
+            type Buffer = ($(MarkedBuffer<'a, $name>,)*);
+
+            fn type_ids() -> Vec<std::any::TypeId> {
+                let mut vec = vec![];
+                ($(vec.push(std::any::TypeId::of::<<$name as Queryable>::Item>()),)*);
+                vec
+            }
+
+            fn component_ids(source: &ComponentStorage) -> Option<Vec<ComponentId>> {
+                let mut vec = vec![];
+                ($(vec.push(source.get_component_id::<<$name as Queryable>::Item>()?),)*);
+                Some(vec)
+            }
+
+            fn bitset(source: &ComponentStorage) -> Option<ComponentBitset> {
+                let mut bitset = ComponentBitset::new();
+                ($(bitset.update(source.get_component_id::<<$name as Queryable>::Item>()?),)*);
+                Some(bitset)
+            }
+
+            fn get_buffer(source: &'a ComponentStorage) -> Option<Self::Buffer> {
+                Some(($(source.get_marked_buffer::<$name>()?,)*))
+            }
+        }
+
+        impl<'a, $($name),*> Iterator for QueryIter<'a, ($($name,)*)>
+        where
+            $($name: Queryable),*,
+            $($name::Item: 'static),*,
+        {
+            type Item = ($($name,)*);
+
+            fn next(&mut self) -> Option<Self::Item> {
+                let entity = self.entities?.get(self.counter)?;
+
+                #[allow(non_snake_case)]
+                let ($($name,)*): &($(MarkedBuffer<'a, $name>,)*) = self.buffer.as_ref()?;
+
+                let res = ($(
+                    $name.indexes.get_index(*entity).map(|index| unsafe {
+                        $name::convert($name.buffer.get_unchecked_raw::<$name::Item>(index))
+                    })?,
+                )*);
+
+                self.counter += 1;
+
+                Some(res)
+            }
+        } 
+    };
+}
+
+impl_tuple_macro!(
+    query,
+    A, B, C, D, E,
+    F, G, H, I, J,
+    K, L, M, N, O,
+    P, Q, R, S, T,
+    U, V, W, X, Y,
+    Z
+);
+
+macro_rules! query_one {
+    ($name:ident) => {
+        impl<'a, $name> QueryData<'a> for $name
+        where
+            $name: Queryable,
+            $name::Item: 'static,
+        {
+            type Items = <$name as Queryable>::Item;
+
+            type Buffer = MarkedBuffer<'a, $name>;
+
+            fn type_ids() -> Vec<std::any::TypeId> {
+                vec![std::any::TypeId::of::<<$name as Queryable>::Item>()]
+            }
+
+            fn component_ids(source: &ComponentStorage) -> Option<Vec<ComponentId>> {
+                let component_id = source.get_component_id::<<$name as Queryable>::Item>()?;
+                Some(vec![component_id])
+            }
+
+            fn bitset(source: &ComponentStorage) -> Option<ComponentBitset> {
+                let component_id = source.get_component_id::<<$name as Queryable>::Item>()?;
+                Some(ComponentBitset(1 << component_id.0))
+            }
+
+            fn get_buffer(source: &'a ComponentStorage) -> Option<Self::Buffer> {
+                source.get_marked_buffer::<$name>()
+            }
+        }
+
+        impl<'a, $name> Iterator for QueryIter<'a, $name>
+        where
+            $name: Queryable,
+            $name::Item: 'static,
+        {
+            type Item = $name;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                let entity = self.entities?.get(self.counter)?;
+                let buffer = self.buffer.as_ref()?;
+                let res = buffer.indexes.get_index(*entity)
+                    .map(|index| unsafe {
+                        $name::convert(buffer.buffer.get_unchecked_raw::<$name::Item>(index))
+                    });
+                self.counter += 1;
+                res
+            }
+        } 
+    };
+}
+
+query_one!(A);

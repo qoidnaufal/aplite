@@ -1,8 +1,9 @@
 use std::alloc;
 use std::mem;
 use std::ptr::NonNull;
-use std::cell::UnsafeCell;
 use std::marker::PhantomData;
+
+use crate::arena::ptr::ArenaPtr;
 
 #[derive(Debug)] pub struct MaxCapacityReached;
 
@@ -80,22 +81,24 @@ impl TypeErasedBuffer {
 
     #[inline(always)]
     /// Safety: you have to ensure buffer is already initialized or the number of elements are within [`capacity`](Self::capacity) - 1
-    unsafe fn push_unchecked<T>(&mut self, data: T) {
-        unsafe { self.raw.push(data, self.len) };
+    unsafe fn push_unchecked<T>(&mut self, data: T) -> *mut T {
+        let raw = unsafe { self.raw.push(data, self.len) };
         self.len += 1;
+        raw
     }
 
     /// Safety: this method assumes that buffer is already initialized via [`with_capacity`](Self::with_capacity)
-    pub fn push_within_capacity<T>(&mut self, data: T) -> Result<(), MaxCapacityReached> {
+    pub fn push_within_capacity<T>(&mut self, data: T) -> Result<ArenaPtr<T>, MaxCapacityReached> {
         if self.len == self.raw.capacity {
             return Err(MaxCapacityReached)
         }
 
-        unsafe { self.push_unchecked(data) }
+        let raw = unsafe { self.push_unchecked(data) };
 
-        Ok(())
+        Ok(ArenaPtr::new(raw))
     }
 
+    #[inline(always)]
     const fn check(&self) -> Result<(), Error> {
         if self.raw.capacity == 0 {
             return Err(Error::Uninitialized);
@@ -122,6 +125,12 @@ impl TypeErasedBuffer {
     pub(crate) fn clear(&mut self) {
         self.raw.clear(self.len);
         self.len = 0;
+    }
+
+    pub(crate) unsafe fn get_unchecked_raw<T>(&self, index: usize) -> *mut T {
+        unsafe {
+            self.raw.get_raw(index * self.item_layout.size()).cast()
+        }
     }
 
     #[inline(always)]
@@ -155,21 +164,6 @@ impl TypeErasedBuffer {
     }
 
     #[inline(always)]
-    pub const unsafe fn get_unchecked_cell<T>(&self, index: usize) -> &UnsafeCell<T> {
-        unsafe {
-            &*self.raw.get_raw(index * self.item_layout.size()).cast::<UnsafeCell<T>>()
-        }
-    }
-    
-    pub const fn get_cell<T>(&self, index: usize) -> Option<&UnsafeCell<T>> {
-        if index >= self.len { return None }
-       
-        unsafe {
-            Some(self.get_unchecked_cell(index))
-        }
-    }
-
-    #[inline(always)]
     fn swr<R>(&mut self, index: usize, f: impl FnOnce(*mut u8) -> R) -> Option<R> {
         index.lt(&self.len).then_some(unsafe {
             let last_index = self.len - 1;
@@ -193,6 +187,10 @@ impl TypeErasedBuffer {
 
     pub fn iter_mut<'a, T>(&'a mut self) -> IterMut<'a, T> {
         IterMut::new(self)
+    }
+
+    pub(crate) fn iter_raw<'a, T>(&'a self) -> IterRaw<'a, T> {
+        IterRaw::new(self)
     }
 }
 
@@ -449,6 +447,30 @@ impl<'a, T: 'a> DoubleEndedIterator for IterMut<'a, T> {
     }
 }
 
+pub(crate) struct IterRaw<'a, T> {
+    base: Base<T>,
+    marker: PhantomData<fn() -> &'a mut T>,
+}
+
+impl<'a, T> IterRaw<'a, T> {
+    fn new(source: &'a TypeErasedBuffer) -> Self {
+        Self {
+            base: Base::new(source.raw.block.cast::<T>().as_ptr(), source.len),
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<'a, T: 'a> Iterator for IterRaw<'a, T> {
+    type Item = *mut T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        unsafe {
+            self.base.next(|raw| raw)
+        }
+    }
+}
+
 /*
 #########################################################
 #                                                       #
@@ -484,14 +506,9 @@ mod buffer_test {
         ba.push(balo);
         ba.push(nunez);
     
-        let get = ba.get_cell::<Obj>(1).map(|cell| unsafe {
-            let raw = cell.get();
-            let this = &mut *raw;
-            this.age = 0;
-            &*raw
-        });
+        let get = ba.get::<Obj>(1);
 
-        assert!(get.is_some_and(|obj| obj.age == 0));
+        assert!(get.is_some_and(|obj| obj.age == 888));
     
         println!("{:?}", get.unwrap());
         println!("quitting");

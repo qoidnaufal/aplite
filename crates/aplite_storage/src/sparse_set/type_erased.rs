@@ -50,17 +50,24 @@ impl TypeErasedSparseSet {
     #[inline(always)]
     pub unsafe fn get_raw<K: SparsetKey>(&self, key: K) -> Option<*mut u8> {
         self.indexes
-            .get_index(key.index())
+            .get_index(key)
             .map(|index| unsafe {
                 self.raw
                     .get_raw(index * self.item_layout.size())
             })
     }
 
+    pub unsafe fn get_unchecked<K: SparsetKey, V>(&self, key: K) -> &V {
+        let index = self.indexes.0[key.index()].get().unwrap();
+        unsafe {
+            &*self.raw.get_raw(index * self.item_layout.size()).cast::<V>()
+        }
+    }
+
     #[inline(always)]
     pub fn get<K: SparsetKey, V>(&self, key: K) -> Option<&V> {
         self.indexes
-            .get_index(key.index())
+            .get_index(key)
             .map(|index| unsafe {
                 &*self.raw
                     .get_raw(index * self.item_layout.size())
@@ -71,7 +78,7 @@ impl TypeErasedSparseSet {
     #[inline(always)]
     pub fn get_mut<K: SparsetKey, V>(&self, key: K) -> Option<&mut V> {
         self.indexes
-            .get_index(key.index())
+            .get_index(key)
             .map(|index| unsafe {
                 &mut *self.raw
                     .get_raw(index * self.item_layout.size())
@@ -81,13 +88,13 @@ impl TypeErasedSparseSet {
 
     #[inline(always)]
     pub fn get_data_index<K: SparsetKey>(&self, key: K) -> Option<usize> {
-        self.indexes.get_index(key.index())
+        self.indexes.get_index(key)
     }
 
     #[inline(always)]
     /// Safety: you have to ensure len < capacity, and the entity does not existed yet within this sparse_set
     pub unsafe fn insert_unchecked<K: SparsetKey, V>(&mut self, key: K, value: V) -> ArenaPtr<V> {
-        self.indexes.set_index(key.index(), self.len);
+        self.indexes.set_index(key, self.len);
         let ptr = unsafe { ArenaPtr::new(self.raw.push(value, self.len)) };
         self.len += 1;
         ptr
@@ -145,13 +152,13 @@ impl TypeErasedSparseSet {
     pub fn swap_remove<K: SparsetKey, V>(&mut self, key: K, last_key_to_swap: K) -> Option<V> {
         debug_assert!({
             self.indexes
-                .get_index(last_key_to_swap.index())
+                .get_index(last_key_to_swap)
                 .is_some_and(|idx| idx == self.len - 1)
         });
 
-        self.indexes.get_index(key.index()).map(|index| unsafe {
-            self.indexes.set_index(last_key_to_swap.index(), index);
-            self.indexes.set_null(key.index());
+        self.indexes.get_index(key).map(|index| unsafe {
+            self.indexes.set_index(last_key_to_swap, index);
+            self.indexes.set_null(key);
             self.len -= 1;
             
             self.raw
@@ -186,7 +193,7 @@ impl TypeErasedSparseSet {
     }
 
     pub fn contains_key<K: SparsetKey>(&self, key: K) -> bool {
-        self.indexes.get_index(key.index()).is_some()
+        self.indexes.get_index(key).is_some()
     }
 
     #[inline(always)]
@@ -364,13 +371,13 @@ mod type_erased_sparse_set {
         let last = EntityId::new(4);
         let to_remove = EntityId::new(1);
 
-        let prev_index = ss.indexes.get_index(last.index());
+        let prev_index = ss.indexes.get_index(last);
 
         ss.swap_remove::<EntityId, Obj>(to_remove, last);
         let removed = ss.get::<EntityId, Obj>(to_remove);
         assert!(removed.is_none());
 
-        let new_index = ss.indexes.get_index(last.index());
+        let new_index = ss.indexes.get_index(last);
         assert_ne!(prev_index, new_index);
 
         println!("quitting");

@@ -34,7 +34,7 @@ fn main() -> ApliteResult {
         window_inner_size: (400, 400).into(),
     };
 
-    Aplite::new(config).view(root).launch()
+    Aplite::new(config, root).launch()
 }
 
 // const IMAGE_1: &str = "../../Wallpaper/milky-way-over-mountains-4k-fl-1680x1050-2045764561.jpg";

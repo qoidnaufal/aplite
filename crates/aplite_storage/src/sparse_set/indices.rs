@@ -1,8 +1,6 @@
 use std::num::NonZeroU32;
 
-// use crate::entity::EntityId;
-// use crate::sparse_set::SparsetKey;
-// use crate::data::component::ComponentId;
+use crate::SparsetKey;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct SparseSetIndex(pub(crate) Option<NonZeroU32>);
@@ -36,7 +34,7 @@ impl std::fmt::Debug for SparseSetIndex {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SparseIndices(pub(crate) Vec<SparseSetIndex>);
 
 impl Default for SparseIndices {
@@ -55,25 +53,26 @@ impl SparseIndices {
     }
 
     #[inline(always)]
-    pub fn get_index(&self, key: usize) -> Option<usize> {
-        self.0.get(key)
+    pub fn get_index<K: SparsetKey>(&self, key: K) -> Option<usize> {
+        self.0.get(key.index())
             .and_then(SparseSetIndex::get)
     }
 
     #[inline(always)]
-    pub fn set_index(&mut self, key: usize, data_index: usize) {
-        self.resize_if_needed(key);
-        self.0[key] = SparseSetIndex::new(data_index);
+    pub fn set_index<K: SparsetKey>(&mut self, key: K, data_index: usize) {
+        let index = key.index();
+        self.resize_if_needed(index);
+        self.0[index] = SparseSetIndex::new(data_index);
     }
 
     #[inline(always)]
-    pub fn set_null(&mut self, key: usize) {
-        self.0[key] = SparseSetIndex::null()
+    pub fn set_null<K: SparsetKey>(&mut self, key: K) {
+        self.0[key.index()] = SparseSetIndex::null()
     }
 
     #[inline(always)]
-    pub fn contains(&self, key: usize) -> bool {
-        self.0.get(key)
+    pub fn contains<K: SparsetKey>(&self, key: K) -> bool {
+        self.0.get(key.index())
             .is_some_and(SparseSetIndex::is_valid)
     }
 

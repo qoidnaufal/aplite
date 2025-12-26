@@ -2,7 +2,7 @@ use aplite_renderer::Scene;
 use aplite_storage::{Component, make_component};
 
 use crate::context::Context;
-use crate::widget::{Children, Mountable, Widget};
+use crate::widget::{Mountable, Widget};
 
 /*
 #########################################################
@@ -17,15 +17,13 @@ pub struct View<W> {
     widget: W
 }
 
-impl<W> View<W> {
+impl<W: Widget + Mountable + 'static> View<W> {
     pub fn new(widget: W) -> Self {
         Self {
             widget,
         }
     }
-}
 
-impl<W: Widget + Mountable + 'static> View<W> {
     pub fn as_ref(&self) -> &dyn Widget {
         &self.widget
     }
@@ -39,7 +37,7 @@ impl<W: Widget + Mountable + 'static> View<W> {
     }
 }
 
-impl<W: Widget + Mountable> Widget for View<W> {
+impl<W: Widget> Widget for View<W> {
     fn layout(&self, cx: &mut Context) {
         self.widget.layout(cx);
     }
@@ -134,8 +132,6 @@ impl<IV> IntoView for IV where IV: Widget + Mountable + Sized + 'static {
 */
 
 pub trait ViewTuple: IntoView {
-    fn into_typed_children(self) -> Children<Self>;
-
     fn for_each(&self, f: impl FnMut(&dyn Widget));
 
     fn for_each_mut(&mut self, f: impl FnMut(&mut dyn Widget));
@@ -154,14 +150,6 @@ macro_rules! impl_tuple_macro {
 macro_rules! view_tuple {
     ($($name:ident),*) => {
         impl<$($name: IntoView),*> ViewTuple for ($($name,)*) {
-            // type View = ($($name,)*);
-
-            fn into_typed_children(self) -> Children<Self> {
-                #[allow(non_snake_case)]
-                let ($($name,)*) = self;
-                Children(($($name,)*))
-            }
-
             fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
                 #[allow(non_snake_case)]
                 let ($($name,)*) = self;
@@ -218,13 +206,12 @@ mod view_tuple_test {
 
     #[test]
     fn children() {
-        let children = Children((
+        let stack = (
             h_stack((button("+", || {}), circle())),
             circle(),
-        ));
+        );
 
-        children.0.for_each(|widget| println!("{}", widget.debug_name()));
-
-        assert!(children.debug_name().contains(children.0.debug_name()));
+        stack.for_each(|widget| println!("{}", widget.debug_name()));
+        assert!(stack.debug_name().contains("Button"))
     }
 }

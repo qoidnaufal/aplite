@@ -18,10 +18,9 @@ pub mod prelude {
     pub use aplite_types::CornerRadius;
     pub use aplite_types::Length::{Fixed, Grow, Fit};
 
-    pub use crate::app::{Aplite, AppConfig};
+    pub use crate::app::{Aplite, AppConfig, Run};
     pub use crate::context::Context;
     pub use crate::cursor::Cursor;
-    pub use crate::state::AspectRatio;
 
     pub use crate::layout::{
         Orientation,

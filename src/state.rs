@@ -1,14 +1,9 @@
+use aplite_renderer::Shape;
 use aplite_types::{
-    Paint,
+    CornerRadius, Matrix3x2, Paint, Rect
 };
 
-#[derive(Debug, Clone, Copy)]
-pub enum AspectRatio {
-    Defined(u8, u8),
-    Source,
-    Undefined,
-}
-
+use crate::layout::{AlignH, AlignV, Orientation, Padding};
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Flag(u8);
 
@@ -83,3 +78,13 @@ pub struct Border {
     pub(crate) paint: Paint,
     pub(crate) width: f32,
 }
+
+#[derive(Clone)]
+pub struct Background(Paint);
+
+#[derive(Clone)]
+pub struct Spacing(u8);
+
+pub type DefaultRenderComponent = (Rect, Matrix3x2, Background, Border, Shape, CornerRadius);
+
+pub type ContainerComponent = (Rect, Orientation, AlignH, AlignV, Padding, Spacing);

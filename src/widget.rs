@@ -49,41 +49,15 @@ pub trait InteractiveWidget: Widget {
 /*
 #########################################################
 #
-# ViewFn
-#
-#########################################################
-*/
-
-impl<F, IV> Widget for F
-where
-    F: FnOnce() -> IV,
-    IV: IntoView,
-{
-    fn layout(&self, _: &mut Context) {}
-
-    fn draw(&self, _: &mut Scene) {}
-}
-
-impl<F, IV> Mountable for F
-where
-    F: FnOnce() -> IV + 'static,
-    IV: IntoView,
-{
-    fn build(self, cx: &mut Context) {
-        self().into_view().build(cx);
-    }
-}
-
-/*
-#########################################################
-#
 # Circle
 #
 #########################################################
 */
 
 pub fn circle() -> impl IntoView {
-    CircleWidget::new()
+    CircleWidget {
+        radius: Radius(100.),
+    }
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -94,14 +68,6 @@ make_component!(Radius);
 #[derive(Clone, PartialEq)]
 pub struct CircleWidget {
     radius: Radius,
-}
-
-impl CircleWidget {
-    fn new() -> Self {
-        Self {
-            radius: Radius(100.),
-        }
-    }
 }
 
 impl Widget for CircleWidget {
@@ -116,14 +82,6 @@ impl Widget for CircleWidget {
 
 impl Mountable for CircleWidget {
     fn build(self, cx: &mut Context) {
-        let entity = cx.create_entity();
-        cx.storage.insert_component_tuple(entity, (
-            // self.into_view().as_any_view(),
-            Rgba::from_u32(0x2b2b2b),
-            Matrix3x2::identity()
-        ));
-        cx.views.insert(entity.id(), self.into_view().as_any_view());
-        cx.entities.push(entity);
     }
 }
 
@@ -188,47 +146,44 @@ where
 /*
 #########################################################
 #
-# Children
-#
-#########################################################
-*/
-
-pub struct Children<IV>(pub(crate) IV);
-
-impl<IV: IntoView + 'static> Widget for Children<IV> {
-    fn layout(&self, cx: &mut Context) {
-        self.0.layout(cx);
-    }
-
-    fn draw(&self, scene: &mut Scene) {
-        self.0.draw(scene);
-    }
-}
-
-impl<IV: IntoView + 'static> Mountable for Children<IV> {
-    fn build(self, cx: &mut Context) {
-        self.0.build(cx);
-    }
-}
-
-/*
-#########################################################
-#
 # Other Types
 #
 #########################################################
 */
-// -- ()
-impl Widget for () {
+
+// -- ViewFn
+impl<F, IV> Widget for F
+where
+    F: FnOnce() -> IV,
+    IV: IntoView,
+{
     fn layout(&self, _: &mut Context) {}
+
     fn draw(&self, _: &mut Scene) {}
 }
 
-impl Mountable for () {
-    fn build(self, _: &mut Context) {}
+impl<F, IV> Mountable for F
+where
+    F: FnOnce() -> IV + 'static,
+    IV: IntoView,
+{
+    fn build(self, cx: &mut Context) {
+        self().into_view().build(cx);
+    }
 }
 
-// -- Option
+// -- Vec<IV>
+impl<IV: IntoView> Widget for Vec<IV> {
+    fn layout(&self, cx: &mut Context) {
+        self.iter().for_each(|widget| widget.layout(cx));
+    }
+
+    fn draw(&self, scene: &mut Scene) {
+        self.iter().for_each(|widget| widget.draw(scene));
+    }
+}
+
+// -- Option<IV>
 impl<IV: IntoView> Widget for Option<IV> {
     fn layout(&self, cx: &mut Context) {
         match self {
@@ -245,6 +200,16 @@ impl<IV: IntoView> Widget for Option<IV> {
     }
 }
 
+// -- ()
+impl Widget for () {
+    fn layout(&self, _: &mut Context) {}
+    fn draw(&self, _: &mut Scene) {}
+}
+
+impl Mountable for () {
+    fn build(self, _: &mut Context) {}
+}
+
 impl<IV: IntoView> Mountable for Option<IV> {
     fn build(self, cx: &mut Context) {
         match self {
@@ -254,7 +219,7 @@ impl<IV: IntoView> Mountable for Option<IV> {
     }
 }
 
-// -- u32
+// -- Signal
 impl<IV: IntoView> Widget for SignalRead<IV> {
     fn layout(&self, cx: &mut Context) {
         self.with(|widget| widget.layout(cx))
@@ -269,3 +234,32 @@ impl<IV: IntoView + Clone> Mountable for SignalRead<IV> {
         self.get().build(cx);
     }
 }
+
+// -- Primitives
+macro_rules! impl_view_primitive {
+    ($name:ty) => {
+        impl Widget for $name {
+            fn layout(&self, _: &mut Context) {}
+
+            fn draw(&self, _: &mut Scene) {}
+        }
+
+        impl Mountable for $name {
+            fn build(self, _: &mut Context) {}
+        }
+    };
+
+    ($next:ty, $($rest:ty),*) => {
+        impl_view_primitive!{ $next }
+        impl_view_primitive!{ $($rest),* }
+    };
+}
+
+impl_view_primitive!(
+    u8,    i8,
+    u16,   i16,
+    u32,   i32,
+    u64,   i64,
+    usize, isize,
+    u128,  i128
+);

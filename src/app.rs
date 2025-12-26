@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
@@ -16,7 +15,8 @@ use aplite_types::Size;
 use crate::prelude::ApliteResult;
 use crate::context::Context;
 use crate::error::ApliteError;
-use crate::view::IntoView;
+use crate::view::{IntoView, View};
+use crate::widget::Widget;
 
 pub(crate) struct WindowHandle {
     pub(crate) window: Arc<Window>,
@@ -28,33 +28,40 @@ pub struct AppConfig {
     pub executor_capacity: usize,
 }
 
-pub struct Aplite {
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            window_inner_size: Size::new(600., 400.),
+            allocation_size: unsafe { NonZeroUsize::new_unchecked(1024 * 1024) },
+            executor_capacity: 128,
+        }
+    }
+}
+
+pub struct Aplite<IV> {
+    view: View<IV>,
     cx: Context,
     renderer: Option<Renderer>,
-    window_handle: HashMap<WindowId, WindowHandle>,
+    window: Option<Arc<Window>>,
 
     #[cfg(feature = "render_stats")]
     stats: aplite_stats::Stats,
 }
 
 // user API
-impl Aplite {
-    pub fn new(config: AppConfig) -> Self {
+impl<IV: IntoView> Aplite<IV> {
+    pub fn new(config: AppConfig, view: IV) -> Self {
         Executor::init(config.executor_capacity);
 
         Self {
+            view: view.into_view(),
             renderer: None,
             cx: Context::new(config.window_inner_size, config.allocation_size),
-            window_handle: HashMap::with_capacity(4),
+            window: None,
 
             #[cfg(feature = "render_stats")]
             stats: aplite_stats::Stats::new(),
         }
-    }
-
-    pub fn view<IV: IntoView>(mut self, view: IV) -> Self {
-        self.cx.mount(view);
-        self
     }
 
     pub fn launch(mut self) -> ApliteResult {
@@ -69,22 +76,13 @@ impl Aplite {
         event_loop: &ActiveEventLoop,
     ) -> Result<(), ApliteError> {
         let window_attributes = WindowAttributes::default()
-            .with_inner_size(PhysicalSize::new(self.cx.rect.width, self.cx.rect.height));
-        let window = event_loop.create_window(window_attributes)?;
-        let window = Arc::new(window);
-        let window_id = window.id();
+            .with_inner_size(PhysicalSize::new(self.cx.window_rect.width, self.cx.window_rect.height));
+        let window = Arc::new(event_loop.create_window(window_attributes)?);
 
-        // self.cx.view.widget.calculate_size(None);
-        // self.cx.view.widget.calculate_layout(&mut cx);
-
-        self.cx.calculate_layout();
-        #[cfg(feature = "debug_tree")] eprintln!("{:#?}", view);
-
-        let renderer = block_on(async { Renderer::new(Arc::clone(&window)).await })?;
-
-        self.renderer = Some(renderer);
+        self.renderer = Some(block_on(Renderer::new(Arc::clone(&window)))?);
         self.track_window(Arc::clone(&window));
-        self.window_handle.insert(window_id, WindowHandle { window });
+        self.view.layout(&mut self.cx);
+        self.window = Some(window);
 
         Ok(())
     }
@@ -124,7 +122,7 @@ impl Aplite {
     }
 
     fn handle_close_request(&mut self, window_id: &WindowId, event_loop: &ActiveEventLoop) {
-        if let Some(window) = self.window_handle.remove(window_id) {
+        if let Some(window) = self.window.take_if(|w| w.id() == *window_id) {
             drop(window);
             event_loop.exit();
         }
@@ -132,21 +130,22 @@ impl Aplite {
 
     // WARN: not sure if retained mode works like this
     fn handle_redraw_request(&mut self, window_id: &WindowId, _: &ActiveEventLoop) {
-        if let Some(window_handle) = self.window_handle.get(window_id)
+        if let Some(window) = self.window.as_ref()
+            && window.id() == *window_id
             && let Some(renderer) = self.renderer.as_mut()
         {
             #[cfg(feature = "render_stats")] let start = std::time::Instant::now();
 
             renderer.begin();
-            self.cx.render(renderer);
-            renderer.finish(window_handle.window.as_ref());
+            self.cx.render(&self.view, renderer);
+            renderer.finish(window);
 
             #[cfg(feature = "render_stats")] self.stats.inc(start.elapsed());
         }
     }
 }
 
-impl ApplicationHandler for Aplite {
+impl<IV: IntoView> ApplicationHandler for Aplite<IV> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         self.initialize_window_and_renderer(event_loop)
             .unwrap_or_else(|_| event_loop.exit());
@@ -168,8 +167,14 @@ impl ApplicationHandler for Aplite {
             _ => {}
         }
 
-        if let Some(_handle) = self.window_handle.get(&window_id) {
-            self.cx.process_pending_update();
-        }
+        self.cx.process_pending_update();
     }
 }
+
+pub trait Run: IntoView {
+    fn run(self, config: AppConfig) -> ApliteResult {
+        Aplite::new(config, self).launch()
+    }
+}
+
+impl<IV: IntoView> Run for IV {}

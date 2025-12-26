@@ -33,10 +33,6 @@ impl ComponentBitset {
     pub(crate) fn update(&mut self, component_id: ComponentId) {
         self.0 |= 1 << component_id.0
     }
-
-    // pub(crate) fn contains(&self, component_id: ComponentId) -> bool {
-    //     self.0 & 1 << component_id.0 == 1 << component_id.0
-    // }
 }
 
 impl std::hash::Hash for ComponentBitset {

@@ -5,7 +5,6 @@ use aplite_reactive::*;
 use aplite_renderer::{Renderer};
 use aplite_types::{Vec2f, Rect, Size};
 use aplite_storage::{ComponentStorage, ComponentTuple, Entity, EntityId, EntityManager};
-use aplite_storage::{SparseSet, SparseTree, TypeIdMap, TypeErasedSparseSet};
 
 use crate::view::{IntoView, View, AnyView};
 use crate::cursor::{Cursor, MouseAction, MouseButton};
@@ -14,16 +13,11 @@ use crate::callback::CallbackStorage;
 
 pub struct Context {
     pub(crate) id_manager: EntityManager,
-
-    // SparseSet must always be accompanied with a Vec<Entity>
-    pub(crate) views: SparseSet<EntityId, AnyView>,
-    pub(crate) entities: Vec<Entity>,
-
     pub(crate) storage: ComponentStorage,
     pub(crate) callbacks: CallbackStorage,
     pub(crate) dirty: Signal<bool>,
     pub(crate) cursor: Cursor,
-    pub(crate) rect: Rect,
+    pub(crate) window_rect: Rect,
     pub(crate) pending_update: Vec<Entity>,
 }
 
@@ -39,13 +33,11 @@ impl Context {
     pub(crate) fn new(size: Size, _allocation_size: NonZeroUsize) -> Self {
         Self {
             id_manager: EntityManager::default(),
-            entities: Vec::new(),
             storage: ComponentStorage::new(),
-            views: SparseSet::default(),
             callbacks: CallbackStorage::default(),
             cursor: Cursor::default(),
             dirty: Signal::new(false),
-            rect: Rect::from_size(size),
+            window_rect: Rect::from_size(size),
             pending_update: Vec::new(),
         }
     }
@@ -117,7 +109,9 @@ impl Context {
         self.handle_drag();
     }
 
-    fn detect_hover(&mut self) {}
+    fn detect_hover(&mut self) {
+        let query = self.storage.query::<(&Vec2f, &Size)>();
+    }
 
     pub(crate) fn handle_drag(&mut self) {}
 
@@ -154,8 +148,8 @@ impl Context {
 // #                                                       #
 // #########################################################
 
-    pub(crate) fn render(&self, renderer: &mut Renderer) {
+    pub(crate) fn render<W: Widget>(&self, view: &View<W>, renderer: &mut Renderer) {
         let mut scene = renderer.scene();
-        self.views.iter().for_each(|any| any.as_ref().draw(&mut scene));
+        view.draw(&mut scene);
     }
 }
