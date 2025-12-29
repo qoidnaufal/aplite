@@ -1,20 +1,19 @@
-use std::any::TypeId;
 use std::num::NonZeroUsize;
 
 use aplite_reactive::*;
 use aplite_renderer::{Renderer, Scene};
 use aplite_types::{Rect, Rgba, Size, Vec2f};
-use aplite_storage::{ComponentStorage, ComponentTuple, Entity, EntityId, EntityManager};
+use aplite_storage::{ComponentStorage, ComponentTuple, Entity, EntityManager};
 
 use crate::view::IntoView;
 use crate::cursor::{Cursor, MouseAction, MouseButton};
 use crate::widget::Widget;
-use crate::callback::CallbackStorage;
+// use crate::callback::CallbackStorage;
 
 pub struct Context {
     pub(crate) id_manager: EntityManager,
     pub(crate) storage: ComponentStorage,
-    pub(crate) callbacks: CallbackStorage,
+    // pub(crate) callbacks: CallbackStorage,
     pub(crate) dirty: Signal<bool>,
     pub(crate) cursor: Cursor,
     pub(crate) window_rect: Rect,
@@ -34,7 +33,7 @@ impl Context {
         Self {
             id_manager: EntityManager::default(),
             storage: ComponentStorage::new(),
-            callbacks: CallbackStorage::default(),
+            // callbacks: CallbackStorage::default(),
             cursor: Cursor::default(),
             dirty: Signal::new(false),
             window_rect: Rect::from_size(size),
@@ -51,6 +50,7 @@ impl Context {
     }
 
     pub fn mount<IV: IntoView>(&mut self, widget: IV) {
+        let _ = widget;
     }
 
     pub fn layout(&mut self) {}
@@ -106,7 +106,7 @@ impl Context {
     }
 
     fn detect_hover(&mut self) {
-        let query = self.storage.query::<(&Vec2f, &mut Size)>();
+        // let query = self.storage.query::<(&Vec2f, &mut Size)>();
     }
 
     pub(crate) fn handle_drag(&mut self) {}
@@ -116,6 +116,8 @@ impl Context {
         action: impl Into<MouseAction>,
         button: impl Into<MouseButton>
     ) {
+        let _ = action;
+        let _ = button;
         // match self.cursor.process_click_event(action.into(), button.into()) {
         //     EmittedClickEvent::Captured(captured) => {
         //         let pos = self.state.common.query::<&Rect>().get(&captured).unwrap().vec2f();
@@ -135,8 +137,6 @@ impl Context {
         //     _ => {}
         // }
     }
-
-    pub(crate) fn calculate_layout(&mut self) {}
 
 // #########################################################
 // #                                                       #

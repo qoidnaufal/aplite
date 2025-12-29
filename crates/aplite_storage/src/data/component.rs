@@ -60,6 +60,6 @@ pub trait ComponentTuple {
     // fn for_each(&self, f: impl FnMut(&dyn Component));
 }
 
-pub(crate) trait ComponentTupleExt {
-    fn bitset(storage: &ComponentStorage) -> Option<ComponentBitset>;
-}
+// pub(crate) trait ComponentTupleExt {
+//     fn bitset(storage: &ComponentStorage) -> Option<ComponentBitset>;
+// }

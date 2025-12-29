@@ -1,7 +1,7 @@
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
-use winit::dpi::{PhysicalPosition, PhysicalSize, LogicalSize};
+use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowAttributes, WindowId};
 use winit::event::{ElementState, MouseButton, WindowEvent};
@@ -12,16 +12,12 @@ use aplite_renderer::Renderer;
 use aplite_future::{Executor, block_on};
 use aplite_types::Size;
 
-use crate::layout::{AlignH, AlignV, LayoutCx, LayoutRules, Orientation, Padding, Spacing};
+use crate::layout::{AlignH, AlignV, LayoutCx, LayoutRules, Axis, Padding, Spacing};
 use crate::prelude::ApliteResult;
 use crate::context::Context;
 use crate::error::ApliteError;
 use crate::view::IntoView;
 use crate::widget::Widget;
-
-pub(crate) struct WindowHandle {
-    pub(crate) window: Arc<Window>,
-}
 
 pub struct AppConfig {
     pub window_inner_size: Size,
@@ -49,12 +45,7 @@ pub struct Aplite<IV: IntoView> {
     stats: aplite_stats::Stats,
 }
 
-// user API
-impl<IV> Aplite<IV>
-where
-    IV: IntoView,
-    IV::View: Widget + 'static,
-{
+impl<IV: IntoView> Aplite<IV> {
     pub fn new(config: AppConfig, view: IV) -> Self {
         Executor::init(config.executor_capacity);
 
@@ -93,7 +84,7 @@ where
             &mut self.cx,
             LayoutRules {
                 padding: Padding::splat(5),
-                orientation: Orientation::Vertical,
+                orientation: Axis::Vertical,
                 align_h: AlignH::Left,
                 align_v: AlignV::Top,
                 spacing: Spacing(5),
@@ -165,11 +156,7 @@ where
     }
 }
 
-impl<IV> ApplicationHandler for Aplite<IV>
-where
-    IV: IntoView,
-    IV::View: Widget + 'static,
-{
+impl<IV: IntoView> ApplicationHandler for Aplite<IV> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         self.initialize_window_and_renderer(event_loop)
             .unwrap_or_else(|_| event_loop.exit());
@@ -195,11 +182,7 @@ where
     }
 }
 
-pub trait Launch
-where
-    Self: Sized + IntoView,
-    <Self as IntoView>::View: Widget
-{
+pub trait Launch: IntoView {
     fn launch_with_default_config(self) -> ApliteResult {
         self.launch(AppConfig::default())
     }
@@ -209,4 +192,4 @@ where
     }
 }
 
-impl<IV> Launch for IV where IV: IntoView, IV::View: Widget {}
+impl<IV> Launch for IV where IV: IntoView {}

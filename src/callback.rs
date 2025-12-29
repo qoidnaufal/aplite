@@ -1,8 +1,4 @@
-use std::marker::PhantomData;
-
-use aplite_storage::{Component, ComponentStorage};
-
-use crate::{context::Context, widget::Widget};
+// use aplite_storage::ComponentStorage;
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,28 +10,28 @@ pub enum WidgetEvent {
     Input,
 }
 
-#[derive(Default)]
-pub(crate) struct CallbackStorage(ComponentStorage);
+// #[derive(Default)]
+// pub(crate) struct CallbackStorage(ComponentStorage);
 
-impl std::ops::Deref for CallbackStorage {
-    type Target = ComponentStorage;
+// impl std::ops::Deref for CallbackStorage {
+//     type Target = ComponentStorage;
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
 
-impl std::ops::DerefMut for CallbackStorage {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
+// impl std::ops::DerefMut for CallbackStorage {
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.0
+//     }
+// }
 
-pub(crate) trait WidgetEventType {
-    const EVENT: WidgetEvent;
+// pub(crate) trait WidgetEventType {
+//     const EVENT: WidgetEvent;
 
-    fn id(&self) -> usize;
-}
+//     fn id(&self) -> usize;
+// }
 
 // pub(crate) struct Hover; impl WidgetEventType for Hover {
 //     const EVENT: WidgetEvent = WidgetEvent::Hover;
@@ -78,18 +74,12 @@ pub(crate) trait WidgetEventType {
 
 // impl<E: WidgetEventType + 'static> Component for Callback<E> {}
 
-pub trait InteractiveWidget: Widget + Sized + 'static {
-    fn on<E, F>(self, cx: &mut Context, f: F) -> Self
-    where
-        E: WidgetEventType + 'static,
-        F: FnMut() + 'static,
-    {
-        // let registrator = cx.callbacks.registrator();
-        // registrator.register::<Callback<E>>().finish();
-
-        // let entity = self.into_view().build(cx);
-        // cx.callbacks.insert_with_table_id(table_id, Callback::<E>::new(f));
-
-        self
-    }
-}
+// pub trait InteractiveWidget: Widget + Sized + 'static {
+//     fn on<E, F>(self, cx: &mut Context, f: F) -> Self
+//     where
+//         E: WidgetEventType + 'static,
+//         F: FnMut() + 'static,
+//     {
+//         self
+//     }
+// }

@@ -3,7 +3,7 @@ use aplite_storage::{Component, make_component};
 use aplite_types::Size;
 
 use crate::context::Context;
-use crate::layout::{LayoutCx, Orientation};
+use crate::layout::{LayoutCx, Axis};
 use crate::widget::Widget;
 
 /*
@@ -18,55 +18,13 @@ use crate::widget::Widget;
 /// - any type that implement Widget: `impl Widget for T`,
 /// - any type that implement Mount: `impl Mount for T`,
 /// - any function that produce IntoView: `FnOnce() -> IV where IV: IntoView` or `fn() -> impl IntoView`
-pub trait IntoView: Widget + Sized + 'static {
+pub trait IntoView: Widget + ForEachView + Sized + 'static {
     type View: IntoView;
     /// View basically is just a build context for the widget which implements it.
     /// Internally it's a `Box<dyn FnOnce(&mut ViewStorage) -> Entity + 'a>`
     fn into_view(self) -> Self::View;
 }
 
-
-// impl<IV> IntoView for IV where IV: Widget + Sized + 'static {
-//     fn into_view(self) -> View<Self> {
-//         View::new(self)
-//     }
-// }
-
-/*
-#########################################################
-#
-# View
-#
-#########################################################
-*/
-
-// #[derive(PartialEq)]
-// pub struct View<W> {
-//     widget: W
-// }
-
-// impl<W: Widget + 'static> View<W> {
-//     pub fn new(widget: W) -> Self {
-//         Self {
-//             widget,
-//         }
-//     }
-
-//     pub fn as_ref(&self) -> &dyn Widget {
-//         &self.widget
-//     }
-
-//     pub fn as_mut(&mut self) -> &mut dyn Widget {
-//         &mut self.widget
-//     }
-// }
-
-// impl<W: Widget> std::fmt::Debug for View<W> {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         f.debug_struct(self.widget.debug_name())
-//             .finish()
-//     }
-// }
 
 /*
 #########################################################
@@ -76,13 +34,13 @@ pub trait IntoView: Widget + Sized + 'static {
 #########################################################
 */
 
-pub trait AsAnyView: IntoView + Sized {
+pub trait ToAnyView: IntoView + Sized {
     fn into_any(self) -> AnyView {
         AnyView::new(Box::new(self.into_view()))
     }
 }
 
-impl<IV: IntoView> AsAnyView for IV {}
+impl<IV: IntoView> ToAnyView for IV {}
 
 pub struct AnyView {
     pub(crate) widget: Box<dyn Widget>,
@@ -112,6 +70,16 @@ impl Widget for AnyView {
     }
 }
 
+impl ForEachView for AnyView {
+    fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
+        f(self.as_ref())
+    }
+
+    fn for_each_mut(&mut self, mut f: impl FnMut(&mut dyn Widget)) {
+        f(self.as_mut())
+    }
+}
+
 impl IntoView for AnyView {
     type View = Self;
 
@@ -130,10 +98,14 @@ make_component!(AnyView);
 #########################################################
 */
 
-pub trait ForEach: IntoView {
-    fn for_each(&self, f: impl FnMut(&dyn Widget));
+pub trait ForEachView: Widget + Sized {
+    fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
+        f(self);
+    }
 
-    fn for_each_mut(&mut self, f: impl FnMut(&mut dyn Widget));
+    fn for_each_mut(&mut self, mut f: impl FnMut(&mut dyn Widget)) {
+        f(self)
+    }
 }
 
 macro_rules! impl_tuple_macro {
@@ -148,7 +120,7 @@ macro_rules! impl_tuple_macro {
 
 macro_rules! view_tuple {
     ($($name:ident),*) => {
-        impl<$($name: Widget + 'static),*> ForEach for ($($name,)*) {
+        impl<$($name: IntoView),*> ForEachView for ($($name,)*) {
             fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
                 #[allow(non_snake_case)]
                 let ($($name,)*) = self;
@@ -164,21 +136,21 @@ macro_rules! view_tuple {
             }
         }
 
-        impl<$($name: Widget + 'static),*> Widget for ($($name,)*) {
-            fn layout_node_size(&self, orientation: Orientation) -> Size {
+        impl<$($name: IntoView),*> Widget for ($($name,)*) {
+            fn layout_node_size(&self, axis: Axis) -> Size {
                 let mut s = Size::default();
 
-                match orientation {
-                    Orientation::Horizontal => {
+                match axis {
+                    Axis::Horizontal => {
                         self.for_each(|w| {
-                            let content_size = w.layout_node_size(orientation);
+                            let content_size = w.layout_node_size(axis);
                             s.width += content_size.width;
                             s.height = s.height.max(content_size.height);
                         })
                     },
-                    Orientation::Vertical => {
+                    Axis::Vertical => {
                         self.for_each(|w| {
-                            let content_size = w.layout_node_size(orientation);
+                            let content_size = w.layout_node_size(axis);
                             s.height += content_size.height;
                             s.width = s.width.max(content_size.width);
                         })
@@ -197,11 +169,13 @@ macro_rules! view_tuple {
             }
         }
 
-        impl<$($name: Widget + 'static),*> IntoView for ($($name,)*) {
-            type View = Self;
+        impl<$($name: IntoView),*> IntoView for ($($name,)*) {
+            type View = ($($name::View,)*);
 
             fn into_view(self) -> Self::View {
-                self
+                #[allow(non_snake_case)]
+                let ($($name,)*) = self;
+                ($($name.into_view(),)*)
             }
         }
 
@@ -284,7 +258,7 @@ mod view_test {
 
         let e = either(
             move || when.get(),
-            move || hstack((circle(), button("", || {}))),
+            move || hstack((circle, button("", || {}))),
             || button("+", || {}),
         );
 
@@ -297,6 +271,20 @@ mod view_test {
 
         let name = e.debug_name();
         println!("{name}");
-        assert!(name.contains("Circle"));
+        assert!(name.contains("Stack"));
+    }
+
+    #[test]
+    fn for_each_view() {
+        let ht = hstack((
+            circle(),
+            button("", || {}),
+        ));
+
+        ht.for_each(|w| {
+            println!("{}", w.debug_name())
+        });
+
+        circle.for_each(|w| println!("{}", w.debug_name()));
     }
 }

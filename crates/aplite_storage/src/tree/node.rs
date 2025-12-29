@@ -11,23 +11,23 @@ pub struct Node {
 }
 
 impl Node {
-    pub(crate) fn id(&self) -> EntityId {
-        self.entity
-    }
+    // pub(crate) fn id(&self) -> EntityId {
+    //     self.entity
+    // }
 
     pub(crate) fn index(&self) -> usize {
         self.entity.index()
     }
 
-    pub(crate) fn as_node_ref(&self) -> NodeRef<'_> {
-        NodeRef {
-            entity: self.entity,
-            parent: self.parent.as_ref(),
-            first_child: self.first_child.as_ref(),
-            next_sibling: self.next_sibling.as_ref(),
-            prev_sibling: self.prev_sibling.as_ref(),
-        }
-    }
+    // pub(crate) fn as_node_ref(&self) -> NodeRef<'_> {
+    //     NodeRef {
+    //         entity: self.entity,
+    //         parent: self.parent.as_ref(),
+    //         first_child: self.first_child.as_ref(),
+    //         next_sibling: self.next_sibling.as_ref(),
+    //         prev_sibling: self.prev_sibling.as_ref(),
+    //     }
+    // }
 }
 
 #[derive(Debug)]
@@ -40,9 +40,9 @@ pub struct NodeRef<'a> {
 }
 
 impl NodeRef<'_> {
-    pub(crate) fn index(&self) -> usize {
-        self.entity.index()
-    }
+    // pub(crate) fn index(&self) -> usize {
+    //     self.entity.index()
+    // }
 }
 
 // pub struct NodeMut<'a, E: Entity> {

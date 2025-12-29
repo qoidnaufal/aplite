@@ -3,8 +3,8 @@ use aplite_types::Size;
 use aplite_types::{CornerRadius, Rect, Rgba, theme::gruvbox_dark as theme};
 
 use crate::context::Context;
-use crate::layout::{AlignH, AlignV, LayoutCx, LayoutRules, Orientation, Padding, Spacing};
-use crate::view::IntoView;
+use crate::layout::{AlignH, AlignV, LayoutCx, LayoutRules, Axis, Padding, Spacing};
+use crate::view::{ForEachView, IntoView};
 use crate::widget::{InteractiveWidget, Widget};
 
 pub fn button<IV, F>(content: IV, f: F) -> Button<IV, F>
@@ -60,7 +60,7 @@ impl<IV: IntoView, F: Fn() + 'static> Button<IV, F> {
 }
 
 impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
-    fn layout_node_size(&self, _: Orientation) -> Size {
+    fn layout_node_size(&self, _: Axis) -> Size {
         self.rect.size()
     }
 
@@ -70,7 +70,7 @@ impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
 
         let rules = LayoutRules {
             padding: Padding::splat(5),
-            orientation: crate::layout::Orientation::Horizontal,
+            orientation: crate::layout::Axis::Horizontal,
             align_h: AlignH::Center,
             align_v: AlignV::Middle,
             spacing: Spacing(5),
@@ -83,6 +83,11 @@ impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
         self.content.draw(scene);
     }
 }
+
+impl<IV, F> ForEachView for Button<IV, F>
+where
+    IV: IntoView,
+    F: Fn() + 'static, {}
 
 impl<IV, F> IntoView for Button<IV, F>
 where

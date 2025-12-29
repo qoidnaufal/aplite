@@ -5,13 +5,13 @@ pub(crate) mod component;
 pub(crate) mod query;
 pub(crate) mod table;
 
-use query::{Query, Queryable, QueryData, QueryIter};
+use query::{Queryable, QueryData, QueryIter};
 use table::ComponentStorage;
 use component::{
     Component,
     ComponentEq,
     ComponentTuple,
-    ComponentTupleExt,
+    // ComponentTupleExt,
     ComponentBitset,
     ComponentId,
 };
@@ -64,13 +64,13 @@ macro_rules! component_bundle {
             // }
         }
 
-        impl<$($name: Component + 'static),*> ComponentTupleExt for ($($name,)*) {
-            fn bitset(storage: &ComponentStorage) -> Option<ComponentBitset> {
-                let mut bitset = ComponentBitset::new();
-                ($(bitset.update(storage.get_component_id::<$name>()?),)*);
-                Some(bitset)
-            }
-        }
+        // impl<$($name: Component + 'static),*> ComponentTupleExt for ($($name,)*) {
+        //     fn bitset(storage: &ComponentStorage) -> Option<ComponentBitset> {
+        //         let mut bitset = ComponentBitset::new();
+        //         ($(bitset.update(storage.get_component_id::<$name>()?),)*);
+        //         Some(bitset)
+        //     }
+        // }
     };
 }
 

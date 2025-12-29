@@ -1,11 +1,11 @@
 use std::path::Path;
 
-use aplite_types::{ImageData, Length};
+use aplite_types::{ImageData, Length, Matrix3x2, PaintRef, Rect, rgba};
 use aplite_renderer::Scene;
 
 use crate::context::Context;
 use crate::layout::LayoutCx;
-use crate::view::IntoView;
+use crate::view::{ForEachView, IntoView};
 use crate::widget::Widget;
 
 pub fn image<F: Fn() -> ImageData + 'static>(image_fn: F) -> impl IntoView {
@@ -54,14 +54,28 @@ impl Image {
 }
 
 impl Widget for Image {
-    fn layout(&mut self, cx: &mut LayoutCx<'_>) {
+    fn layout(&mut self, _: &mut LayoutCx<'_>) {
+        let _ = self.aspect_ratio;
         todo!()
     }
 
     fn draw(&self, scene: &mut Scene) {
-        todo!()
+        scene.draw(aplite_renderer::DrawArgs {
+            rect: &Rect::from_size((
+                self.width.get(self.data.width as _),
+                self.height.get(self.data.height as _),
+            ).into()),
+            transform: &Matrix3x2::identity(),
+            background_paint: &PaintRef::Image(self.data.downgrade()),
+            border_paint: &PaintRef::Color(&rgba(0x00000000)),
+            border_width: &0.,
+            shape: &aplite_renderer::Shape::Rect,
+            corner_radius: &aplite_types::CornerRadius::splat(0),
+        });
     }
 }
+
+impl ForEachView for Image {}
 
 impl IntoView for Image {
     type View = Self;

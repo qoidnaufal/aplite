@@ -23,7 +23,7 @@ pub mod prelude {
     pub use crate::cursor::Cursor;
 
     pub use crate::layout::{
-        Orientation,
+        Axis,
         Padding,
         AlignV,
         AlignH
@@ -35,8 +35,8 @@ pub mod prelude {
 
     pub use crate::view::{
         IntoView,
-        AsAnyView,
-        ForEach,
+        ToAnyView,
+        ForEachView,
     };
 
     pub type ApliteResult = Result<(), crate::error::ApliteError>;

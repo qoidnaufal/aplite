@@ -25,7 +25,7 @@ pub enum AlignV {
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Orientation {
+pub enum Axis {
     #[default]
     Horizontal,
     Vertical,
@@ -39,7 +39,7 @@ pub struct Padding {
     pub right: u8,
 }
 
-impl Orientation {
+impl Axis {
     pub fn is_vertical(&self) -> bool {
         matches!(self, Self::Vertical)
     }
@@ -105,10 +105,10 @@ impl<'a> LayoutCx<'a> {
     pub fn get_next_pos(&mut self, size: Size) -> Vec2f {
         let ret = self.next_pos;
         match self.rules.orientation {
-            Orientation::Horizontal => {
+            Axis::Horizontal => {
                 self.next_pos.x += size.width + self.rules.spacing.0 as f32;
             },
-            Orientation::Vertical => {
+            Axis::Vertical => {
                 self.next_pos.y += size.height + self.rules.spacing.0 as f32;
             },
         }
@@ -123,7 +123,7 @@ pub struct Spacing(pub(crate) u8);
 #[derive(Default, Debug, Clone, Copy)]
 pub struct LayoutRules {
     pub(crate) padding: Padding,
-    pub(crate) orientation: Orientation,
+    pub(crate) orientation: Axis,
     pub(crate) align_h: AlignH,
     pub(crate) align_v: AlignV,
     pub(crate) spacing: Spacing,
@@ -163,7 +163,7 @@ impl LayoutRules {
         let stretch = child_dimension_along_axis + stretch_factor;
 
         match self.orientation {
-            Orientation::Vertical => {
+            Axis::Vertical => {
                 let y = match self.align_v {
                     AlignV::Top => offset_y,
                     AlignV::Middle => offset_y - stretch / 2.,
@@ -171,7 +171,7 @@ impl LayoutRules {
                 };
                 Vec2f::new(offset_x, y)
             },
-            Orientation::Horizontal => {
+            Axis::Horizontal => {
                 let x = match self.align_h {
                     AlignH::Left => offset_x,
                     AlignH::Center => offset_x - stretch / 2.,

@@ -160,10 +160,10 @@ impl NodeStorage {
     //     f(&Self::read())
     // }
 
-    #[inline(always)]
-    pub(crate) fn with_mut<U>(f: impl FnOnce(&mut NodeStorage) -> U) -> U {
-        f(&mut Self::write())
-    }
+    // #[inline(always)]
+    // pub(crate) fn with_mut<U>(f: impl FnOnce(&mut NodeStorage) -> U) -> U {
+    //     f(&mut Self::write())
+    // }
 
     pub(crate) fn with_downcast<R, F, U>(node: &Node<R>, f: F) -> U
     where

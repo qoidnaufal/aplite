@@ -1,7 +1,5 @@
-use crate::shapes::Rect;
-
-pub struct Width(Length);
-pub struct Height(Length);
+// pub struct Width(Length);
+// pub struct Height(Length);
 
 #[derive(Clone, Copy)]
 pub enum Length {

@@ -2,11 +2,11 @@ use aplite_reactive::*;
 use aplite_renderer::Scene;
 use aplite_types::{Matrix3x2, PaintRef, Rect, Rgba, Size, Vec2f, rgba, rgb};
 
-use crate::layout::Orientation;
+use crate::layout::Axis;
 use crate::state::{Background, BorderColor, BorderWidth, Radius};
-use crate::{layout::LayoutCx, view::AnyView};
+use crate::layout::LayoutCx;
 // use crate::layout::*;
-use crate::view::IntoView;
+use crate::view::{ForEachView, IntoView};
 use crate::context::Context;
 // use crate::callback::WidgetEvent;
 
@@ -35,7 +35,7 @@ pub trait Widget {
         std::any::type_name::<Self>()
     }
 
-    fn layout_node_size(&self, orientation: Orientation) -> Size {
+    fn layout_node_size(&self, orientation: Axis) -> Size {
         let _ = orientation;
         Size::default()
     }
@@ -116,7 +116,7 @@ impl CircleWidget {
 }
 
 impl Widget for CircleWidget {
-    fn layout_node_size(&self, _: Orientation) -> Size {
+    fn layout_node_size(&self, _: Axis) -> Size {
         Size::new(self.radius.0, self.radius.0)
     }
 
@@ -134,6 +134,8 @@ impl Widget for CircleWidget {
         );
     }
 }
+
+impl ForEachView for CircleWidget {}
 
 impl IntoView for CircleWidget {
     type View = Self;
@@ -168,7 +170,7 @@ where
         }
     }
 
-    fn layout_node_size(&self, orientation: Orientation) -> Size {
+    fn layout_node_size(&self, orientation: Axis) -> Size {
         match self {
             Either::True(iv1) => iv1.layout_node_size(orientation),
             Either::False(iv2) => iv2.layout_node_size(orientation),
@@ -189,6 +191,11 @@ where
         }
     }
 }
+
+impl<T, F> ForEachView for Either<T, F>
+where
+    T: IntoView,
+    F: IntoView, {}
 
 impl<T, F> IntoView for Either<T, F>
 where
@@ -217,8 +224,8 @@ where
     let when = Memo::new(move |_| when());
 
     move || match when.get() {
-        true => Either::True(content_true()),
-        false => Either::False(content_false()),
+        true => Either::True(content_true().into_view()),
+        false => Either::False(content_false().into_view()),
     }
 }
 
@@ -232,18 +239,18 @@ where
         w.debug_name()
     }
 
-    fn layout_node_size(&self, orientation: Orientation) -> Size {
+    fn layout_node_size(&self, orientation: Axis) -> Size {
         let w = self();
         w.layout_node_size(orientation)
     }
 
     fn layout(&mut self, cx: &mut LayoutCx<'_>) {
-        let mut w = self().into_view();
+        let mut w = self();
         w.layout(cx);
     }
 
     fn draw(&self, scene: &mut Scene) {
-        self().into_view().draw(scene);
+        self().draw(scene);
     }
 }
 
@@ -258,6 +265,12 @@ where
         self().into_view()
     }
 }
+
+impl<F, IV> ForEachView for F
+where
+    F: Fn() -> IV + 'static,
+    IV: IntoView,
+{}
 
 /*
 #########################################################
@@ -286,6 +299,16 @@ impl<W: Widget + 'static> IntoView for Vec<W> {
     }
 }
 
+impl<W: Widget + 'static> ForEachView for Vec<W> {
+    fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
+        self.iter().for_each(|w| f(w));
+    }
+
+    fn for_each_mut(&mut self, mut f: impl FnMut(&mut dyn Widget)) {
+        self.iter_mut().for_each(|w| f(w));
+    }
+}
+
 /*
 #########################################################
 #
@@ -307,6 +330,20 @@ impl<W: Widget> Widget for Option<W> {
         match self {
             Some(widget) => widget.draw(scene),
             None => {},
+        }
+    }
+}
+
+impl<W: Widget> ForEachView for Option<W> {
+    fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
+        if let Some(w) = self {
+            f(w)
+        }
+    }
+
+    fn for_each_mut(&mut self, mut f: impl FnMut(&mut dyn Widget)) {
+        if let Some(w) = self {
+            f(w)
         }
     }
 }
@@ -333,6 +370,8 @@ impl Widget for () {
     fn draw(&self, _: &mut Scene) {}
 }
 
+impl ForEachView for () {}
+
 impl IntoView for () {
     type View = Self;
 
@@ -344,19 +383,79 @@ impl IntoView for () {
 /*
 #########################################################
 #
-# Signal
+# Reactive Nodes
 #
 #########################################################
 */
 
-impl<IV: IntoView> Widget for SignalRead<IV> {
+impl<IV: IntoView + Clone> Widget for SignalRead<IV> {
     fn layout(&mut self, _: &mut LayoutCx<'_>) {}
-    fn draw(&self, _: &mut Scene) {}
+    fn draw(&self, scene: &mut Scene) {
+        self.with_untracked(|w| w.draw(scene))
+    }
 }
 
-impl<IV: IntoView> Widget for Signal<IV> {
+impl<IV: IntoView + Clone> ForEachView for SignalRead<IV> {
+    fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
+        self.with_untracked(|w| f(w))
+    }
+
+    fn for_each_mut(&mut self, _: impl FnMut(&mut dyn Widget)) {
+    }
+}
+
+impl<IV: IntoView + Clone> IntoView for SignalRead<IV> {
+    type View = IV::View;
+
+    fn into_view(self) -> Self::View {
+        self.get_untracked().into_view()
+    }
+}
+
+// ----
+
+impl<IV: IntoView + Clone> Widget for Signal<IV> {
     fn layout(&mut self, _: &mut LayoutCx<'_>) {}
-    fn draw(&self, _: &mut Scene) {}
+    fn draw(&self, scene: &mut Scene) {
+        self.with_untracked(|w| w.draw(scene))
+    }
+}
+
+impl<IV: IntoView + Clone> ForEachView for Signal<IV> {
+    fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
+        self.with_untracked(|w| f(w))
+    }
+}
+
+impl<IV: IntoView + Clone> IntoView for Signal<IV> {
+    type View = IV::View;
+
+    fn into_view(self) -> Self::View {
+        self.get_untracked().into_view()
+    }
+}
+
+impl<IV: IntoView + Clone + PartialEq> Widget for Memo<IV> {
+    fn layout(&mut self, _: &mut LayoutCx<'_>) {
+    }
+
+    fn draw(&self, scene: &mut Scene) {
+        self.with_untracked(|w| w.draw(scene))
+    }
+}
+
+impl<IV: IntoView + Clone + PartialEq> ForEachView for Memo<IV> {
+    fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
+        self.with_untracked(|w| f(w))
+    }
+}
+
+impl<IV: IntoView + Clone + PartialEq> IntoView for Memo<IV> {
+    type View = IV::View;
+
+    fn into_view(self) -> Self::View {
+        self.get_untracked().into_view()
+    }
 }
 
 /*
@@ -367,11 +466,13 @@ impl<IV: IntoView> Widget for Signal<IV> {
 #########################################################
 */
 
-impl Widget for &'static str {
-    fn layout(&mut self, cx: &mut LayoutCx<'_>) {}
+impl<'a> Widget for &'a str {
+    fn layout(&mut self, _: &mut LayoutCx<'_>) {}
 
-    fn draw(&self, scene: &mut Scene) {}
+    fn draw(&self, _: &mut Scene) {}
 }
+
+impl<'a> ForEachView for &'a str {}
 
 impl IntoView for &'static str {
     type View = Self;

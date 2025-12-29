@@ -3,10 +3,10 @@ use aplite_renderer::{Scene, DrawArgs};
 use aplite_types::{Length, Matrix3x2, PaintRef, Rect, Rgba, Size};
 use aplite_types::theme::basic;
 
-use crate::layout::{AlignH, AlignV, LayoutCx, LayoutRules, Orientation, Padding, Spacing};
+use crate::layout::{AlignH, AlignV, LayoutCx, LayoutRules, Axis, Padding, Spacing};
 use crate::context::Context;
 use crate::state::{Background, BorderColor, BorderWidth};
-use crate::view::IntoView;
+use crate::view::{ForEachView, IntoView};
 use crate::widget::Widget;
 
 pub fn hstack<IV>(widget: IV) -> Stack<IV, Horizontal>
@@ -23,20 +23,27 @@ where
     Stack::<IV, Vertical>::new(widget)
 }
 
-pub trait StackOrientation {
-    const ORIENTATION: Orientation;
+pub trait StackDirection {
+    const AXIS: Axis;
+
+    // fn layout() {
+    //     match Self::AXIS {
+    //         Axis::Horizontal => todo!(),
+    //         Axis::Vertical => todo!(),
+    //     }
+    // }
 }
 
-pub struct Horizontal; impl StackOrientation for Horizontal {
-    const ORIENTATION: Orientation = Orientation::Horizontal;
+pub struct Horizontal; impl StackDirection for Horizontal {
+    const AXIS: Axis = Axis::Horizontal;
 }
 
-pub struct Vertical; impl StackOrientation for Vertical {
-    const ORIENTATION: Orientation = Orientation::Vertical;
+pub struct Vertical; impl StackDirection for Vertical {
+    const AXIS: Axis = Axis::Vertical;
 }
 
-pub struct Stack<IV, SO> {
-    content: IV,
+pub struct Stack<IV, AX> {
+    pub(crate) content: IV,
     rect: Rect,
     background: Background,
     border_color: BorderColor,
@@ -45,10 +52,10 @@ pub struct Stack<IV, SO> {
     spacing: Spacing,
     align_h: AlignH,
     align_v: AlignV,
-    marker: PhantomData<SO>
+    marker: PhantomData<AX>
 }
 
-impl<IV, SO: StackOrientation> Stack<IV, SO>
+impl<IV, AX: StackDirection> Stack<IV, AX>
 where
     IV: IntoView,
 {
@@ -106,14 +113,14 @@ where
     }
 }
 
-impl<IV, SO> Widget for Stack<IV, SO>
+impl<IV, AX> Widget for Stack<IV, AX>
 where
     IV: IntoView,
-    SO: StackOrientation + 'static,
+    AX: StackDirection + 'static,
 {
-    fn layout_node_size(&self, _: Orientation) -> Size {
+    fn layout_node_size(&self, _: Axis) -> Size {
         let mut s = Size::default();
-        let content_size = self.content.layout_node_size(SO::ORIENTATION);
+        let content_size = self.content.layout_node_size(AX::AXIS);
 
         s.width = content_size.width + self.padding.horizontal() as f32;
         s.height = content_size.height + self.padding.vertical() as f32;
@@ -127,7 +134,7 @@ where
 
         let rules = LayoutRules {
             padding: self.padding,
-            orientation: SO::ORIENTATION,
+            orientation: AX::AXIS,
             align_h: self.align_h,
             align_v: self.align_v,
             spacing: self.spacing,
@@ -151,12 +158,26 @@ where
     }
 }
 
-impl<IV, SO> IntoView for Stack<IV, SO>
+impl<IV, AX> ForEachView for Stack<IV, AX>
 where
     IV: IntoView,
-    SO: StackOrientation + 'static,
+    AX: StackDirection + 'static,
 {
-    type View = Stack<<IV as IntoView>::View, SO>;
+    fn for_each(&self, f: impl FnMut(&dyn Widget)) {
+        self.content.for_each(f);
+    }
+
+    fn for_each_mut(&mut self, f: impl FnMut(&mut dyn Widget)) {
+        self.content.for_each_mut(f);
+    }
+}
+
+impl<IV, AX> IntoView for Stack<IV, AX>
+where
+    IV: IntoView,
+    AX: StackDirection + 'static,
+{
+    type View = Stack<<IV as IntoView>::View, AX>;
 
     fn into_view(self) -> Self::View {
         Stack {
