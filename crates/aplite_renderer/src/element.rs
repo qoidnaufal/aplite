@@ -24,8 +24,8 @@ impl Element {
     pub fn new(size: Size) -> Self {
         Self {
             size,
-            background: basic::RED.into(),
-            border: basic::WHITE.into(),
+            background: basic::RED.pack_u32(),
+            border: basic::WHITE.pack_u32(),
             corners: 0,
             shape: 1,
             border_width: 0.0,

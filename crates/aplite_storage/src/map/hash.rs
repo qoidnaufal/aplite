@@ -50,7 +50,7 @@ impl BuildHasher for NullHashBuilder {
 pub type EntityIdMap<V> = HashMap<EntityId, V, NullHashBuilder>;
 pub type BitSetMap<V> = HashMap<ComponentBitset, V, NullHashBuilder>;
 
-pub struct TypeIdMap<V>(HashMap<TypeId, V, NullHashBuilder>);
+pub struct TypeIdMap<V>(HashMap<TypeId, V>);
 
 impl<V> Default for TypeIdMap<V> {
     fn default() -> Self {
@@ -60,7 +60,7 @@ impl<V> Default for TypeIdMap<V> {
 
 impl<V> TypeIdMap<V> {
     pub fn with_capacity(capacity: usize) -> Self {
-        Self(HashMap::with_capacity_and_hasher(capacity, NullHashBuilder))
+        Self(HashMap::with_capacity(capacity))
     }
 
     pub fn new() -> Self {

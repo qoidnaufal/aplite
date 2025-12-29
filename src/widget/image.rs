@@ -4,8 +4,9 @@ use aplite_types::{ImageData, Length};
 use aplite_renderer::Scene;
 
 use crate::context::Context;
+use crate::layout::LayoutCx;
 use crate::view::IntoView;
-use crate::widget::{Mountable, Widget};
+use crate::widget::Widget;
 
 pub fn image<F: Fn() -> ImageData + 'static>(image_fn: F) -> impl IntoView {
     Image::new(image_fn)
@@ -52,16 +53,20 @@ impl Image {
     }
 }
 
-impl Mountable for Image {
-    fn build(self, cx: &mut Context) {}
-}
-
 impl Widget for Image {
-    fn layout(&self, cx: &mut Context) {
+    fn layout(&mut self, cx: &mut LayoutCx<'_>) {
         todo!()
     }
 
     fn draw(&self, scene: &mut Scene) {
         todo!()
+    }
+}
+
+impl IntoView for Image {
+    type View = Self;
+
+    fn into_view(self) -> Self::View {
+        self
     }
 }

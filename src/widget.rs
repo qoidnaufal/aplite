@@ -1,10 +1,12 @@
 use aplite_reactive::*;
 use aplite_renderer::Scene;
-use aplite_storage::{Component, make_component};
-use aplite_types::{Matrix3x2, Rgba};
+use aplite_types::{Matrix3x2, PaintRef, Rect, Rgba, Size, Vec2f, rgba, rgb};
 
+use crate::layout::Orientation;
+use crate::state::{Background, BorderColor, BorderWidth, Radius};
+use crate::{layout::LayoutCx, view::AnyView};
 // use crate::layout::*;
-use crate::view::{AnyView, IntoView, View};
+use crate::view::IntoView;
 use crate::context::Context;
 // use crate::callback::WidgetEvent;
 
@@ -33,14 +35,24 @@ pub trait Widget {
         std::any::type_name::<Self>()
     }
 
-    fn layout(&self, cx: &mut Context);
+    fn layout_node_size(&self, orientation: Orientation) -> Size {
+        let _ = orientation;
+        Size::default()
+    }
+
+    fn layout(&mut self, cx: &mut LayoutCx<'_>);
 
     fn draw(&self, scene: &mut Scene);
 }
 
-pub trait Mountable: Sized {
-    fn build(self, cx: &mut Context);
+pub trait WidgetExt: IntoView {
+    fn style(mut self, f: impl FnOnce(&mut Self)) -> Self {
+        f(&mut self);
+        self
+    }
 }
+
+impl<IV: IntoView> WidgetExt for IV {}
 
 pub trait InteractiveWidget: Widget {
     fn execute(&self) {}
@@ -54,128 +66,211 @@ pub trait InteractiveWidget: Widget {
 #########################################################
 */
 
-pub fn circle() -> impl IntoView {
+pub fn circle() -> CircleWidget {
     CircleWidget {
+        pos: Vec2f::default(),
         radius: Radius(100.),
+        background: Background(rgba(0xff6969ff)),
+        border_color: BorderColor(rgb(0x000000)),
+        border_width: BorderWidth(0.),
     }
 }
-
-#[derive(Clone, Copy, PartialEq)]
-pub(crate) struct Radius(f32);
-
-make_component!(Radius);
 
 #[derive(Clone, PartialEq)]
 pub struct CircleWidget {
+    pos: Vec2f,
     radius: Radius,
+    background: Background,
+    border_color: BorderColor,
+    border_width: BorderWidth,
+}
+
+impl CircleWidget {
+    pub fn radius(self, radius: f32) -> Self {
+        Self {
+            radius: Radius(radius),
+            ..self
+        }
+    }
+
+    pub fn background(self, background: Rgba) -> Self {
+        Self {
+            background: Background(background),
+            ..self
+        }
+    }
+
+    pub fn border_color(self, border_color: Rgba) -> Self {
+        Self {
+            border_color: BorderColor(border_color),
+            ..self
+        }
+    }
+
+    pub fn border_width(self, border_width: f32) -> Self {
+        Self {
+            border_width: BorderWidth(border_width),
+            ..self
+        }
+    }
 }
 
 impl Widget for CircleWidget {
-    fn layout(&self, cx: &mut Context) {
-       todo!()
+    fn layout_node_size(&self, _: Orientation) -> Size {
+        Size::new(self.radius.0, self.radius.0)
+    }
+
+    fn layout(&mut self, cx: &mut LayoutCx<'_>) {
+        self.pos = cx.get_next_pos(Size::new(self.radius.0, self.radius.0));
     }
 
     fn draw(&self, scene: &mut Scene) {
-        todo!()
+        scene.draw_circle(
+            &Rect::from_vec2f_size(self.pos, Size::new(self.radius.0, self.radius.0)),
+            &Matrix3x2::identity(),
+            &PaintRef::Color(&self.background.0),
+            &PaintRef::Color(&self.background.0),
+            &0.
+        );
     }
 }
 
-impl Mountable for CircleWidget {
-    fn build(self, cx: &mut Context) {
+impl IntoView for CircleWidget {
+    type View = Self;
+
+    fn into_view(self) -> Self::View {
+        self
     }
 }
 
 /*
 #########################################################
 #
-# Show
+# Either & ViewFn
 #
 #########################################################
 */
 
-enum Show<IV1: IntoView, IV2: IntoView> {
-    True(IV1),
-    False(IV2)
+pub enum Either<T, F> {
+    True(T),
+    False(F)
 }
 
-impl<IV1: IntoView, IV2: IntoView> Widget for Show<IV1, IV2> {
-    fn layout(&self, cx: &mut Context) {
+impl<T, F> Widget for Either<T, F>
+where
+    T: IntoView,
+    F: IntoView,
+{
+    fn debug_name(&self) -> &'static str {
         match self {
-            Show::True(iv1) => iv1.layout(cx),
-            Show::False(iv2) => iv2.layout(cx),
+            Either::True(iv1) => iv1.debug_name(),
+            Either::False(iv2) => iv2.debug_name(),
+        }
+    }
+
+    fn layout_node_size(&self, orientation: Orientation) -> Size {
+        match self {
+            Either::True(iv1) => iv1.layout_node_size(orientation),
+            Either::False(iv2) => iv2.layout_node_size(orientation),
+        }
+    }
+
+    fn layout(&mut self, cx: &mut LayoutCx<'_>) {
+        match self {
+            Either::True(iv1) => iv1.layout(cx),
+            Either::False(iv2) => iv2.layout(cx),
         }
     }
 
     fn draw(&self, scene: &mut Scene) {
         match self {
-            Show::True(iv1) => iv1.draw(scene),
-            Show::False(iv2) => iv2.draw(scene),
+            Either::True(iv1) => iv1.draw(scene),
+            Either::False(iv2) => iv2.draw(scene),
         }
     }
 }
 
-impl<IV1: IntoView, IV2: IntoView> Mountable for Show<IV1, IV2> {
-    fn build(self, cx: &mut Context) {
-        match self {
-            Show::True(iv1) => iv1.build(cx),
-            Show::False(iv2) => iv2.build(cx),
-        }
+impl<T, F> IntoView for Either<T, F>
+where
+    T: IntoView,
+    F: IntoView,
+{
+    type View = Self;
+
+    fn into_view(self) -> Self::View {
+        self
     }
 }
 
-pub fn show<TrueFn, FalseFn, W, TrueIV, FalseIV>(
+pub fn either<W, TrueFn, FalseFn, T, F>(
+    when: W,
     content_true: TrueFn,
     content_false: FalseFn,
-    when: W,
 ) -> impl IntoView
 where
-    TrueFn: Fn() -> TrueIV + 'static,
-    FalseFn: Fn() -> FalseIV + 'static,
     W: Fn() -> bool + 'static,
-    TrueIV: IntoView,
-    FalseIV: IntoView,
+    TrueFn: Fn() -> T + 'static,
+    FalseFn: Fn() -> F + 'static,
+    T: IntoView,
+    F: IntoView,
 {
     let when = Memo::new(move |_| when());
 
     move || match when.get() {
-        true => Show::True(content_true),
-        false => Show::False(content_false),
+        true => Either::True(content_true()),
+        false => Either::False(content_false()),
+    }
+}
+
+impl<F, IV> Widget for F
+where
+    F: Fn() -> IV + 'static,
+    IV: IntoView,
+{
+    fn debug_name(&self) -> &'static str {
+        let w = self();
+        w.debug_name()
+    }
+
+    fn layout_node_size(&self, orientation: Orientation) -> Size {
+        let w = self();
+        w.layout_node_size(orientation)
+    }
+
+    fn layout(&mut self, cx: &mut LayoutCx<'_>) {
+        let mut w = self().into_view();
+        w.layout(cx);
+    }
+
+    fn draw(&self, scene: &mut Scene) {
+        self().into_view().draw(scene);
+    }
+}
+
+impl<F, IV> IntoView for F
+where
+    F: Fn() -> IV + 'static,
+    IV: IntoView,
+{
+    type View = IV::View;
+
+    fn into_view(self) -> Self::View {
+        self().into_view()
     }
 }
 
 /*
 #########################################################
 #
-# Other Types
+# Vec<IV>
 #
 #########################################################
 */
 
-// -- ViewFn
-impl<F, IV> Widget for F
-where
-    F: FnOnce() -> IV,
-    IV: IntoView,
-{
-    fn layout(&self, _: &mut Context) {}
-
-    fn draw(&self, _: &mut Scene) {}
-}
-
-impl<F, IV> Mountable for F
-where
-    F: FnOnce() -> IV + 'static,
-    IV: IntoView,
-{
-    fn build(self, cx: &mut Context) {
-        self().into_view().build(cx);
-    }
-}
-
 // -- Vec<IV>
-impl<IV: IntoView> Widget for Vec<IV> {
-    fn layout(&self, cx: &mut Context) {
-        self.iter().for_each(|widget| widget.layout(cx));
+impl<W: Widget> Widget for Vec<W> {
+    fn layout(&mut self, cx: &mut LayoutCx<'_>) {
+        self.iter_mut().for_each(|widget| widget.layout(cx));
     }
 
     fn draw(&self, scene: &mut Scene) {
@@ -183,9 +278,25 @@ impl<IV: IntoView> Widget for Vec<IV> {
     }
 }
 
+impl<W: Widget + 'static> IntoView for Vec<W> {
+    type View = Self;
+
+    fn into_view(self) -> Self::View {
+        self
+    }
+}
+
+/*
+#########################################################
+#
+# Option<IV>
+#
+#########################################################
+*/
+
 // -- Option<IV>
-impl<IV: IntoView> Widget for Option<IV> {
-    fn layout(&self, cx: &mut Context) {
+impl<W: Widget> Widget for Option<W> {
+    fn layout(&mut self, cx: &mut LayoutCx<'_>) {
         match self {
             Some(widget) => widget.layout(cx),
             None => {},
@@ -200,52 +311,90 @@ impl<IV: IntoView> Widget for Option<IV> {
     }
 }
 
+impl<W: Widget + 'static> IntoView for Option<W> {
+    type View = Self;
+
+    fn into_view(self) -> Self::View {
+        self
+    }
+}
+
+/*
+#########################################################
+#
+# Void
+#
+#########################################################
+*/
+
 // -- ()
 impl Widget for () {
-    fn layout(&self, _: &mut Context) {}
+    fn layout(&mut self, _: &mut LayoutCx<'_>) {}
     fn draw(&self, _: &mut Scene) {}
 }
 
-impl Mountable for () {
-    fn build(self, _: &mut Context) {}
-}
+impl IntoView for () {
+    type View = Self;
 
-impl<IV: IntoView> Mountable for Option<IV> {
-    fn build(self, cx: &mut Context) {
-        match self {
-            Some(widget) => widget.build(cx),
-            None => {},
-        }
+    fn into_view(self) -> Self::View {
+        self
     }
 }
 
-// -- Signal
+/*
+#########################################################
+#
+# Signal
+#
+#########################################################
+*/
+
 impl<IV: IntoView> Widget for SignalRead<IV> {
-    fn layout(&self, cx: &mut Context) {
-        self.with(|widget| widget.layout(cx))
-    }
-    fn draw(&self, scene: &mut Scene) {
-        self.with(|widget| widget.draw(scene))
+    fn layout(&mut self, _: &mut LayoutCx<'_>) {}
+    fn draw(&self, _: &mut Scene) {}
+}
+
+impl<IV: IntoView> Widget for Signal<IV> {
+    fn layout(&mut self, _: &mut LayoutCx<'_>) {}
+    fn draw(&self, _: &mut Scene) {}
+}
+
+/*
+#########################################################
+#
+# Text
+#
+#########################################################
+*/
+
+impl Widget for &'static str {
+    fn layout(&mut self, cx: &mut LayoutCx<'_>) {}
+
+    fn draw(&self, scene: &mut Scene) {}
+}
+
+impl IntoView for &'static str {
+    type View = Self;
+
+    fn into_view(self) -> Self::View {
+        self
     }
 }
 
-impl<IV: IntoView + Clone> Mountable for SignalRead<IV> {
-    fn build(self, cx: &mut Context) {
-        self.get().build(cx);
-    }
-}
+/*
+#########################################################
+#
+# Integers
+#
+#########################################################
+*/
 
-// -- Primitives
 macro_rules! impl_view_primitive {
     ($name:ty) => {
         impl Widget for $name {
-            fn layout(&self, _: &mut Context) {}
+            fn layout(&mut self, _: &mut LayoutCx<'_>) {}
 
             fn draw(&self, _: &mut Scene) {}
-        }
-
-        impl Mountable for $name {
-            fn build(self, _: &mut Context) {}
         }
     };
 

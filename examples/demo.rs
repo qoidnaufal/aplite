@@ -1,7 +1,7 @@
 use aplite::prelude::*;
 
 fn leaf() -> impl IntoView {
-    v_stack((
+    vstack((
         button("", || {}),
         button("", || {}),
         button("", || {}),
@@ -16,14 +16,19 @@ fn root() -> impl IntoView {
 
     Effect::new(move |_| eprintln!("{:?}", counter.get()));
 
-    let button_1 = button("+", inc);
+    let button_1 = button("+", inc).style(|b| b.corner_radius(CornerRadius::splat(50)));
     let button_2 = button("-", dec);
 
-    v_stack((
-        h_stack((button_1, button_2)),
-        show(circle, circle, move || counter.get() % 2 == 0),
+    vstack((
+        hstack((button_1, button_2)),
+        either(
+            move || counter.get() % 2 == 0,
+            circle,
+            || button("dummy", || {}),
+        ),
         leaf
     ))
+    .padding(Padding::splat(5))
 }
 
 
@@ -34,6 +39,8 @@ fn main() -> ApliteResult {
         window_inner_size: (400, 400).into(),
     };
 
+    // root.launch(config)
+    // root.launch_with_default_config()
     Aplite::new(config, root).launch()
 }
 

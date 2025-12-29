@@ -18,7 +18,7 @@ pub(crate) struct SubscriberSet(pub(crate) Vec<AnySubscriber>);
 
 impl SubscriberSet {
     pub(crate) fn any_update(&self) -> bool {
-        self.0.iter().any(AnySubscriber::update_if_necessary)
+        self.0.iter().any(AnySubscriber::try_update)
     }
 }
 
@@ -36,14 +36,12 @@ impl SubscriberStorage {
     }
 
     pub(crate) fn insert(id: SlotId, subscriber: AnySubscriber) {
-        let mut lock = Self::write();
-        if let Some(subscriber_set) = lock.storage.get_mut(id) {
-            if !subscriber_set.0.contains(&subscriber) {
-                subscriber_set.0.push(subscriber);
-            }
-        } else {
-            let mut set = lock.storage.insert(id, SubscriberSet::default());
-            set.as_mut().0.push(subscriber);
+        let mut set = Self::write()
+            .storage
+            .get_or_insert_with(id, || SubscriberSet::default());
+
+        if !set.0.contains(&subscriber) {
+            set.0.push(subscriber);
         }
     }
 
@@ -55,10 +53,11 @@ impl SubscriberStorage {
 
     pub(crate) fn remove(id: SlotId) {
         let mut lock = Self::write();
-        if let Some(last) = lock.ids.last().copied() {
-            let index = lock.storage.get_data_index(id).unwrap();
-            lock.ids.swap_remove(index);
-            lock.storage.swap_remove(id, last);
+        if let Some(index) = lock.storage.get_data_index(id) {
+            if let Some(last) = lock.ids.last().copied() {
+                lock.ids.swap_remove(index);
+                lock.storage.swap_remove(id, last);
+            }
         }
     }
 
@@ -100,13 +99,15 @@ impl AnySubscriber {
         self.mark_dirty();
     }
 
-    pub(crate) fn try_update(&self) -> bool {
-        let prev = Observer::swap_observer(Some(self.clone()));
-        let res = self.update_if_necessary();
-        Observer::swap_observer(prev);
-        res
+    pub(crate) fn needs_update(&self) -> bool {
+        self.as_observer(|| self.try_update())
+        // let prev = Observer::swap_observer(Some(self.clone()));
+        // let res = self.try_update();
+        // Observer::swap_observer(prev);
+        // res
     }
 
+    #[inline(always)]
     pub(crate) fn as_observer<R>(&self, f: impl FnOnce() -> R) -> R {
         let prev = Observer::swap_observer(Some(self.clone()));
         let res = f();
@@ -149,9 +150,9 @@ impl Reactive for AnySubscriber {
         }
     }
 
-    fn update_if_necessary(&self) -> bool {
+    fn try_update(&self) -> bool {
         self.upgrade()
-            .is_some_and(|subscriber| subscriber.update_if_necessary())
+            .is_some_and(|subscriber| subscriber.try_update())
     }
 }
 

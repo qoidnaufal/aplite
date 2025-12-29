@@ -2,11 +2,11 @@ use std::any::TypeId;
 use std::num::NonZeroUsize;
 
 use aplite_reactive::*;
-use aplite_renderer::{Renderer};
-use aplite_types::{Vec2f, Rect, Size};
+use aplite_renderer::{Renderer, Scene};
+use aplite_types::{Rect, Rgba, Size, Vec2f};
 use aplite_storage::{ComponentStorage, ComponentTuple, Entity, EntityId, EntityManager};
 
-use crate::view::{IntoView, View, AnyView};
+use crate::view::IntoView;
 use crate::cursor::{Cursor, MouseAction, MouseButton};
 use crate::widget::Widget;
 use crate::callback::CallbackStorage;
@@ -46,15 +46,11 @@ impl Context {
         self.id_manager.create()
     }
 
-    pub(crate) fn register<C: ComponentTuple>(&mut self, component_tuple: C) -> Entity {
-        let entity = self.id_manager.create();
+    pub fn register<C: ComponentTuple>(&mut self, entity: Entity, component_tuple: C) {
         self.storage.insert_component_tuple(entity, component_tuple);
-        entity
     }
 
     pub fn mount<IV: IntoView>(&mut self, widget: IV) {
-        let view = widget.into_view();
-        let entity = self.id_manager.create();
     }
 
     pub fn layout(&mut self) {}
@@ -110,7 +106,7 @@ impl Context {
     }
 
     fn detect_hover(&mut self) {
-        let query = self.storage.query::<(&Vec2f, &Size)>();
+        let query = self.storage.query::<(&Vec2f, &mut Size)>();
     }
 
     pub(crate) fn handle_drag(&mut self) {}
@@ -148,8 +144,32 @@ impl Context {
 // #                                                       #
 // #########################################################
 
-    pub(crate) fn render<W: Widget>(&self, view: &View<W>, renderer: &mut Renderer) {
+    pub(crate) fn render<W: Widget>(&self, widget: &W, renderer: &mut Renderer) {
         let mut scene = renderer.scene();
-        view.draw(&mut scene);
+        widget.draw(&mut scene);
     }
+}
+
+pub struct RenderCx<'a> {
+    cx: &'a mut Context,
+    scene: &'a mut Scene<'a>,
+}
+
+pub struct Theme {
+    pub red0: Rgba,
+    pub red1: Rgba,
+    pub green0: Rgba,
+    pub green1: Rgba,
+    pub blue0: Rgba,
+    pub blue1: Rgba,
+    pub yellow0: Rgba,
+    pub yellow1: Rgba,
+    pub orange0: Rgba,
+    pub orange1: Rgba,
+    pub purple0: Rgba,
+    pub purple1: Rgba,
+    pub background0: Rgba,
+    pub background1: Rgba,
+    pub foreground0: Rgba,
+    pub foreground1: Rgba,
 }

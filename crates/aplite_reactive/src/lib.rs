@@ -10,7 +10,7 @@ mod stored_value;
 mod subscriber;
 
 pub use effect::*;
-pub use graph::Scope;
+// pub use graph::Scope;
 pub use memo::*;
 pub use signal::*;
 pub use signal_read::*;

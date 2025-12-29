@@ -141,6 +141,23 @@ impl TypeErasedSparseSet {
     }
 
     #[inline(always)]
+    pub fn get_or_insert_with<K: SparsetKey, V>(&mut self, key: K, new: impl FnOnce() -> V) -> ArenaPtr<V> {
+        if let Some(exist) = self.get_mut(key) {
+            return ArenaPtr::new(exist);
+        }
+
+        if self.raw.capacity == 0 {
+            self.raw.initialize(4, self.item_layout.size(), self.item_layout.align());
+        }
+
+        if self.len >= self.raw.capacity {
+            self.raw.realloc(self.item_layout, self.len + 4);
+        }
+
+        unsafe { self.insert_unchecked(key, new()) }
+    }
+
+    #[inline(always)]
     pub fn replace<K: SparsetKey, V>(&mut self, key: K, value: V) -> Option<ArenaPtr<V>> {
         self.get_mut(key).map(|exist| {
             *exist = value;

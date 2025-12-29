@@ -12,10 +12,11 @@ use aplite_renderer::Renderer;
 use aplite_future::{Executor, block_on};
 use aplite_types::Size;
 
+use crate::layout::{AlignH, AlignV, LayoutCx, LayoutRules, Orientation, Padding, Spacing};
 use crate::prelude::ApliteResult;
 use crate::context::Context;
 use crate::error::ApliteError;
-use crate::view::{IntoView, View};
+use crate::view::IntoView;
 use crate::widget::Widget;
 
 pub(crate) struct WindowHandle {
@@ -38,8 +39,8 @@ impl Default for AppConfig {
     }
 }
 
-pub struct Aplite<IV> {
-    view: View<IV>,
+pub struct Aplite<IV: IntoView> {
+    view: IV::View,
     cx: Context,
     renderer: Option<Renderer>,
     window: Option<Arc<Window>>,
@@ -49,7 +50,11 @@ pub struct Aplite<IV> {
 }
 
 // user API
-impl<IV: IntoView> Aplite<IV> {
+impl<IV> Aplite<IV>
+where
+    IV: IntoView,
+    IV::View: Widget + 'static,
+{
     pub fn new(config: AppConfig, view: IV) -> Self {
         Executor::init(config.executor_capacity);
 
@@ -81,8 +86,23 @@ impl<IV: IntoView> Aplite<IV> {
 
         self.renderer = Some(block_on(Renderer::new(Arc::clone(&window)))?);
         self.track_window(Arc::clone(&window));
-        self.view.layout(&mut self.cx);
         self.window = Some(window);
+
+        let rect = self.cx.window_rect;
+        let mut layout_cx = LayoutCx::new(
+            &mut self.cx,
+            LayoutRules {
+                padding: Padding::splat(5),
+                orientation: Orientation::Vertical,
+                align_h: AlignH::Left,
+                align_v: AlignV::Top,
+                spacing: Spacing(5),
+            },
+            rect,
+            0.,
+            0
+        );
+        self.view.layout(&mut layout_cx);
 
         Ok(())
     }
@@ -145,7 +165,11 @@ impl<IV: IntoView> Aplite<IV> {
     }
 }
 
-impl<IV: IntoView> ApplicationHandler for Aplite<IV> {
+impl<IV> ApplicationHandler for Aplite<IV>
+where
+    IV: IntoView,
+    IV::View: Widget + 'static,
+{
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         self.initialize_window_and_renderer(event_loop)
             .unwrap_or_else(|_| event_loop.exit());
@@ -171,10 +195,18 @@ impl<IV: IntoView> ApplicationHandler for Aplite<IV> {
     }
 }
 
-pub trait Run: IntoView {
-    fn run(self, config: AppConfig) -> ApliteResult {
+pub trait Launch
+where
+    Self: Sized + IntoView,
+    <Self as IntoView>::View: Widget
+{
+    fn launch_with_default_config(self) -> ApliteResult {
+        self.launch(AppConfig::default())
+    }
+
+    fn launch(self, config: AppConfig) -> ApliteResult {
         Aplite::new(config, self).launch()
     }
 }
 
-impl<IV: IntoView> Run for IV {}
+impl<IV> Launch for IV where IV: IntoView, IV::View: Widget {}

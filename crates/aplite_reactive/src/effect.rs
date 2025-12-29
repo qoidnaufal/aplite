@@ -5,7 +5,7 @@ use aplite_future::{
     Executor,
 };
 
-use crate::graph::{Scope, Node, NodeStorage};
+use crate::graph::{Node, NodeStorage};
 use crate::subscriber::{Subscriber, ToAnySubscriber, AnySubscriber};
 use crate::source::AnySource;
 use crate::reactive_traits::*;
@@ -32,12 +32,12 @@ impl Effect {
     pub fn new<F, R>(mut f: F) -> Self
     where
         F: FnMut(Option<R>) -> R + 'static,
-        R: std::fmt::Debug + 'static,
+        R: 'static,
     {
         let (tx, mut rx) = aplite_channel();
         tx.notify();
 
-        let scope = Scope::new();
+        // let scope = Scope::new();
         let arc_node = Arc::new(RwLock::new(EffectNode::new(tx)));
         let subscriber = arc_node.to_any_subscriber();
         let node = NodeStorage::insert(arc_node);
@@ -46,14 +46,14 @@ impl Effect {
             let mut value = None::<R>;
 
             while rx.recv().await.is_some() {
-                if !scope.paused() && subscriber.try_update() {
+                if subscriber.needs_update() {
                     subscriber.clear_sources();
 
-                    scope.with_cleanup(|| subscriber.as_observer(|| {
+                    subscriber.as_observer(|| {
                         let prev_value = value.take();
                         let new_val = f(prev_value);
                         value = Some(new_val);
-                    }))
+                    })
                 }
             }
         });
@@ -124,17 +124,17 @@ impl Reactive for RwLock<EffectNode> {
         this.sender.notify();
     }
 
-    fn update_if_necessary(&self) -> bool {
+    fn try_update(&self) -> bool {
         let mut lock = self.write().unwrap();
         if lock.dirty {
             lock.dirty = false;
             return true;
         }
 
-        let sources = lock.source.clone();
-        drop(lock);
+        // let sources = lock.source.clone();
+        // drop(lock);
 
-        sources.iter().any(AnySource::update_if_necessary)
+        lock.source.iter().any(AnySource::update_if_necessary)
     }
 }
 
@@ -143,8 +143,8 @@ impl Reactive for Arc<RwLock<EffectNode>> {
         self.as_ref().mark_dirty();
     }
 
-    fn update_if_necessary(&self) -> bool {
-        self.as_ref().update_if_necessary()
+    fn try_update(&self) -> bool {
+        self.as_ref().try_update()
     }
 }
 

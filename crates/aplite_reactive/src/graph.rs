@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 use std::any::Any;
 use std::sync::{
-    Arc,
-    Weak,
+    // Arc,
+    // Weak,
     RwLock,
     RwLockReadGuard,
     RwLockWriteGuard,
@@ -20,115 +20,104 @@ use crate::subscriber::AnySubscriber;
 #########################################################
 */
 
-pub(crate) struct ReactiveScope {
-    // parent: Option<WeakScope>,
-    // storage: SlotMap<Box<dyn Any + Send + Sync>>,
-    children: Vec<WeakScope>,
-    node_ids: Vec<SlotId>,
-    // cleanups: Vec<Box<dyn FnOnce() + Send + Sync>>,
-    paused: bool,
-}
+// pub(crate) struct ReactiveScope {
+//     children: Vec<WeakScope>,
+//     node_ids: Vec<SlotId>,
+//     paused: bool,
+// }
 
-static SCOPE: RwLock<Option<WeakScope>> = RwLock::new(None);
+// static SCOPE: RwLock<Option<WeakScope>> = RwLock::new(None);
 
-pub struct Scope(Arc<RwLock<ReactiveScope>>);
+// pub struct Scope(Arc<RwLock<ReactiveScope>>);
 
-impl Scope {
-    pub fn new() -> Self {
-        let current_scope = SCOPE.read().unwrap().as_ref().map(WeakScope::clone);
+// impl Scope {
+//     pub fn new() -> Self {
+//         let current_scope = SCOPE.read().unwrap().as_ref().map(WeakScope::clone);
 
-        Self(Arc::new_cyclic(|weak| {
-            if let Some(current) = current_scope.as_ref().and_then(WeakScope::upgrade) {
-                current.0.write()
-                    .unwrap()
-                    .children
-                    .push(WeakScope(weak.clone()));
-            }
+//         Self(Arc::new_cyclic(|weak| {
+//             if let Some(current) = current_scope.as_ref().and_then(WeakScope::upgrade) {
+//                 current.0.write()
+//                     .unwrap()
+//                     .children
+//                     .push(WeakScope(weak.clone()));
+//             }
 
-            RwLock::new(ReactiveScope {
-                // parent: current_scope.clone(),
-                children: Vec::new(),
-                // storage: SlotMap::default(),
-                node_ids: Vec::new(),
-                // cleanups: Vec::new(),
-                paused: false,
-            })
-        }))
-    }
+//             RwLock::new(ReactiveScope {
+//                 children: Vec::new(),
+//                 node_ids: Vec::new(),
+//                 paused: false,
+//             })
+//         }))
+//     }
 
-    pub(crate) fn downgrade(&self) -> WeakScope {
-        WeakScope(Arc::downgrade(&self.0))
-    }
+//     pub(crate) fn downgrade(&self) -> WeakScope {
+//         WeakScope(Arc::downgrade(&self.0))
+//     }
 
-    pub fn with<R>(&self, f: impl FnOnce() -> R) -> R {
-        let prev = SCOPE.write().unwrap().replace(self.downgrade());
-        let res = f();
-        *SCOPE.write().unwrap() = prev;
-        res
-    }
+//     pub fn with<R>(&self, f: impl FnOnce() -> R) -> R {
+//         let prev = SCOPE.write().unwrap().replace(self.downgrade());
+//         let res = f();
+//         *SCOPE.write().unwrap() = prev;
+//         res
+//     }
 
-    pub fn with_cleanup<R>(&self, f: impl FnOnce() -> R) -> R {
-        self.cleanup();
-        self.with(f)
-    }
+//     pub fn with_cleanup<R>(&self, f: impl FnOnce() -> R) -> R {
+//         self.cleanup();
+//         self.with(f)
+//     }
 
-    pub(crate) fn cleanup(&self) {
-        let mut lock = self.0.write().unwrap();
+//     pub(crate) fn cleanup(&self) {
+//         let mut lock = self.0.write().unwrap();
 
-        // let cleanups = std::mem::take(&mut lock.cleanups);
-        let children = std::mem::take(&mut lock.children);
-        let node_ids = std::mem::take(&mut lock.node_ids);
+//         let children = std::mem::take(&mut lock.children);
+//         let node_ids = std::mem::take(&mut lock.node_ids);
 
-        // for cleanup_fn in cleanups {
-        //     cleanup_fn()
-        // }
+//         for child in children {
+//             if let Some(child) = child.upgrade() {
+//                 child.cleanup()
+//             }
+//         }
 
-        for child in children {
-            if let Some(child) = child.upgrade() {
-                child.cleanup()
-            }
-        }
+//         NodeStorage::with_mut(|graph| {
+//             for id in node_ids {
+//                 graph.inner.remove(id);
+//             }
+//         });
+//     }
 
-        NodeStorage::with_mut(|graph| {
-            for id in node_ids {
-                graph.inner.remove(id);
-            }
-        });
-    }
+//     pub fn pause(&self) {
+//         let mut write_lock = self.0.write().unwrap();
+//         write_lock.paused = true;
+//         drop(write_lock);
 
-    pub fn pause(&self) {
-        let mut write_lock = self.0.write().unwrap();
-        write_lock.paused = true;
-        drop(write_lock);
+//         let read_lock = self.0.read().unwrap();
+//         read_lock.children.iter()
+//             .for_each(|weak| {
+//                 if let Some(child_scope) = weak.upgrade() {
+//                     child_scope.pause();
+//                 }
+//             });
+//     }
 
-        let read_lock = self.0.read().unwrap();
-        read_lock.children.iter()
-            .for_each(|weak| {
-                if let Some(child_scope) = weak.upgrade() {
-                    child_scope.pause();
-                }
-            });
-    }
+//     pub(crate) fn paused(&self) -> bool {
+//         self.0.read().unwrap().paused
+//     }
+// }
 
-    pub(crate) fn paused(&self) -> bool {
-        self.0.read().unwrap().paused
-    }
-}
+// pub struct WeakScope(Weak<RwLock<ReactiveScope>>);
 
-pub struct WeakScope(Weak<RwLock<ReactiveScope>>);
+// impl Clone for WeakScope {
+//     fn clone(&self) -> Self {
+//         Self(Weak::clone(&self.0))
+//     }
+// }
 
-impl Clone for WeakScope {
-    fn clone(&self) -> Self {
-        Self(Weak::clone(&self.0))
-    }
-}
-
-impl WeakScope {
-    #[inline(always)]
-    fn upgrade(&self) -> Option<Scope> {
-        self.0.upgrade().map(Scope)
-    }
-}
+// impl WeakScope {
+//     #[inline(always)]
+//     fn upgrade(&self) -> Option<Scope> {
+//         self.0.upgrade().map(Scope)
+//     }
+// }
 
 /*
 #########################################################

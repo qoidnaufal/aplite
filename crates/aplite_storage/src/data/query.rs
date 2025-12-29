@@ -3,7 +3,7 @@ use crate::data::table::ComponentStorage;
 use crate::entity::Entity;
 use crate::sparse_set::SparsetKey;
 
-pub struct Query<'a, Q> {
+pub struct Query<'a, Q: QueryData<'a>> {
     source: &'a ComponentStorage,
     component_ids: Vec<ComponentId>,
     marker: std::marker::PhantomData<Q>,
@@ -11,7 +11,6 @@ pub struct Query<'a, Q> {
 
 pub struct QueryIter<'a, Q: QueryData<'a>> {
     pub(crate) buffer: Option<Q::Buffer>,
-    pub(crate) entities: Option<&'a [Entity]>,
     pub(crate) counter: usize,
 }
 
@@ -38,14 +37,13 @@ where
             .min_by_key(|entities| entities.len())
     }
 
-    pub fn buffers(&self) -> Option<Q::Buffer> {
-        Q::get_buffer(self.source)
+    pub fn buffers(&'a self) -> Option<Q::Buffer> {
+        Q::get_buffer(self.source, self.entities())
     }
 
     pub fn iter(&'a self) -> QueryIter<'a, Q> {
         QueryIter {
-            buffer: Q::get_buffer(self.source),
-            entities: self.entities(),
+            buffer: Q::get_buffer(self.source, self.entities()),
             counter: 0,
         }
     }
@@ -59,13 +57,13 @@ where
 #########################################################
 */
 
-pub trait Queryable {
-    type Item: Component;
+pub trait Queryable<'a> {
+    type Item: Component + 'static;
 
     fn convert(input: *mut Self::Item) -> Self;
 }
 
-impl<'a, T: Component> Queryable for &'a T {
+impl<'a, T: Component + 'static> Queryable<'a> for &'a T {
     type Item = T;
 
     fn convert(input: *mut Self::Item) -> Self {
@@ -75,7 +73,7 @@ impl<'a, T: Component> Queryable for &'a T {
     }
 }
 
-impl<'a, T: Component> Queryable for &'a mut T {
+impl<'a, T: Component + 'static> Queryable<'a> for &'a mut T {
     type Item = T;
 
     fn convert(input: *mut Self::Item) -> Self {
@@ -86,7 +84,7 @@ impl<'a, T: Component> Queryable for &'a mut T {
 }
 
 pub trait QueryData<'a> {
-    type Items;
+    type Items: crate::ComponentTuple;
     type Buffer;
 
     fn type_ids() -> Vec<std::any::TypeId>;
@@ -95,8 +93,16 @@ pub trait QueryData<'a> {
 
     fn bitset(source: &ComponentStorage) -> Option<ComponentBitset>;
 
-    fn get_buffer(source: &'a ComponentStorage) -> Option<Self::Buffer>;
+    fn get_buffer(source: &'a ComponentStorage, entities: Option<&'a[Entity]>) -> Option<Self::Buffer>;
 }
+
+/*
+#########################################################
+#
+# Test
+#
+#########################################################
+*/
 
 #[cfg(test)]
 mod query_test {
@@ -137,8 +143,8 @@ mod query_test {
             );
         }
 
-        let query = storage.query::<&mut Salary>();
-        let buffer = query.buffers().unwrap();
+        let query = storage.query::<(&Name, &mut Salary)>();
+        let (_, buffer) = query.buffers().unwrap();
         for salary in buffer.iter() {
             salary.0 += 10
         }

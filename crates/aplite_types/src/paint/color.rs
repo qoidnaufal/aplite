@@ -1,23 +1,49 @@
 use std::num::ParseIntError;
 
-pub const fn rgb8(r: u8, g: u8, b: u8) -> Rgba {
-    Rgba::new(r, g, b, 255)
+pub struct ParseError;
+
+impl std::fmt::Debug for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ParseError")
+            .finish()
+    }
 }
 
-pub const fn rgba8(r: u8, g: u8, b: u8, a: u8) -> Rgba {
-    Rgba::new(r, g, b, a)
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self, f)
+    }
 }
 
-pub const fn rgba32(val: u32) -> Rgba {
-    Rgba::from_u32(val)
+impl std::error::Error for ParseError {}
+
+impl From<ParseIntError> for ParseError {
+    fn from(_value: ParseIntError) -> Self {
+        Self
+    }
 }
 
-pub fn hex_alpha(hex: &str) -> Result<Rgba, ParseIntError> {
-    Rgba::from_hex_alpha(hex)
+/// accept 1 << 16 bytes of color, alpha will always be 255
+pub const fn rgb(val: u32) -> Rgba {
+    let r = (val >> 16) as u8;
+    let g = ((val >> 8) & 0xFF) as u8;
+    let b = (val & 0xFF) as u8;
+
+    Rgba { r, g, b, a: 255 }
 }
 
-pub fn hex(hex: &str) -> Result<Rgba, ParseIntError> {
-    Rgba::from_hex_alpha(hex)
+/// accept 1 << 24 bytes of color
+pub const fn rgba(val: u32) -> Rgba {
+    let r = (val >> 24) as u8;
+    let g = ((val >> 16) & 0xFF) as u8;
+    let b = ((val >> 8) & 0xFF) as u8;
+    let a = (val & 0xFF) as u8;
+
+    Rgba { r, g, b, a }
+}
+
+pub fn hex(hex: &str) -> Result<Rgba, ParseError> {
+    Rgba::hex(hex)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -35,27 +61,20 @@ impl Rgba {
     }
 
     #[inline(always)]
-    pub fn from_hex_alpha(hex: &str) -> Result<Self, ParseIntError> {
+    pub fn hex(hex: &str) -> Result<Self, ParseError> {
         debug_assert!(hex.starts_with('#'), "input doesn't start with #");
-        debug_assert!(
-            hex[1..].len() == 8,
-            "invalid input length, expected 8 'rrggbbaa'"
-        );
 
-        let num = u32::from_str_radix(&hex[1..], 16)?;
-        Ok(Self::from_u32(num))
-    }
-
-    #[inline(always)]
-    pub fn from_hex(hex: &str) -> Result<Self, ParseIntError> {
-        debug_assert!(hex.starts_with('#'), "input doesn't start with #");
-        debug_assert!(
-            hex[1..].len() == 6,
-            "invalid input length, expected 6 'rrggbb'"
-        );
-
-        let num = u32::from_str_radix(&hex[1..], 16)? << 8;
-        Ok(Self::from_u32(num | 255))
+        match hex[1..].len() {
+            6 => {
+                let num = u32::from_str_radix(&hex[1..], 16)?;
+                Ok(rgb(num))
+            },
+            8 => {
+                let num = u32::from_str_radix(&hex[1..], 16)? << 8;
+                Ok(rgb(num | 255))
+            },
+            _ => Err(ParseError)
+        }
     }
 
     #[inline(always)]
@@ -97,18 +116,6 @@ impl Rgba {
     }
 }
 
-impl From<Rgba> for u32 {
-    fn from(rgba: Rgba) -> Self {
-        rgba.pack_u32()
-    }
-}
-
-impl From<u32> for Rgba {
-    fn from(num: u32) -> Self {
-        Self::from_u32(num)
-    }
-}
-
 impl PartialEq for Rgba {
     fn eq(&self, other: &Self) -> bool {
         self.r == other.r
@@ -126,51 +133,47 @@ pub mod theme {
 }
 
 pub mod basic {
-    use super::Rgba;
+    use super::{Rgba, rgb, rgba};
 
-    pub const TRANSPARENT: Rgba = Rgba::new(0, 0, 0, 0);
-    pub const BLACK: Rgba = Rgba::new(0, 0, 0, 255);
-    pub const WHITE: Rgba = Rgba::new(255, 255, 255, 255);
+    pub const TRANSPARENT: Rgba = rgba(0x00000000);
+    pub const BLACK: Rgba = rgb(0x000000);
+    pub const WHITE: Rgba = rgb(0xffffff);
 
-    pub const RED: Rgba = Rgba::new(255, 0, 0, 255);
-    pub const GREEN: Rgba = Rgba::new(0, 255, 0, 255);
-    pub const BLUE: Rgba = Rgba::new(0, 0, 255, 255);
+    pub const RED: Rgba = rgb(0xff0000);
+    pub const GREEN: Rgba = rgb(0x00ff00);
+    pub const BLUE: Rgba = rgb(0x0000ff);
 
-    pub const YELLOW: Rgba = Rgba::new(255, 255, 0, 255);
-    pub const PURPLE: Rgba = Rgba::new(111, 72, 234, 255);
-    pub const LIGHT_GRAY: Rgba = Rgba::new(69, 69, 69, 255);
-    pub const DARK_GRAY: Rgba = Rgba::new(30, 30, 30, 255);
-    pub const DARK_GREEN: Rgba = Rgba::new(10, 30, 15, 255);
+    pub const YELLOW: Rgba = rgb(0xffff00);
 }
 
 pub mod gruvbox_dark {
-    use super::{Rgba, rgb8};
+    use super::{Rgba, rgb};
 
-    pub const BG_0: Rgba = rgb8(0x28, 0x28, 0x28);
-    pub const BG_H: Rgba = rgb8(0x1d, 0x20, 0x21);
-    pub const BG_S: Rgba = rgb8(0x32, 0x30, 0x2f);
+    pub const BG_0: Rgba = rgb(0x282828);
+    pub const BG_H: Rgba = rgb(0x1d2021);
+    pub const BG_S: Rgba = rgb(0x32302f);
 
-    pub const FG_0: Rgba = rgb8(0xfb, 0xf1, 0xc7);
-    pub const FG_1: Rgba = rgb8(0xeb, 0xdb, 0xb2);
+    pub const FG_0: Rgba = rgb(0xfbf1c7);
+    pub const FG_1: Rgba = rgb(0xebdbb2);
 
-    pub const RED_0: Rgba = rgb8(0xcc, 0x24, 0x1d);
-    pub const RED_1: Rgba = rgb8(0xfb, 0x49, 0x34);
+    pub const RED_0: Rgba = rgb(0xcc241d);
+    pub const RED_1: Rgba = rgb(0xfb4934);
 
-    pub const GREEN_0: Rgba = rgb8(0x98, 0x97, 0x1a);
-    pub const GREEN_1: Rgba = rgb8(0xb8, 0xbb, 0x26);
+    pub const GREEN_0: Rgba = rgb(0x98971a);
+    pub const GREEN_1: Rgba = rgb(0xb8bb26);
 
-    pub const YELLOW_0: Rgba = rgb8(0xd7, 0x99, 0x21);
-    pub const YELLOW_1: Rgba = rgb8(0xfa, 0xbd, 0x2f);
+    pub const YELLOW_0: Rgba = rgb(0xd79921);
+    pub const YELLOW_1: Rgba = rgb(0xfabd2f);
 
-    pub const BLUE_0: Rgba = rgb8(0x45, 0x85, 0x88);
-    pub const BLUE_1: Rgba = rgb8(0x83, 0xa5, 0x98);
+    pub const BLUE_0: Rgba = rgb(0x458588);
+    pub const BLUE_1: Rgba = rgb(0x83a598);
 
-    pub const PURPLE_0: Rgba = rgb8(0xb1, 0x62, 0x86);
-    pub const PURPLE_1: Rgba = rgb8(0xd3, 0x86, 0x9b);
+    pub const PURPLE_0: Rgba = rgb(0xb16286);
+    pub const PURPLE_1: Rgba = rgb(0xd3869b);
 
-    pub const AQUA_0: Rgba = rgb8(0x68, 0x9d, 0x6a);
-    pub const AQUA_1: Rgba = rgb8(0x8e, 0xc0, 0x7c);
+    pub const AQUA_0: Rgba = rgb(0x689d6a);
+    pub const AQUA_1: Rgba = rgb(0x8ec07c);
 
-    pub const ORANGE_0: Rgba = rgb8(0xd6, 0x5d, 0x0e);
-    pub const ORANGE_1: Rgba = rgb8(0xfe, 0x80, 0x19);
+    pub const ORANGE_0: Rgba = rgb(0xd65d0e);
+    pub const ORANGE_1: Rgba = rgb(0xfe8019);
 }

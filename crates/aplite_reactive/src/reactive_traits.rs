@@ -9,7 +9,7 @@
 pub trait Reactive {
     fn mark_dirty(&self);
 
-    fn update_if_necessary(&self) -> bool;
+    fn try_update(&self) -> bool;
 }
 
 pub trait Track {

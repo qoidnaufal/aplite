@@ -4,13 +4,8 @@ use aplite_types::{
     Size,
     Length
 };
-use aplite_storage::{
-    Entity,
-    EntityId,
-    SparseSet,
-    SparseTree,
-};
 
+use crate::context::Context;
 use crate::widget::Widget;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,9 +68,9 @@ impl Padding {
         }
     }
 
-    pub(crate) fn vertical(&self) -> u8 { self.top + self.bottom }
+    pub fn vertical(&self) -> u8 { self.top + self.bottom }
 
-    pub(crate) fn horizontal(&self) -> u8 { self.left + self.right }
+    pub fn horizontal(&self) -> u8 { self.left + self.right }
 
     pub fn set_all(&mut self, value: u8) {
         self.top = value;
@@ -86,27 +81,52 @@ impl Padding {
 }
 
 pub struct LayoutCx<'a> {
+    pub(crate) cx: &'a mut Context,
     pub(crate) next_pos: Vec2f,
-    pub(crate) rules: &'a LayoutRules,
+    pub(crate) rules: LayoutRules,
 }
 
 impl<'a> LayoutCx<'a> {
-    pub fn new(rules: &'a LayoutRules, rect: &'a Rect, child_size: f32, child_count: usize) -> Self {
+    pub fn new(
+        cx: &'a mut Context,
+        rules: LayoutRules,
+        rect: Rect,
+        child_size: f32,
+        child_count: usize
+    ) -> Self {
         let next_pos = rules.start_pos(rect, child_size, child_count as f32);
         Self {
+            cx,
             rules,
             next_pos,
         }
     }
+
+    pub fn get_next_pos(&mut self, size: Size) -> Vec2f {
+        let ret = self.next_pos;
+        match self.rules.orientation {
+            Orientation::Horizontal => {
+                self.next_pos.x += size.width + self.rules.spacing.0 as f32;
+            },
+            Orientation::Vertical => {
+                self.next_pos.y += size.height + self.rules.spacing.0 as f32;
+            },
+        }
+
+        ret
+    }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone, Copy)]
+pub struct Spacing(pub(crate) u8);
+
+#[derive(Default, Debug, Clone, Copy)]
 pub struct LayoutRules {
     pub(crate) padding: Padding,
     pub(crate) orientation: Orientation,
     pub(crate) align_h: AlignH,
     pub(crate) align_v: AlignV,
-    pub(crate) spacing: u8,
+    pub(crate) spacing: Spacing,
 }
 
 impl LayoutRules {
@@ -136,11 +156,11 @@ impl LayoutRules {
         }
     }
 
-    fn start_pos(&self, rect: &Rect, child_total_size: f32, len: f32) -> Vec2f {
-        let offset_x = self.offset_x(rect);
-        let offset_y = self.offset_y(rect);
-        let stretch_factor = self.spacing as f32 * (len - 1.);
-        let stretch = child_total_size + stretch_factor;
+    fn start_pos(&self, rect: Rect, child_dimension_along_axis: f32, child_count: f32) -> Vec2f {
+        let offset_x = self.offset_x(&rect);
+        let offset_y = self.offset_y(&rect);
+        let stretch_factor = self.spacing.0 as f32 * (child_count - 1.);
+        let stretch = child_dimension_along_axis + stretch_factor;
 
         match self.orientation {
             Orientation::Vertical => {
@@ -159,41 +179,6 @@ impl LayoutRules {
                 };
                 Vec2f::new(x, offset_y)
             }
-        }
-    }
-}
-
-pub struct LayoutNode {
-    pub(crate) width: Length,
-    pub(crate) height: Length,
-    pub(crate) min_width: Option<f32>,
-    pub(crate) min_height: Option<f32>,
-    pub(crate) max_width: Option<f32>,
-    pub(crate) max_height: Option<f32>,
-}
-
-impl LayoutNode {
-    pub fn from_radius(val: Length) -> Self {
-        todo!()
-    }
-}
-
-pub struct Layout {
-    pub(crate) window_rect: Rect,
-    pub(crate) tree: SparseTree,
-    pub(crate) rects: SparseSet<EntityId, Rect>,
-}
-
-impl Layout {
-    pub(crate) fn new(window_rect: Rect) -> Self {
-        Self::with_capacity(window_rect, 0)
-    }
-
-    pub(crate) fn with_capacity(window_rect: Rect, capacity: usize) -> Self {
-        Self {
-            window_rect,
-            tree: SparseTree::with_capacity(capacity),
-            rects: SparseSet::with_capacity(capacity),
         }
     }
 }

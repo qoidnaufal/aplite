@@ -256,7 +256,7 @@ pub struct DrawArgs<'a> {
 
 // FIXME: this feels immediate mode to me, idk
 impl Scene<'_> {
-    fn draw(
+    pub fn draw(
         &mut self,
         DrawArgs {
             rect,

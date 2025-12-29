@@ -7,17 +7,20 @@ pub(crate) struct Value<T> {
 unsafe impl<T> Send for Value<T> {}
 unsafe impl<T> Sync for Value<T> {}
 
-impl<T: 'static> Value<T> {
+impl<T> Value<T> {
+    #[inline(always)]
     pub(crate) fn new(value: T) -> Self {
         Self {
             inner: Arc::new(RwLock::new(value)),
         }
     }
 
+    #[inline(always)]
     pub(crate) fn read<'a>(&'a self) -> LockResult<RwLockReadGuard<'a, T>> {
         self.inner.read()
     }
 
+    #[inline(always)]
     pub(crate) fn write<'a>(&'a self) -> LockResult<RwLockWriteGuard<'a, T>> {
         self.inner.write()
     }

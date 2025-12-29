@@ -5,7 +5,7 @@ pub(crate) mod component;
 pub(crate) mod query;
 pub(crate) mod table;
 
-use query::{Queryable, QueryData, QueryIter};
+use query::{Query, Queryable, QueryData, QueryIter};
 use table::ComponentStorage;
 use component::{
     Component,
@@ -171,10 +171,10 @@ macro_rules! query {
     ($($name:ident),*) => {
         impl<'a, $($name),*> QueryData<'a> for ($($name,)*)
         where
-            $($name: Queryable),*,
-            $($name::Item: 'static),*,
+            $($name: Queryable<'a>),*,
+            $($name::Item: Component + 'static),*,
         {
-            type Items = ($(<$name as Queryable>::Item,)*);
+            type Items = ($(<$name as Queryable<'a>>::Item,)*);
 
             type Buffer = ($(MarkedBuffer<'a, $name>,)*);
 
@@ -196,28 +196,30 @@ macro_rules! query {
                 Some(bitset)
             }
 
-            fn get_buffer(source: &'a ComponentStorage) -> Option<Self::Buffer> {
-                Some(($(source.get_marked_buffer::<$name>()?,)*))
+            fn get_buffer(source: &'a ComponentStorage, entities: Option<&'a[Entity]>) -> Option<Self::Buffer> {
+                Some(($(source.get_marked_buffer_with_entities::<$name>(entities?)?,)*))
             }
         }
 
         impl<'a, $($name),*> Iterator for QueryIter<'a, ($($name,)*)>
         where
-            $($name: Queryable),*,
-            $($name::Item: 'static),*,
+            $($name: Queryable<'a>),*,
+            $($name::Item: Component + 'static),*,
         {
             type Item = ($($name,)*);
 
             fn next(&mut self) -> Option<Self::Item> {
-                let entity = self.entities?.get(self.counter)?;
-
                 #[allow(non_snake_case)]
                 let ($($name,)*): &($(MarkedBuffer<'a, $name>,)*) = self.buffer.as_ref()?;
 
                 let res = ($(
-                    $name.indexes.get_index(*entity).map(|index| unsafe {
-                        $name::convert($name.buffer.get_unchecked_raw::<$name::Item>(index))
-                    })?,
+                    $name.entities.get(self.counter)
+                        .and_then(|entity| {
+                            $name.indices.get_index(*entity)
+                                .map(|index| unsafe {
+                                    $name::convert($name.raw.add(index).as_ptr())
+                                })
+                        })?,
                 )*);
 
                 self.counter += 1;
@@ -242,10 +244,10 @@ macro_rules! query_one {
     ($name:ident) => {
         impl<'a, $name> QueryData<'a> for $name
         where
-            $name: Queryable,
+            $name: Queryable<'a>,
             $name::Item: 'static,
         {
-            type Items = <$name as Queryable>::Item;
+            type Items = (<$name as Queryable<'a>>::Item,);
 
             type Buffer = MarkedBuffer<'a, $name>;
 
@@ -263,24 +265,25 @@ macro_rules! query_one {
                 Some(ComponentBitset(1 << component_id.0))
             }
 
-            fn get_buffer(source: &'a ComponentStorage) -> Option<Self::Buffer> {
-                source.get_marked_buffer::<$name>()
+            fn get_buffer(source: &'a ComponentStorage, entities: Option<&'a [Entity]>) -> Option<Self::Buffer> {
+                source.get_marked_buffer_with_entities::<$name>(entities?)
             }
         }
 
         impl<'a, $name> Iterator for QueryIter<'a, $name>
         where
-            $name: Queryable,
+            $name: Queryable<'a>,
             $name::Item: 'static,
         {
             type Item = $name;
 
             fn next(&mut self) -> Option<Self::Item> {
-                let entity = self.entities?.get(self.counter)?;
                 let buffer = self.buffer.as_ref()?;
-                let res = buffer.indexes.get_index(*entity)
-                    .map(|index| unsafe {
-                        $name::convert(buffer.buffer.get_unchecked_raw::<$name::Item>(index))
+                let res = buffer.entities.get(self.counter)
+                    .and_then(|entity| {
+                        buffer.indices.get_index(*entity).map(|index| unsafe {
+                            $name::convert(buffer.raw.add(index).as_ptr())
+                        })
                     });
                 self.counter += 1;
                 res

@@ -38,7 +38,7 @@ impl std::error::Error for Error {}
 /// 
 /// On iter, slightly faster than Vec\<T\> and much faster than Vec<Box\<dyn Any\>>.
 pub struct TypeErasedBuffer {
-    raw: RawBuffer,
+    pub(crate) raw: RawBuffer,
     len: usize,
     item_layout: alloc::Layout,
 }
@@ -127,7 +127,7 @@ impl TypeErasedBuffer {
         self.len = 0;
     }
 
-    pub(crate) unsafe fn get_unchecked_raw<T>(&self, index: usize) -> *mut T {
+    pub unsafe fn get_unchecked_raw<T>(&self, index: usize) -> *mut T {
         unsafe {
             self.raw.get_raw(index * self.item_layout.size()).cast()
         }
@@ -189,9 +189,9 @@ impl TypeErasedBuffer {
         IterMut::new(self)
     }
 
-    pub(crate) fn iter_raw<'a, T>(&'a self) -> IterRaw<'a, T> {
-        IterRaw::new(self)
-    }
+    // pub(crate) fn iter_raw<'a, T>(&'a self) -> IterRaw<'a, T> {
+    //     IterRaw::new(self)
+    // }
 }
 
 /*
@@ -447,29 +447,29 @@ impl<'a, T: 'a> DoubleEndedIterator for IterMut<'a, T> {
     }
 }
 
-pub(crate) struct IterRaw<'a, T> {
-    base: Base<T>,
-    marker: PhantomData<fn() -> &'a mut T>,
-}
+// pub(crate) struct IterRaw<'a, T> {
+//     base: Base<T>,
+//     marker: PhantomData<fn() -> &'a mut T>,
+// }
 
-impl<'a, T> IterRaw<'a, T> {
-    fn new(source: &'a TypeErasedBuffer) -> Self {
-        Self {
-            base: Base::new(source.raw.block.cast::<T>().as_ptr(), source.len),
-            marker: PhantomData,
-        }
-    }
-}
+// impl<'a, T> IterRaw<'a, T> {
+//     fn new(source: &'a TypeErasedBuffer) -> Self {
+//         Self {
+//             base: Base::new(source.raw.block.cast::<T>().as_ptr(), source.len),
+//             marker: PhantomData,
+//         }
+//     }
+// }
 
-impl<'a, T: 'a> Iterator for IterRaw<'a, T> {
-    type Item = *mut T;
+// impl<'a, T: 'a> Iterator for IterRaw<'a, T> {
+//     type Item = *mut T;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        unsafe {
-            self.base.next(|raw| raw)
-        }
-    }
-}
+//     fn next(&mut self) -> Option<Self::Item> {
+//         unsafe {
+//             self.base.next(|raw| raw)
+//         }
+//     }
+// }
 
 /*
 #########################################################

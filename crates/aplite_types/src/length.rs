@@ -1,5 +1,8 @@
 use crate::shapes::Rect;
 
+pub struct Width(Length);
+pub struct Height(Length);
+
 #[derive(Clone, Copy)]
 pub enum Length {
     Fixed(f32),
@@ -14,11 +17,11 @@ impl Default for Length {
 }
 
 impl Length {
-    pub fn get_width(&self, inner_bound: &Rect, outer_bound: &Rect) -> f32 {
+    pub fn get(&self, constraint: f32) -> f32 {
         match self {
             Length::Fixed(val) => *val,
-            Length::Grow => outer_bound.width,
-            Length::Fit => inner_bound.width,
+            Length::Grow => constraint,
+            Length::Fit => constraint,
         }
     }
 

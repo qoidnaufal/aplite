@@ -76,6 +76,10 @@ impl<K: SparsetKey, V> SparseSet<K, V> {
         self.inner.insert(key, value)
     }
 
+    pub fn get_or_insert_with(&mut self, key: K, new: impl FnOnce() -> V) -> ArenaPtr<V> {
+        self.inner.get_or_insert_with(key, new)
+    }
+
     pub fn replace(&mut self, key: K, value: V) -> Option<ArenaPtr<V>> {
         self.inner.replace::<K, V>(key, value)
     }

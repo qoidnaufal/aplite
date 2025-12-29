@@ -1,4 +1,5 @@
 use std::any::TypeId;
+use std::ptr::NonNull;
 
 use crate::buffer::TypeErasedBuffer;
 use crate::data::component::{Component, ComponentTuple, ComponentId};
@@ -7,7 +8,7 @@ use crate::entity::Entity;
 use crate::map::hash::TypeIdMap;
 use crate::sparse_set::SparsetKey;
 use crate::sparse_set::indices::SparseIndices;
-use crate::sparse_set::type_erased::TypeErasedSparseSet;
+use crate::sparse_set::typed::SparseSet;
 
 // #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 // pub struct TableId(usize);
@@ -23,10 +24,9 @@ use crate::sparse_set::type_erased::TypeErasedSparseSet;
 // }
 
 /// This is similar to MultiArrayList in Zig, in which Entities with the same composition are stored together.
-/// Entity with different composition will produce a new ComponentTable.
-pub struct ComponentTable {
-    /// K: ComponentId, V: TypeErasedBuffer
-    pub(crate) data: TypeErasedSparseSet,
+/// Entity with different composition will produce a different table.
+pub struct ArchetypeTable {
+    pub(crate) components: SparseSet<ComponentId, TypeErasedBuffer>,
 
     // Idk if it's going to be safe using only EntityId here
     pub(crate) entities: Vec<Entity>,
@@ -35,7 +35,7 @@ pub struct ComponentTable {
     pub(crate) indexes: SparseIndices,
 }
 
-impl std::fmt::Debug for ComponentTable {
+impl std::fmt::Debug for ArchetypeTable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_map()
             .entries(self.indexes.iter_data_index().zip(self.entities.iter()))
@@ -43,41 +43,41 @@ impl std::fmt::Debug for ComponentTable {
     }
 }
 
-impl Default for ComponentTable {
+impl Default for ArchetypeTable {
     fn default() -> Self {
         Self::with_capacity(0)
     }
 }
 
-impl ComponentTable {
+impl ArchetypeTable {
     /// Set the capacity for the contained entity
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            data: TypeErasedSparseSet::new::<TypeErasedBuffer>(),
+            components: SparseSet::new(),
             entities: Vec::with_capacity(capacity),
             indexes: SparseIndices::default(),
         }
     }
 
-    // #[inline(always)]
-    // pub(crate) fn add_buffer<C: Component>(&mut self, component_id: ComponentId, capacity: usize) {
-    //     self.data.insert(component_id, TypeErasedBuffer::with_capacity::<C>(capacity));
-    // }
+    #[inline(always)]
+    pub fn add_buffer<C: Component>(&mut self, component_id: ComponentId, capacity: usize) {
+        self.components.insert(component_id, TypeErasedBuffer::with_capacity::<C>(capacity));
+    }
 
-    // #[inline(always)]
-    // pub(crate) fn insert<C: Component>(&mut self, component: C, component_id: ComponentId) {
-    //     self.data
-    //         .get_mut::<ComponentId, TypeErasedBuffer>(component_id)
-    //         .unwrap()
-    //         .push(component);
-    // }
+    #[inline(always)]
+    pub fn insert<C: Component>(&mut self, component: C, component_id: ComponentId) {
+        self.components
+            .get_mut(component_id)
+            .unwrap()
+            .push(component);
+    }
 
     pub fn get_component_buffer(&self, component_id: ComponentId) -> Option<&TypeErasedBuffer> {
-        self.data.get(component_id)
+        self.components.get(component_id)
     }
 
     pub fn get_component_buffer_mut<C: Component>(&mut self, component_id: ComponentId) -> Option<&mut TypeErasedBuffer> {
-        self.data.get_mut(component_id)
+        self.components.get_mut(component_id)
     }
 
     pub fn get_component<C: Component>(&self, entity: Entity, component_id: ComponentId) -> Option<&C> {
@@ -85,8 +85,8 @@ impl ComponentTable {
             .get_index(entity)
             .and_then(|index| {
                 self.version_check(entity, index).then(|| {
-                    self.data
-                        .get::<ComponentId, TypeErasedBuffer>(component_id)
+                    self.components
+                        .get(component_id)
                         .and_then(|buffer| buffer.get(index))
                 })?
             })
@@ -97,8 +97,8 @@ impl ComponentTable {
             .get_index(entity)
             .and_then(|index| {
                 self.version_check(entity, index).then(|| {
-                    self.data
-                        .get_mut::<ComponentId, TypeErasedBuffer>(component_id)
+                    self.components
+                        .get_mut(component_id)
                         .and_then(|buffer| buffer.get_mut(index))
                 })?
             })
@@ -126,16 +126,10 @@ impl ComponentTable {
     }
 
     pub fn clear(&mut self) {
-        self.data.clear();
+        self.components.clear();
         self.entities.clear();
         self.indexes.clear();
     }
-}
-
-pub struct MarkedBuffer<'a, Q> {
-    pub(crate) indexes: &'a SparseIndices,
-    pub(crate) buffer: &'a TypeErasedBuffer,
-    marker: std::marker::PhantomData<Q>
 }
 
 #[derive(Default, Clone)]
@@ -217,17 +211,23 @@ impl ComponentStorage {
             .map(|component_id| &self.components[component_id.index()])
     }
 
-    pub fn get_marked_buffer<Q>(&self) -> Option<MarkedBuffer<'_, Q>>
+    pub fn get_marked_buffer_with_entities<'a, Q>(
+        &'a self,
+        entities: &'a [Entity]
+    ) -> Option<MarkedBuffer<'a, Q>>
     where
-        Q: Queryable,
+        Q: Queryable<'a>,
         Q::Item: Component + 'static,
     {
         self.get_component_id::<Q::Item>()
             .map(|component_id| {
+                let c_index = component_id.index();
+                let raw = self.components[c_index].raw.block.cast::<Q::Item>();
+
                 MarkedBuffer {
-                    indexes: &self.indexer[component_id.index()].indices,
-                    buffer: &self.components[component_id.index()],
-                    marker: std::marker::PhantomData,
+                    entities,
+                    indices: &self.indexer[c_index].indices,
+                    raw,
                 }
             })
     }
@@ -264,42 +264,6 @@ impl ComponentStorage {
     // {
     //     T::Item::bitset(self)
     // }
-
-    // #[inline(always)]
-    // pub fn insert_with_table_id<C: Component + 'static>(&mut self, table_id: TableId, component: C) {
-    //     let component_id = self.component_ids[&TypeId::of::<C>()];
-    //     self.tables[table_id.index()].insert(component, component_id);
-    // }
-
-    // used in component_bundle! macro
-    // pub(crate) fn get_table_mut_from_table_id(&mut self, table_id: TableId) -> &mut ComponentTable {
-    //     &mut self.tables[table_id.index()]
-    // }
-
-    // pub(crate) fn get_table_mut_from_bundle<T>(&mut self) -> Option<&mut ComponentTable>
-    // where
-    //     T: ComponentTuple,
-    //     T::Item: ComponentTupleExt,
-    // {
-    //     self.get_table_id_from_bundle::<T>()
-    //         .map(|table_id| &mut self.tables[table_id.index()])
-    // }
-
-    // #[inline(always)]
-    // pub(crate) fn get_table_id_from_bundle<T>(&self) -> Option<TableId>
-    // where
-    //     T: ComponentTuple,
-    //     T::Item: ComponentTupleExt,
-    // {
-    //     self.table_ids.get(&self.get_bitset::<T>()?).copied()
-    // }
-
-    // pub fn archetype_builder(&mut self) -> ArchetypeBuilder<'_> {
-    //     ArchetypeBuilder {
-    //         storage: self,
-    //         component_bitset: ComponentBitset::new(),
-    //     }
-    // }
 }
 
 impl TableIndexer {
@@ -311,18 +275,64 @@ impl TableIndexer {
     }
 }
 
-impl<'a, Q: Queryable + 'static> MarkedBuffer<'a, Q> {
-    pub fn iter(&self) -> impl Iterator<Item = Q> {
-        self.buffer.iter_raw::<Q::Item>()
-            .map(|raw| Q::convert(raw))
+pub struct MarkedBuffer<'a, Q>
+where
+    Q: Queryable<'a>,
+    Q::Item: Component + 'static,
+{
+    pub(crate) entities: &'a [Entity],
+    pub(crate) indices: &'a SparseIndices,
+    pub(crate) raw: NonNull<Q::Item>,
+}
+
+impl<'a, Q> MarkedBuffer<'a, Q>
+where
+    Q: Queryable<'a>,
+    Q::Item: Component + 'static,
+{
+    pub fn iter(&'a self) -> impl Iterator<Item = Q> {
+        MarkedBufferIter {
+            raw: self.raw,
+            entities: self.entities,
+            indices: self.indices,
+            cursor: 0,
+        }
     }
 
-    pub fn get_component(&self, entity: Entity) -> Option<Q> {
-        self.indexes.get_index(entity)
-            .map(|index| unsafe {
-                let raw = self.buffer.get_unchecked_raw(index);
-                Q::convert(raw)
-            })
+    pub fn get(&self, entity: Entity) -> Option<Q> {
+        if !self.entities.contains(&entity) {
+            return None;
+        }
+
+        let index = self.indices.get_index(entity)?;
+
+        unsafe {
+            Some(Q::convert(self.raw.add(index).as_ptr()))
+        }
+    }
+}
+
+pub struct MarkedBufferIter<'a, Q: Queryable<'a>> {
+    raw: NonNull<Q::Item>,
+    pub(crate) entities: &'a [Entity],
+    pub(crate) indices: &'a SparseIndices,
+    cursor: usize,
+}
+
+impl<'a, Q> Iterator for MarkedBufferIter<'a, Q>
+where
+    Q: Queryable<'a>,
+    Q::Item: Component + 'static,
+{
+    type Item = Q;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        unsafe {
+            let entity = *self.entities.get(self.cursor)?;
+            let index = self.indices.get_index(entity)?;
+            self.cursor += 1;
+            Some(Q::convert(self.raw.add(index).as_ptr()))
+        }
     }
 }
 
