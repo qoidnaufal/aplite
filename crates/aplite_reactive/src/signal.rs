@@ -1,12 +1,92 @@
+use std::sync::{Arc, RwLock};
+
 use crate::signal_read::SignalRead;
 use crate::graph::{NodeStorage, Node, Observer};
 use crate::signal_write::SignalWrite;
-use crate::stored_value::Value;
 use crate::reactive_traits::*;
 use crate::source::*;
 use crate::subscriber::*;
 
-pub(crate) type SignalNode<T> = Node<Value<T>>;
+/*
+#########################################################
+#
+# State
+#
+#########################################################
+*/
+
+pub(crate) type SignalNode<T> = Node<Arc<RwLock<SignalState<T>>>>;
+
+pub(crate) struct SignalState<T> {
+    pub(crate) value: T,
+    pub(crate) subscribers: SubscriberSet,
+}
+
+unsafe impl<T> Send for SignalState<T> {}
+unsafe impl<T> Sync for SignalState<T> {}
+
+impl<T: 'static> SignalState<T> {
+    pub(crate) fn new(value: T) -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(Self {
+            value,
+            subscribers: SubscriberSet::default(),
+        }))
+    }
+}
+
+impl<T: 'static> Reactive for RwLock<SignalState<T>> {
+    fn mark_dirty(&self) {
+        self.write().unwrap()
+            .subscribers
+            .mark_dirty()
+    }
+
+    fn try_update(&self) -> bool {
+        false
+    }
+}
+
+impl<T: 'static> Reactive for Arc<RwLock<SignalState<T>>> {
+    fn mark_dirty(&self) {
+        self.as_ref().mark_dirty();
+    }
+
+    fn try_update(&self) -> bool {
+        self.as_ref().try_update()
+    }
+}
+
+impl<T: 'static> Source for RwLock<SignalState<T>> {
+    fn add_subscriber(&self, subscriber: AnySubscriber) {
+        self.write().unwrap()
+            .subscribers
+            .push(subscriber)
+    }
+
+    fn clear_subscribers(&self) {
+        self.write().unwrap()
+            .subscribers
+            .clear()
+    }
+}
+
+impl<T: 'static> Source for Arc<RwLock<SignalState<T>>> {
+    fn add_subscriber(&self, subscriber: AnySubscriber) {
+        self.as_ref().add_subscriber(subscriber);
+    }
+
+    fn clear_subscribers(&self) {
+        self.as_ref().clear_subscribers();
+    }
+}
+
+/*
+#########################################################
+#
+# Signal
+#
+#########################################################
+*/
 
 pub struct Signal<T> {
     pub(crate) node: SignalNode<T>,
@@ -20,7 +100,7 @@ impl<T> Copy for Signal<T> {}
 
 impl<T: 'static> Signal<T> {
     pub fn new(value: T) -> Self {
-        let node = NodeStorage::insert(Value::new(value));
+        let node = NodeStorage::insert(SignalState::new(value));
 
         Self { node }
     }
@@ -32,29 +112,36 @@ impl<T: 'static> Signal<T> {
     pub fn into_split(self) -> (SignalRead<T>, SignalWrite<T>) {
         (SignalRead::new(self.node), SignalWrite::new(self.node))
     }
+}
 
-    pub fn read_only(&self) -> SignalRead<T> {
-        SignalRead::new(self.node)
+impl<T: 'static> Reactive for Signal<T> {
+    #[inline(always)]
+    fn mark_dirty(&self) {
+        NodeStorage::with_downcast(&self.node, |state| {
+            state.write().unwrap()
+                .subscribers
+                .mark_dirty()
+        })
     }
 
-    pub fn write_only(&self) -> SignalWrite<T> {
-        SignalWrite::new(self.node)
+    fn try_update(&self) -> bool {
+        false
     }
 }
 
 impl<T: 'static> Source for Signal<T> {
     fn add_subscriber(&self, subscriber: AnySubscriber) {
-        SubscriberStorage::insert(self.node.id, subscriber);
+        NodeStorage::with_downcast(&self.node, |state| state.add_subscriber(subscriber))
     }
 
     fn clear_subscribers(&self) {
-        SubscriberStorage::with_mut(self.node.id, Vec::clear);
+        NodeStorage::with_downcast(&self.node, |state| state.clear_subscribers())
     }
 }
 
 impl<T: 'static> ToAnySource for Signal<T> {
     fn to_any_source(&self) -> AnySource {
-        AnySource::new(self.node.id)
+        NodeStorage::with_downcast(&self.node, AnySource::new)
     }
 }
 
@@ -75,9 +162,7 @@ impl<T: 'static> Track for Signal<T> {
 
 impl<T: 'static> Notify for Signal<T> {
     fn notify(&self) {
-        SubscriberStorage::with_mut(self.node.id, |set| {
-            set.drain(..).for_each(AnySubscriber::mark_dirty_owned);
-        });
+        self.mark_dirty()
     }
 }
 
@@ -85,15 +170,17 @@ impl<T: 'static> Read for Signal<T> {
     type Value = T;
 
     fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
-        NodeStorage::with_downcast(&self.node, |value| {
-            f(&value.read().unwrap())
+        NodeStorage::with_downcast(&self.node, |state| {
+            f(&state.read().unwrap().value)
         })
     }
 
     fn try_read<R, F: FnOnce(Option<&Self::Value>) -> Option<R>>(&self, f: F) -> Option<R> {
-        NodeStorage::try_with_downcast(&self.node, |value| {
-            let guard = value.and_then(|val| val.read().ok());
-            f(guard.as_deref())
+        NodeStorage::try_with_downcast(&self.node, |state| {
+            state.and_then(|ss| {
+                let m = ss.read().ok();
+                f(m.as_deref().map(|s| &s.value))
+            })
         })
     }
 }
@@ -129,8 +216,8 @@ impl<T: 'static> Write for Signal<T> {
     type Value = T;
 
     fn write(&self, f: impl FnOnce(&mut Self::Value)) {
-        NodeStorage::with_downcast(&self.node, |value| {
-            f(&mut value.write().unwrap())
+        NodeStorage::with_downcast(&self.node, |state| {
+            f(&mut state.write().unwrap().value)
         })
     }
 }
@@ -154,7 +241,6 @@ impl<T: 'static> Update for Signal<T> {
 impl<T: 'static> Dispose for Signal<T> {
     fn dispose(&self) {
         NodeStorage::remove(self.node);
-        SubscriberStorage::remove(self.node.id);
     }
 
     fn is_disposed(&self) -> bool {
@@ -254,6 +340,7 @@ mod signal_test {
         assert_eq!(double(), 2);
 
         num.dispose();
+
         set_num.set(2);
         assert_eq!(double(), 2);
     }

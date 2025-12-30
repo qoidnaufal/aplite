@@ -13,30 +13,28 @@ use crate::stored_value::Value;
 #########################################################
 */
 
-pub(crate) struct MemoNode<T> {
+struct MemoState<T> {
     stored_value: Value<Option<T>>,
-    f: Arc<dyn Fn(Option<T>) -> (T, bool)>,
-    // scope: Scope,
-    state: RwLock<MemoState>
+    f: Box<dyn Fn(Option<T>) -> (T, bool)>,
+    state: RwLock<State>
 }
 
-pub(crate) struct MemoState {
+struct State {
     sources: Vec<AnySource>,
     subscribers: SubscriberSet,
     this: AnySubscriber,
     dirty: bool,
 }
 
-unsafe impl<T> Send for MemoNode<T> {}
-unsafe impl<T> Sync for MemoNode<T> {}
+unsafe impl<T> Send for MemoState<T> {}
+unsafe impl<T> Sync for MemoState<T> {}
 
-impl<T> MemoNode<T> {
-    fn new(f: Arc<dyn Fn(Option<T>) -> (T, bool)>, this: AnySubscriber) -> Self {
+impl<T> MemoState<T> {
+    fn new(f: Box<dyn Fn(Option<T>) -> (T, bool)>, this: AnySubscriber) -> Self {
         Self {
             stored_value: Value::new(None::<T>),
             f,
-            // scope: Scope::new(),
-            state: RwLock::new(MemoState {
+            state: RwLock::new(State {
                 sources: Vec::new(),
                 subscribers: SubscriberSet::default(),
                 this,
@@ -51,17 +49,17 @@ impl<T> MemoNode<T> {
     }
 
     #[inline(always)]
-    fn state_reader(&self) -> std::sync::RwLockReadGuard<'_, MemoState> {
+    fn state_reader(&self) -> std::sync::RwLockReadGuard<'_, State> {
         self.state.read().unwrap()
     }
 
     #[inline(always)]
-    fn state_writer(&self) -> std::sync::RwLockWriteGuard<'_, MemoState> {
+    fn state_writer(&self) -> std::sync::RwLockWriteGuard<'_, State> {
         self.state.write().unwrap()
     }
 }
 
-impl<T> Subscriber for MemoNode<T> {
+impl<T> Subscriber for MemoState<T> {
     fn add_source(&self, source: AnySource) {
         self.state_writer()
             .sources
@@ -75,7 +73,7 @@ impl<T> Subscriber for MemoNode<T> {
     }
 }
 
-impl<T> Source for MemoNode<T> {
+impl<T> Source for MemoState<T> {
     fn add_subscriber(&self, subscriber: AnySubscriber) {
         self.state_writer()
             .subscribers.0
@@ -89,7 +87,7 @@ impl<T> Source for MemoNode<T> {
     }
 }
 
-impl<T> Reactive for MemoNode<T> {
+impl<T> Reactive for MemoState<T> {
     fn mark_dirty(&self) {
         self.state_writer().dirty = true;
 
@@ -108,10 +106,6 @@ impl<T> Reactive for MemoNode<T> {
             let this = state_read_lock.this.clone();
             drop(state_read_lock);
             this.clear_sources();
-
-            // let (new_value, changed) = self.scope.with_cleanup(|| {
-            //     this.as_observer(|| (self.f)(value))
-            // });
 
             let (new_value, changed) = this.as_observer(|| (self.f)(prev_value));
             *value_lock = Some(new_value);
@@ -148,13 +142,13 @@ impl<T> Reactive for MemoNode<T> {
 */
 
 pub struct Memo<T> {
-    node: Node<Arc<MemoNode<T>>>
+    node: Node<Arc<MemoState<T>>>
 }
 
 impl<T: PartialEq + 'static> Memo<T> {
     pub fn new(f: impl Fn(Option<&T>) -> T + 'static) -> Self {
         let arc_node = Arc::new_cyclic(move |weak| {
-            let this = AnySubscriber::new(Weak::clone(weak));
+            let this = AnySubscriber::from_weak(Weak::clone(weak));
 
             let memoize_fn = move |prev: Option<T>| {
                 let new_value = f(prev.as_ref());
@@ -162,7 +156,7 @@ impl<T: PartialEq + 'static> Memo<T> {
                 (new_value, changed)
             };
 
-            MemoNode::new(Arc::new(memoize_fn), this)
+            MemoState::new(Box::new(memoize_fn), this)
         });
 
         Self { node: NodeStorage::insert(arc_node) }
@@ -179,57 +173,54 @@ impl<T> Copy for Memo<T> {}
 
 impl<T: 'static> Source for Memo<T> {
     fn add_subscriber(&self, subscriber: AnySubscriber) {
-        NodeStorage::with_downcast(&self.node, |memo_node| {
-            memo_node.add_subscriber(subscriber);
+        NodeStorage::with_downcast(&self.node, |state| {
+            state.add_subscriber(subscriber);
         })
     }
 
     fn clear_subscribers(&self) {
-        NodeStorage::with_downcast(&self.node, |memo_node| {
-            memo_node.clear_subscribers();
+        NodeStorage::with_downcast(&self.node, |state| {
+            state.clear_subscribers();
         })
     }
 }
 
 impl<T: 'static> ToAnySource for Memo<T> {
     fn to_any_source(&self) -> AnySource {
-        AnySource::new(self.node.id)
+        NodeStorage::with_downcast(&self.node, AnySource::new)
     }
 }
 
 impl<T: 'static> Subscriber for Memo<T> {
     fn add_source(&self, source: AnySource) {
-        NodeStorage::with_downcast(&self.node, |memo_node| {
-            memo_node.add_source(source);
+        NodeStorage::with_downcast(&self.node, |state| {
+            state.add_source(source);
         })
     }
 
     fn clear_sources(&self) {
-        NodeStorage::with_downcast(&self.node, |memo_node| {
-            memo_node.clear_sources();
+        NodeStorage::with_downcast(&self.node, |state| {
+            state.clear_sources();
         })
     }
 }
 
 impl<T: 'static> ToAnySubscriber for Memo<T> {
     fn to_any_subscriber(&self) -> AnySubscriber {
-        NodeStorage::with_downcast(
-            &self.node,
-            |memo_node| AnySubscriber::new(Arc::downgrade(memo_node))
-        )
+        NodeStorage::with_downcast(&self.node, AnySubscriber::new)
     }
 }
 
 impl<T: 'static> Reactive for Memo<T> {
     fn mark_dirty(&self) {
-        NodeStorage::with_downcast(&self.node, |memo_node| {
-            memo_node.mark_dirty();
+        NodeStorage::with_downcast(&self.node, |state| {
+            state.mark_dirty();
         })
     }
 
     fn try_update(&self) -> bool {
-        NodeStorage::with_downcast(&self.node, |memo_node| {
-            memo_node.try_update()
+        NodeStorage::with_downcast(&self.node, |state| {
+            state.try_update()
         })
     }
 }
@@ -251,16 +242,18 @@ impl<T: 'static> Read for Memo<T> {
     type Value = T;
 
     fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
-        let node = NodeStorage::with_downcast(&self.node, Arc::clone);
-        node.try_update();
-        f(node.read_value().as_ref().unwrap())
+        NodeStorage::with_downcast(&self.node, |state| {
+            state.try_update();
+            f(state.read_value().as_ref().unwrap())
+        })
     }
 
     fn try_read<R, F: FnOnce(Option<&Self::Value>) -> Option<R>>(&self, f: F) -> Option<R> {
-        let node = NodeStorage::try_with_downcast(&self.node, |opt| opt.map(Arc::clone));
-        node.and_then(|node| {
-            node.try_update();
-            f(node.read_value().as_ref())
+        NodeStorage::try_with_downcast(&self.node, |opt| {
+            opt.and_then(|node| {
+                node.try_update();
+                f(node.read_value().as_ref())
+            })
         })
     }
 }

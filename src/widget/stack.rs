@@ -126,14 +126,15 @@ where
         self.height
     }
 
-    fn layout_node_size(&self) -> Size {
+    fn layout_node_size(&self, bound: Size) -> Size {
         let mut content_size = Size::default();
         let child_count = self.content.count();
 
         match AX::AXIS {
             Axis::Horizontal => {
                 self.content.for_each(|w| {
-                    let cs = w.layout_node_size();
+                    let bound = Size::new(bound.width / child_count as f32, bound.height);
+                    let cs = w.layout_node_size(bound);
                     content_size.width += cs.width;
                     content_size.height = content_size.height.max(cs.height);
                 });
@@ -142,7 +143,8 @@ where
             },
             Axis::Vertical => {
                 self.content.for_each(|w| {
-                    let cs = w.layout_node_size();
+                    let bound = Size::new(bound.width, bound.height / child_count as f32);
+                    let cs = w.layout_node_size(bound);
                     content_size.height += cs.height;
                     content_size.width = content_size.width.max(cs.width);
                 });
@@ -158,7 +160,7 @@ where
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        let size = self.layout_node_size();
+        let size = Size::default();
         let pos = cx.get_next_pos(size);
         let rect = Rect::from_vec2f_size(pos, size);
 

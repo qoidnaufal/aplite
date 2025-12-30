@@ -20,24 +20,35 @@ impl<T: 'static> SignalRead<T> {
         Self { node }
     }
 
+    #[inline(always)]
     pub fn as_signal(&self) -> Signal<T> {
         Signal { node: self.node }
     }
 }
 
+impl<T: 'static> Reactive for SignalRead<T> {
+    fn mark_dirty(&self) {
+        self.as_signal().mark_dirty();
+    }
+
+    fn try_update(&self) -> bool {
+        false
+    }
+}
+
 impl<T: 'static> Source for SignalRead<T> {
     fn add_subscriber(&self, subscriber: AnySubscriber) {
-        SubscriberStorage::insert(self.node.id, subscriber);
+        self.as_signal().add_subscriber(subscriber);
     }
 
     fn clear_subscribers(&self) {
-        SubscriberStorage::with_mut(self.node.id, |set| set.clear());
+        self.as_signal().clear_subscribers();
     }
 }
 
 impl<T: 'static> ToAnySource for SignalRead<T> {
     fn to_any_source(&self) -> AnySource {
-        AnySource::new(self.node.id)
+        self.as_signal().to_any_source()
     }
 }
 
@@ -55,15 +66,11 @@ impl<T: 'static> Read for SignalRead<T> {
     type Value = T;
 
     fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
-        NodeStorage::with_downcast(&self.node, |value| {
-            f(&value.read().unwrap())
-        })
+        self.as_signal().read(f)
     }
 
     fn try_read<R, F: FnOnce(Option<&Self::Value>) -> Option<R>>(&self, f: F) -> Option<R> {
-        NodeStorage::try_with_downcast(&self.node, |value| {
-            f(value.and_then(|val| val.read().ok()).as_deref())
-        })
+        self.as_signal().try_read(f)
     }
 }
 

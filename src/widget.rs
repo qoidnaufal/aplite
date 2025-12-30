@@ -43,7 +43,7 @@ pub trait Widget {
         Length::Grow
     }
 
-    fn layout_node_size(&self) -> Size {
+    fn layout_node_size(&self, bound: Size) -> Size {
         Size::default()
     }
 
@@ -73,8 +73,8 @@ where
         self().into_view().debug_name()
     }
 
-    fn layout_node_size(&self) -> Size {
-        self().into_view().layout_node_size()
+    fn layout_node_size(&self, bound: Size) -> Size {
+        self().into_view().layout_node_size(bound)
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
@@ -161,7 +161,7 @@ impl Widget for CircleWidget {
         self.radius
     }
 
-    fn layout_node_size(&self) -> Size {
+    fn layout_node_size(&self, bound: Size) -> Size {
         Size::default()
     }
 
@@ -213,10 +213,10 @@ where
         }
     }
 
-    fn layout_node_size(&self) -> Size {
+    fn layout_node_size(&self, bound: Size) -> Size {
         match self {
-            Either::True(iv1) => iv1.layout_node_size(),
-            Either::False(iv2) => iv2.layout_node_size(),
+            Either::True(iv1) => iv1.layout_node_size(bound),
+            Either::False(iv2) => iv2.layout_node_size(bound),
         }
     }
 

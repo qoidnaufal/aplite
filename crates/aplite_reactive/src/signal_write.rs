@@ -2,7 +2,6 @@ use crate::graph::NodeStorage;
 use crate::signal::{Signal, SignalNode};
 use crate::signal_read::SignalRead;
 use crate::reactive_traits::*;
-use crate::subscriber::{AnySubscriber, SubscriberStorage};
 
 pub struct SignalWrite<T> {
     pub(crate) node: SignalNode<T>,
@@ -19,6 +18,7 @@ impl<T: 'static> SignalWrite<T> {
         Self { node }
     }
 
+    #[inline(always)]
     pub fn as_signal(&self) -> Signal<T> {
         Signal { node: self.node }
     }
@@ -26,9 +26,7 @@ impl<T: 'static> SignalWrite<T> {
 
 impl<T: 'static> Notify for SignalWrite<T> {
     fn notify(&self) {
-        SubscriberStorage::with_mut(self.node.id, |set| {
-            set.drain(..).for_each(AnySubscriber::mark_dirty_owned);
-        });
+        self.as_signal().notify()
     }
 }
 
@@ -36,9 +34,7 @@ impl<T: 'static> Write for SignalWrite<T> {
     type Value = T;
 
     fn write(&self, f: impl FnOnce(&mut Self::Value)) {
-        NodeStorage::with_downcast(&self.node, |value| {
-            f(&mut value.write().unwrap())
-        })
+        self.as_signal().write(f);
     }
 }
 

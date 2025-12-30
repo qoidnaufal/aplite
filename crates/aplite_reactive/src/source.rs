@@ -1,37 +1,67 @@
-use aplite_storage::SlotId;
-use crate::subscriber::{AnySubscriber, SubscriberSet, SubscriberStorage};
+use std::sync::{Weak, Arc};
 
-#[derive(Clone, Copy)]
-pub(crate) struct AnySource(pub(crate) SlotId);
+use crate::subscriber::AnySubscriber;
+use crate::reactive_traits::*;
+
+pub(crate) struct AnySource(pub(crate) Weak<dyn Source>);
 
 impl AnySource {
-    pub(crate) fn new(id: SlotId) -> Self {
-        Self(id)
+    pub(crate) fn new<T: Source + 'static>(arc: &Arc<T>) -> Self {
+        let weak: Weak<T> = Arc::downgrade(arc);
+        Self(weak)
+    }
+
+    pub(crate) fn upgrade(&self) -> Option<Arc<dyn Source>> {
+        self.0.upgrade()
     }
 
     pub(crate) fn update_if_necessary(&self) -> bool {
-        SubscriberStorage::with(self.0, SubscriberSet::any_update).unwrap_or(false)
+        self.upgrade()
+            .map(|source| source.try_update())
+            .unwrap_or(false)
     }
 }
 
-pub(crate) trait Source {
+impl Clone for AnySource {
+    fn clone(&self) -> Self {
+        Self(Weak::clone(&self.0))
+    }
+}
+
+impl Reactive for AnySource {
+    fn mark_dirty(&self) {
+        if let Some(source) = self.upgrade() {
+            source.mark_dirty();
+        }
+    }
+
+    fn try_update(&self) -> bool {
+        self.update_if_necessary()
+    }
+}
+
+pub(crate) trait Source: Reactive {
     fn add_subscriber(&self, subscriber: AnySubscriber);
     fn clear_subscribers(&self);
 }
 
 impl Source for AnySource {
     fn add_subscriber(&self, subscriber: AnySubscriber) {
-        SubscriberStorage::insert(self.0, subscriber);
+        if let Some(source) = self.upgrade() {
+            source.add_subscriber(subscriber);
+        }
     }
 
     fn clear_subscribers(&self) {
-        SubscriberStorage::with_mut(self.0, |set| set.clear());
+        if let Some(source) = self.upgrade() {
+            source.clear_subscribers();
+        }
     }
 }
 
 impl PartialEq for AnySource {
     fn eq(&self, other: &Self) -> bool {
-        self.0.eq(&other.0)
+        Weak::ptr_eq(&self.0, &other.0)
     }
 }
 
@@ -47,6 +77,6 @@ pub(crate) trait ToAnySource: Source {
 
 impl ToAnySource for AnySource {
     fn to_any_source(&self) -> AnySource {
-        *self
+        self.clone()
     }
 }

@@ -142,13 +142,14 @@ macro_rules! view_tuple {
         }
 
         impl<$($name: Widget + 'static),*> Widget for ($($name,)*) {
-            fn layout_node_size(&self) -> Size {
+            fn layout_node_size(&self, bound: Size) -> Size {
                 let mut s = Size::default();
                 self.for_each(|w| {
-                    let cs = w.layout_node_size();
+                    let cs = w.layout_node_size(bound);
                     s.width += cs.width;
                     s.height = cs.height;
                 });
+
                 s
             }
 

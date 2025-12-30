@@ -35,7 +35,7 @@ pub trait Notify {
 pub(crate) trait Read {
     type Value: 'static;
 
-    /// read and apply function to the value, and track the underying signal
+    /// read the value
     fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R;
 
     fn try_read<R, F: FnOnce(Option<&Self::Value>) -> Option<R>>(&self, f: F) -> Option<R>;

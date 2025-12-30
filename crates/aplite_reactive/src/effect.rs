@@ -21,8 +21,10 @@ use crate::reactive_traits::*;
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Effect {
-    node: Node<Arc<RwLock<EffectNode>>>,
+    node: EffectNode,
 }
+
+type EffectNode = Node<Arc<RwLock<EffectState>>>;
 
 impl Effect {
     pub fn pause(&self) { }
@@ -37,10 +39,9 @@ impl Effect {
         let (tx, mut rx) = aplite_channel();
         tx.notify();
 
-        // let scope = Scope::new();
-        let arc_node = Arc::new(RwLock::new(EffectNode::new(tx)));
-        let subscriber = arc_node.to_any_subscriber();
-        let node = NodeStorage::insert(arc_node);
+        let effect_state = EffectState::new(tx);
+        let subscriber = effect_state.to_any_subscriber();
+        let node = NodeStorage::insert(effect_state);
 
         Executor::spawn(async move {
             let mut value = None::<R>;
@@ -61,32 +62,32 @@ impl Effect {
         Self { node }
     }
 
-    /// for now just brute-forcefully remove the EffectNode
+    /// for now a simple brute-force by removing the EffectState from NodeStorage
     pub fn stop(self) {
         NodeStorage::remove(self.node);
     }
 }
 
-pub struct EffectNode {
-    pub(crate) sender: Sender,
-    pub(crate) source: Vec<AnySource>,
-    pub(crate) dirty: bool,
+struct EffectState {
+    sender: Sender,
+    source: Vec<AnySource>,
+    dirty: bool,
 }
 
-unsafe impl Send for EffectNode {}
-unsafe impl Sync for EffectNode {}
+unsafe impl Send for EffectState {}
+unsafe impl Sync for EffectState {}
 
-impl EffectNode {
-    pub fn new(sender: Sender) -> Self {
-        Self {
+impl EffectState {
+    fn new(sender: Sender) -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(Self {
             sender,
             source: Vec::new(),
             dirty: true,
-        }
+        }))
     }
 }
 
-impl Drop for EffectNode {
+impl Drop for EffectState {
     fn drop(&mut self) {
         self.source.clear();
     }
@@ -94,7 +95,7 @@ impl Drop for EffectNode {
 
 // ---- impl Subscriber
 
-impl Subscriber for RwLock<EffectNode> {
+impl Subscriber for RwLock<EffectState> {
     fn add_source(&self, source: AnySource) {
         let mut lock = self.write().unwrap();
         if !lock.source.contains(&source) { lock.source.push(source) }
@@ -105,7 +106,7 @@ impl Subscriber for RwLock<EffectNode> {
     }
 }
 
-impl Subscriber for Arc<RwLock<EffectNode>> {
+impl Subscriber for Arc<RwLock<EffectState>> {
     fn add_source(&self, source: AnySource) {
         self.as_ref().add_source(source);
     }
@@ -117,7 +118,7 @@ impl Subscriber for Arc<RwLock<EffectNode>> {
 
 // ---- impl Reactive
 
-impl Reactive for RwLock<EffectNode> {
+impl Reactive for RwLock<EffectState> {
     fn mark_dirty(&self) {
         let this = &mut *self.write().unwrap();
         this.dirty = true;
@@ -131,14 +132,11 @@ impl Reactive for RwLock<EffectNode> {
             return true;
         }
 
-        // let sources = lock.source.clone();
-        // drop(lock);
-
         lock.source.iter().any(AnySource::update_if_necessary)
     }
 }
 
-impl Reactive for Arc<RwLock<EffectNode>> {
+impl Reactive for Arc<RwLock<EffectState>> {
     fn mark_dirty(&self) {
         self.as_ref().mark_dirty();
     }
@@ -150,9 +148,9 @@ impl Reactive for Arc<RwLock<EffectNode>> {
 
 // ---- impl ToAnySubscriber
 
-impl ToAnySubscriber for Arc<RwLock<EffectNode>> {
+impl ToAnySubscriber for Arc<RwLock<EffectState>> {
     fn to_any_subscriber(&self) -> AnySubscriber {
-        AnySubscriber::new(Arc::downgrade(self))
+        AnySubscriber::new(self)
     }
 }
 

@@ -15,6 +15,164 @@ use crate::subscriber::AnySubscriber;
 /*
 #########################################################
 #
+# ReactiveNodeStorage
+#
+#########################################################
+*/
+
+// had to use OnceLock because we don't know yet which reactive node will initialize this first
+static STORAGE: OnceLock<RwLock<NodeStorage>> = OnceLock::new();
+
+#[derive(Default)]
+pub(crate) struct NodeStorage {
+    pub(crate) inner: SlotMap<Box<dyn Any + Send + Sync>>,
+}
+
+unsafe impl Send for NodeStorage {}
+unsafe impl Sync for NodeStorage {}
+
+impl NodeStorage {
+    #[inline(always)]
+    fn read<'a>() -> RwLockReadGuard<'a, NodeStorage> {
+        STORAGE.get_or_init(Default::default).read().unwrap()
+    }
+
+    #[inline(always)]
+    fn try_read<'a>() -> Option<RwLockReadGuard<'a, NodeStorage>> {
+        STORAGE.get_or_init(Default::default).read().ok()
+    }
+
+    #[inline(always)]
+    fn write<'a>() -> RwLockWriteGuard<'a, NodeStorage> {
+        STORAGE.get_or_init(Default::default).write().unwrap()
+    }
+
+    pub(crate) fn with_downcast<R, F, U>(node: &Node<R>, f: F) -> U
+    where
+        R: 'static,
+        F: FnOnce(&R) -> U,
+    {
+        let storage = Self::read();
+        let r = storage
+            .inner
+            .get(&node.id)
+            .and_then(|any| any.downcast_ref::<R>())
+            .unwrap();
+        f(r)
+    }
+
+    pub(crate) fn try_with_downcast<R, F, U>(node: &Node<R>, f: F) -> Option<U>
+    where
+        R: 'static,
+        F: FnOnce(Option<&R>) -> Option<U>,
+    {
+        Self::try_read().and_then(|guard| {
+            guard.inner
+                .get(&node.id)
+                .and_then(|any| f(any.downcast_ref::<R>()))
+        })
+    }
+
+    pub(crate) fn insert<R: Send + Sync + 'static>(r: R) -> Node<R> {
+        let mut storage = Self::write();
+        let id = storage.inner.insert(Box::new(r));
+        Node { id, marker: PhantomData }
+    }
+
+    pub(crate) fn remove<R>(node: Node<R>) {
+        let mut storage = Self::write();
+        storage.inner.remove(node.id);
+    }
+
+    pub(crate) fn is_removed<R>(node: &Node<R>) -> bool {
+        let storage = Self::read();
+        storage.inner.get(&node.id).is_none()
+    }
+}
+
+/*
+#########################################################
+#
+# Observer
+#
+#########################################################
+*/
+
+static OBSERVER: RwLock<Option<AnySubscriber>> = RwLock::new(None);
+
+pub(crate) struct Observer;
+
+impl Observer {
+    #[inline(always)]
+    pub(crate) fn with<U>(f: impl FnOnce(Option<&AnySubscriber>) -> U) -> U {
+        f(OBSERVER.read().unwrap().as_ref())
+    }
+
+    pub(crate) fn swap_observer(subscriber: Option<AnySubscriber>) -> Option<AnySubscriber> {
+        let mut current = OBSERVER.write().unwrap();
+        let prev = current.take();
+        *current = subscriber;
+        prev
+    }
+}
+
+/*
+#########################################################
+#
+# Node
+#
+#########################################################
+*/
+
+pub(crate) struct Node<R> {
+    pub(crate) id: SlotId,
+    marker: PhantomData<R>,
+}
+
+impl<R> Clone for Node<R> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<R> PartialEq for Node<R> {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl<R> PartialOrd for Node<R> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<R> Ord for Node<R> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.id.cmp(&other.id)
+    }
+}
+
+impl<R> Copy for Node<R> {}
+impl<R> Eq for Node<R> {}
+
+impl<R> std::hash::Hash for Node<R> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
+
+impl<R> std::fmt::Debug for Node<R> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct(std::any::type_name::<R>())
+            .field("id", &self.id)
+            .finish()
+    }
+}
+
+/*
+#########################################################
+#
 # Scope
 #
 #########################################################
@@ -118,165 +276,3 @@ use crate::subscriber::AnySubscriber;
 //         self.0.upgrade().map(Scope)
 //     }
 // }
-
-/*
-#########################################################
-#
-# ReactiveNodeStorage
-#
-#########################################################
-*/
-
-// had to use OnceLock because we don't know yet which reactive node will initialize this first
-static STORAGE: OnceLock<RwLock<NodeStorage>> = OnceLock::new();
-
-#[derive(Default)]
-pub(crate) struct NodeStorage {
-    pub(crate) inner: SlotMap<Box<dyn Any + Send + Sync>>,
-}
-
-unsafe impl Send for NodeStorage {}
-unsafe impl Sync for NodeStorage {}
-
-impl NodeStorage {
-    pub(crate) fn insert<R: Send + Sync + 'static>(r: R) -> Node<R> {
-        let mut storage = Self::write();
-        let id = storage.inner.insert(Box::new(r));
-        Node { id, marker: PhantomData }
-    }
-
-    #[inline(always)]
-    fn read<'a>() -> RwLockReadGuard<'a, NodeStorage> {
-        STORAGE.get_or_init(Default::default).read().unwrap()
-    }
-
-    #[inline(always)]
-    fn write<'a>() -> RwLockWriteGuard<'a, NodeStorage> {
-        STORAGE.get_or_init(Default::default).write().unwrap()
-    }
-
-    // #[inline(always)]
-    // pub(crate) fn with<U>(f: impl FnOnce(&Graph) -> U) -> U {
-    //     f(&Self::read())
-    // }
-
-    // #[inline(always)]
-    // pub(crate) fn with_mut<U>(f: impl FnOnce(&mut NodeStorage) -> U) -> U {
-    //     f(&mut Self::write())
-    // }
-
-    pub(crate) fn with_downcast<R, F, U>(node: &Node<R>, f: F) -> U
-    where
-        R: 'static,
-        F: FnOnce(&R) -> U,
-    {
-        let storage = Self::read();
-        let r = storage
-            .inner
-            .get(&node.id)
-            .and_then(|any| any.as_ref().downcast_ref::<R>())
-            .unwrap();
-        f(r)
-    }
-
-    pub(crate) fn try_with_downcast<R, F, U>(node: &Node<R>, f: F) -> Option<U>
-    where
-        R: 'static,
-        F: FnOnce(Option<&R>) -> Option<U>,
-    {
-        Self::read()
-            .inner
-            .get(&node.id)
-            .and_then(|any| f(any.as_ref().downcast_ref::<R>()))
-    }
-
-    pub(crate) fn remove<R>(node: Node<R>) {
-        let mut storage = Self::write();
-        storage.inner.remove(node.id);
-    }
-
-    pub(crate) fn is_removed<R>(node: &Node<R>) -> bool {
-        let storage = Self::read();
-        storage.inner.get(&node.id).is_none()
-    }
-}
-
-/*
-#########################################################
-#
-# Observer
-#
-#########################################################
-*/
-
-static OBSERVER: RwLock<Option<AnySubscriber>> = RwLock::new(None);
-
-pub(crate) struct Observer;
-
-impl Observer {
-    #[inline(always)]
-    pub(crate) fn with<U>(f: impl FnOnce(Option<&AnySubscriber>) -> U) -> U {
-        f(OBSERVER.read().unwrap().as_ref())
-    }
-
-    pub(crate) fn swap_observer(subscriber: Option<AnySubscriber>) -> Option<AnySubscriber> {
-        let mut current = OBSERVER.write().unwrap();
-        let prev = current.take();
-        *current = subscriber;
-        prev
-    }
-}
-
-/*
-#########################################################
-#
-# Node
-#
-#########################################################
-*/
-
-pub(crate) struct Node<R> {
-    pub(crate) id: SlotId,
-    marker: PhantomData<R>,
-}
-
-impl<R> Clone for Node<R> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<R> PartialEq for Node<R> {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-impl<R> PartialOrd for Node<R> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<R> Ord for Node<R> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.id.cmp(&other.id)
-    }
-}
-
-impl<R> Copy for Node<R> {}
-impl<R> Eq for Node<R> {}
-
-impl<R> std::hash::Hash for Node<R> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.id.hash(state);
-    }
-}
-
-impl<R> std::fmt::Debug for Node<R> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct(std::any::type_name::<R>())
-            .field("id", &self.id)
-            .finish()
-    }
-}

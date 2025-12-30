@@ -62,7 +62,7 @@ impl Widget for Image {
         self.height
     }
 
-    fn layout_node_size(&self) -> Size {
+    fn layout_node_size(&self, bound: Size) -> Size {
         Size::new(self.data.width as _, self.data.height as _)
     }
 

@@ -88,15 +88,15 @@ impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
         self.height
     }
 
-    fn layout_node_size(&self) -> Size {
+    fn layout_node_size(&self, bound: Size) -> Size {
         let mut content_size = Size::default();
 
         match self.content_layout {
             Axis::Horizontal => {
-                let c_width = self.content.width();
+                let _c_width = self.content.width();
             },
             Axis::Vertical => {
-                let c_heigth = self.content.height();
+                let _c_heigth = self.content.height();
             }
         }
 
@@ -107,7 +107,7 @@ impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        let size = self.layout_node_size();
+        let size = Size::default();
         let pos = cx.get_next_pos(size);
         let rect = Rect::from_vec2f_size(pos, size);
 
