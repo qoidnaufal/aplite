@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use aplite_types::{ImageData, Length, Matrix3x2, PaintRef, Rect, rgba};
+use aplite_types::{ImageData, Length, Matrix3x2, PaintRef, Rect, Size, rgba};
 use aplite_renderer::Scene;
 
 use crate::context::Context;
@@ -8,7 +8,7 @@ use crate::layout::LayoutCx;
 use crate::view::{ForEachView, IntoView};
 use crate::widget::Widget;
 
-pub fn image<F: Fn() -> ImageData + 'static>(image_fn: F) -> impl IntoView {
+pub fn image<F: Fn() -> ImageData + 'static>(image_fn: F) -> Image {
     Image::new(image_fn)
 }
 
@@ -35,7 +35,7 @@ pub enum AspectRatio {
 }
 
 
-struct Image {
+pub struct Image {
     width: Length,
     height: Length,
     aspect_ratio: AspectRatio,
@@ -54,17 +54,26 @@ impl Image {
 }
 
 impl Widget for Image {
-    fn layout(&mut self, _: &mut LayoutCx<'_>) {
+    fn width(&self) -> Length {
+        self.width
+    }
+
+    fn height(&self) -> Length {
+        self.height
+    }
+
+    fn layout_node_size(&self) -> Size {
+        Size::new(self.data.width as _, self.data.height as _)
+    }
+
+    fn layout(&self, _: &mut LayoutCx<'_>) {
         let _ = self.aspect_ratio;
         todo!()
     }
 
     fn draw(&self, scene: &mut Scene) {
         scene.draw(aplite_renderer::DrawArgs {
-            rect: &Rect::from_size((
-                self.width.get(self.data.width as _),
-                self.height.get(self.data.height as _),
-            ).into()),
+            rect: &Rect::from_size((self.data.width, self.data.height).into()),
             transform: &Matrix3x2::identity(),
             background_paint: &PaintRef::Image(self.data.downgrade()),
             border_paint: &PaintRef::Color(&rgba(0x00000000)),

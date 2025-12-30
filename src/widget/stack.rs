@@ -9,18 +9,18 @@ use crate::state::{Background, BorderColor, BorderWidth};
 use crate::view::{ForEachView, IntoView};
 use crate::widget::Widget;
 
-pub fn hstack<IV>(widget: IV) -> Stack<IV, Horizontal>
+pub fn hstack<C>(widget: C) -> Stack<C, Horizontal>
 where
-    IV: IntoView,
+    C: ForEachView,
 {
-    Stack::<IV, Horizontal>::new(widget)
+    Stack::<C, Horizontal>::new(widget)
 }
 
-pub fn vstack<IV>(widget: IV) -> Stack<IV, Vertical>
+pub fn vstack<C>(widget: C) -> Stack<C, Vertical>
 where
-    IV: IntoView,
+    C: ForEachView,
 {
-    Stack::<IV, Vertical>::new(widget)
+    Stack::<C, Vertical>::new(widget)
 }
 
 pub trait StackDirection {
@@ -42,9 +42,10 @@ pub struct Vertical; impl StackDirection for Vertical {
     const AXIS: Axis = Axis::Vertical;
 }
 
-pub struct Stack<IV, AX> {
-    pub(crate) content: IV,
-    rect: Rect,
+pub struct Stack<C, AX> {
+    pub(crate) content: C,
+    width: Length,
+    height: Length,
     background: Background,
     border_color: BorderColor,
     border_width: BorderWidth,
@@ -55,14 +56,15 @@ pub struct Stack<IV, AX> {
     marker: PhantomData<AX>
 }
 
-impl<IV, AX: StackDirection> Stack<IV, AX>
+impl<C, AX: StackDirection> Stack<C, AX>
 where
-    IV: IntoView,
+    C: ForEachView,
 {
-    fn new(widget: IV) -> Self {
+    fn new(widget: C) -> Self {
         Self {
             content: widget,
-            rect: Rect::default(),
+            width: Length::Grow,
+            height: Length::Grow,
             background: Background(basic::TRANSPARENT),
             border_color: BorderColor(basic::TRANSPARENT),
             border_width: BorderWidth(0.),
@@ -74,63 +76,91 @@ where
         }
     }
 
-    pub fn width(self, length: Length) -> Self {
-        let _ = length;
-        self
+    pub fn with_width(self, width: Length) -> Self {
+        Self { width, ..self }
     }
 
-    pub fn height(self, length: Length) -> Self {
-        let _ = length;
-        self
+    pub fn with_height(self, height: Length) -> Self {
+        Self { height, ..self }
     }
 
-    pub fn padding(self, padding: Padding) -> Self {
+    pub fn with_padding(self, padding: Padding) -> Self {
         Self { padding, ..self }
     }
 
-    pub fn spacing(self, spacing: u8) -> Self {
+    pub fn with_spacing(self, spacing: u8) -> Self {
         Self { spacing: Spacing(spacing), ..self }
     }
 
-    pub fn align_h(self, align_h: AlignH) -> Self {
+    pub fn with_align_h(self, align_h: AlignH) -> Self {
         Self { align_h, ..self }
     }
 
-    pub fn align_v(self, align_v: AlignV) -> Self {
+    pub fn with_align_v(self, align_v: AlignV) -> Self {
         Self { align_v, ..self }
     }
 
-    pub fn background(self, color: Rgba) -> Self {
+    pub fn with_background(self, color: Rgba) -> Self {
         Self { background: Background(color), ..self }
     }
 
-    pub fn border_color(self, color: Rgba) -> Self {
+    pub fn with_border_color(self, color: Rgba) -> Self {
         Self { border_color: BorderColor(color), ..self }
     }
 
-    pub fn border_width(self, width: f32) -> Self {
+    pub fn with_border_width(self, width: f32) -> Self {
         Self { border_width: BorderWidth(width), ..self }
     }
 }
 
-impl<IV, AX> Widget for Stack<IV, AX>
+impl<C, AX> Widget for Stack<C, AX>
 where
-    IV: IntoView,
+    C: ForEachView,
     AX: StackDirection + 'static,
 {
-    fn layout_node_size(&self, _: Axis) -> Size {
-        let mut s = Size::default();
-        let content_size = self.content.layout_node_size(AX::AXIS);
-
-        s.width = content_size.width + self.padding.horizontal() as f32;
-        s.height = content_size.height + self.padding.vertical() as f32;
-
-        s
+    fn width(&self) -> Length {
+        self.width
     }
 
-    fn layout(&mut self, cx: &mut LayoutCx<'_>) {
-        let pos = cx.get_next_pos(self.rect.size());
-        self.rect.set_pos(pos);
+    fn height(&self) -> Length {
+        self.height
+    }
+
+    fn layout_node_size(&self) -> Size {
+        let mut content_size = Size::default();
+        let child_count = self.content.count();
+
+        match AX::AXIS {
+            Axis::Horizontal => {
+                self.content.for_each(|w| {
+                    let cs = w.layout_node_size();
+                    content_size.width += cs.width;
+                    content_size.height = content_size.height.max(cs.height);
+                });
+
+                content_size.width += ((child_count - 1) * self.spacing.0 as usize) as f32;
+            },
+            Axis::Vertical => {
+                self.content.for_each(|w| {
+                    let cs = w.layout_node_size();
+                    content_size.height += cs.height;
+                    content_size.width = content_size.width.max(cs.width);
+                });
+
+                content_size.height += ((child_count - 1) * self.spacing.0 as usize) as f32;
+            }
+        }
+
+        content_size.width += self.padding.horizontal() as f32;
+        content_size.height += self.padding.vertical() as f32;
+
+        content_size
+    }
+
+    fn layout(&self, cx: &mut LayoutCx<'_>) {
+        let size = self.layout_node_size();
+        let pos = cx.get_next_pos(size);
+        let rect = Rect::from_vec2f_size(pos, size);
 
         let rules = LayoutRules {
             padding: self.padding,
@@ -139,14 +169,15 @@ where
             align_v: self.align_v,
             spacing: self.spacing,
         };
-        let mut cx = LayoutCx::new(cx.cx, rules, self.rect, 0., 0);
+
+        let mut cx = LayoutCx::new(cx.cx, rules, rect, 0., 0);
 
         self.content.layout(&mut cx);
     }
 
     fn draw(&self, scene: &mut Scene) {
         scene.draw(DrawArgs {
-            rect: &self.rect,
+            rect: &Rect::default(),
             transform: &Matrix3x2::identity(),
             background_paint: &PaintRef::Color(&self.background.0),
             border_paint: &PaintRef::Color(&self.border_color.0),
@@ -158,9 +189,9 @@ where
     }
 }
 
-impl<IV, AX> ForEachView for Stack<IV, AX>
+impl<C, AX> ForEachView for Stack<C, AX>
 where
-    IV: IntoView,
+    C: ForEachView,
     AX: StackDirection + 'static,
 {
     fn for_each(&self, f: impl FnMut(&dyn Widget)) {
@@ -172,25 +203,14 @@ where
     }
 }
 
-impl<IV, AX> IntoView for Stack<IV, AX>
+impl<C, AX> IntoView for Stack<C, AX>
 where
-    IV: IntoView,
+    C: ForEachView,
     AX: StackDirection + 'static,
 {
-    type View = Stack<<IV as IntoView>::View, AX>;
+    type View = Self;
 
     fn into_view(self) -> Self::View {
-        Stack {
-            content: self.content.into_view(),
-            rect: self.rect,
-            background: self.background,
-            border_color: self.border_color,
-            border_width: self.border_width,
-            padding: self.padding,
-            spacing: self.spacing,
-            align_h: self.align_h,
-            align_v: self.align_v,
-            marker: PhantomData,
-        }
+        self
     }
 }

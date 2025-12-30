@@ -9,7 +9,7 @@ use crate::widget::Widget;
 /*
 #########################################################
 #
-# IntoView
+# Traits
 #
 #########################################################
 */
@@ -18,13 +18,28 @@ use crate::widget::Widget;
 /// - any type that implement Widget: `impl Widget for T`,
 /// - any type that implement Mount: `impl Mount for T`,
 /// - any function that produce IntoView: `FnOnce() -> IV where IV: IntoView` or `fn() -> impl IntoView`
-pub trait IntoView: Widget + ForEachView + Sized + 'static {
+pub trait IntoView: Widget + Sized + 'static {
     type View: IntoView;
     /// View basically is just a build context for the widget which implements it.
     /// Internally it's a `Box<dyn FnOnce(&mut ViewStorage) -> Entity + 'a>`
     fn into_view(self) -> Self::View;
 }
 
+pub trait ForEachView: IntoView {
+    fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
+        f(self);
+    }
+
+    fn for_each_mut(&mut self, mut f: impl FnMut(&mut dyn Widget)) {
+        f(self)
+    }
+
+    fn count(&self) -> usize {
+        let mut count = 0;
+        self.for_each(|_| count += 1);
+        count
+    }
+}
 
 /*
 #########################################################
@@ -61,8 +76,8 @@ impl AnyView {
 }
 
 impl Widget for AnyView {
-    fn layout(&mut self, cx: &mut LayoutCx<'_>) {
-        self.as_mut().layout(cx);
+    fn layout(&self, cx: &mut LayoutCx<'_>) {
+        self.as_ref().layout(cx);
     }
 
     fn draw(&self, scene: &mut aplite_renderer::Scene) {
@@ -93,20 +108,10 @@ make_component!(AnyView);
 /*
 #########################################################
 #
-# ViewTuple
+# Macros
 #
 #########################################################
 */
-
-pub trait ForEachView: Widget + Sized {
-    fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
-        f(self);
-    }
-
-    fn for_each_mut(&mut self, mut f: impl FnMut(&mut dyn Widget)) {
-        f(self)
-    }
-}
 
 macro_rules! impl_tuple_macro {
     ($macro:ident, $next:tt) => {
@@ -120,7 +125,7 @@ macro_rules! impl_tuple_macro {
 
 macro_rules! view_tuple {
     ($($name:ident),*) => {
-        impl<$($name: IntoView),*> ForEachView for ($($name,)*) {
+        impl<$($name: Widget + 'static),*> ForEachView for ($($name,)*) {
             fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
                 #[allow(non_snake_case)]
                 let ($($name,)*) = self;
@@ -136,32 +141,19 @@ macro_rules! view_tuple {
             }
         }
 
-        impl<$($name: IntoView),*> Widget for ($($name,)*) {
-            fn layout_node_size(&self, axis: Axis) -> Size {
+        impl<$($name: Widget + 'static),*> Widget for ($($name,)*) {
+            fn layout_node_size(&self) -> Size {
                 let mut s = Size::default();
-
-                match axis {
-                    Axis::Horizontal => {
-                        self.for_each(|w| {
-                            let content_size = w.layout_node_size(axis);
-                            s.width += content_size.width;
-                            s.height = s.height.max(content_size.height);
-                        })
-                    },
-                    Axis::Vertical => {
-                        self.for_each(|w| {
-                            let content_size = w.layout_node_size(axis);
-                            s.height += content_size.height;
-                            s.width = s.width.max(content_size.width);
-                        })
-                    },
-                }
-
+                self.for_each(|w| {
+                    let cs = w.layout_node_size();
+                    s.width += cs.width;
+                    s.height = cs.height;
+                });
                 s
             }
 
-            fn layout(&mut self, cx: &mut LayoutCx<'_>) {
-                self.for_each_mut(|w| w.layout(cx));
+            fn layout(&self, cx: &mut LayoutCx<'_>) {
+                self.for_each(|w| w.layout(cx));
             }
 
             fn draw(&self, scene: &mut Scene) {
@@ -169,13 +161,13 @@ macro_rules! view_tuple {
             }
         }
 
-        impl<$($name: IntoView),*> IntoView for ($($name,)*) {
-            type View = ($($name::View,)*);
+        impl<$($name: Widget + 'static),*> IntoView for ($($name,)*) {
+            type View = ($($name,)*);
 
             fn into_view(self) -> Self::View {
                 #[allow(non_snake_case)]
                 let ($($name,)*) = self;
-                ($($name.into_view(),)*)
+                ($($name,)*)
             }
         }
 
@@ -220,36 +212,33 @@ mod view_test {
 
         let debug_name = view.debug_name();
         println!("{debug_name}");
-        assert!(debug_name.contains("&str"));
+        assert_eq!(debug_name, "&str");
     }
 
     #[test]
     fn stack_content() {
-        let v0 = vstack(circle());
-        let v0 = v0.into_view();
-        assert_eq!(v0.type_id(), TypeId::of::<Stack<CircleWidget, Vertical>>());
-
-        let hv = hstack(vec![
+        let s_vec = hstack(vec![
             circle().into_any(),
             button("", || {}).into_any(),
             circle().into_any(),
         ]);
-        let ht = hstack((
+
+        let s_tuple = hstack((
             circle(),
             button("", || {}),
             circle(),
         ));
 
-        assert!(size_of_val(&hv) < size_of_val(&ht));
-        assert_eq!(hv.type_id(), TypeId::of::<Stack<Vec<AnyView>, Horizontal>>());
-        assert_ne!(hv.type_id(), ht.type_id());
+        let s_arr = hstack([
+            circle().into_any(),
+            button("", || {}).into_any(),
+            circle().into_any(),
+        ]);
 
-        let vf = vstack(circle);
-        let tid_vf = vf.type_id();
-        let iv = vf.into_view();
-
-        assert_ne!(tid_vf, iv.type_id());
-        assert_eq!(iv.type_id(), v0.type_id());
+        assert!(size_of_val(&s_vec) < size_of_val(&s_tuple));
+        assert_eq!(s_vec.type_id(), TypeId::of::<Stack<Vec<AnyView>, Horizontal>>());
+        assert_eq!(s_arr.type_id(), TypeId::of::<Stack<[AnyView; 3], Horizontal>>());
+        assert_ne!(s_vec.type_id(), s_tuple.type_id());
     }
 
     #[test]
@@ -284,7 +273,5 @@ mod view_test {
         ht.for_each(|w| {
             println!("{}", w.debug_name())
         });
-
-        circle.for_each(|w| println!("{}", w.debug_name()));
     }
 }

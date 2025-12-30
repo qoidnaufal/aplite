@@ -5,21 +5,21 @@
 pub enum Length {
     Fixed(f32),
     Grow,
-    Fit,
+    MinContent(f32),
 }
 
 impl Default for Length {
     fn default() -> Self {
-        Self::Fixed(0.0)
+        Self::Grow
     }
 }
 
 impl Length {
-    pub fn get(&self, constraint: f32) -> f32 {
+    pub fn get_min_max(&self, min: f32, max: f32) -> f32 {
         match self {
             Length::Fixed(val) => *val,
-            Length::Grow => constraint,
-            Length::Fit => constraint,
+            Length::Grow => max,
+            Length::MinContent(val) => val.max(min)
         }
     }
 
@@ -28,7 +28,7 @@ impl Length {
     }
 
     pub fn is_fit(&self) -> bool {
-        matches!(self, Self::Fit)
+        matches!(self, Self::MinContent(_))
     }
 
     pub fn is_fixed(&self) -> bool {
@@ -52,7 +52,8 @@ impl PartialEq for Length {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Length::Fixed(a), Length::Fixed(b)) => a == b,
-            (Length::Grow, Length::Grow) | (Length::Fit, Length::Fit) => true,
+            (Length::MinContent(a), Length::MinContent(b)) => a == b,
+            (Length::Grow, Length::Grow) => true,
             _ => false
         }
     }

@@ -16,7 +16,7 @@ pub mod prelude {
     pub use aplite_reactive::*;
     pub use aplite_renderer::Shape;
     pub use aplite_types::CornerRadius;
-    pub use aplite_types::Length::{Fixed, Grow, Fit};
+    pub use aplite_types::Length::{Fixed, Grow, MinContent};
 
     pub use crate::app::{Aplite, AppConfig, Launch};
     pub use crate::context::Context;

@@ -16,7 +16,7 @@ fn root() -> impl IntoView {
 
     Effect::new(move |_| eprintln!("{:?}", counter.get()));
 
-    let button_1 = button("+", inc).style(|b| b.corner_radius(CornerRadius::splat(50)));
+    let button_1 = button("+", inc).with_corner_radius(CornerRadius::splat(50));
     let button_2 = button("-", dec);
 
     vstack((
@@ -28,7 +28,7 @@ fn root() -> impl IntoView {
         ),
         leaf
     ))
-    .padding(Padding::splat(5))
+    .with_padding(Padding::splat(5))
 }
 
 

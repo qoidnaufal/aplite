@@ -1,5 +1,5 @@
-use aplite_renderer::Scene;
-use aplite_types::Size;
+use aplite_renderer::{DrawArgs, Scene};
+use aplite_types::{Length, Matrix3x2, PaintRef, Size};
 use aplite_types::{CornerRadius, Rect, Rgba, theme::gruvbox_dark as theme};
 
 use crate::context::Context;
@@ -16,7 +16,13 @@ where
 }
 
 pub struct Button<IV: IntoView, F> {
-    rect: Rect,
+    width: Length,
+    height: Length,
+    padding: Padding,
+    spacing: Spacing,
+    align_h: AlignH,
+    align_v: AlignV,
+    content_layout: Axis,
     background: Rgba,
     border_color: Rgba,
     border_width: f32,
@@ -28,7 +34,13 @@ pub struct Button<IV: IntoView, F> {
 impl<IV: IntoView, F: Fn() + 'static> Button<IV, F> {
     fn new(content: IV, f: F) -> Self {
         Self {
-            rect: Rect::new(0., 0., 100., 200.),
+            width: Length::MinContent(100.),
+            height: Length::MinContent(100.),
+            padding: Padding::splat(5),
+            spacing: Spacing(5),
+            align_h: AlignH::Center,
+            align_v: AlignV::Middle,
+            content_layout: Axis::Horizontal,
             background: theme::GREEN_0,
             border_color: theme::GREEN_1,
             border_width: 5.,
@@ -38,48 +50,90 @@ impl<IV: IntoView, F: Fn() + 'static> Button<IV, F> {
         }
     }
 
-    pub fn size(&mut self, size: Size) {
-        self.rect.set_size(size);
+    pub fn with_width(self, width: Length) -> Self {
+        Self{ width, ..self }
     }
 
-    pub fn background(&mut self, background: Rgba) {
-        self.background = background;
+    pub fn with_height(self, height: Length) -> Self {
+        Self{ height, ..self }
     }
 
-    pub fn border_color(&mut self, border_color: Rgba) {
-        self.border_color = border_color;
+    pub fn with_background(self, background: Rgba) -> Self {
+        Self { background, ..self }
     }
 
-    pub fn border_width(&mut self, border_width: f32) {
-        self.border_width = border_width;
+    pub fn with_border_color(self, border_color: Rgba) -> Self {
+        Self { border_color, ..self }
     }
 
-    pub fn corner_radius(&mut self, corner_radius: CornerRadius) {
-        self.corner_radius = corner_radius;
+    pub fn with_border_width(self, border_width: f32) -> Self {
+        Self { border_width, ..self }
+    }
+
+    pub fn with_corner_radius(self, corner_radius: CornerRadius) -> Self {
+        Self { corner_radius, ..self }
+    }
+
+    pub fn with_content_layout(self, content_layout: Axis) -> Self {
+        Self { content_layout, ..self }
     }
 }
 
 impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
-    fn layout_node_size(&self, _: Axis) -> Size {
-        self.rect.size()
+    fn width(&self) -> Length {
+        self.width
     }
 
-    fn layout(&mut self, cx: &mut LayoutCx<'_>) {
-        let pos = cx.get_next_pos(self.rect.size());
-        self.rect.set_pos(pos);
+    fn height(&self) -> Length {
+        self.height
+    }
+
+    fn layout_node_size(&self) -> Size {
+        let mut content_size = Size::default();
+
+        match self.content_layout {
+            Axis::Horizontal => {
+                let c_width = self.content.width();
+            },
+            Axis::Vertical => {
+                let c_heigth = self.content.height();
+            }
+        }
+
+        content_size.width += self.padding.horizontal() as f32;
+        content_size.height += self.padding.vertical() as f32;
+
+        content_size
+    }
+
+    fn layout(&self, cx: &mut LayoutCx<'_>) {
+        let size = self.layout_node_size();
+        let pos = cx.get_next_pos(size);
+        let rect = Rect::from_vec2f_size(pos, size);
 
         let rules = LayoutRules {
-            padding: Padding::splat(5),
-            orientation: crate::layout::Axis::Horizontal,
-            align_h: AlignH::Center,
-            align_v: AlignV::Middle,
-            spacing: Spacing(5),
+            padding: self.padding,
+            orientation: Axis::Horizontal,
+            align_h: self.align_h,
+            align_v: self.align_v,
+            spacing: self.spacing,
         };
-        let mut new_cx = LayoutCx::new(cx.cx, rules, self.rect, 0., 1);
-        self.content.layout(&mut new_cx);
+
+        let mut cx = LayoutCx::new(cx.cx, rules, rect, 0., 0);
+
+        self.content.layout(&mut cx);
     }
 
     fn draw(&self, scene: &mut Scene) {
+        scene.draw(DrawArgs {
+            rect: &Rect::default(),
+            transform: &Matrix3x2::identity(),
+            background_paint: &PaintRef::Color(&self.background),
+            border_paint: &PaintRef::Color(&self.border_color),
+            border_width: &self.border_width,
+            shape: &aplite_renderer::Shape::RoundedRect,
+            corner_radius: &self.corner_radius,
+        });
         self.content.draw(scene);
     }
 }

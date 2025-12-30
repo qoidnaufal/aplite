@@ -151,8 +151,8 @@ impl Context {
 }
 
 pub struct RenderCx<'a> {
-    cx: &'a mut Context,
-    scene: &'a mut Scene<'a>,
+    pub cx: &'a mut Context,
+    pub scene: &'a mut Scene<'a>,
 }
 
 pub struct Theme {

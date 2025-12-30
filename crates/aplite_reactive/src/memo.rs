@@ -151,13 +151,10 @@ pub struct Memo<T> {
     node: Node<Arc<MemoNode<T>>>
 }
 
-impl<T: 'static> Memo<T> {
-    pub fn new(f: impl Fn(Option<&T>) -> T + 'static) -> Self
-    where
-        T: PartialEq,
-    {
+impl<T: PartialEq + 'static> Memo<T> {
+    pub fn new(f: impl Fn(Option<&T>) -> T + 'static) -> Self {
         let arc_node = Arc::new_cyclic(move |weak| {
-            let any_subscriber = AnySubscriber::new(Weak::clone(weak));
+            let this = AnySubscriber::new(Weak::clone(weak));
 
             let memoize_fn = move |prev: Option<T>| {
                 let new_value = f(prev.as_ref());
@@ -165,7 +162,7 @@ impl<T: 'static> Memo<T> {
                 (new_value, changed)
             };
 
-            MemoNode::new(Arc::new(memoize_fn), any_subscriber)
+            MemoNode::new(Arc::new(memoize_fn), this)
         });
 
         Self { node: NodeStorage::insert(arc_node) }
