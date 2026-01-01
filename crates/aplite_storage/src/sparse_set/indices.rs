@@ -53,6 +53,11 @@ impl SparseIndices {
     }
 
     #[inline(always)]
+    pub unsafe fn get_index_unchecked<K: SparsetKey>(&self, key: K) -> usize {
+        (self.0[key.index()].0.unwrap().get() - 1) as usize
+    }
+
+    #[inline(always)]
     pub fn get_index<K: SparsetKey>(&self, key: K) -> Option<usize> {
         self.0.get(key.index())
             .and_then(SparseSetIndex::get)

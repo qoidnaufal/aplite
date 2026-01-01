@@ -2,7 +2,7 @@ use std::num::NonZeroUsize;
 
 use aplite_reactive::*;
 use aplite_renderer::{Renderer, Scene};
-use aplite_types::{Rect, Rgba, Size, Vec2f};
+use aplite_types::{Rect, Size, Vec2f};
 use aplite_storage::{ComponentStorage, ComponentTuple, Entity, EntityManager};
 
 use crate::view::IntoView;
@@ -46,7 +46,7 @@ impl Context {
     }
 
     pub fn register<C: ComponentTuple>(&mut self, entity: Entity, component_tuple: C) {
-        self.storage.insert_component_tuple(entity, component_tuple);
+        self.storage.insert_component(entity.id(), component_tuple);
     }
 
     pub fn mount<IV: IntoView>(&mut self, widget: IV) {
@@ -150,26 +150,26 @@ impl Context {
     }
 }
 
-pub struct RenderCx<'a> {
-    pub cx: &'a mut Context,
-    pub scene: &'a mut Scene<'a>,
-}
+// pub struct RenderCx<'a> {
+//     pub cx: &'a mut Context,
+//     pub scene: &'a mut Scene<'a>,
+// }
 
-pub struct Theme {
-    pub red0: Rgba,
-    pub red1: Rgba,
-    pub green0: Rgba,
-    pub green1: Rgba,
-    pub blue0: Rgba,
-    pub blue1: Rgba,
-    pub yellow0: Rgba,
-    pub yellow1: Rgba,
-    pub orange0: Rgba,
-    pub orange1: Rgba,
-    pub purple0: Rgba,
-    pub purple1: Rgba,
-    pub background0: Rgba,
-    pub background1: Rgba,
-    pub foreground0: Rgba,
-    pub foreground1: Rgba,
-}
+// pub struct Theme {
+//     pub red0: Rgba,
+//     pub red1: Rgba,
+//     pub green0: Rgba,
+//     pub green1: Rgba,
+//     pub blue0: Rgba,
+//     pub blue1: Rgba,
+//     pub yellow0: Rgba,
+//     pub yellow1: Rgba,
+//     pub orange0: Rgba,
+//     pub orange1: Rgba,
+//     pub purple0: Rgba,
+//     pub purple1: Rgba,
+//     pub background0: Rgba,
+//     pub background1: Rgba,
+//     pub foreground0: Rgba,
+//     pub foreground1: Rgba,
+// }

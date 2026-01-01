@@ -5,7 +5,7 @@ use aplite_future::{
     Executor,
 };
 
-use crate::graph::{Node, NodeStorage};
+use crate::graph::{Node, ReactiveStorage};
 use crate::subscriber::{Subscriber, ToAnySubscriber, AnySubscriber};
 use crate::source::AnySource;
 use crate::reactive_traits::*;
@@ -41,7 +41,7 @@ impl Effect {
 
         let effect_state = EffectState::new(tx);
         let subscriber = effect_state.to_any_subscriber();
-        let node = NodeStorage::insert(effect_state);
+        let node = ReactiveStorage::insert(effect_state);
 
         Executor::spawn(async move {
             let mut value = None::<R>;
@@ -64,7 +64,10 @@ impl Effect {
 
     /// for now a simple brute-force by removing the EffectState from NodeStorage
     pub fn stop(self) {
-        NodeStorage::remove(self.node);
+        // ReactiveStorage::with_downcast(&self.node, |state| {
+        //     state.write()
+        // });
+        ReactiveStorage::remove(self.node);
     }
 }
 
@@ -89,6 +92,7 @@ impl EffectState {
 
 impl Drop for EffectState {
     fn drop(&mut self) {
+        println!("{:?}", self.source);
         self.source.clear();
     }
 }

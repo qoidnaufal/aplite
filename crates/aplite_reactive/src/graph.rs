@@ -21,29 +21,29 @@ use crate::subscriber::AnySubscriber;
 */
 
 // had to use OnceLock because we don't know yet which reactive node will initialize this first
-static STORAGE: OnceLock<RwLock<NodeStorage>> = OnceLock::new();
+static STORAGE: OnceLock<RwLock<ReactiveStorage>> = OnceLock::new();
 
 #[derive(Default)]
-pub(crate) struct NodeStorage {
+pub(crate) struct ReactiveStorage {
     pub(crate) inner: SlotMap<Box<dyn Any + Send + Sync>>,
 }
 
-unsafe impl Send for NodeStorage {}
-unsafe impl Sync for NodeStorage {}
+unsafe impl Send for ReactiveStorage {}
+unsafe impl Sync for ReactiveStorage {}
 
-impl NodeStorage {
+impl ReactiveStorage {
     #[inline(always)]
-    fn read<'a>() -> RwLockReadGuard<'a, NodeStorage> {
+    fn read<'a>() -> RwLockReadGuard<'a, ReactiveStorage> {
         STORAGE.get_or_init(Default::default).read().unwrap()
     }
 
     #[inline(always)]
-    fn try_read<'a>() -> Option<RwLockReadGuard<'a, NodeStorage>> {
+    fn try_read<'a>() -> Option<RwLockReadGuard<'a, ReactiveStorage>> {
         STORAGE.get_or_init(Default::default).read().ok()
     }
 
     #[inline(always)]
-    fn write<'a>() -> RwLockWriteGuard<'a, NodeStorage> {
+    fn write<'a>() -> RwLockWriteGuard<'a, ReactiveStorage> {
         STORAGE.get_or_init(Default::default).write().unwrap()
     }
 
@@ -79,7 +79,7 @@ impl NodeStorage {
         Node { id, marker: PhantomData }
     }
 
-    pub(crate) fn remove<R>(node: Node<R>) {
+    pub(crate) fn remove<R: 'static>(node: Node<R>) {
         let mut storage = Self::write();
         storage.inner.remove(node.id);
     }

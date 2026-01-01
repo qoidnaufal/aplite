@@ -43,7 +43,7 @@ impl<K: SparsetKey, V> SparseSet<K, V> {
         }
     }
 
-    pub unsafe fn get_raw(&mut self, key: K) -> Option<*mut V> {
+    pub unsafe fn get_raw(&self, key: K) -> Option<*mut V> {
         unsafe {
             self.inner
                 .get_raw::<K>(key)
@@ -51,8 +51,20 @@ impl<K: SparsetKey, V> SparseSet<K, V> {
         }
     }
 
+    pub unsafe fn get_unchecked(&self, key: K) -> &V {
+        unsafe {
+            self.inner.get_unchecked(key)
+        }
+    }
+
     pub fn get(&self, key: K) -> Option<&V> {
         self.inner.get::<K, V>(key)
+    }
+
+    pub unsafe fn get_unchecked_mut(&mut self, key: K) -> &mut V {
+        unsafe {
+            self.inner.get_unchecked_mut(key)
+        }
     }
 
     pub fn get_mut(&mut self, key: K) -> Option<&mut V> {

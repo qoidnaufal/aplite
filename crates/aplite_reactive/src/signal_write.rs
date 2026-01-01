@@ -1,4 +1,4 @@
-use crate::graph::NodeStorage;
+use crate::graph::ReactiveStorage;
 use crate::signal::{Signal, SignalNode};
 use crate::signal_read::SignalRead;
 use crate::reactive_traits::*;
@@ -58,7 +58,7 @@ impl<T: 'static> Dispose for SignalWrite<T> {
     fn dispose(&self) { self.as_signal().dispose() }
 
     fn is_disposed(&self) -> bool {
-        NodeStorage::is_removed(&self.node)
+        ReactiveStorage::is_removed(&self.node)
     }
 }
 

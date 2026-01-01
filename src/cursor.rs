@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use aplite_types::Vec2f;
 use aplite_storage::Entity;
 

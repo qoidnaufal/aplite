@@ -13,6 +13,7 @@ use crate::source::AnySource;
 */
 
 #[derive(Default)]
+// TODO: Conside using SparseSet to make removal of a single AnySubscriber much more convenient
 pub(crate) struct SubscriberSet(pub(crate) Vec<AnySubscriber>);
 
 impl SubscriberSet {

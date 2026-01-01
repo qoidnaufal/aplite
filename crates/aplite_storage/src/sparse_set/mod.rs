@@ -36,3 +36,9 @@ impl SparsetKey for SlotId {
         self.index()
     }
 }
+
+impl SparsetKey for usize {
+    fn index(&self) -> usize {
+        *self
+    }
+}

@@ -57,9 +57,10 @@ impl TypeErasedSparseSet {
             })
     }
 
+    #[inline(always)]
     pub unsafe fn get_unchecked<K: SparsetKey, V>(&self, key: K) -> &V {
-        let index = self.indexes.0[key.index()].get().unwrap();
         unsafe {
+            let index = self.indexes.get_index_unchecked(key);
             &*self.raw.get_raw(index * self.item_layout.size()).cast::<V>()
         }
     }
@@ -76,7 +77,15 @@ impl TypeErasedSparseSet {
     }
 
     #[inline(always)]
-    pub fn get_mut<K: SparsetKey, V>(&self, key: K) -> Option<&mut V> {
+    pub unsafe fn get_unchecked_mut<K: SparsetKey, V>(&mut self, key: K) -> &mut V {
+        unsafe {
+            let index = self.indexes.get_index_unchecked(key);
+            &mut *self.raw.get_raw(index * self.item_layout.size()).cast::<V>()
+        }
+    }
+
+    #[inline(always)]
+    pub fn get_mut<K: SparsetKey, V>(&mut self, key: K) -> Option<&mut V> {
         self.indexes
             .get_index(key)
             .map(|index| unsafe {
@@ -444,5 +453,50 @@ mod type_erased_sparse_set {
         let sum_2 = te_ss.iter::<NewObj>().map(|obj| obj.age).sum::<usize>();
         let elapsed_2i = now_2i.elapsed();
         println!("TypeErasedSparseSet      : iter.map.sum time for {sum_2} objects: {:?}", elapsed_2i);
+    }
+
+    #[test]
+    fn remove_againt_vec() {
+        struct Obj {
+            name: u32,
+        }
+
+        const NUM: u32 = 16;
+        const REMOVE_IDX: u32 = 13;
+
+        let now = std::time::Instant::now();
+        let mut vec: Vec<Obj> = Vec::with_capacity(NUM as _);
+        for i in 0..NUM { vec.push(Obj { name: i }) }
+        let elapsed1 = now.elapsed();
+        println!("Vec<T>                   : push time for {NUM} obj: {:?}", elapsed1);
+
+        let now = std::time::Instant::now();
+        let mut ss = TypeErasedSparseSet::with_capacity::<Obj>(NUM as _);
+        for i in 0..NUM { ss.insert(EntityId(i as _), Obj { name: i }); }
+        let elapsed2 = now.elapsed();
+        println!("TypeErasedSparseSet      : push time for {NUM} obj: {:?}", elapsed2);
+        println!("vec is faster by {:.2}%\n", 100. / elapsed1.div_duration_f64(elapsed2));
+
+        let now = std::time::Instant::now();
+        vec.retain(|obj| obj.name != REMOVE_IDX);
+        let elapsed1 = now.elapsed();
+        println!("Vec<T>                   : removal time against idx {REMOVE_IDX}: {:?}", elapsed1);
+
+        let now = std::time::Instant::now();
+        ss.swap_remove::<EntityId, Obj>(EntityId(REMOVE_IDX), EntityId(NUM as u32 - 1));
+        let elapsed2 = now.elapsed();
+        println!("TypeErasedSparseSet      : removal time against idx {REMOVE_IDX}: {:?}", elapsed2);
+        println!("sparset is faster by {:.2}%\n", 100. / elapsed2.div_duration_f64(elapsed1));
+
+        // Vec<T>                   : push time for 16 obj: 42ns
+        // TypeErasedSparseSet      : push time for 16 obj: 500ns
+        // vec is faster by 1190.48%
+
+        // Vec<T>                   : removal time against idx 13: 83ns
+        // TypeErasedSparseSet      : removal time against idx 13: 42ns
+        // sparset is faster by 197.62%
+
+        // conclusion: using sparset for frequent push and clear operation (eg: in reactive graph) is not worth it
+        // for sure, in a static array environment, it's looks very promising if not better
     }
 }

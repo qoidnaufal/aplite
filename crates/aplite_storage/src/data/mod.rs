@@ -1,18 +1,19 @@
 use aplite_types::*;
-use crate::entity::Entity;
+use crate::entity::EntityId;
 
+pub(crate) mod bitset;
 pub(crate) mod component;
 pub(crate) mod query;
 pub(crate) mod table;
 
+use bitset::Bitset;
 use query::{Queryable, QueryData, QueryIter};
-use table::ComponentStorage;
+use table::{ComponentStorage, MarkedBuffer};
 use component::{
     Component,
     ComponentEq,
     ComponentTuple,
-    // ComponentTupleExt,
-    ComponentBitset,
+    ComponentTupleExt,
     ComponentId,
 };
 
@@ -31,46 +32,42 @@ macro_rules! component_bundle {
         impl<$($name: Component + 'static),*> ComponentTuple for ($($name,)*) {
             type Item = ($($name,)*);
 
-            fn insert_bundle(self, entity: Entity, storage: &mut ComponentStorage) {
+            fn insert_bundle(self, entity: EntityId, storage: &mut ComponentStorage) {
                 #[allow(non_snake_case)]
                 let ($($name,)*) = self;
 
-                ($(storage.insert(entity, $name),)*);
+                if let Some(bitset) = storage.get_bitset::<Self>() {
+                    ($(storage.insert(bitset, $name),)*);
+
+                    let table_id = storage.table_ids[&bitset];
+                    let table = &mut storage.tables[table_id.0];
+                    table.indexes.set_index(entity.index(), table.entities.len());
+                    table.entities.push(entity);
+
+                    return;
+                }
+
+                let mut registrator = storage.archetype_builder();
+                ($(registrator.register_component::<$name>(0),)*);
+
+                let bitset = registrator.finish();
+
+                ($(storage.insert(bitset, $name),)*);
+
+                let table_id = storage.table_ids[&bitset];
+                let table = &mut storage.tables[table_id.0];
+                table.indexes.set_index(entity.index(), table.entities.len());
+                table.entities.push(entity);
             }
-
-            // fn insert_bundle(self, entity: Entity, storage: &mut ComponentStorage) {
-            //     #[allow(non_snake_case)]
-            //     let ($($name,)*) = self;
-
-            //     if let Some(table_id) = storage.get_table_id_from_bundle::<Self>() {
-            //         ($(storage.insert_with_table_id(table_id, $name),)*);
-
-            //         let table = storage.get_table_mut_from_table_id(table_id);
-            //         table.indexes.set_index(entity.index(), table.entities.len());
-            //         table.entities.push(entity);
-
-            //         return;
-            //     }
-
-            //     let mut registrator = storage.registrator();
-            //     ($(registrator.register_component::<$name>(0),)*);
-
-            //     let table_id = registrator.finish();
-            //     ($(storage.insert_with_table_id(table_id, $name),)*);
-
-            //     let table = storage.get_table_mut_from_table_id(table_id);
-            //     table.indexes.set_index(entity.index(), table.entities.len());
-            //     table.entities.push(entity);
-            // }
         }
 
-        // impl<$($name: Component + 'static),*> ComponentTupleExt for ($($name,)*) {
-        //     fn bitset(storage: &ComponentStorage) -> Option<ComponentBitset> {
-        //         let mut bitset = ComponentBitset::new();
-        //         ($(bitset.update(storage.get_component_id::<$name>()?),)*);
-        //         Some(bitset)
-        //     }
-        // }
+        impl<$($name: Component + 'static),*> ComponentTupleExt for ($($name,)*) {
+            fn bitset(storage: &ComponentStorage) -> Option<Bitset> {
+                let mut bitset = Bitset::new();
+                ($(bitset.update(storage.get_component_id::<$name>()?.0),)*);
+                Some(bitset)
+            }
+        }
     };
 }
 
@@ -132,6 +129,12 @@ macro_rules! make_component {
                     .finish()
             }
         }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                std::fmt::Debug::fmt(self, f)
+            }
+        }
     };
 
     ($vis:vis struct $name:ident { $($field:ident: $ty:ty),* }) => {
@@ -165,8 +168,6 @@ make_component!(Paint);
 make_component!(ImageData);
 make_component!(Matrix3x2);
 
-use table::MarkedBuffer;
-
 macro_rules! query {
     ($($name:ident),*) => {
         impl<'a, $($name),*> QueryData<'a> for ($($name,)*)
@@ -176,7 +177,7 @@ macro_rules! query {
         {
             type Items = ($(<$name as Queryable<'a>>::Item,)*);
 
-            type Buffer = ($(MarkedBuffer<'a, $name>,)*);
+            type Buffer = ($(Box<[MarkedBuffer<'a, $name>]>,)*);
 
             fn type_ids() -> Vec<std::any::TypeId> {
                 let mut vec = vec![];
@@ -190,14 +191,14 @@ macro_rules! query {
                 Some(vec)
             }
 
-            fn bitset(source: &ComponentStorage) -> Option<ComponentBitset> {
-                let mut bitset = ComponentBitset::new();
-                ($(bitset.update(source.get_component_id::<<$name as Queryable>::Item>()?),)*);
+            fn bitset(source: &ComponentStorage) -> Option<Bitset> {
+                let mut bitset = Bitset::new();
+                ($(bitset.update(source.get_component_id::<<$name as Queryable>::Item>()?.0),)*);
                 Some(bitset)
             }
 
-            fn get_buffer(source: &'a ComponentStorage, entities: Option<&'a[Entity]>) -> Option<Self::Buffer> {
-                Some(($(source.get_marked_buffer_with_entities::<$name>(entities?)?,)*))
+            fn get_buffer(source: &'a ComponentStorage, bitset: Bitset) -> Self::Buffer {
+                ($(source.get_queryable_buffers::<$name>(bitset),)*)
             }
         }
 
@@ -210,21 +211,30 @@ macro_rules! query {
 
             fn next(&mut self) -> Option<Self::Item> {
                 #[allow(non_snake_case)]
-                let ($($name,)*): &($(MarkedBuffer<'a, $name>,)*) = self.buffer.as_ref()?;
+                let ($($name,)*): &mut ($(Box<[MarkedBuffer<'a, $name>]>,)*) = &mut self.buffer;
 
-                let res = ($(
-                    $name.entities.get(self.counter)
-                        .and_then(|entity| {
-                            $name.indices.get_index(*entity)
-                                .map(|index| unsafe {
-                                    $name::convert($name.raw.add(index).as_ptr())
-                                })
-                        })?,
-                )*);
+                #[allow(non_snake_case)]
+                let ($($name,)*) = ($($name.get_mut(self.buffer_counter)?,)*);
 
-                self.counter += 1;
+                fn get<'a, $($name),*>(
+                    counter: usize,
+                    #[allow(non_snake_case)] ($($name,)*): ($(&mut MarkedBuffer<'a, $name>,)*)
+                ) -> Option<($($name,)*)>
+                where
+                    $($name: Queryable<'a>),*,
+                    $($name::Item: Component + 'static),*,
+                {
+                    Some(($($name.get(counter)?,)*))
+                }
 
-                Some(res)
+                if let Some(res) = get(self.counter, ($($name,)*)) {
+                    self.counter += 1;
+                    Some(res)
+                } else {
+                    self.buffer_counter += 1;
+                    self.counter = 0;
+                    self.next()
+                }
             }
         } 
     };
@@ -249,7 +259,7 @@ macro_rules! query_one {
         {
             type Items = (<$name as Queryable<'a>>::Item,);
 
-            type Buffer = MarkedBuffer<'a, $name>;
+            type Buffer = Box<[MarkedBuffer<'a, $name>]>;
 
             fn type_ids() -> Vec<std::any::TypeId> {
                 vec![std::any::TypeId::of::<<$name as Queryable>::Item>()]
@@ -260,13 +270,13 @@ macro_rules! query_one {
                 Some(vec![component_id])
             }
 
-            fn bitset(source: &ComponentStorage) -> Option<ComponentBitset> {
+            fn bitset(source: &ComponentStorage) -> Option<Bitset> {
                 let component_id = source.get_component_id::<<$name as Queryable>::Item>()?;
-                Some(ComponentBitset(1 << component_id.0))
+                Some(Bitset(1 << component_id.0))
             }
 
-            fn get_buffer(source: &'a ComponentStorage, entities: Option<&'a [Entity]>) -> Option<Self::Buffer> {
-                source.get_marked_buffer_with_entities::<$name>(entities?)
+            fn get_buffer(source: &'a ComponentStorage, entities: Bitset) -> Self::Buffer {
+                source.get_queryable_buffers::<$name>(entities)
             }
         }
 
@@ -278,15 +288,16 @@ macro_rules! query_one {
             type Item = $name;
 
             fn next(&mut self) -> Option<Self::Item> {
-                let buffer = self.buffer.as_ref()?;
-                let res = buffer.entities.get(self.counter)
-                    .and_then(|entity| {
-                        buffer.indices.get_index(*entity).map(|index| unsafe {
-                            $name::convert(buffer.raw.add(index).as_ptr())
-                        })
-                    });
-                self.counter += 1;
-                res
+                let buffer = self.buffer.get_mut(self.buffer_counter)?;
+
+                if let Some(res) = buffer.get(self.counter) {
+                    self.counter += 1;
+                    return Some(res);
+                } else {
+                    self.buffer_counter += 1;
+                    self.counter = 0;
+                    self.next()
+                }
             }
         } 
     };

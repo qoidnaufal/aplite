@@ -1,5 +1,5 @@
 use std::sync::{Arc, Weak, RwLock};
-use crate::graph::{NodeStorage, Node, Observer};
+use crate::graph::{ReactiveStorage, Node, Observer};
 use crate::source::{AnySource, Source, ToAnySource};
 use crate::subscriber::{AnySubscriber, Subscriber, SubscriberSet, ToAnySubscriber};
 use crate::reactive_traits::*;
@@ -76,13 +76,13 @@ impl<T> Subscriber for MemoState<T> {
 impl<T> Source for MemoState<T> {
     fn add_subscriber(&self, subscriber: AnySubscriber) {
         self.state_writer()
-            .subscribers.0
+            .subscribers
             .push(subscriber);
     }
 
     fn clear_subscribers(&self) {
         self.state_writer()
-            .subscribers.0
+            .subscribers
             .clear();
     }
 }
@@ -124,8 +124,6 @@ impl<T> Reactive for MemoState<T> {
                 });
             }
 
-            drop(state_write_lock);
-
             return changed
         }
 
@@ -147,7 +145,7 @@ pub struct Memo<T> {
 
 impl<T: PartialEq + 'static> Memo<T> {
     pub fn new(f: impl Fn(Option<&T>) -> T + 'static) -> Self {
-        let arc_node = Arc::new_cyclic(move |weak| {
+        let state = Arc::new_cyclic(move |weak| {
             let this = AnySubscriber::from_weak(Weak::clone(weak));
 
             let memoize_fn = move |prev: Option<T>| {
@@ -159,7 +157,7 @@ impl<T: PartialEq + 'static> Memo<T> {
             MemoState::new(Box::new(memoize_fn), this)
         });
 
-        Self { node: NodeStorage::insert(arc_node) }
+        Self { node: ReactiveStorage::insert(state) }
     }
 }
 
@@ -173,13 +171,13 @@ impl<T> Copy for Memo<T> {}
 
 impl<T: 'static> Source for Memo<T> {
     fn add_subscriber(&self, subscriber: AnySubscriber) {
-        NodeStorage::with_downcast(&self.node, |state| {
+        ReactiveStorage::with_downcast(&self.node, |state| {
             state.add_subscriber(subscriber);
         })
     }
 
     fn clear_subscribers(&self) {
-        NodeStorage::with_downcast(&self.node, |state| {
+        ReactiveStorage::with_downcast(&self.node, |state| {
             state.clear_subscribers();
         })
     }
@@ -187,19 +185,19 @@ impl<T: 'static> Source for Memo<T> {
 
 impl<T: 'static> ToAnySource for Memo<T> {
     fn to_any_source(&self) -> AnySource {
-        NodeStorage::with_downcast(&self.node, AnySource::new)
+        ReactiveStorage::with_downcast(&self.node, AnySource::new)
     }
 }
 
 impl<T: 'static> Subscriber for Memo<T> {
     fn add_source(&self, source: AnySource) {
-        NodeStorage::with_downcast(&self.node, |state| {
+        ReactiveStorage::with_downcast(&self.node, |state| {
             state.add_source(source);
         })
     }
 
     fn clear_sources(&self) {
-        NodeStorage::with_downcast(&self.node, |state| {
+        ReactiveStorage::with_downcast(&self.node, |state| {
             state.clear_sources();
         })
     }
@@ -207,19 +205,19 @@ impl<T: 'static> Subscriber for Memo<T> {
 
 impl<T: 'static> ToAnySubscriber for Memo<T> {
     fn to_any_subscriber(&self) -> AnySubscriber {
-        NodeStorage::with_downcast(&self.node, AnySubscriber::new)
+        ReactiveStorage::with_downcast(&self.node, AnySubscriber::new)
     }
 }
 
 impl<T: 'static> Reactive for Memo<T> {
     fn mark_dirty(&self) {
-        NodeStorage::with_downcast(&self.node, |state| {
+        ReactiveStorage::with_downcast(&self.node, |state| {
             state.mark_dirty();
         })
     }
 
     fn try_update(&self) -> bool {
-        NodeStorage::with_downcast(&self.node, |state| {
+        ReactiveStorage::with_downcast(&self.node, |state| {
             state.try_update()
         })
     }
@@ -242,17 +240,17 @@ impl<T: 'static> Read for Memo<T> {
     type Value = T;
 
     fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
-        NodeStorage::with_downcast(&self.node, |state| {
+        ReactiveStorage::with_downcast(&self.node, |state| {
             state.try_update();
             f(state.read_value().as_ref().unwrap())
         })
     }
 
     fn try_read<R, F: FnOnce(Option<&Self::Value>) -> Option<R>>(&self, f: F) -> Option<R> {
-        NodeStorage::try_with_downcast(&self.node, |opt| {
-            opt.and_then(|node| {
-                node.try_update();
-                f(node.read_value().as_ref())
+        ReactiveStorage::try_with_downcast(&self.node, |opt| {
+            opt.and_then(|state| {
+                state.try_update();
+                f(state.read_value().as_ref())
             })
         })
     }
