@@ -1,3 +1,5 @@
+use std::ptr::NonNull;
+
 use aplite_types::*;
 use crate::entity::EntityId;
 
@@ -8,7 +10,7 @@ pub(crate) mod table;
 
 use bitset::Bitset;
 use query::{Queryable, QueryData, QueryIter};
-use table::{ComponentStorage, MarkedBuffer};
+use table::{ComponentStorage, MarkedBuffer, TableId};
 use component::{
     Component,
     ComponentEq,
@@ -176,7 +178,7 @@ macro_rules! query {
             $($name::Item: Component + 'static),*,
         {
             type Items = ($(<$name as Queryable<'a>>::Item,)*);
-
+            type RawBuffer = ($(NonNull<$name::Item>,)*);
             type Buffer = ($(Box<[MarkedBuffer<'a, $name>]>,)*);
 
             fn type_ids() -> Vec<std::any::TypeId> {
@@ -197,8 +199,8 @@ macro_rules! query {
                 Some(bitset)
             }
 
-            fn get_buffer(source: &'a ComponentStorage, bitset: Bitset) -> Self::Buffer {
-                ($(source.get_queryable_buffers::<$name>(bitset),)*)
+            fn get_buffer(source: &'a ComponentStorage, table_ids: &[&'a TableId]) -> Self::Buffer {
+                ($(source.get_queryable_buffers_by_id::<$name>(table_ids),)*)
             }
         }
 
@@ -210,31 +212,29 @@ macro_rules! query {
             type Item = ($($name,)*);
 
             fn next(&mut self) -> Option<Self::Item> {
+                if let Some(raws) = self.current {
+                    #[allow(non_snake_case)]
+                    let ($($name,)*) = raws;
+
+                    if self.counter < self.len {
+                        #[allow(non_snake_case)]
+                        let ($($name,)*) = unsafe { ($($name.add(self.counter),)*) };
+                        self.counter += 1;
+                        return Some(($($name::convert($name.as_ptr()),)*));
+                    }
+                }
+
                 #[allow(non_snake_case)]
                 let ($($name,)*): &mut ($(Box<[MarkedBuffer<'a, $name>]>,)*) = &mut self.buffer;
 
                 #[allow(non_snake_case)]
                 let ($($name,)*) = ($($name.get_mut(self.buffer_counter)?,)*);
 
-                fn get<'a, $($name),*>(
-                    counter: usize,
-                    #[allow(non_snake_case)] ($($name,)*): ($(&mut MarkedBuffer<'a, $name>,)*)
-                ) -> Option<($($name,)*)>
-                where
-                    $($name: Queryable<'a>),*,
-                    $($name::Item: Component + 'static),*,
-                {
-                    Some(($($name.get(counter)?,)*))
-                }
-
-                if let Some(res) = get(self.counter, ($($name,)*)) {
-                    self.counter += 1;
-                    Some(res)
-                } else {
-                    self.buffer_counter += 1;
-                    self.counter = 0;
-                    self.next()
-                }
+                self.current = Some(($($name.start,)*));
+                ($(self.len = $name.len,)*);
+                self.buffer_counter += 1;
+                self.counter = 0;
+                self.next()
             }
         } 
     };
@@ -258,7 +258,7 @@ macro_rules! query_one {
             $name::Item: 'static,
         {
             type Items = (<$name as Queryable<'a>>::Item,);
-
+            type RawBuffer = NonNull<$name::Item>;
             type Buffer = Box<[MarkedBuffer<'a, $name>]>;
 
             fn type_ids() -> Vec<std::any::TypeId> {
@@ -275,8 +275,8 @@ macro_rules! query_one {
                 Some(Bitset(1 << component_id.0))
             }
 
-            fn get_buffer(source: &'a ComponentStorage, entities: Bitset) -> Self::Buffer {
-                source.get_queryable_buffers::<$name>(entities)
+            fn get_buffer(source: &'a ComponentStorage, table_ids: &[&'a TableId]) -> Self::Buffer {
+                source.get_queryable_buffers_by_id::<$name>(table_ids)
             }
         }
 
@@ -288,16 +288,20 @@ macro_rules! query_one {
             type Item = $name;
 
             fn next(&mut self) -> Option<Self::Item> {
-                let buffer = self.buffer.get_mut(self.buffer_counter)?;
-
-                if let Some(res) = buffer.get(self.counter) {
-                    self.counter += 1;
-                    return Some(res);
-                } else {
-                    self.buffer_counter += 1;
-                    self.counter = 0;
-                    self.next()
+                if let Some(raw) = self.current {
+                    if self.counter < self.len {
+                        let next = unsafe { raw.add(self.counter) };
+                        self.counter += 1;
+                        return Some($name::convert(next.as_ptr()));
+                    }
                 }
+
+                let buffer = self.buffer.get_mut(self.buffer_counter)?;
+                self.current = Some(buffer.start);
+                self.buffer_counter += 1;
+                self.counter = 0;
+                self.len = buffer.len;
+                self.next()
             }
         } 
     };

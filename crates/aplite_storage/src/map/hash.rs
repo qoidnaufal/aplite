@@ -4,7 +4,7 @@ use std::any::TypeId;
 use std::collections::HashMap;
 
 use crate::entity::EntityId;
-// use crate::data::component::ComponentBitset;
+// use crate::data::bitset::Bitset;
 
 pub struct NullHash(u64);
 
@@ -48,7 +48,7 @@ impl BuildHasher for NullHashBuilder {
 }
 
 pub type EntityIdMap<V> = HashMap<EntityId, V, NullHashBuilder>;
-// pub type BitSetMap<V> = HashMap<ComponentBitset, V, NullHashBuilder>;
+// pub(crate) type BitsetMap<V> = HashMap<Bitset, V, NullHashBuilder>;
 
 pub struct TypeIdMap<V>(HashMap<TypeId, V>);
 

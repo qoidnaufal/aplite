@@ -148,16 +148,12 @@ impl ArchetypeTable {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct TableId(pub(crate) usize);
+pub struct TableId(pub(crate) usize);
 
 impl TableId {
     pub(crate) fn new(id: usize) -> Self {
         Self(id)
     }
-
-    // pub(crate) fn index(&self) -> usize {
-    //     self.0
-    // }
 }
 
 #[derive(Default)]
@@ -171,7 +167,7 @@ impl ComponentStorage {
     pub fn new() -> Self {
         Self {
             tables: Vec::new(),
-            table_ids: HashMap::new(),
+            table_ids: HashMap::default(),
             component_ids: TypeIdMap::new(),
         }
     }
@@ -221,6 +217,16 @@ impl ComponentStorage {
         self.table_ids.get(&bitset).map(|id| &mut self.tables[id.0])
     }
 
+    pub(crate) fn get_table_ids<'a>(&'a self, bitset: Bitset) -> Box<[&'a TableId]> {
+        self.table_ids
+            .keys()
+            .filter_map(|bits| {
+                bits.contains(&bitset)
+                    .then(|| self.table_ids.get(bits))?
+            })
+            .collect()
+    }
+
     pub fn get_tables<'a>(&'a self, bitset: Bitset) -> Box<[&'a ArchetypeTable]> {
         self.table_ids
             .keys()
@@ -250,6 +256,26 @@ impl ComponentStorage {
                     })
                 )?
             )
+            .collect()
+    }
+
+    pub(crate) fn get_queryable_buffers_by_id<'a, Q>(&'a self, table_ids: &[&'a TableId]) -> Box<[MarkedBuffer<'a, Q>]>
+    where
+        Q: Queryable<'a>,
+        Q::Item: Component + 'static,
+    {
+        let component_id = self.get_component_id::<Q::Item>();
+
+        table_ids.iter()
+            .filter_map(|id| {
+                let table = &self.tables[id.0];
+                let buffer = table.get_component_buffer(component_id?)?;
+
+                Some(MarkedBuffer {
+                    start: buffer.raw.block.cast::<Q::Item>(),
+                    len: buffer.len(),
+                })
+            })
             .collect()
     }
 
