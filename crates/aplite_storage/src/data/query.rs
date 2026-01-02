@@ -1,113 +1,175 @@
-use crate::data::component::{Component, ComponentId};
-use crate::data::table::{ComponentStorage, TableId};
-use crate::data::bitset::Bitset;
+use std::ptr::NonNull;
+use aplite_bitset::Bitset;
+
+use crate::data::component::Component;
+use crate::data::table::{ComponentStorage, MarkedBuffer, TableId};
 use crate::entity::EntityId;
 
-pub struct QueryIter<'a, Q: QueryData<'a>> {
-    pub(crate) current: Option<Q::RawBuffer>,
-    pub(crate) buffer: Q::Buffer,
-    pub(crate) buffer_counter: usize,
-    pub(crate) counter: usize,
-    pub(crate) len: usize,
-}
-
-pub struct Query<'a, Q: QueryData<'a>> {
+pub struct Query<'a, Q: QueryData> {
     source: &'a ComponentStorage,
-    bitset: Bitset,
-    table_ids: Box<[&'a TableId]>,
+    matched_component_ids: Bitset,
+    matched_table_ids: Bitset,
     marker: std::marker::PhantomData<Q>,
 }
 
 impl<'a, Q> Query<'a, Q>
 where
-    Q: QueryData<'a>,
+    Q: QueryData,
 {
     pub fn new(source: &'a ComponentStorage) -> Self {
-        let component_ids = Q::component_ids(source)
-            .map(|vec| vec.into_boxed_slice())
-            .unwrap_or_default();
-
-        let mut bitset = Bitset::new();
-
-        component_ids.iter().for_each(|id| bitset.update(id.0));
-
-        let table_ids = source.get_table_ids(bitset);
+        let matched_component_ids = Q::matched_component_ids(source).unwrap_or_default();
 
         Self {
             source,
-            table_ids,
-            bitset,
+            matched_component_ids,
+            matched_table_ids: source.get_table_ids(matched_component_ids),
             marker: std::marker::PhantomData,
         }
     }
 
+    pub fn update_query_state(&mut self) {
+        self.matched_component_ids = Q::matched_component_ids(self.source).unwrap_or_default();
+        self.matched_table_ids = self.source.get_table_ids(self.matched_component_ids);
+    }
+
     pub fn entities(&self) -> Box<[&EntityId]> {
-        self.table_ids.iter()
+        self.matched_table_ids
+            .iter()
+            .map(|n| TableId((1 << n) as usize))
             .flat_map(|id| &self.source.tables[id.0].entities)
             .collect()
     }
 
-    pub fn buffers(&'a self) -> Q::Buffer {
-        Q::get_buffer(self.source, self.table_ids.as_ref())
+    pub fn buffers(&'a self) -> <Q as QueryData>::Buffer<'a> {
+        Q::get_buffer(self.source, self.matched_table_ids)
     }
 
     pub fn iter(&'a self) -> QueryIter<'a, Q> {
         QueryIter {
             current: None,
-            buffer: Q::get_buffer(self.source, self.table_ids.as_ref()),
+            buffer: self.buffers(),
             buffer_counter: 0,
             counter: 0,
             len: 0,
+            marker: std::marker::PhantomData,
         }
+    }
+}
+
+pub struct QueryIter<'a, Q: QueryData> {
+    pub(crate) current: Option<Q::State>,
+    pub(crate) buffer: Q::Buffer<'a>,
+    pub(crate) buffer_counter: usize,
+    pub(crate) counter: usize,
+    pub(crate) len: usize,
+    pub(crate) marker: std::marker::PhantomData<Q::Fetch<'a>>,
+}
+
+impl<'a, T: Component + 'static> Iterator for QueryIter<'a, &'a T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(raw) = self.current {
+            if self.counter < self.len {
+                let next = unsafe { raw.add(self.counter) };
+                self.counter += 1;
+                return Some(<&'a T as QueryData>::get(next));
+            }
+        }
+
+        let buffer = self.buffer.get(self.buffer_counter)?;
+        self.current = Some(buffer.start);
+        self.buffer_counter += 1;
+        self.counter = 0;
+        self.len = buffer.len;
+        self.next()
+    }
+}
+
+impl<'a, T: Component + 'static> Iterator for QueryIter<'a, &'a mut T> {
+    type Item = &'a mut T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(raw) = self.current {
+            if self.counter < self.len {
+                let next = unsafe { raw.add(self.counter) };
+                self.counter += 1;
+                return Some(<&'a mut T as QueryData>::get(next));
+            }
+        }
+
+        let buffer = self.buffer.get(self.buffer_counter)?;
+        self.current = Some(buffer.start);
+        self.buffer_counter += 1;
+        self.counter = 0;
+        self.len = buffer.len;
+        self.next()
     }
 }
 
 /*
 #########################################################
 #
-# Traits
+# QueryData
 #
 #########################################################
 */
 
-pub trait Queryable<'a> {
-    type Item: Component + 'static;
+pub trait QueryData {
+    type Item: 'static;
+    type Fetch<'a>;
+    type State;
+    type Buffer<'a>;
 
-    fn convert(input: *mut Self::Item) -> Self;
+    fn get<'a>(input: Self::State) -> Self::Fetch<'a>;
+
+    fn matched_component_ids(source: &ComponentStorage) -> Option<Bitset>;
+
+    fn get_buffer<'a>(source: &'a ComponentStorage, table_ids: Bitset) -> Self::Buffer<'a>;
 }
 
-impl<'a, T: Component + 'static> Queryable<'a> for &'a T {
+impl<'a, T: Component + 'static> QueryData for &'a T {
     type Item = T;
+    type Fetch<'b> = &'a T;
+    type State = NonNull<Self::Item>;
+    type Buffer<'b> = Box<[MarkedBuffer<'b, Self::Fetch<'b>>]>;
 
-    fn convert(input: *mut Self::Item) -> Self {
+    fn get<'b>(input: Self::State) -> Self::Fetch<'b> {
         unsafe {
-            &*input
+            &*input.as_ptr()
         }
+    }
+
+    fn matched_component_ids(source: &ComponentStorage) -> Option<Bitset> {
+        source.get_component_id::<Self::Item>()
+            .map(|id| Bitset::new(1 << id.0))
+    }
+
+    fn get_buffer<'b>(source: &'b ComponentStorage, table_ids: Bitset) -> Self::Buffer<'b> {
+        source.get_queryable_buffers_by_id(table_ids)
     }
 }
 
-impl<'a, T: Component + 'static> Queryable<'a> for &'a mut T {
+impl<'a, T: Component + 'static> QueryData for &'a mut T {
     type Item = T;
+    type Fetch<'b> = &'a mut T;
+    type State = NonNull<Self::Item>;
+    type Buffer<'b> = Box<[MarkedBuffer<'b, Self::Fetch<'b>>]>;
 
-    fn convert(input: *mut Self::Item) -> Self {
+    fn get<'b>(input: Self::State) -> Self::Fetch<'b> {
         unsafe {
-            &mut *input
+            &mut *input.as_ptr()
         }
     }
-}
 
-pub trait QueryData<'a> {
-    type Items: crate::ComponentTuple;
-    type RawBuffer;
-    type Buffer;
+    fn matched_component_ids(source: &ComponentStorage) -> Option<Bitset> {
+        source.get_component_id::<Self::Item>()
+            .map(|id| Bitset::new(1 << id.0))
+    }
 
-    fn type_ids() -> Vec<std::any::TypeId>;
-
-    fn component_ids(source: &ComponentStorage) -> Option<Vec<ComponentId>>;
-
-    fn bitset(source: &ComponentStorage) -> Option<Bitset>;
-
-    fn get_buffer(source: &'a ComponentStorage, table_ids: &[&'a TableId]) -> Self::Buffer;
+    fn get_buffer<'b>(source: &'b ComponentStorage, table_ids: Bitset) -> Self::Buffer<'b> {
+        source.get_queryable_buffers_by_id(table_ids)
+    }
 }
 
 /*

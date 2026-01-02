@@ -1,5 +1,6 @@
+use aplite_bitset::Bitset;
+
 use crate::data::table::ComponentStorage;
-use crate::data::bitset::Bitset;
 use crate::entity::EntityId;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

@@ -1,12 +1,12 @@
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::ptr::NonNull;
+use aplite_bitset::Bitset;
 
-use crate::ArenaPtr;
+use crate::arena::ptr::ArenaPtr;
 use crate::buffer::TypeErasedBuffer;
 use crate::data::component::{Component, ComponentTuple, ComponentTupleExt, ComponentId};
-use crate::data::query::{Query, QueryData, Queryable};
-use crate::data::bitset::Bitset;
+use crate::data::query::{Query, QueryData};
 use crate::entity::EntityId;
 use crate::map::hash::TypeIdMap;
 use crate::sparse_set::indices::SparseIndices;
@@ -217,14 +217,17 @@ impl ComponentStorage {
         self.table_ids.get(&bitset).map(|id| &mut self.tables[id.0])
     }
 
-    pub(crate) fn get_table_ids<'a>(&'a self, bitset: Bitset) -> Box<[&'a TableId]> {
-        self.table_ids
+    pub(crate) fn get_table_ids<'a>(&'a self, matched_component_ids: Bitset) -> Bitset {
+        let bitset_num = self.table_ids
             .keys()
             .filter_map(|bits| {
-                bits.contains(&bitset)
+                bits.contains(&matched_component_ids)
                     .then(|| self.table_ids.get(bits))?
             })
-            .collect()
+            .map(|id| 1 << id.0)
+            .sum();
+
+        Bitset::new(bitset_num)
     }
 
     pub fn get_tables<'a>(&'a self, bitset: Bitset) -> Box<[&'a ArchetypeTable]> {
@@ -238,42 +241,50 @@ impl ComponentStorage {
             .collect()
     }
 
-    pub fn get_queryable_buffers<'a, Q>(&'a self, bitset: Bitset) -> Box<[MarkedBuffer<'a, Q>]>
-    where
-        Q: Queryable<'a>,
-        Q::Item: Component + 'static,
-    {
-        let component_id = self.get_component_id::<Q::Item>();
+    // pub fn get_queryable_buffers<'a, Q>(
+    //     &'a self,
+    //     component_bitset: Bitset,
+    //     table_id_bitset: Bitset,
+    // ) -> Box<[MarkedBuffer<'a, Q>]>
+    // where
+    //     Q: QueryData,
+    //     // Q::Item: Component + 'static,
+    // {
+    //     let component_id = component_bitset.iter()
+    //         .map(|bit| ComponentId(bit as usize))
+    //         .collect::<Box<[_]>>();
 
-        self.table_ids.keys()
-            .filter_map(|bits| bits.contains(&bitset)
-                .then(|| self.table_ids.get(bits)
-                    .map(|id| &self.tables[id.0])
-                    .and_then(|table| table.get_component_buffer(component_id?))
-                    .map(|buffer| MarkedBuffer {
-                        start: buffer.raw.block.cast::<Q::Item>(),
-                        len: buffer.len(),
-                    })
-                )?
-            )
-            .collect()
-    }
+    //     self.table_ids.keys()
+    //         .filter_map(|bits| bits.contains(&table_id_bitset)
+    //             .then(|| self.table_ids.get(bits)
+    //                 .map(|id| &self.tables[id.0])
+    //                 .and_then(|table| table.get_component_buffer(component_id?))
+    //                 .map(|buffer| MarkedBuffer {
+    //                     start: buffer.raw.block.cast::<Q::Item>(),
+    //                     len: buffer.len(),
+    //                     marker: std::marker::PhantomData,
+    //                 })
+    //             )?
+    //         )
+    //         .collect()
+    // }
 
-    pub(crate) fn get_queryable_buffers_by_id<'a, Q>(&'a self, table_ids: &[&'a TableId]) -> Box<[MarkedBuffer<'a, Q>]>
+    pub(crate) fn get_queryable_buffers_by_id<'a, Q>(&'a self, table_ids: Bitset) -> Box<[MarkedBuffer<'a, Q>]>
     where
-        Q: Queryable<'a>,
+        Q: QueryData,
         Q::Item: Component + 'static,
     {
         let component_id = self.get_component_id::<Q::Item>();
 
         table_ids.iter()
             .filter_map(|id| {
-                let table = &self.tables[id.0];
+                let table = &self.tables[id as usize];
                 let buffer = table.get_component_buffer(component_id?)?;
 
                 Some(MarkedBuffer {
                     start: buffer.raw.block.cast::<Q::Item>(),
                     len: buffer.len(),
+                    marker: std::marker::PhantomData,
                 })
             })
             .collect()
@@ -281,7 +292,7 @@ impl ComponentStorage {
 
     pub fn get_marked_buffer<'a, Q>(&'a self, bitset: Bitset) -> Option<MarkedBuffer<'a, Q>>
     where
-        Q: Queryable<'a>,
+        Q: QueryData,
         Q::Item: Component + 'static,
     {
         let component_id = *self.component_ids.get(&TypeId::of::<Q::Item>())?;
@@ -294,18 +305,23 @@ impl ComponentStorage {
         Some(MarkedBuffer {
             start,
             len,
+            marker: std::marker::PhantomData,
         })
     }
 
     pub fn archetype_builder(&mut self) -> ArchetypeBuilder<'_> {
         ArchetypeBuilder {
             storage: self,
-            bitset: Bitset::new(),
+            bitset: Bitset::default(),
             table: ArchetypeTable::default(),
         }
     }
 
-    pub fn query<'a, Q: QueryData<'a>>(&'a self) -> Query<'a, Q> {
+    pub fn query<'a, Q>(&'a self) -> Query<'a, Q>
+    where
+        Q: QueryData,
+        // Q::Item: Component  + 'static,
+    {
         Query::new(self)
     }
 }
@@ -320,7 +336,7 @@ impl<'a> ArchetypeBuilder<'a> {
     #[inline(always)]
     pub(crate) fn register_component<C: Component + 'static>(&mut self, capacity: usize) {
         let component_id = self.storage.get_or_create_id::<C>();
-        self.bitset.update(component_id.0);
+        self.bitset.add_bit(component_id.0);
         self.table.add_buffer::<C>(component_id, capacity);
     }
 
@@ -344,31 +360,33 @@ impl<'a> ArchetypeBuilder<'a> {
 
 pub struct MarkedBuffer<'a, Q>
 where
-    Q: Queryable<'a>,
-    Q::Item: Component + 'static,
+    Q: QueryData,
+    // Q::Item: Component + 'static,
 {
     pub(crate) start: NonNull<Q::Item>,
     pub(crate) len: usize,
+    marker: std::marker::PhantomData<Q::Fetch<'a>>
 }
 
 impl<'a, Q> MarkedBuffer<'a, Q>
 where
-    Q: Queryable<'a>,
-    Q::Item: Component + 'static,
+    Q: QueryData<State = NonNull<<Q as QueryData>::Item>>,
+    // Q::Item: Component + 'static,
 {
-    pub fn iter(&'a self) -> impl Iterator<Item = Q> {
-        MarkedBufferIter {
+    pub fn iter(&'a self) -> impl Iterator<Item = Q::Fetch<'a>> {
+        MarkedBufferIter::<Q> {
             start: self.start,
             len: self.len,
             counter: 0,
+            marker: std::marker::PhantomData,
         }
     }
 
-    pub fn get(&mut self, offset: usize) -> Option<Q> {
+    pub fn get(&mut self, offset: usize) -> Option<Q::Fetch<'a>> {
         unsafe {
             if offset < self.len {
                 let next = self.start.add(offset);
-                return Some(Q::convert(next.as_ptr()));
+                return Some(Q::get(next));
             }
 
             None
@@ -376,25 +394,26 @@ where
     }
 }
 
-pub struct MarkedBufferIter<'a, Q: Queryable<'a>> {
+pub struct MarkedBufferIter<'a, Q: QueryData> {
     start: NonNull<Q::Item>,
     len: usize,
     counter: usize,
+    marker: std::marker::PhantomData<Q::Fetch<'a>>,
 }
 
 impl<'a, Q> Iterator for MarkedBufferIter<'a, Q>
 where
-    Q: Queryable<'a>,
-    Q::Item: Component + 'static,
+    Q: QueryData<State = NonNull<<Q as QueryData>::Item>>,
+    // Q::Item: Component + 'static,
 {
-    type Item = Q;
+    type Item = Q::Fetch<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
             if self.counter < self.len {
                 let next = self.start.add(self.counter);
                 self.counter += 1;
-                return Some(Q::convert(next.as_ptr()));
+                return Some(Q::get(next));
             }
 
             None

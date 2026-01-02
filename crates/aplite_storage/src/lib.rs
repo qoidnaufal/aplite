@@ -23,7 +23,7 @@ pub use tree::{
 
 pub use data::{
     component::{Component, ComponentEq, ComponentTuple},
-    query::{Query, QueryData, Queryable},
+    query::{Query, QueryData},
     table::{ArchetypeTable, ComponentStorage},
 };
 

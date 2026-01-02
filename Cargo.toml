@@ -20,6 +20,7 @@ members = [
   "crates/aplite_stats",
   "crates/aplite_reactive",
   "crates/aplite_storage",
+  "crates/aplite_bitset",
 ]
 
 [dependencies]

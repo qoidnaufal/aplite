@@ -1,5 +1,5 @@
 [package]
-name = "aplite_storage"
+name = "aplite_bitset"
 version = "0.1.0"
 edition.workspace = true
 authors.workspace = true
@@ -7,5 +7,3 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-aplite_types = { path = "../aplite_types" }
-aplite_bitset = { path = "../aplite_bitset" }
