@@ -1,5 +1,6 @@
-use aplite_storage::{make_component, Component};
+use aplite_storage::{make_component, Component, EntityId, ComponentStorage};
 use aplite_types::Rgba;
+use aplite_bitset::Bitset;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Flag(u8);

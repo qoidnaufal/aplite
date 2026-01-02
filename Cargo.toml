@@ -28,6 +28,7 @@ winit.workspace = true
 wgpu.workspace = true
 aplite_types.workspace = true
 aplite_storage.workspace = true
+aplite_bitset.workspace = true
 aplite_stats = { path = "crates/aplite_stats", default-features = false, optional = true }
 aplite_reactive = { path = "crates/aplite_reactive" }
 aplite_renderer = { path = "crates/aplite_renderer" }
@@ -40,6 +41,7 @@ features = ["rayon", "jpeg", "png"]
 optional = true
 
 [workspace.dependencies]
+aplite_bitset = { path = "crates/aplite_bitset" }
 aplite_storage = { path = "crates/aplite_storage" }
 aplite_types = { path = "crates/aplite_types" }
 wgpu = "27.0.1"

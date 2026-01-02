@@ -1,6 +1,7 @@
 use aplite_renderer::Scene;
-use aplite_storage::{Component, make_component};
+use aplite_storage::{Component, EntityId, ComponentStorage, make_component};
 use aplite_types::Size;
+use aplite_bitset::Bitset;
 
 use crate::context::Context;
 use crate::layout::{LayoutCx, Axis};

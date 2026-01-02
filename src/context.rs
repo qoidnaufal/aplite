@@ -3,7 +3,7 @@ use std::num::NonZeroUsize;
 use aplite_reactive::*;
 use aplite_renderer::{Renderer, Scene};
 use aplite_types::{Rect, Size, Vec2f};
-use aplite_storage::{ComponentStorage, ComponentTuple, Entity, EntityManager};
+use aplite_storage::{Component, ComponentStorage, Entity, EntityManager};
 
 use crate::view::IntoView;
 use crate::cursor::{Cursor, MouseAction, MouseButton};
@@ -45,7 +45,7 @@ impl Context {
         self.id_manager.create()
     }
 
-    pub fn register<C: ComponentTuple>(&mut self, entity: Entity, component_tuple: C) {
+    pub fn register<C: Component>(&mut self, entity: Entity, component_tuple: C) {
         self.storage.insert_component(entity.id(), component_tuple);
     }
 

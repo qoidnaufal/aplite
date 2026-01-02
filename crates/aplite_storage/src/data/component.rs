@@ -1,7 +1,15 @@
-use aplite_bitset::Bitset;
-
-use crate::data::table::ComponentStorage;
+use crate::data::component_storage::ComponentStorage;
 use crate::entity::EntityId;
+
+pub trait Component {
+    type Item;
+
+    fn insert(self, entity: EntityId, storage: &mut ComponentStorage);
+}
+
+pub trait ComponentEq: Component {
+    fn component_eq(&self, other: &Self) -> bool;
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ComponentId(pub(crate) usize);
@@ -9,6 +17,11 @@ pub struct ComponentId(pub(crate) usize);
 impl ComponentId {
     pub(crate) fn new(id: usize) -> Self {
         Self(id)
+    }
+
+    #[inline(always)]
+    pub fn index(&self) -> usize {
+        self.0
     }
 }
 
@@ -24,18 +37,36 @@ impl std::hash::Hash for ComponentId {
     }
 }
 
-pub trait Component {}
+/*
+#########################################################
+#
+# TEST
+#
+#########################################################
+*/
 
-pub trait ComponentEq: ComponentTuple {
-    fn component_eq(&self, other: &Self) -> bool;
-}
+#[cfg(test)]
+mod component_test {
+    use super::*;
+    use crate::entity::*;
 
-pub trait ComponentTuple {
-    type Item;
+    crate::make_component!(struct Age(u8));
+    crate::make_component!(struct Name(String));
+    crate::make_component!(struct Salary(usize));
+    crate::make_component!(struct Cars(usize));
+    // crate::make_component!(struct Kids((Name, Age)));
+    // crate::make_component!(struct Person { name: Name, age: Age });
 
-    fn insert_bundle(self, entity: EntityId, storage: &mut ComponentStorage);
-}
+    #[test]
+    fn register_bundle() {
+        let mut storage = ComponentStorage::new();
+        let mut manager = EntityManager::new();
 
-pub(crate) trait ComponentTupleExt {
-    fn bitset(storage: &ComponentStorage) -> Option<Bitset>;
+        let balo = manager.create().id();
+        storage.insert_component(balo, (Age(69), Name("Balo".to_string())));
+        storage.insert_component(balo, (Salary(6969), Cars(666)));
+
+        let nunez = manager.create().id();
+        storage.insert_component(nunez, (Age(69), Name("Balo".to_string())));
+    }
 }

@@ -22,9 +22,10 @@ pub use tree::{
 };
 
 pub use data::{
-    component::{Component, ComponentEq, ComponentTuple},
+    archetype::ArchetypeTable,
+    component::{Component, ComponentEq},
     query::{Query, QueryData},
-    table::{ArchetypeTable, ComponentStorage},
+    component_storage::ComponentStorage,
 };
 
 pub use arena::{
@@ -39,10 +40,8 @@ pub use map::{
 };
 
 pub use sparse_set::{
-    SparsetKey,
-    typed::SparseSet,
-    type_erased::TypeErasedSparseSet,
-    indices::SparseIndices,
+    SparseSet,
+    indices::{SparseIndices, SparsetKey},
 };
 
 pub use iterator::{TreeChildIter, TreeDepthIter};

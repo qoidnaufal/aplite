@@ -4,18 +4,17 @@ use aplite_types::*;
 use aplite_bitset::Bitset;
 use crate::entity::EntityId;
 
-pub(crate) mod bitset;
+pub(crate) mod archetype;
 pub(crate) mod component;
+pub(crate) mod component_storage;
 pub(crate) mod query;
 pub(crate) mod table;
 
 use query::{QueryData, QueryIter};
-use table::{ComponentStorage, MarkedBuffer};
+use component_storage::{ComponentStorage, MarkedBuffer};
 use component::{
     Component,
     ComponentEq,
-    ComponentTuple,
-    ComponentTupleExt,
 };
 
 macro_rules! impl_tuple_macro {
@@ -28,52 +27,53 @@ macro_rules! impl_tuple_macro {
     };
 }
 
-macro_rules! component_bundle {
+macro_rules! component_tuple {
     ($($name:ident),*) => {
-        impl<$($name: Component + 'static),*> ComponentTuple for ($($name,)*) {
+        impl<$($name: Component + 'static),*> Component for ($($name,)*) {
             type Item = ($($name,)*);
 
-            fn insert_bundle(self, entity: EntityId, storage: &mut ComponentStorage) {
+            fn insert(self, entity: EntityId, storage: &mut ComponentStorage) {
                 #[allow(non_snake_case)]
                 let ($($name,)*) = self;
 
-                if let Some(bitset) = storage.get_bitset::<Self>() {
-                    ($(storage.insert(bitset, $name),)*);
+                fn get_component_id<$($name: Component + 'static),*>(
+                    storage: &mut ComponentStorage
+                ) -> Option<Bitset>
+                {
+                    let mut bitset = Bitset::default();
+                    ($(bitset.add_bit(storage.get_component_id::<$name>()?.0),)*);
+                    Some(bitset)
+                }
 
-                    let table_id = storage.table_ids[&bitset];
-                    let table = &mut storage.tables[table_id.0];
+                if let Some(bitset) = get_component_id::<$($name),*>(storage) {
+                    let id = storage.archetype_ids[&bitset];
+
+                    ($(storage.insert_archetype_by_id(id, $name),)*);
+
+                    let table = &mut storage.archetype_tables[id.0];
                     table.indexes.set_index(entity.index(), table.entities.len());
                     table.entities.push(entity);
 
                     return;
                 }
 
-                let mut registrator = storage.archetype_builder();
-                ($(registrator.register_component::<$name>(0),)*);
+                let mut builder = storage.archetype_builder();
+                ($(builder.register_component::<$name>(0),)*);
 
-                let bitset = registrator.finish();
+                let id = builder.finish();
 
-                ($(storage.insert(bitset, $name),)*);
+                ($(storage.insert_archetype_by_id(id, $name),)*);
 
-                let table_id = storage.table_ids[&bitset];
-                let table = &mut storage.tables[table_id.0];
+                let table = &mut storage.archetype_tables[id.0];
                 table.indexes.set_index(entity.index(), table.entities.len());
                 table.entities.push(entity);
-            }
-        }
-
-        impl<$($name: Component + 'static),*> ComponentTupleExt for ($($name,)*) {
-            fn bitset(storage: &ComponentStorage) -> Option<Bitset> {
-                let mut bitset = Bitset::default();
-                ($(bitset.add_bit(storage.get_component_id::<$name>()?.0),)*);
-                Some(bitset)
             }
         }
     };
 }
 
 impl_tuple_macro!(
-    component_bundle,
+    component_tuple,
     A, B, C, D, E,
     F, G, H, I, J,
     K, L, M, N, O,
@@ -114,14 +114,26 @@ impl_tuple_macro!(
 #[macro_export]
 macro_rules! make_component {
     ($name:ident) => {
-        impl Component for $name {}
+        impl Component for $name {
+            type Item = $name;
+
+            fn insert(self, entity: EntityId, storage: &mut ComponentStorage) {
+                if let Some(component_id) = storage.get_component_id::<$name>() {
+                    let component_id_bitset = Bitset::new(component_id.index());
+                }
+            }
+        }
     };
 
     ($vis:vis struct $name:ident($ty:ty)) => {
         #[derive(PartialEq)]
         $vis struct $name($ty);
 
-        impl Component for $name {}
+        impl Component for $name {
+            type Item = $name;
+
+            fn insert(self, entity: EntityId, storage: &mut ComponentStorage) {}
+        }
 
         impl std::fmt::Debug for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -142,7 +154,11 @@ macro_rules! make_component {
         #[derive(PartialEq)]
         $vis struct $name { $($field: $ty),* }
 
-        impl Component for $name {}
+        impl Component for $name {
+            type Item = $name;
+
+            fn insert(self, entity: EntityId, storage: &mut ComponentStorage) {}
+        }
 
         impl std::fmt::Debug for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -199,7 +215,7 @@ macro_rules! query {
             }
 
             fn get_buffer<'b>(source: &'b ComponentStorage, table_ids: Bitset) -> Self::Buffer<'b> {
-                ($(source.get_queryable_buffers_by_id::<$name>(table_ids),)*)
+                ($(source.get_marked_buffers::<$name>(table_ids),)*)
             }
         }
 

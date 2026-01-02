@@ -5,30 +5,6 @@ use std::marker::PhantomData;
 
 use crate::arena::ptr::ArenaPtr;
 
-#[derive(Debug)] pub struct MaxCapacityReached;
-
-impl std::fmt::Display for MaxCapacityReached {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-
-impl std::error::Error for MaxCapacityReached {}
-
-#[derive(Debug)]
-pub enum Error {
-    MaxCapacityReached,
-    Uninitialized,
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-
-impl std::error::Error for Error {}
-
 /// Type erased data storage.
 /// ## Performace
 /// Performance wise, with naive duration-based testing, this data structure is very competitive against std::Vec.
@@ -188,10 +164,6 @@ impl TypeErasedBuffer {
     pub fn iter_mut<'a, T>(&'a mut self) -> IterMut<'a, T> {
         IterMut::new(self)
     }
-
-    // pub(crate) fn iter_raw<'a, T>(&'a self) -> IterRaw<'a, T> {
-    //     IterRaw::new(self)
-    // }
 }
 
 /*
@@ -201,6 +173,11 @@ impl TypeErasedBuffer {
 #
 #########################################################
 */
+
+// pub(crate) struct ImmutableRawBuffer {
+//     pub(crate) block: NonNull<u8>,
+//     drop: Option<unsafe fn(*mut u8, usize)>,
+// }
 
 pub(crate) struct RawBuffer {
     pub(crate) block: NonNull<u8>,
@@ -344,48 +321,50 @@ impl RawBuffer {
 #########################################################
 */
 
-struct Base<T> {
-    raw: *mut T,
-    count: usize,
-    len: usize,
+pub(crate) struct Base<T> {
+    start: *mut T,
+    end: *mut T,
 }
 
 impl<T> Base<T> {
     #[inline(always)]
-    fn new(raw: *mut T, len: usize) -> Self {
+    pub(crate) fn new(start: *mut T, len: usize) -> Self {
         Self {
-            raw,
-            count: 0,
-            len,
+            start,
+            end: unsafe { start.add(len) },
         }
     }
 
     #[inline(always)]
-    unsafe fn next<R>(&mut self, f: impl FnOnce(*mut T) -> R) -> Option<R> {
-        if self.count == self.len || self.len == 0 {
-            return None;
+    pub(crate) unsafe fn next<R>(&mut self, f: impl FnOnce(*mut T) -> R) -> Option<R> {
+        if unsafe { self.end.offset_from_unsigned(self.start) } == 0 {
+            return None
         }
 
-        let next = unsafe { f(self.raw.add(self.count)) };
-        self.count += 1;
-        Some(next)
+        unsafe {
+            let next = self.start;
+            self.start = next.add(1);
+            Some(f(next))
+        }
     }
 
     #[inline(always)]
-    unsafe fn back<R>(&mut self, f: impl FnOnce(*mut T) -> R) -> Option<R> {
-        if self.len == 0 || self.len == self.count {
-            return None;
+    pub(crate) unsafe fn back<R>(&mut self, f: impl FnOnce(*mut T) -> R) -> Option<R> {
+        if unsafe { self.end.offset_from_unsigned(self.start) } == 0 {
+            return None
         }
 
-        let count = self.len - self.count - 1;
-        self.count += 1;
-        unsafe { Some(f(self.raw.add(count))) }
+        unsafe {
+            let next = self.end.sub(1);
+            self.end = next;
+            Some(f(next))
+        }
     }
 }
 
 pub struct Iter<'a, T> {
     base: Base<T>,
-    marker: PhantomData<fn() -> &'a T>,
+    marker: PhantomData<&'a T>,
 }
 
 impl<'a, T> Iter<'a, T> {
@@ -417,7 +396,7 @@ impl<'a, T: 'a> DoubleEndedIterator for Iter<'a, T> {
 
 pub struct IterMut<'a, T> {
     base: Base<T>,
-    marker: PhantomData<fn() -> &'a mut T>,
+    marker: PhantomData<&'a mut T>,
 }
 
 impl<'a, T> IterMut<'a, T> {
@@ -447,29 +426,37 @@ impl<'a, T: 'a> DoubleEndedIterator for IterMut<'a, T> {
     }
 }
 
-// pub(crate) struct IterRaw<'a, T> {
-//     base: Base<T>,
-//     marker: PhantomData<fn() -> &'a mut T>,
-// }
+/*
+#########################################################
+#
+# Errors
+#
+#########################################################
+*/
 
-// impl<'a, T> IterRaw<'a, T> {
-//     fn new(source: &'a TypeErasedBuffer) -> Self {
-//         Self {
-//             base: Base::new(source.raw.block.cast::<T>().as_ptr(), source.len),
-//             marker: PhantomData,
-//         }
-//     }
-// }
+#[derive(Debug)] pub struct MaxCapacityReached;
 
-// impl<'a, T: 'a> Iterator for IterRaw<'a, T> {
-//     type Item = *mut T;
+impl std::fmt::Display for MaxCapacityReached {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
 
-//     fn next(&mut self) -> Option<Self::Item> {
-//         unsafe {
-//             self.base.next(|raw| raw)
-//         }
-//     }
-// }
+impl std::error::Error for MaxCapacityReached {}
+
+#[derive(Debug)]
+pub enum Error {
+    MaxCapacityReached,
+    Uninitialized,
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::error::Error for Error {}
 
 /*
 #########################################################
@@ -546,47 +533,47 @@ mod buffer_test {
         assert_eq!(first, second);
     }
 
-    #[test]
-    fn iter_speed() {
-        struct NewObj {
-            _name: String,
-            age: usize,
-            _addr: usize,
-        }
+    // #[test]
+    // fn iter_speed() {
+    //     struct NewObj {
+    //         _name: String,
+    //         age: usize,
+    //         _addr: usize,
+    //     }
 
-        const NUM: usize = 1024 * 1024 * 4;
+    //     const NUM: usize = 1024 * 1024 * 4;
 
-        let mut vec: Vec<NewObj> = Vec::with_capacity(NUM);
-        let now_1p = std::time::Instant::now();
-        for i in 0..NUM { vec.push(NewObj { _name: i.to_string(), age: 1, _addr: i }) }
-        let elapsed_1p = now_1p.elapsed();
-        println!("Vec<T>            : push time for {NUM} objects: {:?}", elapsed_1p);
+    //     let mut vec: Vec<NewObj> = Vec::with_capacity(NUM);
+    //     let now_1p = std::time::Instant::now();
+    //     for i in 0..NUM { vec.push(NewObj { _name: i.to_string(), age: 1, _addr: i }) }
+    //     let elapsed_1p = now_1p.elapsed();
+    //     println!("Vec<T>            : push time for {NUM} objects: {:?}", elapsed_1p);
 
-        let now_2p = std::time::Instant::now();
-        let mut ba = TypeErasedBuffer::with_capacity::<NewObj>(NUM);
-        for i in 0..NUM { ba.push(NewObj { _name: i.to_string(), age: 1, _addr: i }) }
-        let elapsed_2p = now_2p.elapsed();
-        println!("TypeErasedBuffer  : push time for {NUM} objects: {:?}", elapsed_2p);
+    //     let now_2p = std::time::Instant::now();
+    //     let mut ba = TypeErasedBuffer::with_capacity::<NewObj>(NUM);
+    //     for i in 0..NUM { ba.push(NewObj { _name: i.to_string(), age: 1, _addr: i }) }
+    //     let elapsed_2p = now_2p.elapsed();
+    //     println!("TypeErasedBuffer  : push time for {NUM} objects: {:?}", elapsed_2p);
 
-        let now_3p = std::time::Instant::now();
-        let mut any_vec: Vec<Box<dyn std::any::Any>> = Vec::with_capacity(NUM);
-        for i in 0..NUM { any_vec.push(Box::new(NewObj { _name: i.to_string(), age: 1, _addr: i })) }
-        let elapsed_3p = now_3p.elapsed();
-        println!("Vec<Box<dyn Any>> : push time for {NUM} objects: {:?}\n", elapsed_3p);
+    //     let now_3p = std::time::Instant::now();
+    //     let mut any_vec: Vec<Box<dyn std::any::Any>> = Vec::with_capacity(NUM);
+    //     for i in 0..NUM { any_vec.push(Box::new(NewObj { _name: i.to_string(), age: 1, _addr: i })) }
+    //     let elapsed_3p = now_3p.elapsed();
+    //     println!("Vec<Box<dyn Any>> : push time for {NUM} objects: {:?}\n", elapsed_3p);
 
-        let now_1i = std::time::Instant::now();
-        let sum_1 = vec.iter().map(|obj| obj.age).sum::<usize>();
-        let elapsed_1i = now_1i.elapsed();
-        println!("Vec<T>            : iter.map.sum time for {sum_1} objects: {:?}", elapsed_1i);
+    //     let now_1i = std::time::Instant::now();
+    //     let sum_1 = vec.iter().map(|obj| obj.age).sum::<usize>();
+    //     let elapsed_1i = now_1i.elapsed();
+    //     println!("Vec<T>            : iter.map.sum time for {sum_1} objects: {:?}", elapsed_1i);
 
-        let now_2i = std::time::Instant::now();
-        let sum_2 = ba.iter::<NewObj>().map(|obj| obj.age).sum::<usize>();
-        let elapsed_2i = now_2i.elapsed();
-        println!("TypeErasedBuffer  : iter.map.sum time for {sum_2} objects: {:?}", elapsed_2i);
+    //     let now_2i = std::time::Instant::now();
+    //     let sum_2 = ba.iter::<NewObj>().map(|obj| obj.age).sum::<usize>();
+    //     let elapsed_2i = now_2i.elapsed();
+    //     println!("TypeErasedBuffer  : iter.map.sum time for {sum_2} objects: {:?}", elapsed_2i);
 
-        let now_3i = std::time::Instant::now();
-        let sum_3 = any_vec.iter().map(|any| any.downcast_ref::<NewObj>().unwrap().age).sum::<usize>();
-        let elapsed_3i = now_3i.elapsed();
-        println!("Vec<Box<dyn Any>> : iter.map.sum time for {sum_3} objects: {:?}", elapsed_3i);
-    }
+    //     let now_3i = std::time::Instant::now();
+    //     let sum_3 = any_vec.iter().map(|any| any.downcast_ref::<NewObj>().unwrap().age).sum::<usize>();
+    //     let elapsed_3i = now_3i.elapsed();
+    //     println!("Vec<Box<dyn Any>> : iter.map.sum time for {sum_3} objects: {:?}", elapsed_3i);
+    // }
 }

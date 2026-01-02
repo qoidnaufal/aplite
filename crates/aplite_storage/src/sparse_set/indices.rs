@@ -1,6 +1,45 @@
 use std::num::NonZeroU32;
 
-use crate::SparsetKey;
+use crate::entity::EntityId;
+use crate::data::component::ComponentId;
+use crate::map::slot_map::SlotId;
+
+pub trait SparsetKey
+where
+    Self: Clone + Copy + PartialEq + Eq + std::fmt::Debug + 'static
+{
+    fn index(&self) -> usize;
+}
+
+impl SparsetKey for crate::entity::Entity {
+    fn index(&self) -> usize {
+        self.index()
+    }
+}
+
+impl SparsetKey for EntityId {
+    fn index(&self) -> usize {
+        self.0 as _
+    }
+}
+
+impl SparsetKey for ComponentId {
+    fn index(&self) -> usize {
+        self.0 as _
+    }
+}
+
+impl SparsetKey for SlotId {
+    fn index(&self) -> usize {
+        self.index()
+    }
+}
+
+impl SparsetKey for usize {
+    fn index(&self) -> usize {
+        *self
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct SparseSetIndex(pub(crate) Option<NonZeroU32>);
