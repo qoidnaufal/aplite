@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 use std::any::Any;
 use std::sync::{
-    // Arc,
-    // Weak,
+    Arc,
+    Weak,
     RwLock,
     RwLockReadGuard,
     RwLockWriteGuard,
@@ -11,6 +11,118 @@ use std::sync::{
 
 use aplite_storage::{SlotMap, SlotId};
 use crate::subscriber::AnySubscriber;
+
+
+/*
+#########################################################
+#
+# Scope
+#
+#########################################################
+*/
+
+pub(crate) struct ReactiveScope {
+    children: Vec<WeakScope>,
+    node_ids: Vec<SlotId>,
+    paused: bool,
+}
+
+static SCOPE: RwLock<Option<WeakScope>> = RwLock::new(None);
+
+pub struct Scope(Arc<RwLock<ReactiveScope>>);
+
+impl Scope {
+    pub fn new() -> Self {
+        let current_scope = SCOPE.read().unwrap().as_ref().map(WeakScope::clone);
+
+        Self(Arc::new_cyclic(|weak| {
+            if let Some(current) = current_scope.as_ref().and_then(WeakScope::upgrade) {
+                current.0.write()
+                    .unwrap()
+                    .children
+                    .push(WeakScope(weak.clone()));
+            }
+
+            RwLock::new(ReactiveScope {
+                children: Vec::new(),
+                node_ids: Vec::new(),
+                paused: false,
+            })
+        }))
+    }
+
+    pub fn downgrade(&self) -> WeakScope {
+        WeakScope(Arc::downgrade(&self.0))
+    }
+
+    pub fn with<R>(&self, f: impl FnOnce() -> R) -> R {
+        let mut lock = SCOPE.write().unwrap();
+        let prev = lock.replace(self.downgrade());
+        drop(lock);
+        let res = f();
+        *SCOPE.write().unwrap() = prev;
+        res
+    }
+
+    pub fn with_cleanup<R>(&self, f: impl FnOnce() -> R) -> R {
+        self.cleanup();
+        self.with(f)
+    }
+
+    pub fn cleanup(&self) {
+        let mut lock = self.0.write().unwrap();
+
+        let children = std::mem::take(&mut lock.children);
+        let node_ids = std::mem::take(&mut lock.node_ids);
+
+        drop(lock);
+
+        for child in children {
+            if let Some(child) = child.upgrade() {
+                child.cleanup()
+            }
+        }
+
+        ReactiveStorage::with_mut(|graph| {
+            for id in node_ids {
+                graph.inner.remove(id);
+            }
+        });
+    }
+
+    pub fn pause(&self) {
+        let mut write_lock = self.0.write().unwrap();
+        write_lock.paused = true;
+        drop(write_lock);
+
+        let read_lock = self.0.read().unwrap();
+        read_lock.children.iter()
+            .for_each(|weak| {
+                if let Some(child_scope) = weak.upgrade() {
+                    child_scope.pause();
+                }
+            });
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.0.read().unwrap().paused
+    }
+}
+
+pub struct WeakScope(Weak<RwLock<ReactiveScope>>);
+
+impl Clone for WeakScope {
+    fn clone(&self) -> Self {
+        Self(Weak::clone(&self.0))
+    }
+}
+
+impl WeakScope {
+    #[inline(always)]
+    fn upgrade(&self) -> Option<Scope> {
+        self.0.upgrade().map(Scope)
+    }
+}
 
 /*
 #########################################################
@@ -24,7 +136,7 @@ use crate::subscriber::AnySubscriber;
 static STORAGE: OnceLock<RwLock<ReactiveStorage>> = OnceLock::new();
 
 #[derive(Default)]
-pub(crate) struct ReactiveStorage {
+pub struct ReactiveStorage {
     pub(crate) inner: SlotMap<Box<dyn Any + Send + Sync>>,
 }
 
@@ -47,7 +159,15 @@ impl ReactiveStorage {
         STORAGE.get_or_init(Default::default).write().unwrap()
     }
 
-    pub(crate) fn with_downcast<R, F, U>(node: &Node<R>, f: F) -> U
+    pub fn with_mut<F, R>(f: F) -> R
+    where
+        F: FnOnce(&mut ReactiveStorage) -> R,
+        R: 'static,
+    {
+        f(&mut Self::write())
+    }
+
+    pub fn with_downcast<R, F, U>(node: &Node<R>, f: F) -> U
     where
         R: 'static,
         F: FnOnce(&R) -> U,
@@ -61,30 +181,47 @@ impl ReactiveStorage {
         f(r)
     }
 
-    pub(crate) fn try_with_downcast<R, F, U>(node: &Node<R>, f: F) -> Option<U>
+    pub fn try_with_downcast<R, F, U>(node: &Node<R>, f: F) -> Option<U>
     where
         R: 'static,
-        F: FnOnce(Option<&R>) -> Option<U>,
+        F: FnOnce(&R) -> Option<U>,
     {
         Self::try_read().and_then(|guard| {
-            guard.inner
-                .get(&node.id)
-                .and_then(|any| f(any.downcast_ref::<R>()))
+            guard.inner.get(&node.id)
+                .and_then(|any| any.downcast_ref::<R>())
+                .and_then(f)
+        })
+        // Self::try_read().and_then(|guard| {
+        //     guard.inner
+        //         .get(&node.id)
+        //         .and_then(|any| f(any.downcast_ref::<R>()))
+        // })
+    }
+
+    pub fn map_with_downcast<F, R, U>(node: &Node<R>, f: F) -> Option<U>
+    where
+        F: FnOnce(&R) -> U,
+        R: 'static,
+    {
+        Self::try_read().and_then(|guard| {
+            guard.inner.get(&node.id)
+                .and_then(|any| any.downcast_ref::<R>())
+                .map(f)
         })
     }
 
-    pub(crate) fn insert<R: Send + Sync + 'static>(r: R) -> Node<R> {
+    pub fn insert<R: Send + Sync + 'static>(r: R) -> Node<R> {
         let mut storage = Self::write();
         let id = storage.inner.insert(Box::new(r));
         Node { id, marker: PhantomData }
     }
 
-    pub(crate) fn remove<R: 'static>(node: Node<R>) {
+    pub fn remove<R: 'static>(node: Node<R>) {
         let mut storage = Self::write();
         storage.inner.remove(node.id);
     }
 
-    pub(crate) fn is_removed<R>(node: &Node<R>) -> bool {
+    pub fn is_removed<R>(node: &Node<R>) -> bool {
         let storage = Self::read();
         storage.inner.get(&node.id).is_none()
     }
@@ -100,15 +237,15 @@ impl ReactiveStorage {
 
 static OBSERVER: RwLock<Option<AnySubscriber>> = RwLock::new(None);
 
-pub(crate) struct Observer;
+pub struct Observer;
 
 impl Observer {
     #[inline(always)]
-    pub(crate) fn with<U>(f: impl FnOnce(Option<&AnySubscriber>) -> U) -> U {
+    pub fn with<U>(f: impl FnOnce(Option<&AnySubscriber>) -> U) -> U {
         f(OBSERVER.read().unwrap().as_ref())
     }
 
-    pub(crate) fn swap_observer(subscriber: Option<AnySubscriber>) -> Option<AnySubscriber> {
+    pub fn swap_observer(subscriber: Option<AnySubscriber>) -> Option<AnySubscriber> {
         let mut current = OBSERVER.write().unwrap();
         let prev = current.take();
         *current = subscriber;
@@ -124,9 +261,15 @@ impl Observer {
 #########################################################
 */
 
-pub(crate) struct Node<R> {
+pub struct Node<R> {
     pub(crate) id: SlotId,
     marker: PhantomData<R>,
+}
+
+impl<R> Node<R> {
+    pub fn id(&self) -> SlotId {
+        self.id
+    }
 }
 
 impl<R> Clone for Node<R> {
@@ -170,109 +313,3 @@ impl<R> std::fmt::Debug for Node<R> {
     }
 }
 
-/*
-#########################################################
-#
-# Scope
-#
-#########################################################
-*/
-
-// pub(crate) struct ReactiveScope {
-//     children: Vec<WeakScope>,
-//     node_ids: Vec<SlotId>,
-//     paused: bool,
-// }
-
-// static SCOPE: RwLock<Option<WeakScope>> = RwLock::new(None);
-
-// pub struct Scope(Arc<RwLock<ReactiveScope>>);
-
-// impl Scope {
-//     pub fn new() -> Self {
-//         let current_scope = SCOPE.read().unwrap().as_ref().map(WeakScope::clone);
-
-//         Self(Arc::new_cyclic(|weak| {
-//             if let Some(current) = current_scope.as_ref().and_then(WeakScope::upgrade) {
-//                 current.0.write()
-//                     .unwrap()
-//                     .children
-//                     .push(WeakScope(weak.clone()));
-//             }
-
-//             RwLock::new(ReactiveScope {
-//                 children: Vec::new(),
-//                 node_ids: Vec::new(),
-//                 paused: false,
-//             })
-//         }))
-//     }
-
-//     pub(crate) fn downgrade(&self) -> WeakScope {
-//         WeakScope(Arc::downgrade(&self.0))
-//     }
-
-//     pub fn with<R>(&self, f: impl FnOnce() -> R) -> R {
-//         let prev = SCOPE.write().unwrap().replace(self.downgrade());
-//         let res = f();
-//         *SCOPE.write().unwrap() = prev;
-//         res
-//     }
-
-//     pub fn with_cleanup<R>(&self, f: impl FnOnce() -> R) -> R {
-//         self.cleanup();
-//         self.with(f)
-//     }
-
-//     pub(crate) fn cleanup(&self) {
-//         let mut lock = self.0.write().unwrap();
-
-//         let children = std::mem::take(&mut lock.children);
-//         let node_ids = std::mem::take(&mut lock.node_ids);
-
-//         for child in children {
-//             if let Some(child) = child.upgrade() {
-//                 child.cleanup()
-//             }
-//         }
-
-//         NodeStorage::with_mut(|graph| {
-//             for id in node_ids {
-//                 graph.inner.remove(id);
-//             }
-//         });
-//     }
-
-//     pub fn pause(&self) {
-//         let mut write_lock = self.0.write().unwrap();
-//         write_lock.paused = true;
-//         drop(write_lock);
-
-//         let read_lock = self.0.read().unwrap();
-//         read_lock.children.iter()
-//             .for_each(|weak| {
-//                 if let Some(child_scope) = weak.upgrade() {
-//                     child_scope.pause();
-//                 }
-//             });
-//     }
-
-//     pub(crate) fn paused(&self) -> bool {
-//         self.0.read().unwrap().paused
-//     }
-// }
-
-// pub struct WeakScope(Weak<RwLock<ReactiveScope>>);
-
-// impl Clone for WeakScope {
-//     fn clone(&self) -> Self {
-//         Self(Weak::clone(&self.0))
-//     }
-// }
-
-// impl WeakScope {
-//     #[inline(always)]
-//     fn upgrade(&self) -> Option<Scope> {
-//         self.0.upgrade().map(Scope)
-//     }
-// }

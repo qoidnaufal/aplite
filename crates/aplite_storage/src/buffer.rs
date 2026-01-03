@@ -5,14 +5,13 @@ use std::marker::PhantomData;
 
 use crate::arena::ptr::ArenaPtr;
 
-/// Type erased data storage.
-/// ## Performace
+/// This is equivalent to a Vec<Box\<dyn Any\>>, but without the need to Box the element on insertion.
 /// Performance wise, with naive duration-based testing, this data structure is very competitive against std::Vec.
 /// 
-/// On push, slightly slower than Vec\<T\> but much faster than Vec<Box\<dyn Any\>>, with caveat the pushes were within the reserved capacity. A normal push (and growing the capacity dynamically) should be slower than std::Vec, because currently on every realloc, only 4 more capacity is reserved with the idea of being space efficient.
-/// It's highly advised to reserve the needed capacity, and use
-/// 
-/// On iter, slightly faster than Vec\<T\> and much faster than Vec<Box\<dyn Any\>>.
+/// - On push, slightly slower than Vec\<T\> but much faster than Vec<Box\<dyn Any\>>, with caveat the pushes were within the reserved capacity.
+/// - A normal push (and growing the capacity dynamically) should be slower than std::Vec, because currently on every realloc, only 4 more capacity is reserved with the idea of being space efficient.
+/// - It's highly advised to reserve the needed capacity before use.
+/// - Iterating the elements is slightly faster than Vec\<T\> and much faster than Vec<Box\<dyn Any\>>.
 pub struct TypeErasedBuffer {
     pub(crate) raw: RawBuffer,
     len: usize,
@@ -40,6 +39,18 @@ impl TypeErasedBuffer {
             raw: block,
             len: 0,
             item_layout,
+        }
+    }
+
+    pub fn as_slice<T>(&self) -> &[T] {
+        unsafe {
+            &*std::ptr::slice_from_raw_parts(self.raw.ptr.cast::<T>().as_ptr().cast_const(), self.len)
+        }
+    }
+
+    pub fn as_slice_mut<T>(&mut self) -> &mut[T] {
+        unsafe {
+            &mut *std::ptr::slice_from_raw_parts_mut(self.raw.ptr.cast::<T>().as_ptr(), self.len)
         }
     }
 
@@ -103,16 +114,17 @@ impl TypeErasedBuffer {
         self.len = 0;
     }
 
-    pub unsafe fn get_unchecked_raw<T>(&self, index: usize) -> *mut T {
+    #[inline(always)]
+    pub const unsafe fn get_unchecked_raw(&self, index: usize) -> *mut u8 {
         unsafe {
-            self.raw.get_raw(index * self.item_layout.size()).cast()
+            self.raw.get_raw(index * self.item_layout.size())
         }
     }
 
     #[inline(always)]
     pub const unsafe fn get_unchecked<'a, T>(&'a self, index: usize) -> &'a T {
         unsafe {
-            &*self.raw.get_raw(index * self.item_layout.size()).cast()
+            &*self.get_unchecked_raw(index).cast()
         }
     }
 
@@ -127,7 +139,8 @@ impl TypeErasedBuffer {
     #[inline(always)]
     pub const unsafe fn get_unchecked_mut<'a, T>(&'a mut self, index: usize) -> &'a mut T {
         unsafe {
-            &mut *self.raw.get_raw(index * self.item_layout.size()).cast()
+            &mut *self.get_unchecked_raw(index).cast()
+            // &mut *self.raw.get_raw(index * self.item_layout.size()).cast()
         }
     }
 
@@ -169,6 +182,76 @@ impl TypeErasedBuffer {
 /*
 #########################################################
 #
+# UnmanagedBuffer
+#
+#########################################################
+*/
+
+/// Similar with [`TypeErasedBuffer`] but unmanaged
+/// # Safety
+/// You have to manually keep track on the amount of the allocated items, manually clear & manually deallocate this buffer
+pub struct UnmanagedBuffer {
+    pub(crate) raw: RawBuffer,
+    item_layout: alloc::Layout,
+}
+
+impl UnmanagedBuffer {
+    #[inline]
+    pub fn with_capacity<T>(capacity: usize) -> Self {
+        let item_layout = alloc::Layout::new::<T>();
+        let block = RawBuffer::with_capacity::<T>(capacity, item_layout);
+
+        Self {
+            raw: block,
+            item_layout,
+        }
+    }
+
+    pub fn push<T>(&mut self, data: T, offset: usize) {
+        unsafe {
+            self.raw.push(data, offset);
+        }
+    }
+
+    /// # Safety
+    /// The end bound must be provided: exclusive (1..3), or inclusive (..=2). Unbounded end-bound (4..) will panic because the length of the buffer is unknown
+    pub fn as_slice<T>(&self, range: impl std::ops::RangeBounds<usize>) -> &[T] {
+        let start = match range.start_bound() {
+            std::ops::Bound::Included(&val) => val,
+            std::ops::Bound::Excluded(_) => unreachable!(),
+            std::ops::Bound::Unbounded => 0,
+        };
+        let end = match range.end_bound() {
+            std::ops::Bound::Included(&val) => val + 1,
+            std::ops::Bound::Excluded(&val) => val,
+            std::ops::Bound::Unbounded => panic!("must provide the end bound of the range"),
+        };
+
+        unsafe {
+            let (data, len) = if end > start {
+                (self.raw.ptr.cast::<T>().as_ptr().cast_const(), end - start)
+            } else if start == end {
+                (self.raw.ptr.cast::<T>().add(start).as_ptr().cast_const(), 1)
+            } else {
+                (self.raw.ptr.cast::<T>().as_ptr().cast_const(), 0)
+            };
+
+            &*std::ptr::slice_from_raw_parts(data, len)
+        }
+    }
+
+    pub fn clear(&mut self, len: usize) {
+        self.raw.clear(len);
+    }
+
+    pub fn dealloc(&mut self) {
+        self.raw.dealloc(self.item_layout);
+    }
+}
+
+/*
+#########################################################
+#
 # RawBuffer
 #
 #########################################################
@@ -180,7 +263,7 @@ impl TypeErasedBuffer {
 // }
 
 pub(crate) struct RawBuffer {
-    pub(crate) block: NonNull<u8>,
+    pub(crate) ptr: NonNull<u8>,
     pub(crate) capacity: usize,
     drop: Option<unsafe fn(*mut u8, usize)>,
 }
@@ -200,7 +283,7 @@ impl RawBuffer {
 
         if capacity == 0 {
             Self {
-                block: NonNull::dangling(),
+                ptr: NonNull::dangling(),
                 capacity,
                 drop: mem::needs_drop::<T>().then_some(drop::<T>),
             }
@@ -223,7 +306,7 @@ impl RawBuffer {
 
             match NonNull::new(raw) {
                 Some(new) => {
-                    self.block = new;
+                    self.ptr = new;
                     self.capacity = capacity;
                 },
                 None => alloc::handle_alloc_error(layout),
@@ -234,15 +317,15 @@ impl RawBuffer {
     #[inline(always)]
     pub(crate) const unsafe fn get_raw(&self, offset: usize) -> *mut u8 {
         unsafe {
-            self.block.add(offset).as_ptr()
+            self.ptr.add(offset).as_ptr()
         }
     }
 
     #[inline(always)]
-    pub(crate) const unsafe fn push<T>(&mut self, data: T, len: usize) -> *mut T {
+    pub(crate) const unsafe fn push<T>(&mut self, data: T, offset: usize) -> *mut T {
         unsafe {
-            let raw = self.block
-                .add(len * size_of::<T>())
+            let raw = self.ptr
+                .add(offset * size_of::<T>())
                 .as_ptr()
                 .cast::<T>();
             std::ptr::write(raw, data);
@@ -254,11 +337,11 @@ impl RawBuffer {
     pub(crate) fn realloc(&mut self, item_layout: alloc::Layout, new_capacity: usize) {
         unsafe {
             let new_size = item_layout.size() * new_capacity;
-            let new_block = alloc::realloc(self.block.as_ptr(), item_layout, new_size);
+            let new_block = alloc::realloc(self.ptr.as_ptr(), item_layout, new_size);
 
             match NonNull::new(new_block) {
                 Some(new) => {
-                    self.block = new;
+                    self.ptr = new;
                     self.capacity = new_capacity;
                 },
                 None => {
@@ -294,7 +377,7 @@ impl RawBuffer {
         let drop = self.drop.take();
         if let Some(drop) = drop {
             unsafe {
-                drop(self.block.as_ptr(), len)
+                drop(self.ptr.as_ptr(), len)
             }
         }
         self.drop = drop;
@@ -307,7 +390,7 @@ impl RawBuffer {
                 let size = item_layout.size() * self.capacity;
                 let align = item_layout.align();
                 let layout = alloc::Layout::from_size_align_unchecked(size, align);
-                alloc::dealloc(self.block.as_ptr(), layout);
+                alloc::dealloc(self.ptr.as_ptr(), layout);
             }
         }
     }
@@ -370,7 +453,7 @@ pub struct Iter<'a, T> {
 impl<'a, T> Iter<'a, T> {
     fn new(source: &'a TypeErasedBuffer) -> Self {
         Self {
-            base: Base::new(source.raw.block.cast::<T>().as_ptr(), source.len),
+            base: Base::new(source.raw.ptr.cast::<T>().as_ptr(), source.len),
             marker: PhantomData,
         }
     }
@@ -402,7 +485,7 @@ pub struct IterMut<'a, T> {
 impl<'a, T> IterMut<'a, T> {
     fn new(source: &'a mut TypeErasedBuffer) -> Self {
         Self {
-            base: Base::new(source.raw.block.cast::<T>().as_ptr(), source.len),
+            base: Base::new(source.raw.ptr.cast::<T>().as_ptr(), source.len),
             marker: PhantomData,
         }
     }
@@ -492,10 +575,14 @@ mod buffer_test {
     
         ba.push(balo);
         ba.push(nunez);
+
+        let get_mut = ba.get_mut::<Obj>(1);
+        assert!(get_mut.is_some());
+
+        get_mut.unwrap().age = 666;
     
         let get = ba.get::<Obj>(1);
-
-        assert!(get.is_some_and(|obj| obj.age == 888));
+        assert!(get.is_some_and(|obj| obj.age == 666));
     
         println!("{:?}", get.unwrap());
         println!("quitting");
@@ -531,6 +618,26 @@ mod buffer_test {
         let second = ba.get::<Zst>(1);
 
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn unmanaged() {
+        let mut buffer = UnmanagedBuffer::with_capacity::<&'static str>(2);
+        buffer.push("Balo", 0);
+        buffer.push("Nunez", 1);
+
+        let slice = buffer.as_slice::<&str>(..2);
+        println!("{slice:?}");
+
+        let slice = buffer.as_slice::<&str>(1..1);
+        println!("{slice:?}");
+
+        let slice = buffer.as_slice::<&str>(2..1);
+        println!("{slice:?}");
+
+        buffer.clear(2);
+        buffer.dealloc();
+        drop(buffer);
     }
 
     // #[test]

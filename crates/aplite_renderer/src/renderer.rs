@@ -441,7 +441,7 @@ impl Pipeline {
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("pipeline layout"),
             bind_group_layouts,
-            push_constant_ranges: &[],
+            immediate_size: 0,
         });
         let blend_comp = wgpu::BlendComponent {
             operation: wgpu::BlendOperation::Add,
@@ -484,7 +484,7 @@ impl Pipeline {
                 })],
             }),
             depth_stencil: None,
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         })
     }

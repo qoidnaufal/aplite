@@ -3,19 +3,46 @@ use std::sync::{Weak, Arc};
 use crate::subscriber::AnySubscriber;
 use crate::reactive_traits::*;
 
-pub(crate) struct AnySource(pub(crate) Weak<dyn Source>);
+#[derive(Default)]
+pub struct Sources(pub(crate) Vec<AnySource>);
+
+impl Sources {
+    #[inline(always)]
+    pub fn add_source(&mut self, any_source: AnySource) {
+        if !self.0.contains(&any_source) {
+            self.0.push(any_source);
+        }
+    }
+
+    #[inline(always)]
+    pub fn clear(&mut self) {
+        self.0.clear();
+    }
+
+    #[inline(always)]
+    pub fn try_update(&self) -> bool {
+        self.0.iter().any(AnySource::update_if_necessary)
+    }
+
+    // #[inline(always)]
+    // pub fn remove_subscriber(&self, subscriber: &AnySubscriber) {
+    //     self.0.iter().for_each(|any_source| any_source.remove_subscriber(subscriber));
+    // }
+}
+
+pub struct AnySource(pub(crate) Weak<dyn Source>);
 
 impl AnySource {
-    pub(crate) fn new<T: Source + 'static>(arc: &Arc<T>) -> Self {
+    pub fn new<T: Source + 'static>(arc: &Arc<T>) -> Self {
         let weak: Weak<T> = Arc::downgrade(arc);
         Self(weak)
     }
 
-    pub(crate) fn upgrade(&self) -> Option<Arc<dyn Source>> {
+    pub fn upgrade(&self) -> Option<Arc<dyn Source>> {
         self.0.upgrade()
     }
 
-    pub(crate) fn update_if_necessary(&self) -> bool {
+    pub fn update_if_necessary(&self) -> bool {
         self.upgrade()
             .map(|source| source.try_update())
             .unwrap_or(false)
@@ -40,9 +67,10 @@ impl Reactive for AnySource {
     }
 }
 
-pub(crate) trait Source: Reactive {
+pub trait Source: Reactive {
     fn add_subscriber(&self, subscriber: AnySubscriber);
     fn clear_subscribers(&self);
+    // fn remove_subscriber(&self, subscriber: &AnySubscriber);
 }
 
 impl Source for AnySource {
@@ -57,6 +85,12 @@ impl Source for AnySource {
             source.clear_subscribers();
         }
     }
+
+    // fn remove_subscriber(&self, subscriber: &AnySubscriber) {
+    //     if let Some(source) = self.upgrade() {
+    //         source.remove_subscriber(subscriber);
+    //     }
+    // }
 }
 
 impl PartialEq for AnySource {

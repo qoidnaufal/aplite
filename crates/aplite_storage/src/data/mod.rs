@@ -38,8 +38,7 @@ macro_rules! component_tuple {
 
                 fn get_component_id<$($name: Component + 'static),*>(
                     storage: &mut ComponentStorage
-                ) -> Option<Bitset>
-                {
+                ) -> Option<Bitset> {
                     let mut bitset = Bitset::default();
                     ($(bitset.add_bit(storage.get_component_id::<$name>()?.0),)*);
                     Some(bitset)
@@ -117,10 +116,10 @@ macro_rules! make_component {
         impl Component for $name {
             type Item = $name;
 
-            fn insert(self, entity: EntityId, storage: &mut ComponentStorage) {
-                if let Some(component_id) = storage.get_component_id::<$name>() {
-                    let component_id_bitset = Bitset::new(component_id.index());
-                }
+            fn insert(self, _entity: EntityId, _storage: &mut ComponentStorage) {
+                // if let Some(component_id) = storage.get_component_id::<$name>() {
+                //     let component_id_bitset = Bitset::new(component_id.index());
+                // }
             }
         }
     };
@@ -132,7 +131,7 @@ macro_rules! make_component {
         impl Component for $name {
             type Item = $name;
 
-            fn insert(self, entity: EntityId, storage: &mut ComponentStorage) {}
+            fn insert(self, _entity: EntityId, _storage: &mut ComponentStorage) {}
         }
 
         impl std::fmt::Debug for $name {
@@ -157,7 +156,7 @@ macro_rules! make_component {
         impl Component for $name {
             type Item = $name;
 
-            fn insert(self, entity: EntityId, storage: &mut ComponentStorage) {}
+            fn insert(self, _entity: EntityId, _storage: &mut ComponentStorage) {}
         }
 
         impl std::fmt::Debug for $name {

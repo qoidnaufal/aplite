@@ -1,27 +1,25 @@
 use std::sync::{Arc, Weak, RwLock};
-use crate::graph::{ReactiveStorage, Node, Observer};
-use crate::source::{AnySource, Source, ToAnySource};
-use crate::subscriber::{AnySubscriber, Subscriber, SubscriberSet, ToAnySubscriber};
+
+use crate::graph::{ReactiveStorage, Node, Observer, Scope};
+use crate::source::{AnySource, Source, Sources, ToAnySource};
+use crate::subscriber::{AnySubscriber, Subscriber, Subscribers, ToAnySubscriber};
 use crate::reactive_traits::*;
 use crate::stored_value::Value;
 
-/*
-#########################################################
-#
-# MemoNode
-#
-#########################################################
-*/
+pub struct Memo<T> {
+    node: Node<Arc<MemoState<T>>>
+}
 
 struct MemoState<T> {
+    scope: Scope,
     stored_value: Value<Option<T>>,
     f: Box<dyn Fn(Option<T>) -> (T, bool)>,
     state: RwLock<State>
 }
 
 struct State {
-    sources: Vec<AnySource>,
-    subscribers: SubscriberSet,
+    sources: Sources,
+    subscribers: Subscribers,
     this: AnySubscriber,
     dirty: bool,
 }
@@ -29,24 +27,46 @@ struct State {
 unsafe impl<T> Send for MemoState<T> {}
 unsafe impl<T> Sync for MemoState<T> {}
 
+/*
+#########################################################
+#
+# impl MemoState
+#
+#########################################################
+*/
+
 impl<T> MemoState<T> {
     fn new(f: Box<dyn Fn(Option<T>) -> (T, bool)>, this: AnySubscriber) -> Self {
         Self {
+            scope: Scope::new(),
             stored_value: Value::new(None::<T>),
             f,
             state: RwLock::new(State {
-                sources: Vec::new(),
-                subscribers: SubscriberSet::default(),
+                sources: Sources::default(),
+                subscribers: Subscribers::default(),
                 this,
                 dirty: true,
             })
         }
     }
 
-    #[inline(always)]
-    fn read_value(&self) -> std::sync::RwLockReadGuard<'_, Option<T>> {
-        self.stored_value.read().unwrap()
+    fn read_value(&self) -> &Option<T> {
+        self.stored_value.read()
     }
+
+    fn write_value(&self) -> &mut Option<T> {
+        self.stored_value.write()
+    }
+
+    // #[inline(always)]
+    // fn read_value(&self) -> std::sync::RwLockReadGuard<'_, Option<T>> {
+    //     self.stored_value.read().unwrap()
+    // }
+
+    // #[inline(always)]
+    // fn write_value(&self) -> std::sync::RwLockWriteGuard<'_, Option<T>> {
+    //     self.stored_value.write().unwrap()
+    // }
 
     #[inline(always)]
     fn state_reader(&self) -> std::sync::RwLockReadGuard<'_, State> {
@@ -63,7 +83,7 @@ impl<T> Subscriber for MemoState<T> {
     fn add_source(&self, source: AnySource) {
         self.state_writer()
             .sources
-            .push(source);
+            .add_source(source);
     }
 
     fn clear_sources(&self) {
@@ -85,6 +105,12 @@ impl<T> Source for MemoState<T> {
             .subscribers
             .clear();
     }
+
+    // fn remove_subscriber(&self, subscriber: &AnySubscriber) {
+    //     self.state_writer()
+    //         .subscribers
+    //         .remove_subscriber(subscriber);
+    // }
 }
 
 impl<T> Reactive for MemoState<T> {
@@ -100,16 +126,18 @@ impl<T> Reactive for MemoState<T> {
         let state_read_lock = self.state_reader();
 
         if state_read_lock.dirty {
-            let mut value_lock = self.stored_value.write().unwrap();
-            let prev_value = value_lock.take();
+            let val = self.write_value();
+            let prev_value = val.take();
 
             let this = state_read_lock.this.clone();
             drop(state_read_lock);
             this.clear_sources();
 
-            let (new_value, changed) = this.as_observer(|| (self.f)(prev_value));
-            *value_lock = Some(new_value);
-            drop(value_lock);
+            let (new_value, changed) = self.scope.with_cleanup(|| {
+                this.as_observer(|| (self.f)(prev_value))
+            });
+
+            val.replace(new_value);
 
             let mut state_write_lock = self.state_writer();
             state_write_lock.dirty = false;
@@ -134,14 +162,10 @@ impl<T> Reactive for MemoState<T> {
 /*
 #########################################################
 #
-# Memo
+# impl Memo
 #
 #########################################################
 */
-
-pub struct Memo<T> {
-    node: Node<Arc<MemoState<T>>>
-}
 
 impl<T: PartialEq + 'static> Memo<T> {
     pub fn new(f: impl Fn(Option<&T>) -> T + 'static) -> Self {
@@ -181,6 +205,12 @@ impl<T: 'static> Source for Memo<T> {
             state.clear_subscribers();
         })
     }
+
+    // fn remove_subscriber(&self, subscriber: &AnySubscriber) {
+    //     ReactiveStorage::with_downcast(&self.node, |state| {
+    //         state.remove_subscriber(subscriber);
+    //     })
+    // }
 }
 
 impl<T: 'static> ToAnySource for Memo<T> {
@@ -240,18 +270,26 @@ impl<T: 'static> Read for Memo<T> {
     type Value = T;
 
     fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
-        ReactiveStorage::with_downcast(&self.node, |state| {
+        if let Some(state) = ReactiveStorage::with_downcast(&self.node, Arc::downgrade)
+            .upgrade()
+        {
             state.try_update();
+        }
+
+        ReactiveStorage::with_downcast(&self.node, |state| {
             f(state.read_value().as_ref().unwrap())
         })
     }
 
-    fn try_read<R, F: FnOnce(Option<&Self::Value>) -> Option<R>>(&self, f: F) -> Option<R> {
-        ReactiveStorage::try_with_downcast(&self.node, |opt| {
-            opt.and_then(|state| {
-                state.try_update();
-                f(state.read_value().as_ref())
-            })
+    fn try_read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> Option<R> {
+        if let Some(state) = ReactiveStorage::map_with_downcast(&self.node, Arc::downgrade)
+            .and_then(|weak| weak.upgrade())
+        {
+            state.try_update();
+        }
+
+        ReactiveStorage::try_with_downcast(&self.node, |state| {
+            state.read_value().as_ref().map(f)
         })
     }
 }
@@ -264,7 +302,7 @@ impl<T: Clone + 'static> Get for Memo<T> {
     }
 
     fn try_get_untracked(&self) -> Option<Self::Value> {
-        self.try_read(|value| value.cloned())
+        self.try_read(Clone::clone)
     }
 }
 
@@ -279,7 +317,7 @@ impl<T: 'static> With for Memo<T> {
 
     fn try_with_untracked<F, R>(&self, f: F) -> Option<R>
     where
-        F: FnOnce(Option<&Self::Value>) -> Option<R> {
+        F: FnOnce(&Self::Value) -> R {
         self.try_read(f)
     }
 }
@@ -293,38 +331,35 @@ mod memo_test {
 
     #[test]
     fn effect() {
-        Executor::init(3);
+        Executor::init(2);
 
-        let (first, set_first) = Signal::split("Dario");
-        let (last, set_last) = Signal::split("");
+        let (name, set_name) = Signal::split("");
 
-        let full_name = Memo::new(move |_| {
-            first.get().to_string() + last.get()
-        });
+        let memoized = Memo::new(move |_| name.get());
 
         Effect::new(move |_| {
-            full_name.with(|name| eprintln!("full name: {name}"))
+            memoized.with(|name| eprintln!("full name: {name}"))
         });
 
-        let delta = 100;
+        let delta = 200;
         Executor::spawn(async move {
             let duration = std::time::Duration::from_millis(delta);
 
-            set_first.set("Mario");
+            set_name.set("Mario");
             sleep(duration).await;
-            assert!(full_name.with(|name| name == "Mario"));
+            assert!(memoized.with(|&name| name == "Mario"));
 
-            set_last.set(" Ballotelli");
+            set_name.set("Ballotelli");
             sleep(duration).await;
-            assert!(full_name.with(|name| name == "Mario Ballotelli"));
+            assert!(memoized.with(|&name| name == "Ballotelli"));
 
-            set_last.set(" Nunez");
+            set_name.set("Darwin");
             sleep(duration).await;
-            assert!(full_name.with(|name| name == "Mario Nunez"));
+            assert!(memoized.with(|&name| name == "Darwin"));
 
-            set_first.set("Darwin");
+            set_name.set("Nunez");
             sleep(duration).await;
-            assert!(full_name.with(|name| name == "Darwin Nunez"));
+            assert!(memoized.with(|&name| name == "Nunez"));
         });
 
         std::thread::sleep(std::time::Duration::from_millis(delta * 4));

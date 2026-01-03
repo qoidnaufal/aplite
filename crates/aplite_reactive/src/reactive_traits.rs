@@ -32,16 +32,16 @@ pub trait Notify {
 #########################################################
 */
 
-pub(crate) trait Read {
+pub trait Read {
     type Value: 'static;
 
     /// read the value
     fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R;
 
-    fn try_read<R, F: FnOnce(Option<&Self::Value>) -> Option<R>>(&self, f: F) -> Option<R>;
+    fn try_read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> Option<R>;
 }
 
-pub(crate) trait Write {
+pub trait Write {
     type Value: 'static;
 
     /// updating the value without notifying it's subscribers
@@ -88,7 +88,7 @@ pub trait With: Track {
 
     fn try_with<F, R>(&self, f: F) -> Option<R>
     where
-        F: FnOnce(Option<&Self::Value>) -> Option<R>
+        F: FnOnce(&Self::Value) -> R
     {
         self.track();
         self.try_with_untracked(f)
@@ -100,7 +100,7 @@ pub trait With: Track {
 
     fn try_with_untracked<F, R>(&self, f: F) -> Option<R>
     where
-        F: FnOnce(Option<&Self::Value>) -> Option<R>;
+        F: FnOnce(&Self::Value) -> R;
 }
 
 /*

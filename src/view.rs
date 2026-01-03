@@ -20,11 +20,13 @@ use crate::widget::Widget;
 /// - any type that implement Mount: `impl Mount for T`,
 /// - any function that produce IntoView: `FnOnce() -> IV where IV: IntoView` or `fn() -> impl IntoView`
 pub trait IntoView: Widget + Sized + 'static {
-    type View: IntoView;
+    type View: Widget;
     /// View basically is just a build context for the widget which implements it.
     /// Internally it's a `Box<dyn FnOnce(&mut ViewStorage) -> Entity + 'a>`
     fn into_view(self) -> Self::View;
 }
+
+pub trait Mountable: IntoView {}
 
 pub trait ForEachView: IntoView {
     fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
@@ -83,16 +85,6 @@ impl Widget for AnyView {
 
     fn draw(&self, scene: &mut aplite_renderer::Scene) {
         self.as_ref().draw(scene);
-    }
-}
-
-impl ForEachView for AnyView {
-    fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
-        f(self.as_ref())
-    }
-
-    fn for_each_mut(&mut self, mut f: impl FnMut(&mut dyn Widget)) {
-        f(self.as_mut())
     }
 }
 
@@ -268,8 +260,11 @@ mod view_test {
     #[test]
     fn for_each_view() {
         let ht = hstack((
+            either(|| false, || button("", || {}), circle),
+            vstack((circle, circle)),
+            circle,
             circle(),
-            button("", || {}),
+            button(("", circle), || {}),
         ));
 
         ht.for_each(|w| {

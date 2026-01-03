@@ -126,7 +126,7 @@ impl ComponentStorage {
                 let buffer = table.get_component_buffer(component_id?)?;
 
                 Some(MarkedBuffer {
-                    start: buffer.raw.block.cast::<Q::Item>(),
+                    start: buffer.raw.ptr.cast::<Q::Item>(),
                     len: buffer.len(),
                     marker: std::marker::PhantomData,
                 })

@@ -20,6 +20,8 @@ pub use {
     stack::*,
 };
 
+pub struct WidgetElement {}
+
 /*
 #########################################################
 #
@@ -29,8 +31,7 @@ pub use {
 */
 
 /// main building block to create a renderable component
-pub trait Widget {
-    #[cfg(debug_assertions)]
+pub trait Widget: 'static {
     fn debug_name(&self) -> &'static str {
         std::any::type_name::<Self>()
     }
@@ -53,7 +54,7 @@ pub trait Widget {
 }
 
 pub trait InteractiveWidget: Widget {
-    fn execute(&self) {}
+    fn trigger(&self) {}
 }
 
 /*
@@ -262,20 +263,18 @@ where
     let when = Memo::new(move |_| when());
 
     move || match when.get() {
-        true => Either::True(content_true().into_view()),
-        false => Either::False(content_false().into_view()),
+        true => Either::True(content_true()),
+        false => Either::False(content_false()),
     }
 }
 
 /*
 #########################################################
 #
-# Vec<IV> & [IV; N]
+# Vec<W>
 #
 #########################################################
 */
-
-// ---- Vec<IV>
 
 impl<W: Widget> Widget for Vec<W> {
     fn layout(&self, cx: &mut LayoutCx<'_>) {
@@ -309,7 +308,53 @@ impl<W: Widget + 'static> ForEachView for Vec<W> {
     }
 }
 
-// ---- [IV; N]
+/*
+#########################################################
+#
+# Box<[W]>
+#
+#########################################################
+*/
+
+impl<W: Widget + 'static> Widget for Box<[W]> {
+    fn layout(&self, cx: &mut LayoutCx<'_>) {
+        self.for_each(|w| w.layout(cx));
+    }
+
+    fn draw(&self, scene: &mut Scene) {
+        self.for_each(|w| w.draw(scene));
+    }
+}
+
+impl<W: Widget + 'static> IntoView for Box<[W]> {
+    type View = Self;
+
+    fn into_view(self) -> Self::View {
+        self
+    }
+}
+
+impl<W: Widget + 'static> ForEachView for Box<[W]> {
+    fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
+        self.iter().for_each(|w| f(w));
+    }
+
+    fn for_each_mut(&mut self, mut f: impl FnMut(&mut dyn Widget)) {
+        self.iter_mut().for_each(|w| f(w));
+    }
+
+    fn count(&self) -> usize {
+        self.len()
+    }
+}
+
+/*
+#########################################################
+#
+# [W; N]
+#
+#########################################################
+*/
 
 impl<W: Widget + 'static, const N: usize> Widget for [W; N] {
     fn layout(&self, cx: &mut LayoutCx<'_>) {
@@ -401,18 +446,18 @@ impl IntoView for () {
 /*
 #########################################################
 #
-# Reactive Nodes
+# SignalRead<W>
 #
 #########################################################
 */
 
 impl<W: Widget + 'static> Widget for SignalRead<W> {
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        self.with_untracked(|w| w.layout(cx))
+        self.with(|w| w.layout(cx))
     }
 
     fn draw(&self, scene: &mut Scene) {
-        self.with_untracked(|w| w.draw(scene))
+        self.with(|w| w.draw(scene))
     }
 }
 
@@ -424,15 +469,21 @@ impl<W: Widget + 'static> IntoView for SignalRead<W> {
     }
 }
 
-// ----
+/*
+#########################################################
+#
+# Signal<W>
+#
+#########################################################
+*/
 
 impl<W: Widget + 'static> Widget for Signal<W> {
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        self.with_untracked(|w| w.layout(cx))
+        self.with(|w| w.layout(cx))
     }
 
     fn draw(&self, scene: &mut Scene) {
-        self.with_untracked(|w| w.draw(scene))
+        self.with(|w| w.draw(scene))
     }
 }
 
@@ -444,15 +495,21 @@ impl<W: Widget + 'static> IntoView for Signal<W> {
     }
 }
 
-// ----
+/*
+#########################################################
+#
+# Memo<W>
+#
+#########################################################
+*/
 
 impl<W: Widget + PartialEq + 'static> Widget for Memo<W> {
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        self.with_untracked(|w| w.layout(cx))
+        self.with(|w| w.layout(cx))
     }
 
     fn draw(&self, scene: &mut Scene) {
-        self.with_untracked(|w| w.draw(scene))
+        self.with(|w| w.draw(scene))
     }
 }
 
@@ -472,9 +529,8 @@ impl<W: Widget + PartialEq + 'static> IntoView for Memo<W> {
 #########################################################
 */
 
-impl<'a> Widget for &'a str {
-    fn layout(&self, _: &mut LayoutCx<'_>) {
-    }
+impl Widget for &'static str {
+    fn layout(&self, _: &mut LayoutCx<'_>) {}
 
     fn draw(&self, _: &mut Scene) {}
 }

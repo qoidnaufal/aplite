@@ -11,14 +11,16 @@ use crate::widget::Widget;
 
 pub fn hstack<C>(widget: C) -> Stack<C, Horizontal>
 where
-    C: ForEachView,
+    C: IntoView,
+    C::View: ForEachView,
 {
     Stack::<C, Horizontal>::new(widget)
 }
 
 pub fn vstack<C>(widget: C) -> Stack<C, Vertical>
 where
-    C: ForEachView,
+    C: IntoView,
+    C::View: ForEachView,
 {
     Stack::<C, Vertical>::new(widget)
 }
@@ -42,8 +44,12 @@ pub struct Vertical; impl StackDirection for Vertical {
     const AXIS: Axis = Axis::Vertical;
 }
 
-pub struct Stack<C, AX> {
-    pub(crate) content: C,
+pub struct Stack<C, AX>
+where
+    C: IntoView,
+    C::View: ForEachView,
+{
+    pub(crate) content: C::View,
     width: Length,
     height: Length,
     background: Background,
@@ -58,11 +64,12 @@ pub struct Stack<C, AX> {
 
 impl<C, AX: StackDirection> Stack<C, AX>
 where
-    C: ForEachView,
+    C: IntoView,
+    C::View: ForEachView,
 {
     fn new(widget: C) -> Self {
         Self {
-            content: widget,
+            content: widget.into_view(),
             width: Length::Grow,
             height: Length::Grow,
             background: Background(basic::TRANSPARENT),
@@ -115,7 +122,8 @@ where
 
 impl<C, AX> Widget for Stack<C, AX>
 where
-    C: ForEachView,
+    C: IntoView,
+    C::View: ForEachView,
     AX: StackDirection + 'static,
 {
     fn width(&self) -> Length {
@@ -193,7 +201,8 @@ where
 
 impl<C, AX> ForEachView for Stack<C, AX>
 where
-    C: ForEachView,
+    C: IntoView,
+    C::View: ForEachView,
     AX: StackDirection + 'static,
 {
     fn for_each(&self, f: impl FnMut(&dyn Widget)) {
@@ -207,7 +216,8 @@ where
 
 impl<C, AX> IntoView for Stack<C, AX>
 where
-    C: ForEachView,
+    C: IntoView,
+    C::View: ForEachView,
     AX: StackDirection + 'static,
 {
     type View = Self;

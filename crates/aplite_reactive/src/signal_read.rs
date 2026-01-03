@@ -44,6 +44,10 @@ impl<T: 'static> Source for SignalRead<T> {
     fn clear_subscribers(&self) {
         self.as_signal().clear_subscribers();
     }
+
+    // fn remove_subscriber(&self, subscriber: &AnySubscriber) {
+    //     self.as_signal().remove_subscriber(subscriber);
+    // }
 }
 
 impl<T: 'static> ToAnySource for SignalRead<T> {
@@ -69,7 +73,7 @@ impl<T: 'static> Read for SignalRead<T> {
         self.as_signal().read(f)
     }
 
-    fn try_read<R, F: FnOnce(Option<&Self::Value>) -> Option<R>>(&self, f: F) -> Option<R> {
+    fn try_read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> Option<R> {
         self.as_signal().try_read(f)
     }
 }
@@ -82,7 +86,7 @@ impl<T: Clone + 'static> Get for SignalRead<T> {
     }
 
     fn try_get_untracked(&self) -> Option<Self::Value> {
-        self.try_read(|v| v.cloned())
+        self.try_read(Clone::clone)
     }
 }
 
@@ -98,7 +102,7 @@ impl<T: 'static> With for SignalRead<T> {
 
     fn try_with_untracked<F, R>(&self, f: F) -> Option<R>
     where
-        F: FnOnce(Option<&Self::Value>) -> Option<R>
+        F: FnOnce(&Self::Value) -> R
     {
         self.try_read(f)
     }

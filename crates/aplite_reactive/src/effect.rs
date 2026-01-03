@@ -5,9 +5,9 @@ use aplite_future::{
     Executor,
 };
 
-use crate::graph::{Node, ReactiveStorage};
+use crate::graph::{Node, ReactiveStorage, Scope};
 use crate::subscriber::{Subscriber, ToAnySubscriber, AnySubscriber};
-use crate::source::AnySource;
+use crate::source::{AnySource, Sources};
 use crate::reactive_traits::*;
 
 /// [`Effect`] is an async scope to synchronize reactive node (eg: [`Signal`](crate::signal::Signal)) with anything.
@@ -39,6 +39,7 @@ impl Effect {
         let (tx, mut rx) = aplite_channel();
         tx.notify();
 
+        let scope = Scope::new();
         let effect_state = EffectState::new(tx);
         let subscriber = effect_state.to_any_subscriber();
         let node = ReactiveStorage::insert(effect_state);
@@ -47,14 +48,17 @@ impl Effect {
             let mut value = None::<R>;
 
             while rx.recv().await.is_some() {
-                if subscriber.needs_update() {
+                if !scope.is_paused() && subscriber.needs_update() {
                     subscriber.clear_sources();
 
-                    subscriber.as_observer(|| {
-                        let prev_value = value.take();
-                        let new_val = f(prev_value);
-                        value = Some(new_val);
-                    })
+                    let prev_value = value.take();
+                    let new_value = scope.with_cleanup(|| {
+                        subscriber.as_observer(|| {
+                            f(prev_value)
+                        })
+                    });
+
+                    value = Some(new_value);
                 }
             }
         });
@@ -64,16 +68,13 @@ impl Effect {
 
     /// for now a simple brute-force by removing the EffectState from NodeStorage
     pub fn stop(self) {
-        // ReactiveStorage::with_downcast(&self.node, |state| {
-        //     state.write()
-        // });
         ReactiveStorage::remove(self.node);
     }
 }
 
 struct EffectState {
     sender: Sender,
-    source: Vec<AnySource>,
+    source: Sources,
     dirty: bool,
 }
 
@@ -84,7 +85,7 @@ impl EffectState {
     fn new(sender: Sender) -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(Self {
             sender,
-            source: Vec::new(),
+            source: Sources::default(),
             dirty: true,
         }))
     }
@@ -92,7 +93,6 @@ impl EffectState {
 
 impl Drop for EffectState {
     fn drop(&mut self) {
-        println!("{:?}", self.source);
         self.source.clear();
     }
 }
@@ -102,7 +102,7 @@ impl Drop for EffectState {
 impl Subscriber for RwLock<EffectState> {
     fn add_source(&self, source: AnySource) {
         let mut lock = self.write().unwrap();
-        if !lock.source.contains(&source) { lock.source.push(source) }
+        lock.source.add_source(source);
     }
 
     fn clear_sources(&self) {
@@ -136,7 +136,7 @@ impl Reactive for RwLock<EffectState> {
             return true;
         }
 
-        lock.source.iter().any(AnySource::update_if_necessary)
+        lock.source.try_update()
     }
 }
 

@@ -19,7 +19,7 @@ pub(crate) type SignalNode<T> = Node<Arc<RwLock<SignalState<T>>>>;
 
 pub(crate) struct SignalState<T> {
     pub(crate) value: T,
-    pub(crate) subscribers: SubscriberSet,
+    pub(crate) subscribers: Subscribers,
 }
 
 unsafe impl<T> Send for SignalState<T> {}
@@ -29,7 +29,7 @@ impl<T: 'static> SignalState<T> {
     pub(crate) fn new(value: T) -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(Self {
             value,
-            subscribers: SubscriberSet::default(),
+            subscribers: Subscribers::default(),
         }))
     }
 }
@@ -68,6 +68,12 @@ impl<T: 'static> Source for RwLock<SignalState<T>> {
             .subscribers
             .clear()
     }
+
+    // fn remove_subscriber(&self, subscriber: &AnySubscriber) {
+    //     self.write().unwrap()
+    //         .subscribers
+    //         .remove_subscriber(&subscriber);
+    // }
 }
 
 // impl<T: 'static> Source for Arc<RwLock<SignalState<T>>> {
@@ -137,6 +143,10 @@ impl<T: 'static> Source for Signal<T> {
     fn clear_subscribers(&self) {
         ReactiveStorage::with_downcast(&self.node, |state| state.clear_subscribers())
     }
+
+    // fn remove_subscriber(&self, subscriber: &AnySubscriber) {
+    //     ReactiveStorage::with_downcast(&self.node, |state| state.remove_subscriber(subscriber))
+    // }
 }
 
 impl<T: 'static> ToAnySource for Signal<T> {
@@ -175,12 +185,14 @@ impl<T: 'static> Read for Signal<T> {
         })
     }
 
-    fn try_read<R, F: FnOnce(Option<&Self::Value>) -> Option<R>>(&self, f: F) -> Option<R> {
+    fn try_read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> Option<R> {
         ReactiveStorage::try_with_downcast(&self.node, |state| {
-            state.and_then(|ss| {
-                let m = ss.read().ok();
-                f(m.as_deref().map(|s| &s.value))
-            })
+            state.read().ok().map(|val| f(&val.value))
+            // s.as_deref().map(|val| f(&val.value))
+            // state.and_then(|ss| {
+            //     let m = ss.read().ok();
+            //     f(m.as_deref().map(|s| &s.value))
+            // })
         })
     }
 }
@@ -193,7 +205,7 @@ impl<T: Clone + 'static> Get for Signal<T> {
     }
 
     fn try_get_untracked(&self) -> Option<Self::Value> {
-        self.try_read(|value| value.cloned())
+        self.try_read(Clone::clone)
     }
 }
 
@@ -206,7 +218,7 @@ impl<T: 'static> With for Signal<T> {
 
     fn try_with_untracked<F, R>(&self, f: F) -> Option<R>
     where
-        F: FnOnce(Option<&Self::Value>) -> Option<R>
+        F: FnOnce(&Self::Value) -> R
     {
         self.try_read(f)
     }
@@ -315,7 +327,7 @@ mod signal_test {
         set_counter.set(-69);
         assert_eq!(counter.get(), -69);
 
-        let r = counter.try_with(|num| num.map(ToString::to_string));
+        let r = counter.try_with(ToString::to_string);
         assert!(r.is_some());
         assert_eq!(r.unwrap().parse(), Ok(-69));
     }

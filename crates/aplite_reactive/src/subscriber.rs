@@ -7,27 +7,35 @@ use crate::source::AnySource;
 /*
 #########################################################
 #
-# SubscriberSet
+# Subscribers
 #
 #########################################################
 */
 
 #[derive(Default)]
 // TODO: Conside using SparseSet to make removal of a single AnySubscriber much more convenient
-pub(crate) struct SubscriberSet(pub(crate) Vec<AnySubscriber>);
+pub(crate) struct Subscribers(pub(crate) Vec<AnySubscriber>);
 
-impl SubscriberSet {
+impl Subscribers {
     pub(crate) fn mark_dirty(&mut self) {
         self.0.drain(..).for_each(AnySubscriber::mark_dirty_owned);
     }
 
     pub(crate) fn push(&mut self, subscriber: AnySubscriber) {
-        self.0.push(subscriber);
+        if !self.0.contains(&subscriber) {
+            self.0.push(subscriber);
+        }
     }
 
     pub(crate) fn clear(&mut self) {
         self.0.clear();
     }
+
+    // pub(crate) fn remove_subscriber(&mut self, subscriber: &AnySubscriber) {
+    //     if let Some(index) = self.0.iter().position(|any_subscriber| any_subscriber == subscriber) {
+    //         self.0.swap_remove(index);
+    //     }
+    // }
 }
 
 /*
@@ -38,35 +46,31 @@ impl SubscriberSet {
 #########################################################
 */
 
-pub(crate) struct AnySubscriber(pub(crate) Weak<dyn Subscriber>);
+pub struct AnySubscriber(pub(crate) Weak<dyn Subscriber>);
 
 unsafe impl Send for AnySubscriber {}
 unsafe impl Sync for AnySubscriber {}
 
 impl AnySubscriber {
-    pub(crate) fn from_weak<T: Subscriber + 'static>(weak: Weak<T>) -> Self {
+    pub fn from_weak<T: Subscriber + 'static>(weak: Weak<T>) -> Self {
         Self(weak)
     }
 
-    pub(crate) fn new<T: Subscriber + 'static>(arc: &Arc<T>) -> Self {
+    pub fn new<T: Subscriber + 'static>(arc: &Arc<T>) -> Self {
         let weak: Weak<T> = Arc::downgrade(arc);
         Self(weak)
     }
 
-    pub(crate) fn upgrade(&self) -> Option<Arc<dyn Subscriber>> {
+    pub fn upgrade(&self) -> Option<Arc<dyn Subscriber>> {
         self.0.upgrade()
     }
 
-    pub(crate) fn mark_dirty_owned(self) {
+    pub fn mark_dirty_owned(self) {
         self.mark_dirty();
     }
 
-    pub(crate) fn needs_update(&self) -> bool {
+    pub fn needs_update(&self) -> bool {
         self.as_observer(|| self.try_update())
-        // let prev = Observer::swap_observer(Some(self.clone()));
-        // let res = self.try_update();
-        // Observer::swap_observer(prev);
-        // res
     }
 
     #[inline(always)]
@@ -86,7 +90,7 @@ impl AnySubscriber {
 #########################################################
 */
 
-pub(crate) trait Subscriber: Reactive {
+pub trait Subscriber: Reactive {
     fn add_source(&self, source: AnySource);
     fn clear_sources(&self);
 }

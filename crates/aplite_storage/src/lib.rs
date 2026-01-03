@@ -7,7 +7,7 @@ mod map;
 mod sparse_set;
 mod tree;
 
-pub use buffer::TypeErasedBuffer;
+pub use buffer::{TypeErasedBuffer, UnmanagedBuffer};
 
 pub use entity::{
     EntityManager,

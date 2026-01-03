@@ -141,6 +141,7 @@ impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
 impl<IV, F> ForEachView for Button<IV, F>
 where
     IV: IntoView,
+    IV::View: ForEachView,
     F: Fn() + 'static, {}
 
 impl<IV, F> IntoView for Button<IV, F>
@@ -160,7 +161,7 @@ where
     IV: IntoView,
     F: Fn() + 'static,
 {
-    fn execute(&self) {
+    fn trigger(&self) {
         (self.f)()
     }
 }

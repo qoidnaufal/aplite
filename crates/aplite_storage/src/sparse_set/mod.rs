@@ -9,7 +9,7 @@ use crate::arena::ptr::ArenaPtr;
 use crate::sparse_set::indices::{SparseIndices, SparsetKey};
 
 pub struct SparseSet<K, V> {
-    pub(crate) raw: RawBuffer,
+    pub(crate) data_buffer: RawBuffer,
     pub(crate) keys: Vec<K>,
     pub(crate) indexes: SparseIndices,
     marker: PhantomData<V>
@@ -18,7 +18,7 @@ pub struct SparseSet<K, V> {
 impl<K, V> Drop for SparseSet<K, V> {
     fn drop(&mut self) {
         self.clear();
-        self.raw.dealloc(Self::LAYOUT);
+        self.data_buffer.dealloc(Self::LAYOUT);
     }
 }
 
@@ -34,17 +34,19 @@ impl<K, V> SparseSet<K, V> {
     pub fn values<'a>(&'a self) -> &'a [V] {
         unsafe {
             &*std::ptr::slice_from_raw_parts(
-                self.raw.block.cast::<V>().as_ptr().cast_const(),
+                self.data_buffer.ptr.cast::<V>().as_ptr().cast_const(),
                 self.len()
             )
         }
     }
 
-    /// this is unsafe, because removing element(s) from this slice should be done from [`SparseSet::swap_remove`]
+    /// # Safety
+    /// This is unsafe, because removing element(s) from this slice should be done from [`SparseSet::swap_remove`]
+    /// Only use this method to quickly iterates over the mutable slice of values
     pub unsafe fn values_mut<'a>(&'a mut self) -> &'a mut [V] {
         unsafe {
             &mut *std::ptr::slice_from_raw_parts_mut(
-                self.raw.block.cast::<V>().as_ptr(),
+                self.data_buffer.ptr.cast::<V>().as_ptr(),
                 self.len()
             )
         }
@@ -53,14 +55,14 @@ impl<K, V> SparseSet<K, V> {
     pub fn clear(&mut self) {
         if self.keys.len() > 0 {
             self.indexes.clear();
-            self.raw.clear(self.keys.len());
+            self.data_buffer.clear(self.keys.len());
             self.keys.clear();
         }
     }
 
     #[inline(always)]
     pub fn capacity(&self) -> usize {
-        self.raw.capacity
+        self.data_buffer.capacity
     }
 
     #[inline(always)]
@@ -82,7 +84,7 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
     #[inline(always)]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            raw: RawBuffer::with_capacity::<V>(capacity, Self::LAYOUT),
+            data_buffer: RawBuffer::with_capacity::<V>(capacity, Self::LAYOUT),
             keys: Vec::with_capacity(capacity),
             indexes: SparseIndices::default(),
             marker: PhantomData,
@@ -94,7 +96,7 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
         self.indexes
             .get_index(key)
             .and_then(|index| unsafe {
-                let ptr = self.raw.get_raw(index * Self::SIZE_V).cast();
+                let ptr = self.data_buffer.get_raw(index * Self::SIZE_V).cast();
                 NonNull::new(ptr)
             })
     }
@@ -103,7 +105,7 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
     pub unsafe fn get_unchecked(&self, key: K) -> &V {
         unsafe {
             let index = self.indexes.get_index_unchecked(key);
-            &*self.raw.get_raw(index * Self::SIZE_V).cast()
+            &*self.data_buffer.get_raw(index * Self::SIZE_V).cast()
         }
     }
 
@@ -112,7 +114,7 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
         self.indexes
             .get_index(key)
             .map(|index| unsafe {
-                &*self.raw
+                &*self.data_buffer
                     .get_raw(index * Self::SIZE_V)
                     .cast()
             })
@@ -122,7 +124,7 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
     pub unsafe fn get_unchecked_mut(&mut self, key: K) -> &mut V {
         unsafe {
             let index = self.indexes.get_index_unchecked(key);
-            &mut *self.raw.get_raw(index * Self::SIZE_V).cast()
+            &mut *self.data_buffer.get_raw(index * Self::SIZE_V).cast()
         }
     }
 
@@ -131,7 +133,7 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
         self.indexes
             .get_index(key)
             .map(|index| unsafe {
-                &mut *self.raw
+                &mut *self.data_buffer
                     .get_raw(index * Self::SIZE_V)
                     .cast()
             })
@@ -146,7 +148,7 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
     /// Safety: you have to ensure len < capacity, and the entity does not existed yet within this sparse_set
     pub unsafe fn insert_unchecked(&mut self, key: K, value: V, len: usize) -> ArenaPtr<V> {
         self.indexes.set_index(key, len);
-        let ptr = unsafe { ArenaPtr::new(self.raw.push(value, len)) };
+        let ptr = unsafe { ArenaPtr::new(self.data_buffer.push(value, len)) };
         self.keys.push(key);
         ptr
     }
@@ -162,12 +164,12 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
             return Ok(ArenaPtr::new(exist));
         }
 
-        if self.raw.capacity == 0 {
+        if self.data_buffer.capacity == 0 {
             return Err(Error::Uninitialized)
         }
 
         let len = self.len();
-        if len >= self.raw.capacity {
+        if len >= self.data_buffer.capacity {
             return Err(Error::MaxCapacityReached)
         }
 
@@ -181,13 +183,13 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
             return ArenaPtr::new(exist);
         }
 
-        if self.raw.capacity == 0 {
-            self.raw.initialize(4, Self::SIZE_V, Self::ALIGN_V);
+        if self.data_buffer.capacity == 0 {
+            self.data_buffer.initialize(4, Self::SIZE_V, Self::ALIGN_V);
         }
 
         let len = self.len();
-        if len >= self.raw.capacity {
-            self.raw.realloc(Self::LAYOUT, len + 4);
+        if len >= self.data_buffer.capacity {
+            self.data_buffer.realloc(Self::LAYOUT, len + 4);
         }
 
         unsafe { self.insert_unchecked(key, value, len) }
@@ -199,13 +201,13 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
             return ArenaPtr::new(exist);
         }
 
-        if self.raw.capacity == 0 {
-            self.raw.initialize(4, Self::SIZE_V, Self::ALIGN_V);
+        if self.data_buffer.capacity == 0 {
+            self.data_buffer.initialize(4, Self::SIZE_V, Self::ALIGN_V);
         }
 
         let len = self.len();
-        if len >= self.raw.capacity {
-            self.raw.realloc(Self::LAYOUT, len + 4);
+        if len >= self.data_buffer.capacity {
+            self.data_buffer.realloc(Self::LAYOUT, len + 4);
         }
 
         unsafe { self.insert_unchecked(key, new(), len) }
@@ -224,7 +226,7 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
             self.keys.swap_remove(index);
             
             unsafe {
-                self.raw
+                self.data_buffer
                     .swap_remove_raw(index, len - 1, Self::SIZE_V)
                     .cast::<V>()
                     .read()
@@ -269,7 +271,7 @@ pub struct Iter<'a, T> {
 impl<'a, V> Iter<'a, V> {
     pub(crate) fn new<K>(source: &'a SparseSet<K, V>) -> Self {
         Self {
-            base: Base::new(source.raw.block.cast::<V>().as_ptr(), source.len()),
+            base: Base::new(source.data_buffer.ptr.cast::<V>().as_ptr(), source.len()),
             marker: PhantomData,
         }
     }
@@ -301,7 +303,7 @@ pub struct IterMut<'a, T> {
 impl<'a, V> IterMut<'a, V> {
     pub(crate) fn new<K>(source: &'a mut SparseSet<K, V>) -> Self {
         Self {
-            base: Base::new(source.raw.block.cast::<V>().as_ptr(), source.len()),
+            base: Base::new(source.data_buffer.ptr.cast::<V>().as_ptr(), source.len()),
             marker: PhantomData,
         }
     }
