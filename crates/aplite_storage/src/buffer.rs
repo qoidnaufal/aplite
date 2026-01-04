@@ -14,7 +14,7 @@ use crate::arena::ptr::ArenaPtr;
 /// - Iterating the elements is slightly faster than Vec\<T\> and much faster than Vec<Box\<dyn Any\>>.
 pub struct TypeErasedBuffer {
     pub(crate) raw: RawBuffer,
-    len: usize,
+    pub(crate) len: usize,
     item_layout: alloc::Layout,
 }
 
@@ -154,12 +154,16 @@ impl TypeErasedBuffer {
 
     #[inline(always)]
     fn swr<R>(&mut self, index: usize, f: impl FnOnce(*mut u8) -> R) -> Option<R> {
-        index.lt(&self.len).then_some(unsafe {
-            let last_index = self.len - 1;
-            let ptr = self.raw.swap_remove_raw(index, last_index, self.item_layout.size());
-            self.len -= 1;
-            f(ptr)
-        })
+        if self.len > 0 {
+            unsafe {
+                let last_index = self.len - 1;
+                let ptr = self.raw.swap_remove_or_pop(index, last_index, self.item_layout.size());
+                self.len -= 1;
+                return Some(f(ptr));
+            }
+        }
+
+        None
     }
 
     pub fn swap_remove<T>(&mut self, index: usize) -> Option<T> {
@@ -170,12 +174,25 @@ impl TypeErasedBuffer {
         self.swr::<()>(index, |raw| unsafe { raw.cast::<T>().drop_in_place() });
     }
 
+    pub fn pop<T>(&mut self) -> Option<T> {
+        if self.len > 0 {
+            unsafe {
+                let last_index = self.len - 1;
+                let ptr = self.raw.swap_remove_or_pop(last_index, last_index, self.item_layout.size());
+                self.len -= 1;
+                return Some(ptr.cast::<T>().read());
+            }
+        }
+
+        None
+    }
+
     pub fn iter<'a, T>(&'a self) -> Iter<'a, T> {
-        Iter::new(self)
+        Iter::new(self.raw.cast::<T>(), self.len())
     }
 
     pub fn iter_mut<'a, T>(&'a mut self) -> IterMut<'a, T> {
-        IterMut::new(self)
+        IterMut::new(self.raw.cast::<T>(), self.len())
     }
 }
 
@@ -187,12 +204,24 @@ impl TypeErasedBuffer {
 #########################################################
 */
 
-/// Similar with [`TypeErasedBuffer`] but unmanaged
+/// Similar with [`TypeErasedBuffer`] but this buffer is not keeping track of how many items have been allocated.
+/// This is done this way because usually this buffer will be paired with a Vec\<EntityId\> for example
+/// 
 /// # Safety
-/// You have to manually keep track on the amount of the allocated items, manually clear & manually deallocate this buffer
+/// - You have to manually keep track on the amount of the items you have pushed, so you can
+/// - Manually [`clear`](UnmanagedBuffer::clear), by providing the number of elements, before dropping this.
+/// - Getters method are unchecked, because the caller will need to do the check beforehand (ie: check if a ComponentStorage contains an Entity).
+///
+/// Not calling clear before dropping may potentially cause a memory leak
 pub struct UnmanagedBuffer {
     pub(crate) raw: RawBuffer,
     item_layout: alloc::Layout,
+}
+
+impl Drop for UnmanagedBuffer {
+    fn drop(&mut self) {
+        self.raw.dealloc(self.item_layout);
+    }
 }
 
 impl UnmanagedBuffer {
@@ -206,38 +235,124 @@ impl UnmanagedBuffer {
             item_layout,
         }
     }
+    #[inline(always)]
+    pub const unsafe fn get_unchecked_raw(&self, index: usize) -> *mut u8 {
+        unsafe {
+            self.raw.get_raw(index * self.item_layout.size())
+        }
+    }
+
+    pub const unsafe fn get_unchecked<'a, T>(&'a self, index: usize) -> &'a T {
+        unsafe {
+            &*self.get_unchecked_raw(index).cast()
+        }
+    }
+
+    pub const unsafe fn get_unchecked_mut<'a, T>(&'a mut self, index: usize) -> &'a mut T {
+        unsafe {
+            &mut *self.get_unchecked_raw(index).cast()
+        }
+    }
+
+    #[inline(always)]
+    /// Safety: you have to ensure buffer is already initialized or the number of elements are within [`capacity`](Self::capacity) - 1
+    unsafe fn push_unchecked<T>(&mut self, data: T, offset: usize) -> *mut T {
+        let raw = unsafe { self.raw.push(data, offset) };
+        raw
+    }
+
+    /// # Safety
+    /// This method assumes that buffer is already initialized via [`with_capacity`](Self::with_capacity).
+    /// So it's safe to return the pointer to the allocated data, because there's no reallocation that will cause the pointer to be invalid.
+    pub fn push_within_capacity<T>(&mut self, data: T, offset: usize) -> Result<ArenaPtr<T>, MaxCapacityReached> {
+        if offset == self.raw.capacity {
+            return Err(MaxCapacityReached)
+        }
+
+        let raw = unsafe { self.push_unchecked(data, offset) };
+
+        Ok(ArenaPtr::new(raw))
+    }
+
+    #[inline(always)]
+    const fn check(&self, offset: usize) -> Result<(), Error> {
+        if self.raw.capacity == 0 {
+            return Err(Error::Uninitialized);
+        } else if offset == self.raw.capacity {
+            return Err(Error::MaxCapacityReached);
+        } else {
+            Ok(())
+        }
+    }
 
     pub fn push<T>(&mut self, data: T, offset: usize) {
+        if let Err(err) = self.check(offset) {
+            match err {
+                Error::MaxCapacityReached => self.raw.realloc(self.item_layout, self.raw.capacity + 4),
+                Error::Uninitialized => self.raw.initialize(4, self.item_layout.size(), self.item_layout.align()),
+            }
+        }
+
         unsafe {
-            self.raw.push(data, offset);
+            self.push_unchecked(data, offset);
         }
     }
 
     /// # Safety
-    /// The end bound must be provided: exclusive (1..3), or inclusive (..=2). Unbounded end-bound (4..) will panic because the length of the buffer is unknown
+    /// The end bound must be provided: exclusive (1..3), or inclusive (..=2).
+    /// Unbounded end-bound (4..) will panic because the length of the buffer is unknown
     pub fn as_slice<T>(&self, range: impl std::ops::RangeBounds<usize>) -> &[T] {
         let start = match range.start_bound() {
             std::ops::Bound::Included(&val) => val,
             std::ops::Bound::Excluded(_) => unreachable!(),
             std::ops::Bound::Unbounded => 0,
         };
+
         let end = match range.end_bound() {
             std::ops::Bound::Included(&val) => val + 1,
             std::ops::Bound::Excluded(&val) => val,
-            std::ops::Bound::Unbounded => panic!("must provide the end bound of the range"),
+            std::ops::Bound::Unbounded => panic!(
+                "Buffer has no information on the length of elements,
+                must provide the end bound of the range"
+            ),
         };
 
         unsafe {
-            let (data, len) = if end > start {
-                (self.raw.ptr.cast::<T>().as_ptr().cast_const(), end - start)
-            } else if start == end {
-                (self.raw.ptr.cast::<T>().add(start).as_ptr().cast_const(), 1)
+            let len = if end == start {
+                1
             } else {
-                (self.raw.ptr.cast::<T>().as_ptr().cast_const(), 0)
+                end.saturating_sub(start)
             };
+
+            let data = self.raw.ptr.cast::<T>().add(start).as_ptr().cast_const();
 
             &*std::ptr::slice_from_raw_parts(data, len)
         }
+    }
+
+    #[inline(always)]
+    pub fn swap_remove<R>(&mut self, index: usize, len: usize) -> Option<R> {
+        if len > 0{
+            unsafe {
+                let last_index = len - 1;
+                let ptr = self.raw.swap_remove_or_pop(index, last_index, self.item_layout.size());
+                return Some(ptr.cast::<R>().read());
+            }
+        }
+
+        None
+    }
+
+    pub fn pop<T>(&mut self, len: usize) -> Option<T> {
+        if len > 0 {
+            unsafe {
+                let last_index = len - 1;
+                let ptr = self.raw.swap_remove_or_pop(last_index, last_index, self.item_layout.size());
+                return Some(ptr.cast::<T>().read());
+            }
+        }
+
+        None
     }
 
     pub fn clear(&mut self, len: usize) {
@@ -246,6 +361,14 @@ impl UnmanagedBuffer {
 
     pub fn dealloc(&mut self) {
         self.raw.dealloc(self.item_layout);
+    }
+
+    pub fn iter<T>(&self, len: usize) -> Iter<'_, T> {
+        Iter::new(self.raw.cast::<T>(), len)
+    }
+
+    pub fn iter_mut<T>(&mut self, len: usize) -> IterMut<'_, T> {
+        IterMut::new(self.raw.cast::<T>(), len)
     }
 }
 
@@ -256,11 +379,6 @@ impl UnmanagedBuffer {
 #
 #########################################################
 */
-
-// pub(crate) struct ImmutableRawBuffer {
-//     pub(crate) block: NonNull<u8>,
-//     drop: Option<unsafe fn(*mut u8, usize)>,
-// }
 
 pub(crate) struct RawBuffer {
     pub(crate) ptr: NonNull<u8>,
@@ -274,10 +392,10 @@ impl RawBuffer {
         #[inline]
         unsafe fn drop<T>(raw: *mut u8, len: usize) {
             unsafe {
-                let ptr = raw.cast::<T>();
-                for i in 0..len {
-                    std::ptr::drop_in_place(ptr.add(i));
-                }
+                std::ptr::slice_from_raw_parts_mut(raw.cast::<T>(), len).drop_in_place();
+                // for i in 0..len {
+                //     std::ptr::drop_in_place(ptr.add(i));
+                // }
             }
         }
 
@@ -315,29 +433,11 @@ impl RawBuffer {
     }
 
     #[inline(always)]
-    pub(crate) const unsafe fn get_raw(&self, offset: usize) -> *mut u8 {
-        unsafe {
-            self.ptr.add(offset).as_ptr()
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) const unsafe fn push<T>(&mut self, data: T, offset: usize) -> *mut T {
-        unsafe {
-            let raw = self.ptr
-                .add(offset * size_of::<T>())
-                .as_ptr()
-                .cast::<T>();
-            std::ptr::write(raw, data);
-            raw
-        }
-    }
-
-    #[inline(always)]
     pub(crate) fn realloc(&mut self, item_layout: alloc::Layout, new_capacity: usize) {
         unsafe {
             let new_size = item_layout.size() * new_capacity;
-            let new_block = alloc::realloc(self.ptr.as_ptr(), item_layout, new_size);
+            let layout = alloc::Layout::from_size_align_unchecked(item_layout.size() * self.capacity, item_layout.align());
+            let new_block = alloc::realloc(self.ptr.as_ptr(), layout, new_size);
 
             match NonNull::new(new_block) {
                 Some(new) => {
@@ -358,8 +458,32 @@ impl RawBuffer {
         }
     }
 
+    pub(crate) fn cast<T>(&self) -> *mut T {
+        self.ptr.cast::<T>().as_ptr()
+    }
+
     #[inline(always)]
-    pub(crate) unsafe fn swap_remove_raw(&mut self, index: usize, last_index: usize, size_t: usize) -> *mut u8 {
+    pub(crate) const unsafe fn get_raw(&self, offset: usize) -> *mut u8 {
+        unsafe {
+            self.ptr.add(offset).as_ptr()
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) const unsafe fn push<T>(&mut self, data: T, offset: usize) -> *mut T {
+        unsafe {
+            let raw = self.ptr
+                .add(offset * size_of::<T>())
+                .as_ptr()
+                .cast::<T>();
+            std::ptr::write(raw, data);
+            raw
+        }
+    }
+
+    #[inline(always)]
+    /// this method already handle if index is equal to last_index or not -> swapping or popping
+    pub(crate) unsafe fn swap_remove_or_pop(&mut self, index: usize, last_index: usize, size_t: usize) -> *mut u8 {
         unsafe {
             let last = self.get_raw(last_index * size_t);
 
@@ -450,10 +574,10 @@ pub struct Iter<'a, T> {
     marker: PhantomData<&'a T>,
 }
 
-impl<'a, T> Iter<'a, T> {
-    fn new(source: &'a TypeErasedBuffer) -> Self {
+impl<'a, V> Iter<'a, V> {
+    pub(crate) fn new(start: *mut V, len: usize) -> Self {
         Self {
-            base: Base::new(source.raw.ptr.cast::<T>().as_ptr(), source.len),
+            base: Base::new(start, len),
             marker: PhantomData,
         }
     }
@@ -482,10 +606,10 @@ pub struct IterMut<'a, T> {
     marker: PhantomData<&'a mut T>,
 }
 
-impl<'a, T> IterMut<'a, T> {
-    fn new(source: &'a mut TypeErasedBuffer) -> Self {
+impl<'a, V> IterMut<'a, V> {
+    pub(crate) fn new(start: *mut V, len: usize) -> Self {
         Self {
-            base: Base::new(source.raw.ptr.cast::<T>().as_ptr(), source.len),
+            base: Base::new(start, len),
             marker: PhantomData,
         }
     }

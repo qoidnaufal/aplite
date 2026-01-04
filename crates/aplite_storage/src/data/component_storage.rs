@@ -27,6 +27,8 @@ pub struct MarkedBufferIter<'a, Q: QueryData> {
 #[derive(Default)]
 pub struct ComponentStorage {
     pub(crate) archetype_tables: Vec<ArchetypeTable>,
+
+    /// this is bitset of component ids
     pub(crate) archetype_ids: HashMap<Bitset, ArchetypeId>,
     pub(crate) component_ids: TypeIdMap<ComponentId>,
 }
@@ -35,7 +37,7 @@ impl ComponentStorage {
     pub fn new() -> Self {
         Self {
             archetype_tables: Vec::new(),
-            archetype_ids: HashMap::default(),
+            archetype_ids: HashMap::new(),
             component_ids: TypeIdMap::new(),
         }
     }
@@ -50,17 +52,6 @@ impl ComponentStorage {
 
         component_id
     }
-
-    // #[inline(always)]
-    // pub(crate) fn insert_from_tuple<C>(&mut self, archetypal_bitset: Bitset, component: C)
-    // where
-    //     C: Component + 'static
-    // {
-    //     let component_id = self.component_ids[&TypeId::of::<C>()];
-    //     let archetype_id = self.archetype_ids[&archetypal_bitset];
-    //     let table = &mut self.archetype_tables[archetype_id.0];
-    //     table.insert(component_id, component);
-    // }
 
     pub(crate) fn insert_archetype_by_id<C>(&mut self, archetype_id: ArchetypeId, component: C)
     where
@@ -127,7 +118,7 @@ impl ComponentStorage {
 
                 Some(MarkedBuffer {
                     start: buffer.raw.ptr.cast::<Q::Item>(),
-                    len: buffer.len(),
+                    len: table.len(),
                     marker: std::marker::PhantomData,
                 })
             })

@@ -204,6 +204,8 @@ mod query_test {
     make_component!(struct Salary(u32));
     make_component!(struct Cars(u32));
 
+    impl Drop for Name { fn drop(&mut self) { println!("dropping {}", self.0) } }
+
     #[test]
     fn mutable_query() {
         let mut storage = ComponentStorage::new();

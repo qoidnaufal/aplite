@@ -40,7 +40,7 @@ pub use map::{
 };
 
 pub use sparse_set::{
-    SparseSet,
+    SparseSet, TypeErasedSparseSet,
     indices::{SparseIndices, SparsetKey},
 };
 

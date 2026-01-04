@@ -58,16 +58,6 @@ impl<T> MemoState<T> {
         self.stored_value.write()
     }
 
-    // #[inline(always)]
-    // fn read_value(&self) -> std::sync::RwLockReadGuard<'_, Option<T>> {
-    //     self.stored_value.read().unwrap()
-    // }
-
-    // #[inline(always)]
-    // fn write_value(&self) -> std::sync::RwLockWriteGuard<'_, Option<T>> {
-    //     self.stored_value.write().unwrap()
-    // }
-
     #[inline(always)]
     fn state_reader(&self) -> std::sync::RwLockReadGuard<'_, State> {
         self.state.read().unwrap()
@@ -105,12 +95,6 @@ impl<T> Source for MemoState<T> {
             .subscribers
             .clear();
     }
-
-    // fn remove_subscriber(&self, subscriber: &AnySubscriber) {
-    //     self.state_writer()
-    //         .subscribers
-    //         .remove_subscriber(subscriber);
-    // }
 }
 
 impl<T> Reactive for MemoState<T> {
@@ -169,12 +153,22 @@ impl<T> Reactive for MemoState<T> {
 
 impl<T: PartialEq + 'static> Memo<T> {
     pub fn new(f: impl Fn(Option<&T>) -> T + 'static) -> Self {
+        Self::with_compare(f, |prev, new| prev != new)
+    }
+}
+
+impl<T: 'static> Memo<T> {
+    pub fn with_compare(
+        f: impl Fn(Option<&T>) -> T + 'static,
+        compare: impl Fn(Option<&T>, Option<&T>) -> bool + 'static,
+    ) -> Self
+    {
         let state = Arc::new_cyclic(move |weak| {
             let this = AnySubscriber::from_weak(Weak::clone(weak));
 
             let memoize_fn = move |prev: Option<T>| {
                 let new_value = f(prev.as_ref());
-                let changed = prev.as_ref() != Some(&new_value);
+                let changed = compare(prev.as_ref(), Some(&new_value));
                 (new_value, changed)
             };
 
@@ -205,12 +199,6 @@ impl<T: 'static> Source for Memo<T> {
             state.clear_subscribers();
         })
     }
-
-    // fn remove_subscriber(&self, subscriber: &AnySubscriber) {
-    //     ReactiveStorage::with_downcast(&self.node, |state| {
-    //         state.remove_subscriber(subscriber);
-    //     })
-    // }
 }
 
 impl<T: 'static> ToAnySource for Memo<T> {

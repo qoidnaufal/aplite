@@ -4,7 +4,7 @@ use crate::entity::EntityId;
 use crate::sparse_set::indices::SparseIndices;
 use crate::sparse_set::SparseSet;
 use crate::arena::ptr::ArenaPtr;
-use crate::buffer::TypeErasedBuffer;
+use crate::buffer::UnmanagedBuffer;
 use crate::data::component::{ComponentId, Component};
 use crate::data::component_storage::ComponentStorage;
 
@@ -25,7 +25,7 @@ pub struct ArchetypeBuilder<'a> {
 /// This is similar to MultiArrayList in Zig, in which Entities with the same composition are stored together.
 /// Entity with different composition will produce a different table.
 pub struct ArchetypeTable {
-    pub(crate) components: SparseSet<ComponentId, TypeErasedBuffer>,
+    pub(crate) components: SparseSet<ComponentId, UnmanagedBuffer>,
 
     // Idk if it's going to be safe using only EntityId here
     pub(crate) entities: Vec<EntityId>,
@@ -41,6 +41,12 @@ pub struct ArchetypeTable {
 #
 #########################################################
 */
+
+impl Drop for ArchetypeTable {
+    fn drop(&mut self) {
+        self.clear();
+    }
+}
 
 impl std::fmt::Debug for ArchetypeTable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -68,15 +74,17 @@ impl ArchetypeTable {
 
     #[inline(always)]
     pub fn add_buffer<C: Component>(&mut self, component_id: ComponentId, capacity: usize) {
-        self.components.insert(component_id, TypeErasedBuffer::with_capacity::<C>(capacity));
+        self.components.insert(component_id, UnmanagedBuffer::with_capacity::<C>(capacity));
     }
 
     #[inline(always)]
     pub fn insert<C: Component>(&mut self, component_id: ComponentId, component: C) {
+        let len = self.len();
+
         self.components
             .get_mut(component_id)
             .unwrap()
-            .push(component);
+            .push(component, len);
     }
 
     pub fn insert_within_capacity<C: Component>(
@@ -84,41 +92,52 @@ impl ArchetypeTable {
         component_id: ComponentId,
         component: C,
     ) -> Result<ArenaPtr<C>, Error> {
+        let len = self.len();
+
         let table = self.components
             .get_mut(component_id)
             .ok_or(Error::MismatchedTable)?;
 
-        let ptr = table.push_within_capacity(component)?;
+        let ptr = table.push_within_capacity(component, len)?;
 
         Ok(ptr)
     }
 
-    pub fn get_component_buffer(&self, component_id: ComponentId) -> Option<&TypeErasedBuffer> {
+    pub fn get_component_buffer(&self, component_id: ComponentId) -> Option<&UnmanagedBuffer> {
         self.components.get(component_id)
     }
 
-    pub fn get_component_buffer_mut<C: Component>(&mut self, component_id: ComponentId) -> Option<&mut TypeErasedBuffer> {
+    pub fn get_component_buffer_mut<C>(&mut self, component_id: ComponentId) -> Option<&mut UnmanagedBuffer>
+    where
+        C: Component,
+    {
         self.components.get_mut(component_id)
     }
 
-    pub fn get_component<C: Component>(&self, entity: EntityId, component_id: ComponentId) -> Option<&C> {
+    pub fn get_component_with_id<C: Component>(
+        &self,
+        entity: EntityId,
+        component_id: ComponentId,
+    ) -> Option<&C> {
         self.indexes
             .get_index(entity)
-            .and_then(|index| {
-                self.components
-                    .get(component_id)
-                    .and_then(|buffer| buffer.get(index))
-            })
+            .and_then(|index| self.components
+                .get(component_id)
+                .map(|buffer| unsafe { buffer.get_unchecked(index) })
+            )
     }
 
-    pub fn get_component_mut<C: Component>(&mut self, entity: EntityId, component_id: ComponentId) -> Option<&mut C> {
+    pub fn get_component_with_id_mut<C: Component>(
+        &mut self,
+        entity: EntityId,
+        component_id: ComponentId,
+    ) -> Option<&mut C> {
         self.indexes
             .get_index(entity)
-            .and_then(|index| {
-                self.components
-                    .get_mut(component_id)
-                    .and_then(|buffer| buffer.get_mut(index))
-            })
+            .and_then(|index| self.components
+                .get_mut(component_id)
+                .map(|buffer| unsafe { buffer.get_unchecked_mut(index) })
+            )
     }
 
     #[inline(always)]
@@ -128,7 +147,17 @@ impl ArchetypeTable {
             .is_some()
     }
 
+    pub fn len(&self) -> usize {
+        self.entities.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entities.is_empty()
+    }
+
     pub fn clear(&mut self) {
+        let len = self.len();
+        self.components.iter_mut().for_each(|buffer| buffer.clear(len));
         self.components.clear();
         self.entities.clear();
         self.indexes.clear();

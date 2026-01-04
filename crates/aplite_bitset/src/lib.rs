@@ -64,7 +64,7 @@ impl Bitset {
 
 impl std::hash::Hash for Bitset {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.as_bytes().hash(state);
+        state.write_usize(self.0);
     }
 }
 

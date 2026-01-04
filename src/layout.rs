@@ -80,6 +80,12 @@ impl Padding {
     }
 }
 
+pub enum LayoutResult {
+    Fit,
+    UnderFlow,
+    OverFlow,
+}
+
 pub struct LayoutCx<'a> {
     pub(crate) cx: &'a mut Context,
     pub(crate) next_pos: Vec2f,

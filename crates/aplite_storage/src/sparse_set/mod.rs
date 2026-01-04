@@ -4,9 +4,16 @@ use std::alloc;
 use std::marker::PhantomData;
 use std::ptr::NonNull;
 
-use crate::buffer::{RawBuffer, Error};
+use crate::buffer::{RawBuffer, Error, Iter, IterMut};
 use crate::arena::ptr::ArenaPtr;
 use crate::sparse_set::indices::{SparseIndices, SparsetKey};
+
+pub struct TypeErasedSparseSet<K> {
+    pub(crate) data_buffer: RawBuffer,
+    pub(crate) keys: Vec<K>,
+    pub(crate) indexes: SparseIndices,
+    layout: alloc::Layout,
+}
 
 pub struct SparseSet<K, V> {
     pub(crate) data_buffer: RawBuffer,
@@ -14,6 +21,243 @@ pub struct SparseSet<K, V> {
     pub(crate) indexes: SparseIndices,
     marker: PhantomData<V>
 }
+
+/*
+#########################################################
+#
+# impl TypeErasedSparseSet
+#
+#########################################################
+*/
+
+impl<K> Drop for TypeErasedSparseSet<K> {
+    fn drop(&mut self) {
+        self.clear();
+        self.data_buffer.dealloc(self.layout);
+    }
+}
+
+impl<K> TypeErasedSparseSet<K> {
+    pub fn keys(&self) -> &[K] {
+        &self.keys
+    }
+
+    pub fn values<V: 'static>(&self) -> &[V] {
+        unsafe {
+            &*std::ptr::slice_from_raw_parts(
+                self.data_buffer.ptr.cast::<V>().as_ptr().cast_const(),
+                self.len()
+            )
+        }
+    }
+
+    pub fn values_mut<V: 'static>(&mut self) -> &mut [V] {
+        unsafe {
+            &mut *std::ptr::slice_from_raw_parts_mut(
+                self.data_buffer.ptr.cast::<V>().as_ptr(),
+                self.len()
+            )
+        }
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.data_buffer.capacity
+    }
+
+    pub fn len(&self) -> usize {
+        self.keys.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn clear(&mut self) {
+        let len = self.keys.len();
+        if len > 0 {
+            self.indexes.clear();
+            self.data_buffer.clear(len);
+            self.keys.clear();
+        }
+    }
+}
+
+impl<K: SparsetKey> TypeErasedSparseSet<K> {
+    pub fn new<V: 'static>() -> Self {
+        Self::with_capacity::<V>(0)
+    }
+
+    #[inline(always)]
+    pub fn with_capacity<V: 'static>(capacity: usize) -> Self {
+        let layout = alloc::Layout::new::<V>();
+        Self {
+            data_buffer: RawBuffer::with_capacity::<V>(capacity, layout),
+            keys: Vec::with_capacity(capacity),
+            indexes: SparseIndices::default(),
+            layout,
+        }
+    }
+
+    #[inline(always)]
+    pub unsafe fn get_raw<V: 'static>(&self, key: K) -> Option<NonNull<V>> {
+        self.indexes
+            .get_index(key)
+            .and_then(|index| unsafe {
+                let ptr = self.data_buffer.get_raw(index * self.layout.size()).cast();
+                NonNull::new(ptr)
+            })
+    }
+
+    #[inline(always)]
+    pub unsafe fn get_unchecked<V: 'static>(&self, key: K) -> &V {
+        unsafe {
+            let index = self.indexes.get_index_unchecked(key);
+            &*self.data_buffer.get_raw(index * self.layout.size()).cast()
+        }
+    }
+
+    #[inline(always)]
+    pub fn get<V: 'static>(&self, key: K) -> Option<&V> {
+        self.indexes
+            .get_index(key)
+            .map(|index| unsafe {
+                &*self.data_buffer
+                    .get_raw(index * self.layout.size())
+                    .cast()
+            })
+    }
+
+    #[inline(always)]
+    pub unsafe fn get_unchecked_mut<V: 'static>(&mut self, key: K) -> &mut V {
+        unsafe {
+            let index = self.indexes.get_index_unchecked(key);
+            &mut *self.data_buffer.get_raw(index * self.layout.size()).cast()
+        }
+    }
+
+    #[inline(always)]
+    pub fn get_mut<V: 'static>(&mut self, key: K) -> Option<&mut V> {
+        self.indexes
+            .get_index(key)
+            .map(|index| unsafe {
+                &mut *self.data_buffer
+                    .get_raw(index * self.layout.size())
+                    .cast()
+            })
+    }
+
+    #[inline(always)]
+    /// Safety: you have to ensure len < capacity, and the entity does not existed yet within this sparse_set
+    pub unsafe fn insert_unchecked<V: 'static>(&mut self, key: K, value: V, len: usize) -> ArenaPtr<V> {
+        self.indexes.set_index(key, len);
+        let ptr = unsafe { ArenaPtr::new(self.data_buffer.push(value, len)) };
+        self.keys.push(key);
+        ptr
+    }
+
+    #[inline(always)]
+    pub fn insert_within_capacity<V: 'static>(
+        &mut self,
+        key: K,
+        value: V,
+    ) -> Result<ArenaPtr<V>, Error> {
+        if let Some(exist) = self.get_mut(key) {
+            *exist = value;
+            return Ok(ArenaPtr::new(exist));
+        }
+
+        if self.data_buffer.capacity == 0 {
+            return Err(Error::Uninitialized)
+        }
+
+        let len = self.len();
+        if len >= self.data_buffer.capacity {
+            return Err(Error::MaxCapacityReached)
+        }
+
+        Ok(unsafe { self.insert_unchecked(key, value, len) })
+    }
+
+    #[inline(always)]
+    pub fn insert<V: 'static>(&mut self, key: K, value: V) -> ArenaPtr<V> {
+        if let Some(exist) = self.get_mut(key) {
+            *exist = value;
+            return ArenaPtr::new(exist);
+        }
+
+        if self.data_buffer.capacity == 0 {
+            self.data_buffer.initialize(4, self.layout.size(), self.layout.align());
+        }
+
+        let len = self.len();
+        if len >= self.data_buffer.capacity {
+            self.data_buffer.realloc(self.layout, len + 4);
+        }
+
+        unsafe { self.insert_unchecked(key, value, len) }
+    }
+
+    #[inline(always)]
+    pub fn get_or_insert_with<V: 'static>(&mut self, key: K, new: impl FnOnce() -> V) -> ArenaPtr<V> {
+        if let Some(exist) = self.get_mut(key) {
+            return ArenaPtr::new(exist);
+        }
+
+        if self.data_buffer.capacity == 0 {
+            self.data_buffer.initialize(4, self.layout.size(), self.layout.align());
+        }
+
+        let len = self.len();
+        if len >= self.data_buffer.capacity {
+            self.data_buffer.realloc(self.layout, len + 4);
+        }
+
+        unsafe { self.insert_unchecked(key, new(), len) }
+    }
+
+    #[inline(always)]
+    pub fn swap_remove<V: 'static>(&mut self, key: K) -> Option<V> {
+        if self.is_empty() { return None; }
+
+        let last_key = *self.keys.last().unwrap();
+        let len = self.len();
+
+        self.indexes.get_index(key).map(|index| {
+            self.indexes.set_index(last_key, index);
+            self.indexes.set_null(key);
+            self.keys.swap_remove(index);
+            
+            unsafe {
+                self.data_buffer
+                    .swap_remove_or_pop(index, len - 1, self.layout.size())
+                    .cast::<V>()
+                    .read()
+            }
+        })
+    }
+
+    pub fn contains_key(&self, key: K) -> bool {
+        self.indexes.get_index(key).is_some()
+    }
+
+    #[inline(always)]
+    pub fn iter<V: 'static>(&self) -> Iter<'_, V> {
+        Iter::new(self.data_buffer.cast::<V>(), self.len())
+    }
+
+    #[inline(always)]
+    pub fn iter_mut<V: 'static>(&mut self) -> IterMut<'_, V> {
+        IterMut::new(self.data_buffer.cast::<V>(), self.len())
+    }
+}
+
+/*
+#########################################################
+#
+# impl SparseSet
+#
+#########################################################
+*/
 
 impl<K, V> Drop for SparseSet<K, V> {
     fn drop(&mut self) {
@@ -227,12 +471,19 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
             
             unsafe {
                 self.data_buffer
-                    .swap_remove_raw(index, len - 1, Self::SIZE_V)
+                    .swap_remove_or_pop(index, len - 1, Self::SIZE_V)
                     .cast::<V>()
                     .read()
             }
         })
     }
+
+    // pub fn drain_all(&mut self) ->  {
+    //     let len = self.len();
+    //     let values = unsafe { self.values_mut() };
+    //     self.indexes.clear();
+    //     self.keys.clear();
+    // }
 
     pub fn contains_key(&self, key: K) -> bool {
         self.indexes.get_index(key).is_some()
@@ -240,111 +491,25 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
 
     #[inline(always)]
     pub fn iter(&self) -> Iter<'_, V> {
-        // self.values().iter()
-        Iter::new(self)
+        Iter::new(self.data_buffer.cast::<V>(), self.len())
     }
 
     #[inline(always)]
     pub fn iter_mut(&mut self) -> IterMut<'_, V> {
-        // unsafe {
-        //     self.values_mut().iter_mut()
-        // }
-        IterMut::new(self)
-    }
-}
-
-/*
-#########################################################
-#
-# Iterator
-#
-#########################################################
-*/
-
-use crate::buffer::Base;
-
-pub struct Iter<'a, T> {
-    base: Base<T>,
-    marker: PhantomData<&'a T>,
-}
-
-impl<'a, V> Iter<'a, V> {
-    pub(crate) fn new<K>(source: &'a SparseSet<K, V>) -> Self {
-        Self {
-            base: Base::new(source.data_buffer.ptr.cast::<V>().as_ptr(), source.len()),
-            marker: PhantomData,
-        }
-    }
-}
-
-impl<'a, T: 'a> Iterator for Iter<'a, T> {
-    type Item = &'a T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        unsafe {
-            self.base.next::<&'a T>(|raw| &*raw)
-        }
-    }
-}
-
-impl<'a, T: 'a> DoubleEndedIterator for Iter<'a, T> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        unsafe {
-            self.base.back::<&'a T>(|raw| &*raw)
-        }
-    }
-}
-
-pub struct IterMut<'a, T> {
-    base: Base<T>,
-    marker: PhantomData<&'a mut T>,
-}
-
-impl<'a, V> IterMut<'a, V> {
-    pub(crate) fn new<K>(source: &'a mut SparseSet<K, V>) -> Self {
-        Self {
-            base: Base::new(source.data_buffer.ptr.cast::<V>().as_ptr(), source.len()),
-            marker: PhantomData,
-        }
-    }
-}
-
-impl<'a, T: 'a> Iterator for IterMut<'a, T> {
-    type Item = &'a mut T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        unsafe {
-            self.base.next::<&'a mut T>(|raw| &mut *raw)
-        }
-    }
-}
-
-impl<'a, T: 'a> DoubleEndedIterator for IterMut<'a, T> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        unsafe {
-            self.base.back(|raw| &mut *raw)
-        }
+        IterMut::new(self.data_buffer.cast::<V>(), self.len())
     }
 }
 
 #[cfg(test)]
-mod type_erased_sparse_set {
+mod sparse_set_test {
     use super::*;
     use crate::entity::EntityId;
 
     #[derive(Debug, PartialEq)] struct Obj { name: String, age: u32 }
 
-    impl Drop for Obj {
-        fn drop(&mut self) {
-            println!("dropped {} aged {}", self.name, self.age)
-        }
-    }
+    impl Drop for Obj { fn drop(&mut self) { println!("dropped {} aged {}", self.name, self.age) } }
 
-    impl Obj {
-        fn new(name: &str, age: u32) -> Self {
-            Self { name: name.to_string(), age }
-        }
-    }
+    impl Obj { fn new(name: &str, age: u32) -> Self { Self { name: name.to_string(), age } } }
 
     #[test]
     fn swap_remove_and_drop_test() -> Result<(), Error> {
@@ -392,6 +557,26 @@ mod type_erased_sparse_set {
 
         // ss.iter().rev().for_each(|value| println!("rev . {value}"));
         let mut backward = ss.iter().rev().collect::<Box<[_]>>();
+        backward.as_mut().reverse();
+
+        assert_eq!(forward.as_ref(), backward.as_ref());
+    }
+
+    #[test]
+    fn iter_type_erased() {
+        const NUM: usize = 5;
+        let mut ss = TypeErasedSparseSet::<EntityId>::new::<&'static str>();
+        let names = ["Balo", "Nunez", "Maguirre", "Bendtner", "Haryono"];
+
+        for i in 0..NUM {
+            ss.insert(EntityId::new(i as _), names[i]);
+        }
+
+        // ss.iter().for_each(|value| println!("{value}"));
+        let forward = ss.iter::<&str>().collect::<Box<[_]>>();
+
+        // ss.iter().rev().for_each(|value| println!("rev . {value}"));
+        let mut backward = ss.iter::<&str>().rev().collect::<Box<[_]>>();
         backward.as_mut().reverse();
 
         assert_eq!(forward.as_ref(), backward.as_ref());

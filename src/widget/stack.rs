@@ -140,9 +140,10 @@ where
 
         match AX::AXIS {
             Axis::Horizontal => {
-                self.content.for_each(|w| {
-                    let bound = Size::new(bound.width / child_count as f32, bound.height);
-                    let cs = w.layout_node_size(bound);
+                let bound = Size::new(bound.width / child_count as f32, bound.height);
+
+                self.content.for_each(|child| {
+                    let cs = child.layout_node_size(bound);
                     content_size.width += cs.width;
                     content_size.height = content_size.height.max(cs.height);
                 });
@@ -150,8 +151,9 @@ where
                 content_size.width += ((child_count - 1) * self.spacing.0 as usize) as f32;
             },
             Axis::Vertical => {
+                let bound = Size::new(bound.width, bound.height / child_count as f32);
+
                 self.content.for_each(|w| {
-                    let bound = Size::new(bound.width, bound.height / child_count as f32);
                     let cs = w.layout_node_size(bound);
                     content_size.height += cs.height;
                     content_size.width = content_size.width.max(cs.width);

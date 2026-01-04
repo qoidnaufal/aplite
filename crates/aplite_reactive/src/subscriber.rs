@@ -30,12 +30,6 @@ impl Subscribers {
     pub(crate) fn clear(&mut self) {
         self.0.clear();
     }
-
-    // pub(crate) fn remove_subscriber(&mut self, subscriber: &AnySubscriber) {
-    //     if let Some(index) = self.0.iter().position(|any_subscriber| any_subscriber == subscriber) {
-    //         self.0.swap_remove(index);
-    //     }
-    // }
 }
 
 /*

@@ -22,6 +22,7 @@ use crate::subscriber::AnySubscriber;
 */
 
 pub(crate) struct ReactiveScope {
+    parent: Option<WeakScope>,
     children: Vec<WeakScope>,
     node_ids: Vec<SlotId>,
     paused: bool,
@@ -44,6 +45,7 @@ impl Scope {
             }
 
             RwLock::new(ReactiveScope {
+                parent: current_scope,
                 children: Vec::new(),
                 node_ids: Vec::new(),
                 paused: false,
@@ -75,8 +77,6 @@ impl Scope {
         let children = std::mem::take(&mut lock.children);
         let node_ids = std::mem::take(&mut lock.node_ids);
 
-        drop(lock);
-
         for child in children {
             if let Some(child) = child.upgrade() {
                 child.cleanup()
@@ -90,6 +90,7 @@ impl Scope {
         });
     }
 
+    // WARN: this may cause infinite locking
     pub fn pause(&self) {
         let mut write_lock = self.0.write().unwrap();
         write_lock.paused = true;
@@ -103,6 +104,8 @@ impl Scope {
                 }
             });
     }
+
+    pub fn resume(&self) {}
 
     pub fn is_paused(&self) -> bool {
         self.0.read().unwrap().paused
@@ -191,11 +194,6 @@ impl ReactiveStorage {
                 .and_then(|any| any.downcast_ref::<R>())
                 .and_then(f)
         })
-        // Self::try_read().and_then(|guard| {
-        //     guard.inner
-        //         .get(&node.id)
-        //         .and_then(|any| f(any.downcast_ref::<R>()))
-        // })
     }
 
     pub fn map_with_downcast<F, R, U>(node: &Node<R>, f: F) -> Option<U>

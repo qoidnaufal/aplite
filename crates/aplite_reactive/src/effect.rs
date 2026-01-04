@@ -66,7 +66,9 @@ impl Effect {
         Self { node }
     }
 
-    /// for now a simple brute-force by removing the EffectState from NodeStorage
+    /// For now a simple brute-force by removing the EffectState from NodeStorage is enough.
+    /// Telling the sources to remove this node is unnecessary, as the next [`Reactive::mark_dirty`] by each sources will clean-up their subscribers.
+    /// Since this node has been removed from the main storage, upgrading the [`Weak`](std::sync::Weak) references will result in [`None`] and nothing happens.
     pub fn stop(self) {
         ReactiveStorage::remove(self.node);
     }

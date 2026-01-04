@@ -41,12 +41,20 @@ impl Context {
         }
     }
 
-    pub fn create_entity(&mut self) -> Entity {
+    pub(crate) fn create_entity(&mut self) -> Entity {
         self.id_manager.create()
     }
 
-    pub fn register<C: Component>(&mut self, entity: Entity, component_tuple: C) {
-        self.storage.insert_component(entity.id(), component_tuple);
+    pub fn spawn<C: Component>(&mut self, component: C) -> Entity {
+        let entity = self.create_entity();
+        self.storage.insert_component(entity.id(), component);
+        entity
+    }
+
+    pub fn spawn_with_parent<C: Component>(&mut self, parent: Entity, component: C) -> Entity {
+        let entity = self.create_entity();
+        self.storage.insert_component(entity.id(), component);
+        entity
     }
 
     pub fn mount<IV: IntoView>(&mut self, widget: IV) {

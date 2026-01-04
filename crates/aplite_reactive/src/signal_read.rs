@@ -44,10 +44,6 @@ impl<T: 'static> Source for SignalRead<T> {
     fn clear_subscribers(&self) {
         self.as_signal().clear_subscribers();
     }
-
-    // fn remove_subscriber(&self, subscriber: &AnySubscriber) {
-    //     self.as_signal().remove_subscriber(subscriber);
-    // }
 }
 
 impl<T: 'static> ToAnySource for SignalRead<T> {

@@ -14,6 +14,13 @@ impl Size {
         Self { width, height }
     }
 
+    pub const fn square(length: f32) -> Self {
+        Self {
+            width: length,
+            height: length,
+        }
+    }
+
     #[inline(always)]
     pub const fn area(&self) -> f32 { self.width * self.height }
 

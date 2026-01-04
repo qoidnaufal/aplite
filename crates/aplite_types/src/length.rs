@@ -3,8 +3,8 @@
 
 #[derive(Clone, Copy)]
 pub enum Length {
-    Fixed(f32),
     Grow,
+    Fixed(f32),
     MinContent(f32),
 }
 
@@ -17,8 +17,8 @@ impl Default for Length {
 impl Length {
     pub fn get_min_max(&self, min: f32, max: f32) -> f32 {
         match self {
-            Length::Fixed(val) => *val,
             Length::Grow => max,
+            Length::Fixed(val) => *val,
             Length::MinContent(val) => val.max(min)
         }
     }
@@ -51,9 +51,9 @@ impl From<u32> for Length {
 impl PartialEq for Length {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
+            (Length::Grow, Length::Grow) => true,
             (Length::Fixed(a), Length::Fixed(b)) => a == b,
             (Length::MinContent(a), Length::MinContent(b)) => a == b,
-            (Length::Grow, Length::Grow) => true,
             _ => false
         }
     }

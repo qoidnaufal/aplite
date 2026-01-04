@@ -47,7 +47,7 @@ pub struct Aplite<IV: IntoView> {
 
 impl<IV: IntoView> Aplite<IV> {
     pub fn new(config: AppConfig, view: IV) -> Self {
-        Executor::init(config.executor_capacity);
+        Executor::init(config.executor_capacity.max(1));
 
         Self {
             view: view.into_view(),

@@ -23,11 +23,6 @@ impl Sources {
     pub fn try_update(&self) -> bool {
         self.0.iter().any(AnySource::update_if_necessary)
     }
-
-    // #[inline(always)]
-    // pub fn remove_subscriber(&self, subscriber: &AnySubscriber) {
-    //     self.0.iter().for_each(|any_source| any_source.remove_subscriber(subscriber));
-    // }
 }
 
 pub struct AnySource(pub(crate) Weak<dyn Source>);
@@ -70,7 +65,6 @@ impl Reactive for AnySource {
 pub trait Source: Reactive {
     fn add_subscriber(&self, subscriber: AnySubscriber);
     fn clear_subscribers(&self);
-    // fn remove_subscriber(&self, subscriber: &AnySubscriber);
 }
 
 impl Source for AnySource {
@@ -85,12 +79,6 @@ impl Source for AnySource {
             source.clear_subscribers();
         }
     }
-
-    // fn remove_subscriber(&self, subscriber: &AnySubscriber) {
-    //     if let Some(source) = self.upgrade() {
-    //         source.remove_subscriber(subscriber);
-    //     }
-    // }
 }
 
 impl PartialEq for AnySource {

@@ -46,16 +46,6 @@ impl<T: 'static> Reactive for RwLock<SignalState<T>> {
     }
 }
 
-// impl<T: 'static> Reactive for Arc<RwLock<SignalState<T>>> {
-//     fn mark_dirty(&self) {
-//         self.as_ref().mark_dirty();
-//     }
-
-//     fn try_update(&self) -> bool {
-//         self.as_ref().try_update()
-//     }
-// }
-
 impl<T: 'static> Source for RwLock<SignalState<T>> {
     fn add_subscriber(&self, subscriber: AnySubscriber) {
         self.write().unwrap()
@@ -68,23 +58,7 @@ impl<T: 'static> Source for RwLock<SignalState<T>> {
             .subscribers
             .clear()
     }
-
-    // fn remove_subscriber(&self, subscriber: &AnySubscriber) {
-    //     self.write().unwrap()
-    //         .subscribers
-    //         .remove_subscriber(&subscriber);
-    // }
 }
-
-// impl<T: 'static> Source for Arc<RwLock<SignalState<T>>> {
-//     fn add_subscriber(&self, subscriber: AnySubscriber) {
-//         self.as_ref().add_subscriber(subscriber);
-//     }
-
-//     fn clear_subscribers(&self) {
-//         self.as_ref().clear_subscribers();
-//     }
-// }
 
 /*
 #########################################################
@@ -143,10 +117,6 @@ impl<T: 'static> Source for Signal<T> {
     fn clear_subscribers(&self) {
         ReactiveStorage::with_downcast(&self.node, |state| state.clear_subscribers())
     }
-
-    // fn remove_subscriber(&self, subscriber: &AnySubscriber) {
-    //     ReactiveStorage::with_downcast(&self.node, |state| state.remove_subscriber(subscriber))
-    // }
 }
 
 impl<T: 'static> ToAnySource for Signal<T> {

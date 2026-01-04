@@ -1,14 +1,12 @@
 use aplite_reactive::*;
 use aplite_renderer::Scene;
 use aplite_types::{Length, Matrix3x2, PaintRef, Rect, Rgba, Size, Vec2f, rgb, rgba};
+use aplite_storage::Entity;
 
-use crate::layout::Axis;
 use crate::state::{Background, BorderColor, BorderWidth, Radius};
 use crate::layout::LayoutCx;
-// use crate::layout::*;
 use crate::view::{ForEachView, IntoView};
 use crate::context::Context;
-// use crate::callback::WidgetEvent;
 
 mod button;
 mod image;
@@ -20,8 +18,6 @@ pub use {
     stack::*,
 };
 
-pub struct WidgetElement {}
-
 /*
 #########################################################
 #
@@ -31,7 +27,7 @@ pub struct WidgetElement {}
 */
 
 /// main building block to create a renderable component
-pub trait Widget: 'static {
+pub trait Widget {
     fn debug_name(&self) -> &'static str {
         std::any::type_name::<Self>()
     }
@@ -163,7 +159,14 @@ impl Widget for CircleWidget {
     }
 
     fn layout_node_size(&self, bound: Size) -> Size {
-        Size::default()
+        let max = bound.width.max(bound.height);
+        let min = bound.width.min(bound.height);
+        let radius = match self.radius {
+            Length::Grow => min,
+            Length::Fixed(val) => val.clamp(min, max),
+            Length::MinContent(val) => val,
+        };
+        Size::square(radius)
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
@@ -276,7 +279,7 @@ where
 #########################################################
 */
 
-impl<W: Widget> Widget for Vec<W> {
+impl<IV: IntoView> Widget for Vec<IV> {
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         self.iter().for_each(|widget| widget.layout(cx));
     }
@@ -286,7 +289,7 @@ impl<W: Widget> Widget for Vec<W> {
     }
 }
 
-impl<W: Widget + 'static> IntoView for Vec<W> {
+impl<IV: IntoView> IntoView for Vec<IV> {
     type View = Self;
 
     fn into_view(self) -> Self::View {
@@ -294,7 +297,7 @@ impl<W: Widget + 'static> IntoView for Vec<W> {
     }
 }
 
-impl<W: Widget + 'static> ForEachView for Vec<W> {
+impl<IV: IntoView> ForEachView for Vec<IV> {
     fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
         self.iter().for_each(|w| f(w));
     }
@@ -316,7 +319,7 @@ impl<W: Widget + 'static> ForEachView for Vec<W> {
 #########################################################
 */
 
-impl<W: Widget + 'static> Widget for Box<[W]> {
+impl<IV: IntoView> Widget for Box<[IV]> {
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         self.for_each(|w| w.layout(cx));
     }
@@ -326,7 +329,7 @@ impl<W: Widget + 'static> Widget for Box<[W]> {
     }
 }
 
-impl<W: Widget + 'static> IntoView for Box<[W]> {
+impl<IV: IntoView> IntoView for Box<[IV]> {
     type View = Self;
 
     fn into_view(self) -> Self::View {
@@ -334,7 +337,7 @@ impl<W: Widget + 'static> IntoView for Box<[W]> {
     }
 }
 
-impl<W: Widget + 'static> ForEachView for Box<[W]> {
+impl<IV: IntoView> ForEachView for Box<[IV]> {
     fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
         self.iter().for_each(|w| f(w));
     }
@@ -356,7 +359,7 @@ impl<W: Widget + 'static> ForEachView for Box<[W]> {
 #########################################################
 */
 
-impl<W: Widget + 'static, const N: usize> Widget for [W; N] {
+impl<IV: IntoView, const N: usize> Widget for [IV; N] {
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         self.for_each(|w| w.layout(cx));
     }
@@ -366,7 +369,7 @@ impl<W: Widget + 'static, const N: usize> Widget for [W; N] {
     }
 }
 
-impl<W: Widget + 'static, const N: usize> IntoView for [W; N] {
+impl<IV: IntoView, const N: usize> IntoView for [IV; N] {
     type View = Self;
 
     fn into_view(self) -> Self::View {
@@ -374,7 +377,7 @@ impl<W: Widget + 'static, const N: usize> IntoView for [W; N] {
     }
 }
 
-impl<W: Widget + 'static, const N: usize> ForEachView for [W; N] {
+impl<IV: IntoView, const N: usize> ForEachView for [IV; N] {
     fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
         self.iter().for_each(|w| f(w));
     }
@@ -397,7 +400,7 @@ impl<W: Widget + 'static, const N: usize> ForEachView for [W; N] {
 */
 
 // -- Option<IV>
-impl<W: Widget> Widget for Option<W> {
+impl<IV: IntoView> Widget for Option<IV> {
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         match self {
             Some(widget) => widget.layout(cx),
@@ -413,7 +416,7 @@ impl<W: Widget> Widget for Option<W> {
     }
 }
 
-impl<W: Widget + 'static> IntoView for Option<W> {
+impl<IV: IntoView> IntoView for Option<IV> {
     type View = Self;
 
     fn into_view(self) -> Self::View {
@@ -451,7 +454,11 @@ impl IntoView for () {
 #########################################################
 */
 
-impl<W: Widget + 'static> Widget for SignalRead<W> {
+impl<IV: IntoView> Widget for SignalRead<IV> {
+    fn layout_node_size(&self, bound: Size) -> Size {
+        self.with(|w| w.layout_node_size(bound))
+    }
+
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         self.with(|w| w.layout(cx))
     }
@@ -461,7 +468,7 @@ impl<W: Widget + 'static> Widget for SignalRead<W> {
     }
 }
 
-impl<W: Widget + 'static> IntoView for SignalRead<W> {
+impl<IV: IntoView> IntoView for SignalRead<IV> {
     type View = Self;
 
     fn into_view(self) -> Self::View {
@@ -477,7 +484,7 @@ impl<W: Widget + 'static> IntoView for SignalRead<W> {
 #########################################################
 */
 
-impl<W: Widget + 'static> Widget for Signal<W> {
+impl<IV: IntoView> Widget for Signal<IV> {
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         self.with(|w| w.layout(cx))
     }
@@ -487,7 +494,7 @@ impl<W: Widget + 'static> Widget for Signal<W> {
     }
 }
 
-impl<W: Widget + 'static> IntoView for Signal<W> {
+impl<IV: IntoView> IntoView for Signal<IV> {
     type View = Self;
 
     fn into_view(self) -> Self::View {
@@ -503,7 +510,7 @@ impl<W: Widget + 'static> IntoView for Signal<W> {
 #########################################################
 */
 
-impl<W: Widget + PartialEq + 'static> Widget for Memo<W> {
+impl<IV: IntoView + PartialEq> Widget for Memo<IV> {
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         self.with(|w| w.layout(cx))
     }
@@ -513,7 +520,7 @@ impl<W: Widget + PartialEq + 'static> Widget for Memo<W> {
     }
 }
 
-impl<W: Widget + PartialEq + 'static> IntoView for Memo<W> {
+impl<IV: IntoView + PartialEq> IntoView for Memo<IV> {
     type View = Self;
 
     fn into_view(self) -> Self::View {
