@@ -40,7 +40,7 @@ struct Worker {
 
 impl Worker {
     pub fn work(&self) {
-        // WARN: is this as busy loop?
+        // WARN: is this a busy loop?
         while let Ok(task) = self.rx.recv() {
             if let Ok(mut future) = task.future.write() {
                 let waker = Waker::from(Arc::clone(&task));

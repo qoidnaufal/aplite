@@ -35,6 +35,7 @@ pub use arena::{
 };
 
 pub use map::{
+    dense_slotmap::DenseSlotMap,
     slot_map::{SlotMap, SlotId, IndexMapError},
     hash::{EntityIdMap, TypeIdMap},
 };
