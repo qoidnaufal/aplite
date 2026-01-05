@@ -27,7 +27,13 @@ impl Drop for TypeErasedBuffer {
 
 impl TypeErasedBuffer {
     pub fn new<T>() -> Self {
-        Self::with_capacity::<T>(0)
+        let item_layout = alloc::Layout::new::<T>();
+
+        Self {
+            raw: RawBuffer::new::<T>(),
+            len: 0,
+            item_layout,
+        }
     }
 
     #[inline]
@@ -44,13 +50,13 @@ impl TypeErasedBuffer {
 
     pub fn as_slice<T>(&self) -> &[T] {
         unsafe {
-            &*std::ptr::slice_from_raw_parts(self.raw.ptr.cast::<T>().as_ptr().cast_const(), self.len)
+            std::slice::from_raw_parts(self.raw.cast::<T>().cast_const(), self.len)
         }
     }
 
     pub fn as_slice_mut<T>(&mut self) -> &mut[T] {
         unsafe {
-            &mut *std::ptr::slice_from_raw_parts_mut(self.raw.ptr.cast::<T>().as_ptr(), self.len)
+            std::slice::from_raw_parts_mut(self.raw.cast::<T>(), self.len)
         }
     }
 
@@ -74,12 +80,12 @@ impl TypeErasedBuffer {
         raw
     }
 
-    /// Safety: this method assumes that buffer is already initialized via [`with_capacity`](Self::with_capacity)
-    pub fn push_within_capacity<T>(&mut self, data: T) -> Result<ArenaPtr<T>, MaxCapacityReached> {
-        if self.len == self.raw.capacity {
-            return Err(MaxCapacityReached)
-        }
-
+    /// # Safety
+    /// This method assumes that buffer is already initialized via [`with_capacity`](Self::with_capacity).
+    /// If you provided zero capacity on initialization, first push will return error.
+    /// Since there will be no reallocation, it's safe to return the pointer to the allocated data.
+    pub fn push_within_capacity<T>(&mut self, data: T) -> Result<ArenaPtr<T>, Error> {
+        self.check()?;
         let raw = unsafe { self.push_unchecked(data) };
 
         Ok(ArenaPtr::new(raw))
@@ -98,10 +104,12 @@ impl TypeErasedBuffer {
 
     pub fn push<T>(&mut self, data: T) {
         if let Err(err) = self.check() {
-            match err {
-                Error::MaxCapacityReached => self.raw.realloc(self.item_layout, self.raw.capacity + 4),
-                Error::Uninitialized => self.raw.initialize(4, self.item_layout.size(), self.item_layout.align()),
-            }
+            let new_capacity = match err {
+                Error::MaxCapacityReached => self.raw.capacity + 4,
+                Error::Uninitialized => 4,
+            };
+
+            self.raw.grow::<T>(self.item_layout, new_capacity);
         }
 
         unsafe {
@@ -264,11 +272,8 @@ impl UnmanagedBuffer {
     /// # Safety
     /// This method assumes that buffer is already initialized via [`with_capacity`](Self::with_capacity).
     /// So it's safe to return the pointer to the allocated data, because there's no reallocation that will cause the pointer to be invalid.
-    pub fn push_within_capacity<T>(&mut self, data: T, offset: usize) -> Result<ArenaPtr<T>, MaxCapacityReached> {
-        if offset == self.raw.capacity {
-            return Err(MaxCapacityReached)
-        }
-
+    pub fn push_within_capacity<T>(&mut self, data: T, offset: usize) -> Result<ArenaPtr<T>, Error> {
+        self.check(offset)?;
         let raw = unsafe { self.push_unchecked(data, offset) };
 
         Ok(ArenaPtr::new(raw))
@@ -287,10 +292,12 @@ impl UnmanagedBuffer {
 
     pub fn push<T>(&mut self, data: T, offset: usize) {
         if let Err(err) = self.check(offset) {
-            match err {
-                Error::MaxCapacityReached => self.raw.realloc(self.item_layout, self.raw.capacity + 4),
-                Error::Uninitialized => self.raw.initialize(4, self.item_layout.size(), self.item_layout.align()),
-            }
+            let new_capacity = match err {
+                Error::MaxCapacityReached => self.raw.capacity + 4,
+                Error::Uninitialized => 4,
+            };
+
+            self.raw.grow::<T>(self.item_layout, new_capacity);
         }
 
         unsafe {
@@ -359,10 +366,6 @@ impl UnmanagedBuffer {
         self.raw.clear(len);
     }
 
-    pub fn dealloc(&mut self) {
-        self.raw.dealloc(self.item_layout);
-    }
-
     pub fn iter<T>(&self, len: usize) -> Iter<'_, T> {
         Iter::new(self.raw.cast::<T>(), len)
     }
@@ -380,97 +383,91 @@ impl UnmanagedBuffer {
 #########################################################
 */
 
-pub(crate) struct RawBuffer {
+pub struct RawBuffer {
     pub(crate) ptr: NonNull<u8>,
     pub(crate) capacity: usize,
     drop: Option<unsafe fn(*mut u8, usize)>,
 }
 
 impl RawBuffer {
+    pub const fn new<T>() -> Self {
+        Self {
+            ptr: NonNull::dangling(),
+            capacity: if size_of::<T>() == 0 { usize::MAX } else { 0 },
+            drop: None,
+        }
+    }
+
     #[inline(always)]
-    pub(crate) fn with_capacity<T>(capacity: usize, item_layout: alloc::Layout) -> Self {
-        #[inline]
-        unsafe fn drop<T>(raw: *mut u8, len: usize) {
-            unsafe {
-                std::ptr::slice_from_raw_parts_mut(raw.cast::<T>(), len).drop_in_place();
-                // for i in 0..len {
-                //     std::ptr::drop_in_place(ptr.add(i));
-                // }
-            }
+    pub fn with_capacity<T>(capacity: usize, item_layout: alloc::Layout) -> Self {
+        let mut this = Self::new::<T>();
+
+        if capacity > 0 && this.capacity == 0 {
+            this.grow::<T>(item_layout, capacity);
         }
 
-        if capacity == 0 {
-            Self {
-                ptr: NonNull::dangling(),
-                capacity,
-                drop: mem::needs_drop::<T>().then_some(drop::<T>),
-            }
+        this
+    }
+
+    pub fn grow<T>(&mut self, item_layout: alloc::Layout, new_capacity: usize) {
+        let size_t = item_layout.size();
+        let align_t = item_layout.align();
+        let new_size = size_t * new_capacity;
+
+        let (layout, ptr) = if self.capacity == 0 {
+            let layout = alloc::Layout::from_size_align(new_size, align_t).unwrap();
+            let ptr = unsafe { alloc::alloc(layout) };
+
+            (layout, ptr)
         } else {
-            let mut this = Self::with_capacity::<T>(0, item_layout);
-            this.initialize(capacity, item_layout.size(), item_layout.align());
-            this
+            let old_size = size_t * self.capacity;
+            let layout = alloc::Layout::from_size_align(old_size, align_t).unwrap();
+            let ptr = unsafe { alloc::realloc(self.ptr.as_ptr(), layout, new_size) };
+
+            (layout, ptr)
+        };
+
+        match NonNull::new(ptr) {
+            Some(new) => {
+                self.ptr = new;
+                self.capacity = new_capacity;
+            },
+            None => alloc::handle_alloc_error(layout),
         }
-    }
 
-    #[inline(always)]
-    pub(crate) fn initialize(&mut self, capacity: usize, size: usize, align: usize) {
-        unsafe {
-            let layout = alloc::Layout::from_size_align_unchecked(
-                size * capacity,
-                align
-            );
-
-            let raw = std::alloc::alloc(layout);
-
-            match NonNull::new(raw) {
-                Some(new) => {
-                    self.ptr = new;
-                    self.capacity = capacity;
-                },
-                None => alloc::handle_alloc_error(layout),
-            }
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) fn realloc(&mut self, item_layout: alloc::Layout, new_capacity: usize) {
-        unsafe {
-            let new_size = item_layout.size() * new_capacity;
-            let layout = alloc::Layout::from_size_align_unchecked(item_layout.size() * self.capacity, item_layout.align());
-            let new_block = alloc::realloc(self.ptr.as_ptr(), layout, new_size);
-
-            match NonNull::new(new_block) {
-                Some(new) => {
-                    self.ptr = new;
-                    self.capacity = new_capacity;
-                },
-                None => {
-                    alloc::handle_alloc_error(
-                        alloc::Layout::from_size_align_unchecked(
-                            new_size,
-                            item_layout.align()
-                        )
-                    )
-                },
+        if self.drop.is_none() && mem::needs_drop::<T>() {
+            #[inline]
+            unsafe fn drop<T>(raw: *mut u8, len: usize) {
+                unsafe {
+                    std::ptr::slice_from_raw_parts_mut(raw.cast::<T>(), len).drop_in_place();
+                }
             }
 
-            self.capacity = new_capacity;
+            self.drop = Some(drop::<T>)
         }
     }
 
-    pub(crate) fn cast<T>(&self) -> *mut T {
+    pub const fn cast<T>(&self) -> *mut T {
         self.ptr.cast::<T>().as_ptr()
     }
 
     #[inline(always)]
-    pub(crate) const unsafe fn get_raw(&self, offset: usize) -> *mut u8 {
+    pub const unsafe fn get_raw(&self, offset: usize) -> *mut u8 {
         unsafe {
             self.ptr.add(offset).as_ptr()
         }
     }
 
     #[inline(always)]
-    pub(crate) const unsafe fn push<T>(&mut self, data: T, offset: usize) -> *mut T {
+    pub const unsafe fn push<T>(&mut self, data: T, offset: usize) -> *mut T {
+        if size_of::<T>() == 0 {
+            unsafe {
+                let ptr = self.cast::<T>();
+                std::ptr::write(ptr, data);
+                return ptr;
+            }
+        }
+
         unsafe {
             let raw = self.ptr
                 .add(offset * size_of::<T>())
@@ -483,7 +480,11 @@ impl RawBuffer {
 
     #[inline(always)]
     /// this method already handle if index is equal to last_index or not -> swapping or popping
-    pub(crate) unsafe fn swap_remove_or_pop(&mut self, index: usize, last_index: usize, size_t: usize) -> *mut u8 {
+    pub unsafe fn swap_remove_or_pop(&mut self, index: usize, last_index: usize, size_t: usize) -> *mut u8 {
+        if size_t == 0 {
+            return self.ptr.as_ptr();
+        }
+
         unsafe {
             let last = self.get_raw(last_index * size_t);
 
@@ -497,7 +498,7 @@ impl RawBuffer {
     }
 
     #[inline(always)]
-    pub(crate) fn clear(&mut self, len: usize) {
+    pub fn clear(&mut self, len: usize) {
         let drop = self.drop.take();
         if let Some(drop) = drop {
             unsafe {
@@ -508,10 +509,12 @@ impl RawBuffer {
     }
 
     #[inline(always)]
-    pub(crate) fn dealloc(&mut self, item_layout: alloc::Layout) {
-        if self.capacity > 0 {
+    pub fn dealloc(&mut self, item_layout: alloc::Layout) {
+        let size_t = item_layout.size();
+
+        if self.capacity > 0 && size_t > 0 {
             unsafe {
-                let size = item_layout.size() * self.capacity;
+                let size = size_t * self.capacity;
                 let align = item_layout.align();
                 let layout = alloc::Layout::from_size_align_unchecked(size, align);
                 alloc::dealloc(self.ptr.as_ptr(), layout);
@@ -575,7 +578,7 @@ pub struct Iter<'a, T> {
 }
 
 impl<'a, V> Iter<'a, V> {
-    pub(crate) fn new(start: *mut V, len: usize) -> Self {
+    pub fn new(start: *mut V, len: usize) -> Self {
         Self {
             base: Base::new(start, len),
             marker: PhantomData,
@@ -607,7 +610,7 @@ pub struct IterMut<'a, T> {
 }
 
 impl<'a, V> IterMut<'a, V> {
-    pub(crate) fn new(start: *mut V, len: usize) -> Self {
+    pub fn new(start: *mut V, len: usize) -> Self {
         Self {
             base: Base::new(start, len),
             marker: PhantomData,
@@ -640,16 +643,6 @@ impl<'a, T: 'a> DoubleEndedIterator for IterMut<'a, T> {
 #
 #########################################################
 */
-
-#[derive(Debug)] pub struct MaxCapacityReached;
-
-impl std::fmt::Display for MaxCapacityReached {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-
-impl std::error::Error for MaxCapacityReached {}
 
 #[derive(Debug)]
 pub enum Error {
@@ -731,8 +724,8 @@ mod buffer_test {
     #[test]
     fn zst() {
         const CAP: usize = 2;
-        #[derive(Debug, PartialEq)]
-        struct Zst;
+        #[derive(Debug, PartialEq)] struct Zst;
+
         let mut ba = TypeErasedBuffer::with_capacity::<Zst>(CAP);
         for _ in 0..CAP {
             ba.push(Zst);
@@ -760,7 +753,6 @@ mod buffer_test {
         println!("{slice:?}");
 
         buffer.clear(2);
-        buffer.dealloc();
         drop(buffer);
     }
 

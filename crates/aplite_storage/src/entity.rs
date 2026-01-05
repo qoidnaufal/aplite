@@ -144,10 +144,12 @@ impl std::fmt::Debug for Entity {
 #########################################################
 */
 
+use std::collections::VecDeque;
+
 #[derive(Debug)]
 pub struct EntityManager {
     versions: Vec<u32>,
-    recycled: Vec<u32>,
+    recycled: VecDeque<u32>,
 }
 
 impl Default for EntityManager {
@@ -161,10 +163,10 @@ impl Default for EntityManager {
 impl EntityManager {
     /// Create a new manager with the specified capacity for the version manager & recycled,
     /// Using [`IdManager::default`] will create one with no preallocated capacity at all
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
-            recycled: Vec::default(),
-            versions: Vec::default(),
+            versions: Vec::new(),
+            recycled: VecDeque::new(),
         }
     }
 
@@ -174,7 +176,7 @@ impl EntityManager {
 
     pub fn create(&mut self) -> Entity {
         let id = self.recycled
-            .pop()
+            .pop_front()
             .unwrap_or_else(|| {
                 let id = u32::try_from(self.versions.len())
                     .ok()
@@ -197,7 +199,7 @@ impl EntityManager {
         let idx = entity.index();
         if self.versions[idx] < u32::MAX {
             self.versions[idx] += 1;
-            self.recycled.push(idx as u32);
+            self.recycled.push_back(idx as u32);
         }
     }
 

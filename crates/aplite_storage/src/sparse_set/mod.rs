@@ -83,8 +83,13 @@ impl<K> TypeErasedSparseSet<K> {
 }
 
 impl<K: SparsetKey> TypeErasedSparseSet<K> {
-    pub fn new<V: 'static>() -> Self {
-        Self::with_capacity::<V>(0)
+    pub const fn new<V: 'static>() -> Self {
+        Self {
+            data_buffer: RawBuffer::new::<V>(),
+            keys: Vec::new(),
+            indexes: SparseIndices::new(),
+            layout: alloc::Layout::new::<V>(),
+        }
     }
 
     #[inline(always)]
@@ -147,6 +152,28 @@ impl<K: SparsetKey> TypeErasedSparseSet<K> {
     }
 
     #[inline(always)]
+    const fn check(&self, offset: usize) -> Result<(), Error> {
+        if self.data_buffer.capacity == 0 {
+            return Err(Error::Uninitialized);
+        } else if offset == self.data_buffer.capacity {
+            return Err(Error::MaxCapacityReached);
+        } else {
+            Ok(())
+        }
+    }
+
+    fn grow_if_needed<V>(&mut self, len: usize) {
+        if let Err(err) = self.check(len) {
+            let new_capacity = match err {
+                Error::MaxCapacityReached => self.data_buffer.capacity + 4,
+                Error::Uninitialized => 4,
+            };
+
+            self.data_buffer.grow::<V>(self.layout, new_capacity);
+        }
+    }
+
+    #[inline(always)]
     /// Safety: you have to ensure len < capacity, and the entity does not existed yet within this sparse_set
     pub unsafe fn insert_unchecked<V: 'static>(&mut self, key: K, value: V, len: usize) -> ArenaPtr<V> {
         self.indexes.set_index(key, len);
@@ -166,14 +193,8 @@ impl<K: SparsetKey> TypeErasedSparseSet<K> {
             return Ok(ArenaPtr::new(exist));
         }
 
-        if self.data_buffer.capacity == 0 {
-            return Err(Error::Uninitialized)
-        }
-
         let len = self.len();
-        if len >= self.data_buffer.capacity {
-            return Err(Error::MaxCapacityReached)
-        }
+        self.check(len)?;
 
         Ok(unsafe { self.insert_unchecked(key, value, len) })
     }
@@ -185,14 +206,8 @@ impl<K: SparsetKey> TypeErasedSparseSet<K> {
             return ArenaPtr::new(exist);
         }
 
-        if self.data_buffer.capacity == 0 {
-            self.data_buffer.initialize(4, self.layout.size(), self.layout.align());
-        }
-
         let len = self.len();
-        if len >= self.data_buffer.capacity {
-            self.data_buffer.realloc(self.layout, len + 4);
-        }
+        self.grow_if_needed::<V>(len);
 
         unsafe { self.insert_unchecked(key, value, len) }
     }
@@ -203,14 +218,8 @@ impl<K: SparsetKey> TypeErasedSparseSet<K> {
             return ArenaPtr::new(exist);
         }
 
-        if self.data_buffer.capacity == 0 {
-            self.data_buffer.initialize(4, self.layout.size(), self.layout.align());
-        }
-
         let len = self.len();
-        if len >= self.data_buffer.capacity {
-            self.data_buffer.realloc(self.layout, len + 4);
-        }
+        self.grow_if_needed::<V>(len);
 
         unsafe { self.insert_unchecked(key, new(), len) }
     }
@@ -268,8 +277,6 @@ impl<K, V> Drop for SparseSet<K, V> {
 
 impl<K, V> SparseSet<K, V> {
     const LAYOUT: alloc::Layout = alloc::Layout::new::<V>();
-    const SIZE_V: usize = size_of::<V>();
-    const ALIGN_V: usize = align_of::<V>();
 
     pub fn keys(&self) -> &[K] {
         &self.keys
@@ -321,8 +328,13 @@ impl<K, V> SparseSet<K, V> {
 }
 
 impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
-    pub fn new() -> Self {
-        Self::with_capacity(0)
+    pub const fn new() -> Self {
+        Self {
+            data_buffer: RawBuffer::new::<V>(),
+            keys: Vec::new(),
+            indexes: SparseIndices::new(),
+            marker: PhantomData,
+        }
     }
 
     #[inline(always)]
@@ -340,7 +352,7 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
         self.indexes
             .get_index(key)
             .and_then(|index| unsafe {
-                let ptr = self.data_buffer.get_raw(index * Self::SIZE_V).cast();
+                let ptr = self.data_buffer.get_raw(index * Self::LAYOUT.size()).cast();
                 NonNull::new(ptr)
             })
     }
@@ -349,7 +361,7 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
     pub unsafe fn get_unchecked(&self, key: K) -> &V {
         unsafe {
             let index = self.indexes.get_index_unchecked(key);
-            &*self.data_buffer.get_raw(index * Self::SIZE_V).cast()
+            &*self.data_buffer.get_raw(index * Self::LAYOUT.size()).cast()
         }
     }
 
@@ -359,7 +371,7 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
             .get_index(key)
             .map(|index| unsafe {
                 &*self.data_buffer
-                    .get_raw(index * Self::SIZE_V)
+                    .get_raw(index * Self::LAYOUT.size())
                     .cast()
             })
     }
@@ -368,7 +380,7 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
     pub unsafe fn get_unchecked_mut(&mut self, key: K) -> &mut V {
         unsafe {
             let index = self.indexes.get_index_unchecked(key);
-            &mut *self.data_buffer.get_raw(index * Self::SIZE_V).cast()
+            &mut *self.data_buffer.get_raw(index * Self::LAYOUT.size()).cast()
         }
     }
 
@@ -378,7 +390,7 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
             .get_index(key)
             .map(|index| unsafe {
                 &mut *self.data_buffer
-                    .get_raw(index * Self::SIZE_V)
+                    .get_raw(index * Self::LAYOUT.size())
                     .cast()
             })
     }
@@ -386,6 +398,28 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
     #[inline(always)]
     pub fn get_data_index(&self, key: K) -> Option<usize> {
         self.indexes.get_index(key)
+    }
+
+    #[inline(always)]
+    const fn check(&self, offset: usize) -> Result<(), Error> {
+        if self.data_buffer.capacity == 0 {
+            return Err(Error::Uninitialized);
+        } else if offset == self.data_buffer.capacity {
+            return Err(Error::MaxCapacityReached);
+        } else {
+            Ok(())
+        }
+    }
+
+    fn grow_if_needed(&mut self, len: usize) {
+        if let Err(err) = self.check(len) {
+            let new_capacity = match err {
+                Error::MaxCapacityReached => self.data_buffer.capacity + 4,
+                Error::Uninitialized => 4,
+            };
+
+            self.data_buffer.grow::<V>(Self::LAYOUT, new_capacity);
+        }
     }
 
     #[inline(always)]
@@ -408,14 +442,8 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
             return Ok(ArenaPtr::new(exist));
         }
 
-        if self.data_buffer.capacity == 0 {
-            return Err(Error::Uninitialized)
-        }
-
         let len = self.len();
-        if len >= self.data_buffer.capacity {
-            return Err(Error::MaxCapacityReached)
-        }
+        self.check(len)?;
 
         Ok(unsafe { self.insert_unchecked(key, value, len) })
     }
@@ -427,14 +455,8 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
             return ArenaPtr::new(exist);
         }
 
-        if self.data_buffer.capacity == 0 {
-            self.data_buffer.initialize(4, Self::SIZE_V, Self::ALIGN_V);
-        }
-
         let len = self.len();
-        if len >= self.data_buffer.capacity {
-            self.data_buffer.realloc(Self::LAYOUT, len + 4);
-        }
+        self.grow_if_needed(len);
 
         unsafe { self.insert_unchecked(key, value, len) }
     }
@@ -445,14 +467,8 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
             return ArenaPtr::new(exist);
         }
 
-        if self.data_buffer.capacity == 0 {
-            self.data_buffer.initialize(4, Self::SIZE_V, Self::ALIGN_V);
-        }
-
         let len = self.len();
-        if len >= self.data_buffer.capacity {
-            self.data_buffer.realloc(Self::LAYOUT, len + 4);
-        }
+        self.grow_if_needed(len);
 
         unsafe { self.insert_unchecked(key, new(), len) }
     }
@@ -471,19 +487,12 @@ impl<K: SparsetKey, V: 'static> SparseSet<K, V> {
             
             unsafe {
                 self.data_buffer
-                    .swap_remove_or_pop(index, len - 1, Self::SIZE_V)
+                    .swap_remove_or_pop(index, len - 1, Self::LAYOUT.size())
                     .cast::<V>()
                     .read()
             }
         })
     }
-
-    // pub fn drain_all(&mut self) ->  {
-    //     let len = self.len();
-    //     let values = unsafe { self.values_mut() };
-    //     self.indexes.clear();
-    //     self.keys.clear();
-    // }
 
     pub fn contains_key(&self, key: K) -> bool {
         self.indexes.get_index(key).is_some()
