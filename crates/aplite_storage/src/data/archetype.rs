@@ -8,11 +8,6 @@ use crate::buffer::UnmanagedBuffer;
 use crate::data::component::{ComponentId, Component};
 use crate::data::component_storage::ComponentStorage;
 
-pub enum Error {
-    MaxCapacityReached,
-    MismatchedTable,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ArchetypeId(pub(crate) usize);
 
@@ -198,10 +193,25 @@ impl<'a> ArchetypeBuilder<'a> {
     }
 }
 
+/*
+#########################################################
+#
+# Error
+#
+#########################################################
+*/
+
+pub enum Error {
+    MaxCapacityReached,
+    Uninitialized,
+    MismatchedTable,
+}
+
 impl std::fmt::Debug for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = match self {
             Error::MaxCapacityReached => "MaxCapacityReached",
+            Error::Uninitialized => "Uninitialized",
             Error::MismatchedTable => "MismatchedTable",
         };
 
@@ -217,8 +227,11 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-impl From<crate::buffer::MaxCapacityReached> for Error {
-    fn from(_: crate::buffer::MaxCapacityReached) -> Self {
-        Self::MaxCapacityReached
+impl From<crate::buffer::Error> for Error {
+    fn from(error: crate::buffer::Error) -> Self {
+        match error {
+            crate::buffer::Error::MaxCapacityReached => Self::MaxCapacityReached,
+            crate::buffer::Error::Uninitialized => Self::Uninitialized,
+        }
     }
 }

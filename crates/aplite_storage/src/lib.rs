@@ -8,7 +8,6 @@ mod sparse_set;
 mod tree;
 
 pub use buffer::{
-    RawBuffer,
     TypeErasedBuffer,
     UnmanagedBuffer,
     Iter,

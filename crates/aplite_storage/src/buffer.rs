@@ -148,7 +148,6 @@ impl TypeErasedBuffer {
     pub const unsafe fn get_unchecked_mut<'a, T>(&'a mut self, index: usize) -> &'a mut T {
         unsafe {
             &mut *self.get_unchecked_raw(index).cast()
-            // &mut *self.raw.get_raw(index * self.item_layout.size()).cast()
         }
     }
 
@@ -233,13 +232,20 @@ impl Drop for UnmanagedBuffer {
 }
 
 impl UnmanagedBuffer {
+    pub const fn new<T>() -> Self {
+        Self {
+            raw: RawBuffer::new::<T>(),
+            item_layout: alloc::Layout::new::<T>(),
+        }
+    }
+
     #[inline]
     pub fn with_capacity<T>(capacity: usize) -> Self {
         let item_layout = alloc::Layout::new::<T>();
-        let block = RawBuffer::with_capacity::<T>(capacity, item_layout);
+        let raw = RawBuffer::with_capacity::<T>(capacity, item_layout);
 
         Self {
-            raw: block,
+            raw,
             item_layout,
         }
     }
@@ -383,14 +389,14 @@ impl UnmanagedBuffer {
 #########################################################
 */
 
-pub struct RawBuffer {
+pub(crate) struct RawBuffer {
     pub(crate) ptr: NonNull<u8>,
     pub(crate) capacity: usize,
     drop: Option<unsafe fn(*mut u8, usize)>,
 }
 
 impl RawBuffer {
-    pub const fn new<T>() -> Self {
+    pub(crate) const fn new<T>() -> Self {
         Self {
             ptr: NonNull::dangling(),
             capacity: if size_of::<T>() == 0 { usize::MAX } else { 0 },
@@ -399,7 +405,7 @@ impl RawBuffer {
     }
 
     #[inline(always)]
-    pub fn with_capacity<T>(capacity: usize, item_layout: alloc::Layout) -> Self {
+    pub(crate) fn with_capacity<T>(capacity: usize, item_layout: alloc::Layout) -> Self {
         let mut this = Self::new::<T>();
 
         if capacity > 0 && this.capacity == 0 {
@@ -409,7 +415,7 @@ impl RawBuffer {
         this
     }
 
-    pub fn grow<T>(&mut self, item_layout: alloc::Layout, new_capacity: usize) {
+    pub(crate) fn grow<T>(&mut self, item_layout: alloc::Layout, new_capacity: usize) {
         let size_t = item_layout.size();
         let align_t = item_layout.align();
         let new_size = size_t * new_capacity;
@@ -447,19 +453,19 @@ impl RawBuffer {
         }
     }
 
-    pub const fn cast<T>(&self) -> *mut T {
+    pub(crate) const fn cast<T>(&self) -> *mut T {
         self.ptr.cast::<T>().as_ptr()
     }
 
     #[inline(always)]
-    pub const unsafe fn get_raw(&self, offset: usize) -> *mut u8 {
+    pub(crate) const unsafe fn get_raw(&self, offset: usize) -> *mut u8 {
         unsafe {
             self.ptr.add(offset).as_ptr()
         }
     }
 
     #[inline(always)]
-    pub const unsafe fn push<T>(&mut self, data: T, offset: usize) -> *mut T {
+    pub(crate) const unsafe fn push<T>(&mut self, data: T, offset: usize) -> *mut T {
         if size_of::<T>() == 0 {
             unsafe {
                 let ptr = self.cast::<T>();
@@ -469,10 +475,7 @@ impl RawBuffer {
         }
 
         unsafe {
-            let raw = self.ptr
-                .add(offset * size_of::<T>())
-                .as_ptr()
-                .cast::<T>();
+            let raw = self.cast::<T>().add(offset);
             std::ptr::write(raw, data);
             raw
         }
@@ -480,9 +483,10 @@ impl RawBuffer {
 
     #[inline(always)]
     /// this method already handle if index is equal to last_index or not -> swapping or popping
-    pub unsafe fn swap_remove_or_pop(&mut self, index: usize, last_index: usize, size_t: usize) -> *mut u8 {
+    pub(crate) unsafe fn swap_remove_or_pop(&mut self, index: usize, last_index: usize, size_t: usize) -> *mut u8 {
         if size_t == 0 {
-            return self.ptr.as_ptr();
+            let ptr = std::ptr::without_provenance_mut(self.ptr.as_ptr() as usize + index);
+            return ptr;
         }
 
         unsafe {
@@ -498,7 +502,7 @@ impl RawBuffer {
     }
 
     #[inline(always)]
-    pub fn clear(&mut self, len: usize) {
+    pub(crate) fn clear(&mut self, len: usize) {
         let drop = self.drop.take();
         if let Some(drop) = drop {
             unsafe {
@@ -509,7 +513,7 @@ impl RawBuffer {
     }
 
     #[inline(always)]
-    pub fn dealloc(&mut self, item_layout: alloc::Layout) {
+    pub(crate) fn dealloc(&mut self, item_layout: alloc::Layout) {
         let size_t = item_layout.size();
 
         if self.capacity > 0 && size_t > 0 {
@@ -531,56 +535,23 @@ impl RawBuffer {
 #########################################################
 */
 
-pub(crate) struct Base<T> {
+pub struct Iter<'a, T> {
     start: *mut T,
     end: *mut T,
+    marker: PhantomData<&'a [T]>,
 }
 
-impl<T> Base<T> {
-    #[inline(always)]
-    pub(crate) fn new(start: *mut T, len: usize) -> Self {
+impl<'a, T> Iter<'a, T> {
+    pub fn new(start: *mut T, len: usize) -> Self {
+        let end = if size_of::<T>() == 0 {
+            std::ptr::without_provenance_mut(start as usize + len)
+        } else {
+            unsafe { start.add(len) }
+        };
+
         Self {
             start,
-            end: unsafe { start.add(len) },
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) unsafe fn next<R>(&mut self, f: impl FnOnce(*mut T) -> R) -> Option<R> {
-        if unsafe { self.end.offset_from_unsigned(self.start) } == 0 {
-            return None
-        }
-
-        unsafe {
-            let next = self.start;
-            self.start = next.add(1);
-            Some(f(next))
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) unsafe fn back<R>(&mut self, f: impl FnOnce(*mut T) -> R) -> Option<R> {
-        if unsafe { self.end.offset_from_unsigned(self.start) } == 0 {
-            return None
-        }
-
-        unsafe {
-            let next = self.end.sub(1);
-            self.end = next;
-            Some(f(next))
-        }
-    }
-}
-
-pub struct Iter<'a, T> {
-    base: Base<T>,
-    marker: PhantomData<&'a T>,
-}
-
-impl<'a, V> Iter<'a, V> {
-    pub fn new(start: *mut V, len: usize) -> Self {
-        Self {
-            base: Base::new(start, len),
+            end,
             marker: PhantomData,
         }
     }
@@ -590,29 +561,58 @@ impl<'a, T: 'a> Iterator for Iter<'a, T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        unsafe {
-            self.base.next::<&'a T>(|raw| &*raw)
+        if self.start == self.end {
+            None
+        } else {
+            unsafe {
+                if size_of::<T>() == 0 {
+                    self.start = std::ptr::without_provenance_mut(self.start as usize + 1);
+                    Some(&*NonNull::<T>::dangling().as_ptr())
+                } else {
+                    let next = self.start;
+                    self.start = next.add(1);
+                    Some(&*next)
+                }
+            }
         }
     }
 }
 
 impl<'a, T: 'a> DoubleEndedIterator for Iter<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        unsafe {
-            self.base.back::<&'a T>(|raw| &*raw)
+        if self.start == self.end {
+            None
+        } else {
+            unsafe {
+                if size_of::<T>() == 0 {
+                    self.end = std::ptr::without_provenance_mut(self.end as usize - 1);
+                    Some(&*NonNull::<T>::dangling().as_ptr())
+                } else {
+                    self.end = self.end.sub(1);
+                    Some(&*self.end)
+                }
+            }
         }
     }
 }
 
 pub struct IterMut<'a, T> {
-    base: Base<T>,
-    marker: PhantomData<&'a mut T>,
+    start: *mut T,
+    end: *mut T,
+    marker: PhantomData<&'a mut [T]>,
 }
 
-impl<'a, V> IterMut<'a, V> {
-    pub fn new(start: *mut V, len: usize) -> Self {
+impl<'a, T> IterMut<'a, T> {
+    pub fn new(start: *mut T, len: usize) -> Self {
+        let end = if size_of::<T>() == 0 {
+            std::ptr::without_provenance_mut(start as usize + len)
+        } else {
+            unsafe { start.add(len) }
+        };
+
         Self {
-            base: Base::new(start, len),
+            start,
+            end,
             marker: PhantomData,
         }
     }
@@ -622,16 +622,37 @@ impl<'a, T: 'a> Iterator for IterMut<'a, T> {
     type Item = &'a mut T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        unsafe {
-            self.base.next::<&'a mut T>(|raw| &mut *raw)
+        if self.start == self.end {
+            None
+        } else {
+            unsafe {
+                if size_of::<T>() == 0 {
+                    self.start = std::ptr::without_provenance_mut(self.start as usize + 1);
+                    Some(&mut *NonNull::<T>::dangling().as_ptr())
+                } else {
+                    let next = self.start;
+                    self.start = next.add(1);
+                    Some(&mut *next)
+                }
+            }
         }
     }
 }
 
 impl<'a, T: 'a> DoubleEndedIterator for IterMut<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        unsafe {
-            self.base.back(|raw| &mut *raw)
+        if self.start == self.end {
+            None
+        } else {
+            unsafe {
+                if size_of::<T>() == 0 {
+                    self.end = std::ptr::without_provenance_mut(self.end as usize - 1);
+                    Some(&mut *NonNull::<T>::dangling().as_ptr())
+                } else {
+                    self.end = self.end.sub(1);
+                    Some(&mut *self.end)
+                }
+            }
         }
     }
 }
@@ -684,21 +705,21 @@ mod buffer_test {
 
     #[test]
     fn push_and_get() {
-        let mut ba = TypeErasedBuffer::with_capacity::<Obj>(1);
-        assert!(ba.raw.drop.is_some());
+        let mut buffer = TypeErasedBuffer::with_capacity::<Obj>(1);
+        assert!(buffer.raw.drop.is_some());
 
         let balo = Obj { name: "Balo".to_string(), age: 69 };
         let nunez = Obj { name: "Nunez".to_string(), age: 888 };
     
-        ba.push(balo);
-        ba.push(nunez);
+        buffer.push(balo);
+        buffer.push(nunez);
 
-        let get_mut = ba.get_mut::<Obj>(1);
+        let get_mut = buffer.get_mut::<Obj>(1);
         assert!(get_mut.is_some());
 
         get_mut.unwrap().age = 666;
     
-        let get = ba.get::<Obj>(1);
+        let get = buffer.get::<Obj>(1);
         assert!(get.is_some_and(|obj| obj.age == 666));
     
         println!("{:?}", get.unwrap());
@@ -707,14 +728,14 @@ mod buffer_test {
 
     #[test]
     fn remove() {
-        let mut ba = TypeErasedBuffer::with_capacity::<Obj>(5);
+        let mut buffer = TypeErasedBuffer::with_capacity::<Obj>(5);
 
         for i in 0..5 {
-            ba.push(Obj { name: i.to_string(), age: i as _ });
+            buffer.push(Obj { name: i.to_string(), age: i as _ });
         }
 
         let to_remove = 1;
-        let removed = ba.swap_remove::<Obj>(to_remove);
+        let removed = buffer.swap_remove::<Obj>(to_remove);
         assert!(removed.is_some());
 
         let removed = removed.unwrap();
@@ -723,18 +744,23 @@ mod buffer_test {
 
     #[test]
     fn zst() {
-        const CAP: usize = 2;
+        const CAP: usize = 10;
         #[derive(Debug, PartialEq)] struct Zst;
 
-        let mut ba = TypeErasedBuffer::with_capacity::<Zst>(CAP);
+        let mut buffer = TypeErasedBuffer::new::<Zst>();
         for _ in 0..CAP {
-            ba.push(Zst);
+            buffer.push(Zst);
         }
 
-        let first = ba.get::<Zst>(0);
-        let second = ba.get::<Zst>(1);
+        let first = buffer.get::<Zst>(0);
+        let second = buffer.get::<Zst>(1);
 
         assert_eq!(first, second);
+
+        buffer.iter::<Zst>().for_each(|zst| println!("{zst:?}"));
+
+        let removed = buffer.pop::<Zst>();
+        assert!(removed.is_some());
     }
 
     #[test]
@@ -755,48 +781,4 @@ mod buffer_test {
         buffer.clear(2);
         drop(buffer);
     }
-
-    // #[test]
-    // fn iter_speed() {
-    //     struct NewObj {
-    //         _name: String,
-    //         age: usize,
-    //         _addr: usize,
-    //     }
-
-    //     const NUM: usize = 1024 * 1024 * 4;
-
-    //     let mut vec: Vec<NewObj> = Vec::with_capacity(NUM);
-    //     let now_1p = std::time::Instant::now();
-    //     for i in 0..NUM { vec.push(NewObj { _name: i.to_string(), age: 1, _addr: i }) }
-    //     let elapsed_1p = now_1p.elapsed();
-    //     println!("Vec<T>            : push time for {NUM} objects: {:?}", elapsed_1p);
-
-    //     let now_2p = std::time::Instant::now();
-    //     let mut ba = TypeErasedBuffer::with_capacity::<NewObj>(NUM);
-    //     for i in 0..NUM { ba.push(NewObj { _name: i.to_string(), age: 1, _addr: i }) }
-    //     let elapsed_2p = now_2p.elapsed();
-    //     println!("TypeErasedBuffer  : push time for {NUM} objects: {:?}", elapsed_2p);
-
-    //     let now_3p = std::time::Instant::now();
-    //     let mut any_vec: Vec<Box<dyn std::any::Any>> = Vec::with_capacity(NUM);
-    //     for i in 0..NUM { any_vec.push(Box::new(NewObj { _name: i.to_string(), age: 1, _addr: i })) }
-    //     let elapsed_3p = now_3p.elapsed();
-    //     println!("Vec<Box<dyn Any>> : push time for {NUM} objects: {:?}\n", elapsed_3p);
-
-    //     let now_1i = std::time::Instant::now();
-    //     let sum_1 = vec.iter().map(|obj| obj.age).sum::<usize>();
-    //     let elapsed_1i = now_1i.elapsed();
-    //     println!("Vec<T>            : iter.map.sum time for {sum_1} objects: {:?}", elapsed_1i);
-
-    //     let now_2i = std::time::Instant::now();
-    //     let sum_2 = ba.iter::<NewObj>().map(|obj| obj.age).sum::<usize>();
-    //     let elapsed_2i = now_2i.elapsed();
-    //     println!("TypeErasedBuffer  : iter.map.sum time for {sum_2} objects: {:?}", elapsed_2i);
-
-    //     let now_3i = std::time::Instant::now();
-    //     let sum_3 = any_vec.iter().map(|any| any.downcast_ref::<NewObj>().unwrap().age).sum::<usize>();
-    //     let elapsed_3i = now_3i.elapsed();
-    //     println!("Vec<Box<dyn Any>> : iter.map.sum time for {sum_3} objects: {:?}", elapsed_3i);
-    // }
 }
