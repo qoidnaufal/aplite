@@ -1,5 +1,5 @@
 use std::sync::{Arc, Weak};
-use crate::{Fraction, Rgba, Size};
+use crate::{Fraction, Color, Size};
 
 #[derive(Clone)]
 pub struct ImageData {
@@ -33,8 +33,8 @@ impl std::ops::Deref for ImageData {
     }
 }
 
-impl From<Rgba> for ImageData {
-    fn from(rgba: Rgba) -> Self {
+impl From<Color> for ImageData {
+    fn from(rgba: Color) -> Self {
         Self::new((1, 1), &rgba.as_slice())
     }
 }

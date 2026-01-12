@@ -14,20 +14,20 @@ use crate::source::AnySource;
 
 #[derive(Default)]
 // TODO: Conside using SparseSet to make removal of a single AnySubscriber much more convenient
-pub(crate) struct Subscribers(pub(crate) Vec<AnySubscriber>);
+pub struct Subscribers(pub(crate) Vec<AnySubscriber>);
 
 impl Subscribers {
-    pub(crate) fn mark_dirty(&mut self) {
+    pub fn mark_dirty(&mut self) {
         self.0.drain(..).for_each(AnySubscriber::mark_dirty_owned);
     }
 
-    pub(crate) fn push(&mut self, subscriber: AnySubscriber) {
+    pub fn push(&mut self, subscriber: AnySubscriber) {
         if !self.0.contains(&subscriber) {
             self.0.push(subscriber);
         }
     }
 
-    pub(crate) fn clear(&mut self) {
+    pub fn clear(&mut self) {
         self.0.clear();
     }
 }

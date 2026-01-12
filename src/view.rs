@@ -1,5 +1,4 @@
 use aplite_renderer::Scene;
-use aplite_storage::{Component, EntityId, ComponentStorage, make_component};
 use aplite_types::Size;
 
 use crate::layout::LayoutCx;
@@ -18,10 +17,16 @@ use crate::widget::Widget;
 /// - any type that implement Mount: `impl Mount for T`,
 /// - any function that produce IntoView: `FnOnce() -> IV where IV: IntoView` or `fn() -> impl IntoView`
 pub trait IntoView: Widget + Sized + 'static {
-    type View: IntoView;
-    /// View basically is just a build context for the widget which implements it.
-    /// Internally it's a `Box<dyn FnOnce(&mut ViewStorage) -> Entity + 'a>`
+    type View: Widget;
     fn into_view(self) -> Self::View;
+}
+
+impl<IV: Widget + Sized + 'static> IntoView for IV {
+    type View = IV;
+
+    fn into_view(self) -> Self::View {
+        self
+    }
 }
 
 pub trait ForEachView: IntoView {
@@ -78,21 +83,7 @@ impl Widget for AnyView {
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         self.as_ref().layout(cx);
     }
-
-    fn draw(&self, scene: &mut aplite_renderer::Scene) {
-        self.as_ref().draw(scene);
-    }
 }
-
-impl IntoView for AnyView {
-    type View = Self;
-
-    fn into_view(self) -> Self::View {
-        self
-    }
-}
-
-make_component!(AnyView);
 
 /*
 #########################################################
@@ -131,35 +122,20 @@ macro_rules! view_tuple {
         }
 
         impl<$($name: IntoView),*> Widget for ($($name,)*) {
-            fn layout_node_size(&self, bound: Size) -> Size {
-                let mut size = Size::default();
-                self.for_each(|w| {
-                    let cs = w.layout_node_size(bound);
-                    size.width += cs.width;
-                    size.height = cs.height;
-                });
-
-                size
-            }
-
             fn layout(&self, cx: &mut LayoutCx<'_>) {
                 self.for_each(|w| w.layout(cx));
             }
-
-            fn draw(&self, scene: &mut Scene) {
-                self.for_each(|w| w.draw(scene));
-            }
         }
 
-        impl<$($name: IntoView),*> IntoView for ($($name,)*) {
-            type View = ($($name::View,)*);
+        // impl<$($name: IntoView),*> IntoView for ($($name,)*) {
+        //     type View = ($($name::View,)*);
 
-            fn into_view(self) -> Self::View {
-                #[allow(non_snake_case)]
-                let ($($name,)*) = self;
-                ($($name.into_view(),)*)
-            }
-        }
+        //     fn into_view(self) -> Self::View {
+        //         #[allow(non_snake_case)]
+        //         let ($($name,)*) = self;
+        //         ($($name.into_view(),)*)
+        //     }
+        // }
     };
 }
 
@@ -214,7 +190,7 @@ mod view_test {
         assert_eq!(size_of_val(&s_tuple) > size_of_val(&s_arr), size_of_val(&s_arr) > size_of_val(&s_vec));
         assert_eq!(s_vec.type_id(), TypeId::of::<Stack<Vec<AnyView>, Horizontal>>());
         assert_eq!(s_arr.type_id(), TypeId::of::<Stack<[AnyView; 3], Horizontal>>());
-        assert_ne!(s_vec.type_id(), s_tuple.type_id());
+        assert_ne!(s_vec.type_id(), s_arr.type_id());
     }
 
     #[test]
@@ -227,21 +203,23 @@ mod view_test {
             || button("+", || {}),
         );
 
-        let name = e.debug_name();
+        let widget = e.into_view();
+
+        let name = widget.debug_name();
         println!("{name}");
         assert!(name.contains("Button"));
 
         println!();
         set_when.set(true);
 
-        let name = e.debug_name();
+        let name = widget.debug_name();
         println!("{name}");
         assert!(name.contains("Stack"));
     }
 
     #[test]
     fn for_each_view() {
-        let tuple =(
+        let tuple = (
             either(|| false, || button("", || {}), circle),
             vstack((circle, circle)),
             circle,
@@ -249,9 +227,11 @@ mod view_test {
             button(("", circle), || {}),
         );
 
-        tuple.for_each(|_| {});
+        let widget = tuple.into_view();
 
-        let stack = hstack(tuple);
+        widget.for_each(|_| {});
+
+        let stack = hstack(widget);
 
         stack.for_each(|_| {});
     }

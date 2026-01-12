@@ -1,4 +1,4 @@
-use color::Rgba;
+use color::Color;
 use image_data::{ImageData, ImageRef};
 
 use crate::fraction::Fraction;
@@ -8,18 +8,18 @@ pub(crate) mod image_data;
 
 #[derive(Clone)]
 pub enum Paint {
-    Color(Rgba),
+    Color(Color),
     Image(ImageData),
     // TODO: Gradient,
 }
 
 pub enum PaintRef<'a> {
-    Color(&'a Rgba),
+    Color(&'a Color),
     Image(ImageRef),
 }
 
 impl Paint {
-    pub fn from_color(color: Rgba) -> Self {
+    pub fn from_color(color: Color) -> Self {
         Self::Color(color)
     }
 
@@ -52,8 +52,8 @@ impl PartialEq for Paint {
     }
 }
 
-impl From<Rgba> for Paint {
-    fn from(rgba: Rgba) -> Self {
+impl From<Color> for Paint {
+    fn from(rgba: Color) -> Self {
         Self::Color(rgba)
     }
 }

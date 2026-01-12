@@ -1,20 +1,15 @@
-use crate::entity::EntityId;
-use crate::iterator::{
-    TreeChildIter,
-    TreeDepthIter,
-    TreeAncestryIter,
-    TreeNodeIter,
-};
+use crate::map::id::SlotId;
 use super::node::SubTree;
+use crate::tree::node::Node;
 
 /// Sparse array based data structure, where the related information is allocated parallel to the main [`EntityId`].
 /// This should enable fast and efficient indexing when accessing the data.
 /// This Tree can contains more than one roots.
 pub struct SparseTree {
-    pub(crate) parent: Vec<Option<EntityId>>,
-    pub(crate) first_child: Vec<Option<EntityId>>,
-    pub(crate) next_sibling: Vec<Option<EntityId>>,
-    pub(crate) prev_sibling: Vec<Option<EntityId>>,
+    pub(crate) parent: Vec<Option<SlotId>>,
+    pub(crate) first_child: Vec<Option<SlotId>>,
+    pub(crate) next_sibling: Vec<Option<SlotId>>,
+    pub(crate) prev_sibling: Vec<Option<SlotId>>,
 }
 
 impl Default for SparseTree {
@@ -43,18 +38,18 @@ impl SparseTree {
         this
     }
 
-    pub fn roots(&self) -> impl Iterator<Item = EntityId> {
+    pub fn roots(&self) -> impl Iterator<Item = SlotId> {
         self.parent
             .iter()
             .enumerate()
             .filter_map(|(i, parent)| {
                 parent.is_none()
-                    .then_some(EntityId::new(i as u32))
+                    .then_some(SlotId::new(i as u32, 0))
             })
     }
 
     /// get the root of an entity
-    pub fn get_root(&self, id: EntityId) -> Option<EntityId> {
+    pub fn get_root(&self, id: SlotId) -> Option<SlotId> {
         let mut current = id;
         while let Some(parent) = self.get_parent(current) {
             current = parent;
@@ -67,17 +62,17 @@ impl SparseTree {
     }
 
     #[inline(always)]
-    pub fn get_parent(&self, id: EntityId) -> Option<EntityId> {
+    pub fn get_parent(&self, id: SlotId) -> Option<SlotId> {
         self.parent[id.index()]
     }
 
     #[inline(always)]
-    pub fn get_first_child(&self, id: EntityId) -> Option<EntityId> {
+    pub fn get_first_child(&self, id: SlotId) -> Option<SlotId> {
         self.first_child[id.index()]
     }
 
     #[inline(always)]
-    pub fn get_last_child(&self, id: EntityId) -> Option<EntityId> {
+    pub fn get_last_child(&self, id: SlotId) -> Option<SlotId> {
         let Some(first) = self.get_first_child(id) else { return None };
         let mut last = first;
         while let Some(next) = self.get_next_sibling(last) {
@@ -87,24 +82,24 @@ impl SparseTree {
     }
 
     #[inline(always)]
-    pub fn get_next_sibling(&self, id: EntityId) -> Option<EntityId> {
+    pub fn get_next_sibling(&self, id: SlotId) -> Option<SlotId> {
         self.next_sibling[id.index()]
     }
 
     #[inline(always)]
-    pub fn get_prev_sibling(&self, id: EntityId) -> Option<EntityId> {
+    pub fn get_prev_sibling(&self, id: SlotId) -> Option<SlotId> {
         self.prev_sibling[id.index()]
     }
 
     #[inline(always)]
-    pub fn child_count(&self, id: EntityId) -> usize {
+    pub fn child_count(&self, id: SlotId) -> usize {
         self.iter_children(id).count()
     }
 
     /// This method will create an allocation,
     /// If you want to avoid unnecessary allocation use [`iter_children`](Self::iter_children)
     #[inline(always)]
-    pub fn get_all_children(&self, id: EntityId) -> Vec<EntityId> {
+    pub fn get_all_children(&self, id: SlotId) -> Vec<SlotId> {
         self.iter_children(id).collect()
     }
 
@@ -118,7 +113,7 @@ impl SparseTree {
         }
     }
 
-    pub fn insert(&mut self, id: EntityId, parent: Option<EntityId>) {
+    pub fn insert(&mut self, id: SlotId, parent: Option<SlotId>) {
         if let Some(parent) = parent {
             self.insert_with_parent(id, parent);
         } else {
@@ -127,7 +122,7 @@ impl SparseTree {
     }
 
     #[inline(always)]
-    pub fn insert_as_root(&mut self, id: EntityId) {
+    pub fn insert_as_root(&mut self, id: SlotId) {
         self.resize_if_needed(id.index());
     }
 
@@ -135,7 +130,7 @@ impl SparseTree {
     /// This will calculate if it's the first child of the parent,
     /// or the next sibling of parent's last child.
     #[inline(always)]
-    pub fn insert_with_parent(&mut self, id: EntityId, parent: EntityId) {
+    pub fn insert_with_parent(&mut self, id: SlotId, parent: SlotId) {
         self.try_insert_with_parent(id, parent).unwrap()
     }
 
@@ -143,7 +138,7 @@ impl SparseTree {
     /// Adding an entity to be the child of a `maybe parent`.
     /// This will calculate if it's the first child of the parent, or the next sibling of parent's last child.
     /// If a [`TreeError`] is returned it means that the parent is invalid, usually because you haven't registered it to the tree
-    pub fn try_insert_with_parent(&mut self, id: EntityId, parent: EntityId) -> Result<(), TreeError> {
+    pub fn try_insert_with_parent(&mut self, id: SlotId, parent: SlotId) -> Result<(), TreeError> {
         let parent_index = parent.index();
         if parent_index >= self.parent.len() { return Err(TreeError::InvalidEntityId) }
 
@@ -163,7 +158,7 @@ impl SparseTree {
 
     /// Add a sibling to an entity. This will check the current sibling of the entity.
     /// If [`None`], immediately sets the next sibling. If [`Some`], loop until find the last sibling.
-    pub fn add_sibling(&mut self, id: EntityId, sibling: EntityId) {
+    pub fn add_sibling(&mut self, id: SlotId, sibling: SlotId) {
         self.try_add_sibling(id, sibling).unwrap()
     }
 
@@ -171,7 +166,7 @@ impl SparseTree {
     /// If the returned result is [`TreeError`], this means the provided entity is either not registered,
     /// or is actually a root. Maybe you want to add a root instead
     #[inline(always)]
-    pub fn try_add_sibling(&mut self, id: EntityId, sibling: EntityId) -> Result<(), TreeError> {
+    pub fn try_add_sibling(&mut self, id: SlotId, sibling: SlotId) -> Result<(), TreeError> {
         if id.index() >= self.parent.len() { return Err(TreeError::InvalidEntityId) }
 
         let Some(parent) = self.get_parent(id) else { return Err(TreeError::InvalidEntityId) };
@@ -183,7 +178,7 @@ impl SparseTree {
     }
 
     #[inline(always)]
-    pub fn insert_subtree(&mut self, subtree: SubTree, parent: Option<EntityId>) {
+    pub fn insert_subtree(&mut self, subtree: SubTree, parent: Option<SlotId>) {
         self.insert(*subtree.id(), parent);
         subtree.iter_member_ref()
             .for_each(|node_ref| {
@@ -192,14 +187,14 @@ impl SparseTree {
     }
 
     #[inline(always)]
-    pub fn detach_if_needed(&mut self, id: EntityId) {
+    pub fn detach_if_needed(&mut self, id: SlotId) {
         if self.contains(id) {
             self.detach(id);
         }
     }
 
     #[inline(always)]
-    pub fn detach(&mut self, id: EntityId) {
+    pub fn detach(&mut self, id: SlotId) {
         let prev = self.get_prev_sibling(id);
         let next = self.get_next_sibling(id);
 
@@ -215,7 +210,7 @@ impl SparseTree {
     }
 
     #[inline(always)]
-    pub fn set_child(&mut self, id: EntityId, child: EntityId) {
+    pub fn set_child(&mut self, id: SlotId, child: SlotId) {
         self.detach(child);
         self.insert_with_parent(child, id);
     }
@@ -223,7 +218,7 @@ impl SparseTree {
     #[inline(always)]
     /// Currently produces another Tree with the member of the removed entity.
     /// Kinda inefficient if the entity has super big index.
-    pub fn remove(&mut self, id: EntityId) -> Self {
+    pub fn remove(&mut self, id: SlotId) -> Self {
         let mut removed_branch = Self::default();
         removed_branch.insert_as_root(id);
 
@@ -248,7 +243,7 @@ impl SparseTree {
         removed_branch
     }
 
-    pub fn remove_subtree(&mut self, id: EntityId) -> SubTree {
+    pub fn remove_subtree(&mut self, id: SlotId) -> SubTree {
         let subtree = SubTree::from_tree(id, self);
 
         self.detach(id);
@@ -268,7 +263,7 @@ impl SparseTree {
     }
 
     /// the distance of an entity from the root
-    pub fn entity_depth(&self, id: EntityId) -> usize {
+    pub fn entity_depth(&self, id: SlotId) -> usize {
         let mut current = id;
         let mut depth = 0;
         while let Some(parent) = self.get_parent(current) {
@@ -285,7 +280,7 @@ impl SparseTree {
             .count()
     }
 
-    fn ancestors_with_sibling(&self, id: EntityId) -> Vec<bool> {
+    fn ancestors_with_sibling(&self, id: SlotId) -> Vec<bool> {
         let mut current = id;
         let mut loc = vec![];
         while let Some(parent) = self.get_parent(current) {
@@ -296,7 +291,7 @@ impl SparseTree {
         loc
     }
 
-    pub fn is_member_of(&self, id: EntityId, ancestor: EntityId) -> bool {
+    pub fn is_member_of(&self, id: SlotId, ancestor: SlotId) -> bool {
         if self.get_first_child(ancestor).is_none() {
             return false
         }
@@ -310,7 +305,7 @@ impl SparseTree {
         check == ancestor
     }
 
-    pub fn len(&self, start: EntityId) -> usize {
+    pub fn len(&self, start: SlotId) -> usize {
         self.iter_depth(start).count()
     }
 
@@ -318,7 +313,7 @@ impl SparseTree {
         self.parent.is_empty()
     }
 
-    pub fn contains(&self, id: EntityId) -> bool {
+    pub fn contains(&self, id: SlotId) -> bool {
         id.index() <= self.parent.len()
         && (
             self.parent.contains(&Some(id))
@@ -340,34 +335,34 @@ impl SparseTree {
     }
 
     /// iterate the children of the entity
-    pub fn iter_children<'a>(&'a self, id: EntityId) -> TreeChildIter<'a> {
+    pub fn iter_children<'a>(&'a self, id: SlotId) -> TreeChildIter<'a> {
         TreeChildIter::new(self, id)
     }
 
     /// iterate the members of the entity
-    pub fn iter_depth<'a>(&'a self, id: EntityId) -> TreeDepthIter<'a> {
+    pub fn iter_depth<'a>(&'a self, id: SlotId) -> TreeDepthIter<'a> {
         TreeDepthIter::new(self, id)
     }
 
     /// iterate the entity's parent upward
-    pub fn iter_ancestry<'a>(&'a self, id: EntityId) -> TreeAncestryIter<'a> {
+    pub fn iter_ancestry<'a>(&'a self, id: SlotId) -> TreeAncestryIter<'a> {
         TreeAncestryIter::new(self, id)
     }
 
     /// iterate the member of the iterator and map it to a [`NodeRef`](crate::iterator::NodeRef)
-    pub fn iter_node<'a>(&'a self, id: EntityId) -> TreeNodeIter<'a> {
+    pub fn iter_node<'a>(&'a self, id: SlotId) -> TreeNodeIter<'a> {
         TreeNodeIter::new(self, id)
     }
 
     #[inline(always)]
-    fn get_frame<'a>(&self, id: EntityId) -> &'a str {
+    fn get_frame<'a>(&self, id: SlotId) -> &'a str {
         match self.get_next_sibling(id) {
             Some(_) => "├─",
             None => "└─",
         }
     }
 
-    pub fn recursively_fill_string_buffer(&self, start: Option<EntityId>, s: &mut String) {
+    pub fn recursively_fill_string_buffer(&self, start: Option<SlotId>, s: &mut String) {
         match start {
             Some(parent) => {
                 self.iter_children(parent).for_each(|child| {
@@ -446,6 +441,223 @@ impl std::error::Error for TreeError {}
 /*
 #########################################################
 #                                                       #
+#                    TreeNode Iterator                  #
+#                                                       #
+#########################################################
+*/
+
+pub struct TreeNodeIter<'a> {
+    inner: TreeDepthIter<'a>
+}
+
+impl<'a> TreeNodeIter<'a> {
+    pub(crate) fn new(tree: &'a SparseTree, id: SlotId) -> Self {
+        Self {
+            inner: TreeDepthIter::new(tree, id)
+        }
+    }
+}
+
+impl<'a> Iterator for TreeNodeIter<'a> {
+    type Item = Node;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner
+            .next()
+            .map(|id| {
+                Node {
+                    entity: id,
+                    parent: self.inner.tree.get_parent(id),
+                    first_child: self.inner.tree.get_first_child(id),
+                    next_sibling: self.inner.tree.get_next_sibling(id),
+                    prev_sibling: self.inner.tree.get_prev_sibling(id),
+                }
+            })
+    }
+}
+
+/*
+#########################################################
+#                                                       #
+#                  TREE::child_iterator                 #
+#                                                       #
+#########################################################
+*/
+
+pub struct TreeChildIter<'a> {
+    tree: &'a SparseTree,
+    next: Option<SlotId>,
+    back: Option<SlotId>,
+}
+
+impl<'a> TreeChildIter<'a> {
+    pub(crate) fn new(tree: &'a SparseTree, id: SlotId) -> Self {
+        let next = tree.get_first_child(id);
+        let back = tree.get_last_child(id);
+        Self {
+            tree,
+            next,
+            back,
+        }
+    }
+}
+
+impl<'a> Iterator for TreeChildIter<'a> {
+    type Item = SlotId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = self.next.take();
+        if let Some(current) = next {
+            self.next = self.tree.get_next_sibling(current)
+        }
+        next
+    }
+}
+
+impl<'a> DoubleEndedIterator for TreeChildIter<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        let back = self.back.take();
+        if let Some(current) = back {
+            self.back = self.tree.get_prev_sibling(current)
+        }
+        back
+    }
+}
+
+/*
+#########################################################
+#                                                       #
+#                 TREE::depth_iterator                  #
+#                                                       #
+#########################################################
+*/
+
+// TODO: Make a double-ended iterator
+/// Depth first traversal
+pub struct TreeDepthIter<'a> {
+    tree: &'a SparseTree,
+    id: SlotId,
+    next: Option<SlotId>,
+}
+
+impl<'a> TreeDepthIter<'a> {
+    pub(crate) fn new(tree: &'a SparseTree, id: SlotId) -> Self {
+        Self {
+            tree,
+            id,
+            next: Some(id),
+        }
+    }
+}
+
+impl<'a> Iterator for TreeDepthIter<'a> {
+    type Item = SlotId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = self.next.take();
+
+        if let Some(current) = next {
+            if let Some(first_child) = self.tree.get_first_child(current) {
+                self.next = Some(first_child);
+            } else if let Some(next_sibling) = self.tree.get_next_sibling(current) {
+                self.next = Some(next_sibling);
+            } else {
+                // arrived at the last child position
+                let mut curr = current;
+
+                while let Some(parent) = self.tree.get_parent(curr) {
+                    if parent == self.id { break }
+
+                    if let Some(next_sibling) = self.tree.get_next_sibling(parent) {
+                        self.next = Some(next_sibling);
+                        break
+                    }
+
+                    curr = parent;
+                }
+            }
+        }
+
+        next
+    }
+}
+
+/*
+#########################################################
+#                                                       #
+#                TREE::ancestor_iterator                #
+#                                                       #
+#########################################################
+*/
+
+pub struct TreeAncestryIter<'a> {
+    tree: &'a SparseTree,
+    id: SlotId,
+}
+
+impl<'a> TreeAncestryIter<'a> {
+    pub(crate) fn new(tree: &'a SparseTree, id: SlotId) -> Self {
+        Self {
+            tree,
+            id,
+        }
+    }
+}
+
+impl<'a> Iterator for TreeAncestryIter<'a> {
+    type Item = SlotId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = self.tree.get_parent(self.id);
+        if let Some(next) = next {
+            self.id = next;
+        }
+        next
+    }
+}
+
+/*
+#########################################################
+#                                                       #
+#              TREE::double_ended_iterator              #
+#                                                       #
+#########################################################
+*/
+
+// pub(crate) enum Direction {
+//     EnteringFirstChild,
+//     EnteringNextSibling,
+// }
+
+// pub(crate) struct DirectionalTreeIter<'a, E: Entity> {
+//     tree: &'a Tree<E>,
+//     next: Option<E>,
+//     direction: Direction,
+// }
+
+// impl<'a, E: Entity> Iterator for DirectionalTreeIter<'a, E> {
+//     type Item = E;
+
+//     fn next(&mut self) -> Option<Self::Item> {
+//         let next = self.next.take();
+//         if let Some(current) = next {}
+//         next
+//     }
+// }
+
+// impl<'a, E: Entity> DoubleEndedIterator for DirectionalTreeIter<'a, E> {
+//     fn next_back(&mut self) -> Option<Self::Item> {
+//         let next = self.next.take();
+//         if let Some(current) = next {
+//             if let Some(prev_sibling) = self.tree.get_prev_sibling(current) {}
+//         }
+//         next
+//     }
+// }
+
+/*
+#########################################################
+#                                                       #
 #                         TEST                          #
 #                                                       #
 #########################################################
@@ -454,18 +666,18 @@ impl std::error::Error for TreeError {}
 #[cfg(test)]
 mod tree_test {
     use super::*;
-    use crate::{EntityId, EntityManager};
+    use crate::map::slot_map::SlotMap;
 
-    fn setup_tree(num: usize) -> (EntityManager, SparseTree) {
-        let mut manager = EntityManager::default();
-        let root = manager.create().id();
+    fn setup_tree(num: usize) -> (SlotMap<()>, SparseTree) {
+        let mut manager = SlotMap::new();
+        let root = manager.insert(());
         let mut tree = SparseTree::with_capacity(num);
         let mut parent = Some(root);
         for i in 0..num {
-            let id = manager.create().id();
+            let id = manager.insert(());
             tree.insert(id, parent);
             if i > 0 && i % 3 == 0 {
-                parent = tree.get_first_child(EntityId::new(1));
+                parent = tree.get_first_child(SlotId::new(1, 0));
             } else {
                 parent = Some(id);
             }
@@ -480,19 +692,19 @@ mod tree_test {
         // eprintln!("{tree:?}");
         // eprintln!("{:?}", tree.parent);
 
-        let ancestor_id = EntityId::new(9);
+        let ancestor_id = SlotId::new(9, 0);
         let ancestor = tree.get_root(ancestor_id);
 
-        let test_id_6 = EntityId::new(6);
+        let test_id_6 = SlotId::new(6, 0);
         let parent = tree.get_parent(test_id_6);
-        let four_is_mem_of_two = tree.is_member_of(EntityId::new(4), EntityId::new(2));
-        let nine_is_mem_of_two = tree.is_member_of(EntityId::new(9), EntityId::new(2));
+        let four_is_mem_of_two = tree.is_member_of(SlotId::new(4, 0), SlotId::new(2, 0));
+        let nine_is_mem_of_two = tree.is_member_of(SlotId::new(9, 0), SlotId::new(2, 0));
 
-        let test_id_4 = EntityId::new(4);
+        let test_id_4 = SlotId::new(4, 0);
         let next_sibling = tree.get_next_sibling(test_id_4);
 
-        assert_eq!(ancestor, Some(EntityId::new(0)));
-        assert_eq!(parent, Some(EntityId::new(5)));
+        assert_eq!(ancestor, Some(SlotId::new(0, 0)));
+        assert_eq!(parent, Some(SlotId::new(5, 0)));
         assert_eq!(four_is_mem_of_two, nine_is_mem_of_two);
         assert_eq!(next_sibling, None);
     }
@@ -502,7 +714,7 @@ mod tree_test {
         let (_, tree) = setup_tree(11);
         // eprintln!("{tree:?}");
 
-        let root = EntityId::new(0);
+        let root = SlotId::new(0, 0);
         let root_children = tree.iter_children(root).count();
         let all = tree.iter_children(root)
             .map(|id| tree.iter_depth(id).count())
@@ -510,7 +722,7 @@ mod tree_test {
 
         assert_eq!(all + root_children, tree.len(root));
 
-        let subtree_len = tree.len(EntityId::new(5));
+        let subtree_len = tree.len(SlotId::new(5, 0));
 
         assert_eq!(subtree_len, 3);
     }
@@ -518,17 +730,17 @@ mod tree_test {
     #[test]
     fn remove_first_child() {
         let (_, mut tree) = setup_tree(11);
-        let root = EntityId::new(0);
+        let root = SlotId::new(0, 0);
         let initial_len = tree.len(root);
 
         // eprintln!("{tree:?}");
 
-        let test_id2 = EntityId::new(2);
+        let test_id2 = SlotId::new(2, 0);
         let first_child = tree.get_first_child(test_id2).unwrap();
-        assert_eq!(first_child, EntityId::new(3));
+        assert_eq!(first_child, SlotId::new(3, 0));
 
-        let removed = tree.remove(EntityId::new(3));
-        let removed_len = removed.len(EntityId::new(3));
+        let removed = tree.remove(SlotId::new(3, 0));
+        let removed_len = removed.len(SlotId::new(3, 0));
         let after_remove_len = tree.len(root);
         assert_eq!(removed_len, 2);
         assert_eq!(after_remove_len, initial_len - removed_len);
@@ -542,11 +754,11 @@ mod tree_test {
     #[test]
     fn remove_sub_tree() {
         let (_, mut tree) = setup_tree(11);
-        let root = EntityId::new(0);
+        let root = SlotId::new(0, 0);
         let len = tree.len(root);
         // eprintln!("{tree:?}");
 
-        let id = EntityId::new(8);
+        let id = SlotId::new(8, 0);
         let removed = tree.remove_subtree(id);
         let removed_len = removed.len();
         // eprintln!("{removed:?}");
@@ -561,30 +773,12 @@ mod tree_test {
     #[test]
     fn sibling_test() {
         let (mut manager, mut tree) = setup_tree(11);
-        let existing_entity = EntityId::new(6);
-        let new_id = manager.create().id();
+        let existing_entity = SlotId::new(6, 0);
+        let new_id = manager.insert(());
         let err_add = tree.try_add_sibling(new_id, existing_entity);
         assert!(err_add.is_err());
 
         let ok_add = tree.try_add_sibling(existing_entity, new_id);
         assert!(ok_add.is_ok());
     }
-
-    // #[test]
-    // fn stress_test() {
-    //     const NUM: usize = 1 << 19;
-    //     let (_, tree) = setup_tree(NUM);
-
-    //     let now = std::time::Instant::now();
-    //     let n = tree.iter_depth(TestId::root()).count();
-    //     eprintln!("depth traverse time for {n} nodes: {:?}", now.elapsed());
-
-    //     let now = std::time::Instant::now();
-    //     let n = tree.iter_breadth(TestId::root()).count();
-    //     eprintln!("forward breadth traverse time for {n} nodes: {:?}", now.elapsed());
-
-    //     let now = std::time::Instant::now();
-    //     let n = tree.iter_breadth(TestId::root()).rev().count();
-    //     eprintln!("backward breadth traverse time for {n} nodes: {:?}", now.elapsed());
-    // }
 }

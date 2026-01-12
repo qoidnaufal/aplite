@@ -31,7 +31,7 @@ pub enum Axis {
     Vertical,
 }
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Padding {
     pub top: u8,
     pub bottom: u8,
@@ -123,10 +123,10 @@ impl<'a> LayoutCx<'a> {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Spacing(pub(crate) u8);
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LayoutRules {
     pub(crate) padding: Padding,
     pub(crate) orientation: Axis,

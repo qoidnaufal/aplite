@@ -44,5 +44,5 @@ pub mod prelude {
 
 pub mod color {
     pub use aplite_types::theme;
-    pub use aplite_types::{Rgba, rgb, rgba, hex};
+    pub use aplite_types::{Color, rgb, rgba};
 }

@@ -18,8 +18,8 @@ pub use vector::{vec2f, vec2u};
 
 pub use shapes::{Rect, Circle, RoundedRect};
 
-pub use paint::color::Rgba;
-pub use paint::color::{rgba, rgb, hex};
+pub use paint::color::Color;
+pub use paint::color::{rgba, rgb};
 pub use paint::color::theme;
 
 pub use paint::{Paint, PaintRef};

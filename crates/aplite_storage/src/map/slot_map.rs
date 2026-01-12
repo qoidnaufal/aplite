@@ -1,53 +1,8 @@
-use super::slot::Slot;
 use core::slice::{Iter as SliceIter, IterMut as SliceIterMut};
 use core::iter::{FilterMap, Enumerate};
 
-/*
-#########################################################
-#
-# SlotId
-#
-#########################################################
-*/
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SlotId {
-    pub(crate) index: u32,
-    pub(crate) version: u32,
-}
-
-impl SlotId {
-    pub const fn new(index: u32, version: u32) -> Self {
-        Self {
-            index,
-            version,
-        }
-    }
-
-    pub const fn version(&self) -> u32 {
-        self.version
-    }
-
-    pub const fn index(&self) -> usize {
-        self.index as _
-    }
-
-    pub const fn raw(&self) -> u64 {
-        (self.version as u64) << 32 | self.index as u64
-    }
-}
-
-impl std::hash::Hash for SlotId {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_u32(self.index);
-    }
-}
-
-impl std::fmt::Debug for SlotId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SlotId({})", self.index)
-    }
-}
+use super::slot::Slot;
+use super::id::SlotId;
 
 /*
 #########################################################
@@ -101,8 +56,8 @@ impl<T> SlotMap<T> {
         self.try_insert(data).unwrap()
     }
 
-    pub fn try_insert(&mut self, data: T) -> Result<SlotId, IndexMapError<T>> {
-        if self.count == u32::MAX { return Err(IndexMapError::ReachedMaxCapacity(data)) }
+    pub fn try_insert(&mut self, data: T) -> Result<SlotId, Error<T>> {
+        if self.count == u32::MAX { return Err(Error::ReachedMaxCapacity(data)) }
 
         match self.inner.get_mut(self.next as usize) {
             // after removal
@@ -139,15 +94,15 @@ impl<T> SlotMap<T> {
             })
     }
 
-    pub fn replace(&mut self, index: &SlotId, data: T) -> Result<T, IndexMapError<T>> {
+    pub fn replace(&mut self, index: &SlotId, data: T) -> Result<T, Error<T>> {
         match self.inner.get_mut(index.index()) {
             Some(slot) => {
                 let Some(prev) = slot.get_validated_mut(index.version) else {
-                    return Err(IndexMapError::InvalidSlot(data))
+                    return Err(Error::InvalidSlot(data))
                 };
                 Ok(core::mem::replace(prev, data))
             },
-            None => Err(IndexMapError::InvalidIndex(data)),
+            None => Err(Error::InvalidIndex(data)),
         }
     }
 
@@ -226,31 +181,31 @@ impl<T> std::ops::IndexMut<SlotId> for SlotMap<T> {
 }
 
 /// It's important to return the data here, in case non-copy data is being used and data is needed in error handling
-pub enum IndexMapError<T> {
+pub enum Error<T> {
     ReachedMaxCapacity(T),
     InvalidIndex(T),
     InvalidSlot(T),
 }
 
-impl<T> std::fmt::Debug for IndexMapError<T> {
+impl<T> std::fmt::Debug for Error<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = match self {
-            IndexMapError::ReachedMaxCapacity(_) => "ReachedMaxCapacity",
-            IndexMapError::InvalidIndex(_) => "InvalidIndex",
-            IndexMapError::InvalidSlot(_) => "InvalidSlot",
+            Error::ReachedMaxCapacity(_) => "ReachedMaxCapacity",
+            Error::InvalidIndex(_) => "InvalidIndex",
+            Error::InvalidSlot(_) => "InvalidSlot",
         };
 
         write!(f, "{msg}")
     }
 }
 
-impl<T> std::fmt::Display for IndexMapError<T> {
+impl<T> std::fmt::Display for Error<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Debug::fmt(self, f)
     }
 }
 
-impl<T> std::error::Error for IndexMapError<T> {}
+impl<T> std::error::Error for Error<T> {}
 
 /*
 #########################################################

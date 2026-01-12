@@ -1,11 +1,10 @@
 use std::marker::PhantomData;
-use aplite_renderer::{Scene, DrawArgs};
-use aplite_types::{Length, Matrix3x2, PaintRef, Rect, Rgba, Size};
+use aplite_types::{Length, Rect, Color, Size};
 use aplite_types::theme::basic;
 
 use crate::layout::{AlignH, AlignV, LayoutCx, LayoutRules, Axis, Padding, Spacing};
 use crate::context::Context;
-use crate::state::{Background, BorderColor, BorderWidth};
+use crate::state::BorderWidth;
 use crate::view::{ForEachView, IntoView};
 use crate::widget::Widget;
 
@@ -52,8 +51,8 @@ where
     pub(crate) content: C::View,
     width: Length,
     height: Length,
-    background: Background,
-    border_color: BorderColor,
+    background: Color,
+    border_color: Color,
     border_width: BorderWidth,
     padding: Padding,
     spacing: Spacing,
@@ -72,8 +71,8 @@ where
             content: widget.into_view(),
             width: Length::Grow,
             height: Length::Grow,
-            background: Background(basic::TRANSPARENT),
-            border_color: BorderColor(basic::TRANSPARENT),
+            background: basic::TRANSPARENT,
+            border_color: basic::TRANSPARENT,
             border_width: BorderWidth(0.),
             padding: Padding::splat(5),
             align_h: AlignH::Left,
@@ -107,12 +106,12 @@ where
         Self { align_v, ..self }
     }
 
-    pub fn with_background(self, color: Rgba) -> Self {
-        Self { background: Background(color), ..self }
+    pub fn with_background(self, color: Color) -> Self {
+        Self { background: color, ..self }
     }
 
-    pub fn with_border_color(self, color: Rgba) -> Self {
-        Self { border_color: BorderColor(color), ..self }
+    pub fn with_border_color(self, color: Color) -> Self {
+        Self { border_color: color, ..self }
     }
 
     pub fn with_border_width(self, width: f32) -> Self {
@@ -126,48 +125,40 @@ where
     C::View: ForEachView,
     AX: StackDirection + 'static,
 {
-    fn width(&self) -> Length {
-        self.width
-    }
+    // fn layout_node_size(&self, bound: Size) -> Size {
+    //     let mut content_size = Size::default();
+    //     let child_count = self.content.count();
 
-    fn height(&self) -> Length {
-        self.height
-    }
+    //     match AX::AXIS {
+    //         Axis::Horizontal => {
+    //             let bound = Size::new(bound.width / child_count as f32, bound.height);
 
-    fn layout_node_size(&self, bound: Size) -> Size {
-        let mut content_size = Size::default();
-        let child_count = self.content.count();
+    //             self.content.for_each(|child| {
+    //                 let cs = child.layout_node_size(bound);
+    //                 content_size.width += cs.width;
+    //                 content_size.height = content_size.height.max(cs.height);
+    //             });
 
-        match AX::AXIS {
-            Axis::Horizontal => {
-                let bound = Size::new(bound.width / child_count as f32, bound.height);
+    //             content_size.width += ((child_count - 1) * self.spacing.0 as usize) as f32;
+    //         },
+    //         Axis::Vertical => {
+    //             let bound = Size::new(bound.width, bound.height / child_count as f32);
 
-                self.content.for_each(|child| {
-                    let cs = child.layout_node_size(bound);
-                    content_size.width += cs.width;
-                    content_size.height = content_size.height.max(cs.height);
-                });
+    //             self.content.for_each(|w| {
+    //                 let cs = w.layout_node_size(bound);
+    //                 content_size.height += cs.height;
+    //                 content_size.width = content_size.width.max(cs.width);
+    //             });
 
-                content_size.width += ((child_count - 1) * self.spacing.0 as usize) as f32;
-            },
-            Axis::Vertical => {
-                let bound = Size::new(bound.width, bound.height / child_count as f32);
+    //             content_size.height += ((child_count - 1) * self.spacing.0 as usize) as f32;
+    //         }
+    //     }
 
-                self.content.for_each(|w| {
-                    let cs = w.layout_node_size(bound);
-                    content_size.height += cs.height;
-                    content_size.width = content_size.width.max(cs.width);
-                });
+    //     content_size.width += self.padding.horizontal() as f32;
+    //     content_size.height += self.padding.vertical() as f32;
 
-                content_size.height += ((child_count - 1) * self.spacing.0 as usize) as f32;
-            }
-        }
-
-        content_size.width += self.padding.horizontal() as f32;
-        content_size.height += self.padding.vertical() as f32;
-
-        content_size
-    }
+    //     content_size
+    // }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         let size = Size::default();
@@ -186,19 +177,6 @@ where
 
         self.content.layout(&mut cx);
     }
-
-    fn draw(&self, scene: &mut Scene) {
-        scene.draw(DrawArgs {
-            rect: &Rect::default(),
-            transform: &Matrix3x2::identity(),
-            background_paint: &PaintRef::Color(&self.background.0),
-            border_paint: &PaintRef::Color(&self.border_color.0),
-            border_width: &self.border_width.0,
-            shape: &aplite_renderer::Shape::Rect,
-            corner_radius: &aplite_types::CornerRadius::splat(0),
-        });
-        self.content.draw(scene);
-    }
 }
 
 impl<C, AX> ForEachView for Stack<C, AX>
@@ -213,18 +191,5 @@ where
 
     fn for_each_mut(&mut self, f: impl FnMut(&mut dyn Widget)) {
         self.content.for_each_mut(f);
-    }
-}
-
-impl<C, AX> IntoView for Stack<C, AX>
-where
-    C: IntoView,
-    C::View: ForEachView,
-    AX: StackDirection + 'static,
-{
-    type View = Self;
-
-    fn into_view(self) -> Self::View {
-        self
     }
 }

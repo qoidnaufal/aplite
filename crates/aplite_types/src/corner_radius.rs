@@ -1,5 +1,5 @@
 #[repr(C)]
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct CornerRadius {
     pub tl: u8,
     pub bl: u8,

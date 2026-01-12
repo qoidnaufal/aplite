@@ -159,20 +159,20 @@ impl<T: PartialEq + 'static> Memo<T> {
 
 impl<T: 'static> Memo<T> {
     pub fn with_compare(
-        f: impl Fn(Option<&T>) -> T + 'static,
-        compare: impl Fn(Option<&T>, Option<&T>) -> bool + 'static,
+        memoize_fn: impl Fn(Option<&T>) -> T + 'static,
+        compare_fn: impl Fn(Option<&T>, Option<&T>) -> bool + 'static,
     ) -> Self
     {
         let state = Arc::new_cyclic(move |weak| {
             let this = AnySubscriber::from_weak(Weak::clone(weak));
 
-            let memoize_fn = move |prev: Option<T>| {
-                let new_value = f(prev.as_ref());
-                let changed = compare(prev.as_ref(), Some(&new_value));
+            let f = move |prev: Option<T>| {
+                let new_value = memoize_fn(prev.as_ref());
+                let changed = compare_fn(prev.as_ref(), Some(&new_value));
                 (new_value, changed)
             };
 
-            MemoState::new(Box::new(memoize_fn), this)
+            MemoState::new(Box::new(f), this)
         });
 
         Self { node: ReactiveStorage::insert(state) }
@@ -189,15 +189,15 @@ impl<T> Copy for Memo<T> {}
 
 impl<T: 'static> Source for Memo<T> {
     fn add_subscriber(&self, subscriber: AnySubscriber) {
-        ReactiveStorage::with_downcast(&self.node, |state| {
+        ReactiveStorage::map_with_downcast(&self.node, |state| {
             state.add_subscriber(subscriber);
-        })
+        });
     }
 
     fn clear_subscribers(&self) {
-        ReactiveStorage::with_downcast(&self.node, |state| {
+        ReactiveStorage::map_with_downcast(&self.node, |state| {
             state.clear_subscribers();
-        })
+        });
     }
 }
 
@@ -209,15 +209,15 @@ impl<T: 'static> ToAnySource for Memo<T> {
 
 impl<T: 'static> Subscriber for Memo<T> {
     fn add_source(&self, source: AnySource) {
-        ReactiveStorage::with_downcast(&self.node, |state| {
+        ReactiveStorage::map_with_downcast(&self.node, |state| {
             state.add_source(source);
-        })
+        });
     }
 
     fn clear_sources(&self) {
-        ReactiveStorage::with_downcast(&self.node, |state| {
+        ReactiveStorage::map_with_downcast(&self.node, |state| {
             state.clear_sources();
-        })
+        });
     }
 }
 
@@ -229,15 +229,16 @@ impl<T: 'static> ToAnySubscriber for Memo<T> {
 
 impl<T: 'static> Reactive for Memo<T> {
     fn mark_dirty(&self) {
-        ReactiveStorage::with_downcast(&self.node, |state| {
+        ReactiveStorage::map_with_downcast(&self.node, |state| {
             state.mark_dirty();
-        })
+        });
     }
 
     fn try_update(&self) -> bool {
-        ReactiveStorage::with_downcast(&self.node, |state| {
-            state.try_update()
-        })
+        ReactiveStorage::map_with_downcast(&self.node, Arc::downgrade)
+            .and_then(|weak| weak.upgrade())
+            .map(|arc| arc.try_update())
+            .unwrap_or_default()
     }
 }
 
@@ -258,11 +259,7 @@ impl<T: 'static> Read for Memo<T> {
     type Value = T;
 
     fn read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> R {
-        if let Some(state) = ReactiveStorage::with_downcast(&self.node, Arc::downgrade)
-            .upgrade()
-        {
-            state.try_update();
-        }
+        self.try_update();
 
         ReactiveStorage::with_downcast(&self.node, |state| {
             f(state.read_value().as_ref().unwrap())
@@ -270,11 +267,7 @@ impl<T: 'static> Read for Memo<T> {
     }
 
     fn try_read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> Option<R> {
-        if let Some(state) = ReactiveStorage::map_with_downcast(&self.node, Arc::downgrade)
-            .and_then(|weak| weak.upgrade())
-        {
-            state.try_update();
-        }
+        self.try_update();
 
         ReactiveStorage::try_with_downcast(&self.node, |state| {
             state.read_value().as_ref().map(f)
@@ -330,24 +323,25 @@ mod memo_test {
         });
 
         let delta = 200;
+
         Executor::spawn(async move {
             let duration = std::time::Duration::from_millis(delta);
 
             set_name.set("Mario");
             sleep(duration).await;
-            assert!(memoized.with(|&name| name == "Mario"));
+            assert!(memoized.with_untracked(|&name| name == "Mario"));
 
             set_name.set("Ballotelli");
             sleep(duration).await;
-            assert!(memoized.with(|&name| name == "Ballotelli"));
+            assert!(memoized.with_untracked(|&name| name == "Ballotelli"));
 
             set_name.set("Darwin");
             sleep(duration).await;
-            assert!(memoized.with(|&name| name == "Darwin"));
+            assert!(memoized.with_untracked(|&name| name == "Darwin"));
 
             set_name.set("Nunez");
             sleep(duration).await;
-            assert!(memoized.with(|&name| name == "Nunez"));
+            assert!(memoized.with_untracked(|&name| name == "Nunez"));
         });
 
         std::thread::sleep(std::time::Duration::from_millis(delta * 4));

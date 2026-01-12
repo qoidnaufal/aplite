@@ -36,7 +36,8 @@ impl<T: 'static> SignalState<T> {
 
 impl<T: 'static> Reactive for RwLock<SignalState<T>> {
     fn mark_dirty(&self) {
-        self.write().unwrap()
+        self.write()
+            .unwrap()
             .subscribers
             .mark_dirty()
     }
@@ -48,13 +49,15 @@ impl<T: 'static> Reactive for RwLock<SignalState<T>> {
 
 impl<T: 'static> Source for RwLock<SignalState<T>> {
     fn add_subscriber(&self, subscriber: AnySubscriber) {
-        self.write().unwrap()
+        self.write()
+            .unwrap()
             .subscribers
             .push(subscriber)
     }
 
     fn clear_subscribers(&self) {
-        self.write().unwrap()
+        self.write()
+            .unwrap()
             .subscribers
             .clear()
     }
@@ -97,11 +100,8 @@ impl<T: 'static> Signal<T> {
 impl<T: 'static> Reactive for Signal<T> {
     #[inline(always)]
     fn mark_dirty(&self) {
-        ReactiveStorage::with_downcast(&self.node, |state| {
-            state.write().unwrap()
-                .subscribers
-                .mark_dirty()
-        })
+        ReactiveStorage::map_with_downcast(&self.node, |state| state.mark_dirty());
+        // ReactiveStorage::with_downcast(&self.node, |state| { state.mark_dirty() })
     }
 
     fn try_update(&self) -> bool {
@@ -111,17 +111,20 @@ impl<T: 'static> Reactive for Signal<T> {
 
 impl<T: 'static> Source for Signal<T> {
     fn add_subscriber(&self, subscriber: AnySubscriber) {
-        ReactiveStorage::with_downcast(&self.node, |state| state.add_subscriber(subscriber))
+        ReactiveStorage::map_with_downcast(&self.node, |state| state.add_subscriber(subscriber));
     }
 
     fn clear_subscribers(&self) {
-        ReactiveStorage::with_downcast(&self.node, |state| state.clear_subscribers())
+        ReactiveStorage::map_with_downcast(&self.node, |state| state.clear_subscribers());
     }
 }
 
 impl<T: 'static> ToAnySource for Signal<T> {
     fn to_any_source(&self) -> AnySource {
-        ReactiveStorage::with_downcast(&self.node, AnySource::new)
+        // WARN: check here if something doesn't work
+        ReactiveStorage::map_with_downcast(&self.node, AnySource::new)
+            .unwrap_or_else(AnySource::empty::<RwLock<SignalState<T>>>)
+        // ReactiveStorage::with_downcast(&self.node, AnySource::new)
     }
 }
 
@@ -158,11 +161,6 @@ impl<T: 'static> Read for Signal<T> {
     fn try_read<R, F: FnOnce(&Self::Value) -> R>(&self, f: F) -> Option<R> {
         ReactiveStorage::try_with_downcast(&self.node, |state| {
             state.read().ok().map(|val| f(&val.value))
-            // s.as_deref().map(|val| f(&val.value))
-            // state.and_then(|ss| {
-            //     let m = ss.read().ok();
-            //     f(m.as_deref().map(|s| &s.value))
-            // })
         })
     }
 }
@@ -198,9 +196,9 @@ impl<T: 'static> Write for Signal<T> {
     type Value = T;
 
     fn write(&self, f: impl FnOnce(&mut Self::Value)) {
-        ReactiveStorage::with_downcast(&self.node, |state| {
+        ReactiveStorage::map_with_downcast(&self.node, |state| {
             f(&mut state.write().unwrap().value)
-        })
+        });
     }
 }
 

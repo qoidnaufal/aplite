@@ -1,9 +1,12 @@
 use std::alloc;
-use std::mem;
 use std::ptr::NonNull;
 use std::marker::PhantomData;
 
-use crate::arena::ptr::ArenaPtr;
+pub(crate) struct RawBuffer {
+    pub(crate) ptr: NonNull<u8>,
+    pub(crate) capacity: usize,
+    needs_drop: Option<unsafe fn(*mut u8, usize)>,
+}
 
 /// This is equivalent to a Vec<Box\<dyn Any\>>, but without the need to Box the element on insertion.
 /// Performance wise, with naive duration-based testing, this data structure is very competitive against std::Vec.
@@ -18,6 +21,20 @@ pub struct TypeErasedBuffer {
     item_layout: alloc::Layout,
 }
 
+/// Similar with [`TypeErasedBuffer`] but this buffer is not keeping track of how many items have been allocated.
+/// This is done this way because usually this buffer will be paired with a Vec\<EntityId\> for example
+/// 
+/// # Safety
+/// - You have to manually keep track on the amount of the items you have pushed, so you can
+/// - Manually [`clear`](UnmanagedBuffer::clear), by providing the number of elements, before dropping this.
+/// - Getters method are unchecked, because the caller will need to do the check beforehand (ie: check if a ComponentStorage contains an Entity).
+///
+/// Not calling clear before dropping may potentially cause a memory leak
+pub struct UnmanagedBuffer {
+    pub(crate) raw: RawBuffer,
+    item_layout: alloc::Layout,
+}
+
 impl Drop for TypeErasedBuffer {
     fn drop(&mut self) {
         self.clear();
@@ -26,11 +43,11 @@ impl Drop for TypeErasedBuffer {
 }
 
 impl TypeErasedBuffer {
-    pub fn new<T>() -> Self {
+    pub const fn new<T>() -> Self {
         let item_layout = alloc::Layout::new::<T>();
 
         Self {
-            raw: RawBuffer::new::<T>(),
+            raw: RawBuffer::new(&item_layout, crate::needs_drop::<T>()),
             len: 0,
             item_layout,
         }
@@ -39,7 +56,7 @@ impl TypeErasedBuffer {
     #[inline]
     pub fn with_capacity<T>(capacity: usize) -> Self {
         let item_layout = alloc::Layout::new::<T>();
-        let block = RawBuffer::with_capacity::<T>(capacity, item_layout);
+        let block = RawBuffer::with_capacity(&item_layout, crate::needs_drop::<T>(), capacity);
 
         Self {
             raw: block,
@@ -84,37 +101,32 @@ impl TypeErasedBuffer {
     /// This method assumes that buffer is already initialized via [`with_capacity`](Self::with_capacity).
     /// If you provided zero capacity on initialization, first push will return error.
     /// Since there will be no reallocation, it's safe to return the pointer to the allocated data.
-    pub fn push_within_capacity<T>(&mut self, data: T) -> Result<ArenaPtr<T>, Error> {
-        self.check()?;
-        let raw = unsafe { self.push_unchecked(data) };
+    pub fn push_within_capacity<T>(&mut self, data: T) -> Result<(), Error> {
+        self.raw.check(self.len)?;
+        unsafe { self.push_unchecked(data); }
 
-        Ok(ArenaPtr::new(raw))
-    }
-
-    #[inline(always)]
-    const fn check(&self) -> Result<(), Error> {
-        if self.raw.capacity == 0 {
-            return Err(Error::Uninitialized);
-        } else if self.len == self.raw.capacity {
-            return Err(Error::MaxCapacityReached);
-        } else {
-            Ok(())
-        }
+        Ok(())
     }
 
     pub fn push<T>(&mut self, data: T) {
-        if let Err(err) = self.check() {
-            let new_capacity = match err {
-                Error::MaxCapacityReached => self.raw.capacity + 4,
-                Error::Uninitialized => 4,
-            };
-
-            self.raw.grow::<T>(self.item_layout, new_capacity);
+        if let Err(_) = self.raw.check(self.len) {
+            self.raw.grow(&self.item_layout, self.raw.capacity + 4);
         }
 
         unsafe {
             self.push_unchecked(data);
         }
+    }
+
+    pub fn extend<T>(&mut self, len: usize, iter: impl IntoIterator<Item = T>) {
+        if let Err(_) = self.raw.check(self.len + len) {
+            let new_capacity = self.raw.capacity + len;
+            self.raw.grow(&self.item_layout, new_capacity);
+        }
+
+        iter.into_iter().for_each(|data| unsafe {
+            self.push_unchecked(data);
+        });
     }
 
     pub(crate) fn clear(&mut self) {
@@ -211,20 +223,6 @@ impl TypeErasedBuffer {
 #########################################################
 */
 
-/// Similar with [`TypeErasedBuffer`] but this buffer is not keeping track of how many items have been allocated.
-/// This is done this way because usually this buffer will be paired with a Vec\<EntityId\> for example
-/// 
-/// # Safety
-/// - You have to manually keep track on the amount of the items you have pushed, so you can
-/// - Manually [`clear`](UnmanagedBuffer::clear), by providing the number of elements, before dropping this.
-/// - Getters method are unchecked, because the caller will need to do the check beforehand (ie: check if a ComponentStorage contains an Entity).
-///
-/// Not calling clear before dropping may potentially cause a memory leak
-pub struct UnmanagedBuffer {
-    pub(crate) raw: RawBuffer,
-    item_layout: alloc::Layout,
-}
-
 impl Drop for UnmanagedBuffer {
     fn drop(&mut self) {
         self.raw.dealloc(self.item_layout);
@@ -232,17 +230,23 @@ impl Drop for UnmanagedBuffer {
 }
 
 impl UnmanagedBuffer {
-    pub const fn new<T>() -> Self {
+    pub const fn new(
+        item_layout: alloc::Layout,
+        needs_drop: Option<unsafe fn(*mut u8, usize)>,
+    ) -> Self {
         Self {
-            raw: RawBuffer::new::<T>(),
-            item_layout: alloc::Layout::new::<T>(),
+            raw: RawBuffer::new(&item_layout, needs_drop),
+            item_layout,
         }
     }
 
     #[inline]
-    pub fn with_capacity<T>(capacity: usize) -> Self {
-        let item_layout = alloc::Layout::new::<T>();
-        let raw = RawBuffer::with_capacity::<T>(capacity, item_layout);
+    pub fn with_capacity(
+        item_layout: alloc::Layout,
+        needs_drop: Option<unsafe fn(*mut u8, usize)>,
+        capacity: usize,
+    ) -> Self {
+        let raw = RawBuffer::with_capacity(&item_layout, needs_drop, capacity);
 
         Self {
             raw,
@@ -278,32 +282,17 @@ impl UnmanagedBuffer {
     /// # Safety
     /// This method assumes that buffer is already initialized via [`with_capacity`](Self::with_capacity).
     /// So it's safe to return the pointer to the allocated data, because there's no reallocation that will cause the pointer to be invalid.
-    pub fn push_within_capacity<T>(&mut self, data: T, offset: usize) -> Result<ArenaPtr<T>, Error> {
-        self.check(offset)?;
-        let raw = unsafe { self.push_unchecked(data, offset) };
+    pub fn push_within_capacity<T>(&mut self, data: T, offset: usize) -> Result<(), Error> {
+        self.raw.check(offset)?;
+        unsafe { self.push_unchecked(data, offset); }
 
-        Ok(ArenaPtr::new(raw))
-    }
-
-    #[inline(always)]
-    const fn check(&self, offset: usize) -> Result<(), Error> {
-        if self.raw.capacity == 0 {
-            return Err(Error::Uninitialized);
-        } else if offset == self.raw.capacity {
-            return Err(Error::MaxCapacityReached);
-        } else {
-            Ok(())
-        }
+        Ok(())
     }
 
     pub fn push<T>(&mut self, data: T, offset: usize) {
-        if let Err(err) = self.check(offset) {
-            let new_capacity = match err {
-                Error::MaxCapacityReached => self.raw.capacity + 4,
-                Error::Uninitialized => 4,
-            };
-
-            self.raw.grow::<T>(self.item_layout, new_capacity);
+        if let Err(_) = self.raw.check(offset) {
+            let new_capacity = self.raw.capacity + 4;
+            self.raw.grow(&self.item_layout, new_capacity);
         }
 
         unsafe {
@@ -311,45 +300,48 @@ impl UnmanagedBuffer {
         }
     }
 
-    /// # Safety
-    /// The end bound must be provided: exclusive (1..3), or inclusive (..=2).
-    /// Unbounded end-bound (4..) will panic because the length of the buffer is unknown
-    pub fn as_slice<T>(&self, range: impl std::ops::RangeBounds<usize>) -> &[T] {
-        let start = match range.start_bound() {
-            std::ops::Bound::Included(&val) => val,
-            std::ops::Bound::Excluded(_) => unreachable!(),
-            std::ops::Bound::Unbounded => 0,
-        };
-
-        let end = match range.end_bound() {
-            std::ops::Bound::Included(&val) => val + 1,
-            std::ops::Bound::Excluded(&val) => val,
-            std::ops::Bound::Unbounded => panic!(
-                "Buffer has no information on the length of elements,
-                must provide the end bound of the range"
-            ),
-        };
+    pub fn push_raw(&mut self, data: *mut u8, offset: usize) {
+        if let Err(_) = self.raw.check(offset) {
+            let new_capacity = self.raw.capacity + 4;
+            self.raw.grow(&self.item_layout, new_capacity);
+        }
 
         unsafe {
-            let len = if end == start {
-                1
-            } else {
-                end.saturating_sub(start)
-            };
-
-            let data = self.raw.ptr.cast::<T>().add(start).as_ptr().cast_const();
-
-            &*std::ptr::slice_from_raw_parts(data, len)
+            self.raw.push_raw(data, offset, &self.item_layout);
         }
+    }
+
+    pub fn extend<T>(&mut self, offset: usize, len: usize, iter: impl IntoIterator<Item = T>) {
+        let upper_offset = offset + len;
+        if let Err(_) = self.raw.check(upper_offset) {
+            let new_capacity = self.raw.capacity + len;
+            self.raw.grow(&self.item_layout, new_capacity);
+        }
+
+        (offset..upper_offset).zip(iter.into_iter()).for_each(|(idx, data)| unsafe {
+            self.push_unchecked(data, idx);
+        });
     }
 
     #[inline(always)]
     pub fn swap_remove<R>(&mut self, index: usize, len: usize) -> Option<R> {
-        if len > 0{
+        if len > 0 {
             unsafe {
                 let last_index = len - 1;
                 let ptr = self.raw.swap_remove_or_pop(index, last_index, self.item_layout.size());
                 return Some(ptr.cast::<R>().read());
+            }
+        }
+
+        None
+    }
+
+    pub fn swap_remove_raw(&mut self, index: usize, len: usize) -> Option<*mut u8> {
+        if len > 0 {
+            unsafe {
+                let last_index = len - 1;
+                let ptr = self.raw.swap_remove_or_pop(index, last_index, self.item_layout.size());
+                return Some(ptr);
             }
         }
 
@@ -389,33 +381,34 @@ impl UnmanagedBuffer {
 #########################################################
 */
 
-pub(crate) struct RawBuffer {
-    pub(crate) ptr: NonNull<u8>,
-    pub(crate) capacity: usize,
-    drop: Option<unsafe fn(*mut u8, usize)>,
-}
-
 impl RawBuffer {
-    pub(crate) const fn new<T>() -> Self {
+    pub(crate) const fn new(
+        item_layout: &alloc::Layout,
+        needs_drop: Option<unsafe fn(*mut u8, usize)>,
+    ) -> Self {
         Self {
             ptr: NonNull::dangling(),
-            capacity: if size_of::<T>() == 0 { usize::MAX } else { 0 },
-            drop: None,
+            capacity: if item_layout.size() == 0 { usize::MAX } else { 0 },
+            needs_drop,
         }
     }
 
     #[inline(always)]
-    pub(crate) fn with_capacity<T>(capacity: usize, item_layout: alloc::Layout) -> Self {
-        let mut this = Self::new::<T>();
+    pub(crate) fn with_capacity(
+        item_layout: &alloc::Layout,
+        needs_drop: Option<unsafe fn(*mut u8, usize)>,
+        capacity: usize,
+    ) -> Self {
+        let mut this = Self::new(item_layout, needs_drop);
 
         if capacity > 0 && this.capacity == 0 {
-            this.grow::<T>(item_layout, capacity);
+            this.grow(item_layout, capacity);
         }
 
         this
     }
 
-    pub(crate) fn grow<T>(&mut self, item_layout: alloc::Layout, new_capacity: usize) {
+    pub(crate) fn grow(&mut self, item_layout: &alloc::Layout, new_capacity: usize) {
         let size_t = item_layout.size();
         let align_t = item_layout.align();
         let new_size = size_t * new_capacity;
@@ -440,16 +433,16 @@ impl RawBuffer {
             },
             None => alloc::handle_alloc_error(layout),
         }
+    }
 
-        if self.drop.is_none() && mem::needs_drop::<T>() {
-            #[inline]
-            unsafe fn drop<T>(raw: *mut u8, len: usize) {
-                unsafe {
-                    std::ptr::slice_from_raw_parts_mut(raw.cast::<T>(), len).drop_in_place();
-                }
-            }
-
-            self.drop = Some(drop::<T>)
+    #[inline(always)]
+    const fn check(&self, offset: usize) -> Result<(), Error> {
+        if self.capacity == 0 {
+            return Err(Error::Uninitialized);
+        } else if offset >= self.capacity {
+            return Err(Error::ExceedCurrentCapacity);
+        } else {
+            Ok(())
         }
     }
 
@@ -481,9 +474,41 @@ impl RawBuffer {
         }
     }
 
+    pub(crate) unsafe fn push_raw(
+        &mut self,
+        data: *mut u8,
+        offset: usize,
+        item_layout: &alloc::Layout
+    ) {
+        let size_t = item_layout.size();
+
+        if size_t == 0 {
+            unsafe {
+                let ptr = self.ptr.as_ptr();
+                std::ptr::copy(data.cast_const(), ptr, size_t);
+            }
+        } else {
+            unsafe {
+                let aligned_offset = self.ptr.align_offset(item_layout.align());
+                let offset = aligned_offset + offset;
+                let raw = self.ptr.add(offset * size_t);
+                std::ptr::copy(data.cast_const(), raw.as_ptr(), size_t);
+            }
+        }
+
+        unsafe {
+            alloc::dealloc(data, *item_layout);
+        }
+    }
+
     #[inline(always)]
     /// this method already handle if index is equal to last_index or not -> swapping or popping
-    pub(crate) unsafe fn swap_remove_or_pop(&mut self, index: usize, last_index: usize, size_t: usize) -> *mut u8 {
+    pub(crate) unsafe fn swap_remove_or_pop(
+        &mut self,
+        index: usize,
+        last_index: usize,
+        size_t: usize,
+    ) -> *mut u8 {
         if size_t == 0 {
             let ptr = std::ptr::without_provenance_mut(self.ptr.as_ptr() as usize + index);
             return ptr;
@@ -503,13 +528,13 @@ impl RawBuffer {
 
     #[inline(always)]
     pub(crate) fn clear(&mut self, len: usize) {
-        let drop = self.drop.take();
-        if let Some(drop) = drop {
+        let needs_drop = self.needs_drop.take();
+        if let Some(drop_fn) = needs_drop {
             unsafe {
-                drop(self.ptr.as_ptr(), len)
+                drop_fn(self.ptr.as_ptr(), len)
             }
         }
-        self.drop = drop;
+        self.needs_drop = needs_drop;
     }
 
     #[inline(always)]
@@ -667,7 +692,7 @@ impl<'a, T: 'a> DoubleEndedIterator for IterMut<'a, T> {
 
 #[derive(Debug)]
 pub enum Error {
-    MaxCapacityReached,
+    ExceedCurrentCapacity,
     Uninitialized,
 }
 
@@ -706,7 +731,7 @@ mod buffer_test {
     #[test]
     fn push_and_get() {
         let mut buffer = TypeErasedBuffer::with_capacity::<Obj>(1);
-        assert!(buffer.raw.drop.is_some());
+        assert!(buffer.raw.needs_drop.is_some());
 
         let balo = Obj { name: "Balo".to_string(), age: 69 };
         let nunez = Obj { name: "Nunez".to_string(), age: 888 };
@@ -765,18 +790,19 @@ mod buffer_test {
 
     #[test]
     fn unmanaged() {
-        let mut buffer = UnmanagedBuffer::with_capacity::<&'static str>(2);
+        let layout = alloc::Layout::new::<&'static str>();
+        let drop_fn = crate::needs_drop::<&'static str>();
+
+        let mut buffer = UnmanagedBuffer::with_capacity(layout, drop_fn, 2);
+
         buffer.push("Balo", 0);
         buffer.push("Nunez", 1);
 
-        let slice = buffer.as_slice::<&str>(..2);
-        println!("{slice:?}");
+        let balo = unsafe { buffer.get_unchecked::<&str>(0) };
+        println!("{balo:?}");
 
-        let slice = buffer.as_slice::<&str>(1..1);
-        println!("{slice:?}");
-
-        let slice = buffer.as_slice::<&str>(2..1);
-        println!("{slice:?}");
+        let nunez = unsafe { buffer.get_unchecked::<&str>(1) };
+        println!("{nunez:?}");
 
         buffer.clear(2);
         drop(buffer);

@@ -1,13 +1,13 @@
-use crate::entity::EntityId;
+use crate::map::id::SlotId;
 use super::sparse_tree::SparseTree;
 
 #[derive(Debug)]
 pub struct Node {
-    pub entity: EntityId,
-    pub parent: Option<EntityId>,
-    pub first_child: Option<EntityId>,
-    pub next_sibling: Option<EntityId>,
-    pub prev_sibling: Option<EntityId>,
+    pub entity: SlotId,
+    pub parent: Option<SlotId>,
+    pub first_child: Option<SlotId>,
+    pub next_sibling: Option<SlotId>,
+    pub prev_sibling: Option<SlotId>,
 }
 
 impl Node {
@@ -32,11 +32,11 @@ impl Node {
 
 #[derive(Debug)]
 pub struct NodeRef<'a> {
-    pub entity: EntityId,
-    pub parent: Option<&'a EntityId>,
-    pub first_child: Option<&'a EntityId>,
-    pub next_sibling: Option<&'a EntityId>,
-    pub prev_sibling: Option<&'a EntityId>,
+    pub entity: SlotId,
+    pub parent: Option<&'a SlotId>,
+    pub first_child: Option<&'a SlotId>,
+    pub next_sibling: Option<&'a SlotId>,
+    pub prev_sibling: Option<&'a SlotId>,
 }
 
 impl NodeRef<'_> {
@@ -54,19 +54,19 @@ impl NodeRef<'_> {
 // }
 
 pub struct SubTree {
-    id: EntityId,
+    id: SlotId,
     nodes: Vec<Node>
 }
 
 impl SubTree {
-    pub fn new(id: EntityId) -> Self {
+    pub fn new(id: SlotId) -> Self {
         Self {
             id,
             nodes: Vec::new(),
         }
     }
 
-    pub(crate) fn from_tree(id: EntityId, tree: &SparseTree) -> Self {
+    pub(crate) fn from_tree(id: SlotId, tree: &SparseTree) -> Self {
         let nodes = tree.iter_node(id)
             .skip(1)
             .collect();
@@ -76,11 +76,11 @@ impl SubTree {
         }
     }
 
-    pub fn id(&self) -> &EntityId {
+    pub fn id(&self) -> &SlotId {
         &self.id
     }
 
-    pub fn add_child(&mut self, child: EntityId) {
+    pub fn add_child(&mut self, child: SlotId) {
         let child_node = Node {
             entity: child,
             parent: Some(self.id),

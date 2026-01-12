@@ -16,7 +16,9 @@ impl Bitset {
     /// the bit you want to add is at index:       8765(4)3210
     /// so you pass 4 to [`Bitset::add_bit`]
     pub fn add_bit(&mut self, index: usize) {
-        self.0 |= 1 << index
+        if !self.contains_index(index) {
+            self.0 |= 1 << index
+        }
     }
 
     /// say you have this: 0b111010001
@@ -77,6 +79,12 @@ impl std::fmt::Debug for Bitset {
 impl std::fmt::Display for Bitset {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Debug::fmt(self, f)
+    }
+}
+
+impl FromIterator<usize> for Bitset {
+    fn from_iter<T: IntoIterator<Item = usize>>(iter: T) -> Self {
+        Self(iter.into_iter().sum::<usize>())
     }
 }
 

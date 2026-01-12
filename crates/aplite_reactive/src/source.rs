@@ -3,6 +3,13 @@ use std::sync::{Weak, Arc};
 use crate::subscriber::AnySubscriber;
 use crate::reactive_traits::*;
 
+pub trait Source: Reactive {
+    fn add_subscriber(&self, subscriber: AnySubscriber);
+    fn clear_subscribers(&self);
+}
+
+pub struct AnySource(pub(crate) Weak<dyn Source>);
+
 #[derive(Default)]
 pub struct Sources(pub(crate) Vec<AnySource>);
 
@@ -25,11 +32,14 @@ impl Sources {
     }
 }
 
-pub struct AnySource(pub(crate) Weak<dyn Source>);
-
 impl AnySource {
     pub fn new<T: Source + 'static>(arc: &Arc<T>) -> Self {
         let weak: Weak<T> = Arc::downgrade(arc);
+        Self(weak)
+    }
+
+    pub fn empty<T: Source + 'static>() -> Self {
+        let weak: Weak<T> = Weak::new();
         Self(weak)
     }
 
@@ -60,11 +70,6 @@ impl Reactive for AnySource {
     fn try_update(&self) -> bool {
         self.update_if_necessary()
     }
-}
-
-pub trait Source: Reactive {
-    fn add_subscriber(&self, subscriber: AnySubscriber);
-    fn clear_subscribers(&self);
 }
 
 impl Source for AnySource {

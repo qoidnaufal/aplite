@@ -1,9 +1,27 @@
-use aplite_storage::{make_component, Component, EntityId, ComponentStorage};
-use aplite_types::Rgba;
-use aplite_bitset::Bitset;
+#[derive(Debug, Clone, Copy)]
+pub struct BorderWidth(pub(crate) f32);
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Flag(u8);
+#[derive(Debug, Clone, Copy)]
+pub struct Radius(pub(crate) f32);
+
+macro_rules! partial_eq {
+    ($name:ident) => {
+        impl PartialEq for $name {
+            fn eq(&self, other: &Self) -> bool {
+                self.0 == other.0
+            }
+        }
+
+        impl Eq for $name {}
+    };
+}
+
+partial_eq!(BorderWidth);
+partial_eq!(Radius);
+
+
+// #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+// pub struct Flag(u8);
 
 // impl Flag {
 //     pub(crate) const VISIBLE: u8 = 1 << 0;
@@ -70,21 +88,3 @@ pub struct Flag(u8);
 //         Self(Self::DEFAULT)
 //     }
 // }
-
-#[derive(Clone, PartialEq)]
-pub struct Background(pub Rgba);
-
-#[derive(Clone, PartialEq)]
-pub struct BorderColor(pub Rgba);
-
-#[derive(Clone, Copy, PartialEq)]
-pub struct BorderWidth(pub(crate) f32);
-
-#[derive(Clone, Copy, PartialEq)]
-pub struct Radius(pub(crate) f32);
-
-make_component!(Flag);
-make_component!(Background);
-make_component!(BorderColor);
-make_component!(BorderWidth);
-make_component!(Radius);

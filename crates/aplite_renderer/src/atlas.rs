@@ -3,7 +3,7 @@ use std::collections::HashMap;
 // use wgpu::util::DeviceExt;
 
 use aplite_types::{Rect, Size, Point, ImageRef};
-use aplite_storage::{SparseTree, EntityManager, EntityId, EntityIdMap};
+use aplite_storage::{SparseTree, SlotMap, SlotId};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Uv {
@@ -249,9 +249,8 @@ impl Atlas {
 /// This means the total width of the first child's siblings + their childrens <= first child's rect
 struct AtlasAllocator {
     bound: Rect,
-    last_root: Option<EntityId>,
-    id_manager: EntityManager,
-    allocated: EntityIdMap<Rect>,
+    last_root: Option<SlotId>,
+    allocated: SlotMap<Rect>,
     tree: SparseTree,
 }
 
@@ -260,8 +259,7 @@ impl AtlasAllocator {
         Self {
             bound: Rect::from_size(size.into()),
             last_root: None,
-            id_manager: EntityManager::default(),
-            allocated: HashMap::default(),
+            allocated: SlotMap::new(),
             tree: SparseTree::default(),
         }
     }
@@ -275,9 +273,8 @@ impl AtlasAllocator {
             Some(last_root) => {
                 if let Some((parent, pos)) = self.scan(new_size) {
                     let rect = Rect::from_point_size(pos, new_size);
-                    let id = self.id_manager.create().id();
+                    let id = self.allocated.insert(rect);
 
-                    self.allocated.insert(id, rect);
                     self.tree.insert_with_parent(id, parent);
 
                     Some(rect)
@@ -286,9 +283,8 @@ impl AtlasAllocator {
                     let next_y = self.allocated.get(&last_root).unwrap().max_y();
                     let pos = Point::new(0.0, next_y);
                     let rect = Rect::from_point_size(pos, new_size);
-                    let id = self.id_manager.create().id();
+                    let id = self.allocated.insert(rect);
 
-                    self.allocated.insert(id, rect);
                     self.tree.insert_as_root(id);
                     self.last_root = Some(id);
 
@@ -298,9 +294,8 @@ impl AtlasAllocator {
             None => {
                 // first insert
                 let rect = Rect::from_size(new_size);
-                let id = self.id_manager.create().id();
+                let id = self.allocated.insert(rect);
 
-                self.allocated.insert(id, rect);
                 self.tree.insert_as_root(id);
                 self.last_root = Some(id);
         
@@ -311,13 +306,13 @@ impl AtlasAllocator {
 
     #[inline(always)]
     /// scan each roots and try to find available position within the identified root
-    fn scan(&self, new_size: Size) -> Option<(EntityId, Point)> {
+    fn scan(&self, new_size: Size) -> Option<(SlotId, Point)> {
         self.iter_roots()
             .find_map(|(root, bound_rect)| self.identify_member(root, bound_rect, new_size))
     }
 
     #[inline(always)]
-    fn iter_roots<'a>(&'a self) -> impl Iterator<Item = (EntityId, &'a Rect)> {
+    fn iter_roots<'a>(&'a self) -> impl Iterator<Item = (SlotId, &'a Rect)> {
         self.tree
             .roots()
             .filter_map(|id| {
@@ -330,10 +325,10 @@ impl AtlasAllocator {
     #[inline(always)]
     fn identify_member(
         &self,
-        root: EntityId,
+        root: SlotId,
         bound_rect: &Rect,
         new_size: Size,
-    ) -> Option<(EntityId, Point)> {
+    ) -> Option<(SlotId, Point)> {
         if let Some(first) = self.tree.get_first_child(root) {
             // the first rect will set the boundary of it's siblings if any
             let first_rect = self.allocated.get(&first).unwrap();
@@ -377,10 +372,10 @@ impl AtlasAllocator {
     #[inline(always)]
     fn indentify_next_sibling(
         &self,
-        current: EntityId,
+        current: SlotId,
         first_rect_bound: &Rect,
         new_size: Size,
-    ) -> Option<(EntityId, Point)> {
+    ) -> Option<(SlotId, Point)> {
         let current_rect = self.allocated.get(&current).unwrap();
 
         let cond1 = new_size.width + current_rect.max_x() <= first_rect_bound.max_x();

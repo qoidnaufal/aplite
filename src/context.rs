@@ -1,9 +1,9 @@
 use std::num::NonZeroUsize;
+use std::any::Any;
 
 use aplite_reactive::*;
-use aplite_renderer::{Renderer, Scene};
+use aplite_renderer::Renderer;
 use aplite_types::{Rect, Size, Vec2f};
-use aplite_storage::{Component, ComponentStorage, Entity, EntityManager};
 
 use crate::view::IntoView;
 use crate::cursor::{Cursor, MouseAction, MouseButton};
@@ -11,13 +11,12 @@ use crate::widget::Widget;
 // use crate::callback::CallbackStorage;
 
 pub struct Context {
-    pub(crate) id_manager: EntityManager,
-    pub(crate) storage: ComponentStorage,
+    pub(crate) view_state: Vec<Box<dyn Any>>,
     // pub(crate) callbacks: CallbackStorage,
     pub(crate) dirty: Signal<bool>,
     pub(crate) cursor: Cursor,
     pub(crate) window_rect: Rect,
-    pub(crate) pending_update: Vec<Entity>,
+    pub(crate) pending_update: Vec<NodeId>,
 }
 
 /*
@@ -31,8 +30,7 @@ pub struct Context {
 impl Context {
     pub(crate) fn new(size: Size, _allocation_size: NonZeroUsize) -> Self {
         Self {
-            id_manager: EntityManager::default(),
-            storage: ComponentStorage::new(),
+            view_state: Vec::new(),
             // callbacks: CallbackStorage::default(),
             cursor: Cursor::default(),
             dirty: Signal::new(false),
@@ -41,20 +39,16 @@ impl Context {
         }
     }
 
-    pub(crate) fn create_entity(&mut self) -> Entity {
-        self.id_manager.create()
+    pub fn insert_state<S: Send + Sync + 'static>(&mut self, state: S) -> Node<S> {
+        ReactiveStorage::insert(state)
     }
 
-    pub fn spawn<C: Component>(&mut self, component: C) -> Entity {
-        let entity = self.create_entity();
-        self.storage.insert_component(entity.id(), component);
-        entity
-    }
-
-    pub fn spawn_with_parent<C: Component>(&mut self, parent: Entity, component: C) -> Entity {
-        let entity = self.create_entity();
-        self.storage.insert_component(entity.id(), component);
-        entity
+    pub fn map_state_mut<F, R, U>(&self, node: &Node<R>, f: F) -> Option<U>
+    where
+        F: FnOnce(&R) -> U,
+        R: 'static,
+    {
+        ReactiveStorage::map_with_downcast(node, f)
     }
 
     pub fn mount<IV: IntoView>(&mut self, widget: IV) {
@@ -154,7 +148,6 @@ impl Context {
 
     pub(crate) fn render<W: Widget>(&self, widget: &W, renderer: &mut Renderer) {
         let mut scene = renderer.scene();
-        widget.draw(&mut scene);
     }
 }
 

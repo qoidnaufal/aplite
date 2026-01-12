@@ -1,53 +1,30 @@
-mod arena;
 mod buffer;
-mod data;
-mod entity;
-mod iterator;
 mod map;
-mod sparse_set;
 mod tree;
 
-pub use buffer::{
-    TypeErasedBuffer,
-    UnmanagedBuffer,
-    Iter,
-    IterMut,
-};
-
-pub use entity::{
-    EntityManager,
-    Entity,
-    EntityId,
-    EntityVersion
-};
+pub use buffer::*;
 
 pub use tree::{
     sparse_tree::{SparseTree, TreeError},
     node::{Node, NodeRef, SubTree},
 };
 
-pub use data::{
-    archetype::ArchetypeTable,
-    component::{Component, ComponentEq},
-    query::{Query, QueryData},
-    component_storage::ComponentStorage,
-};
-
-pub use arena::{
-    non_static_arena::Arena,
-    static_arena::StaticArena,
-    ptr::{ArenaPtr, ValidCheckedPtr},
-};
-
 pub use map::{
-    dense_slotmap::DenseSlotMap,
-    slot_map::{SlotMap, SlotId, IndexMapError},
-    hash::{EntityIdMap, TypeIdMap},
+    id::SlotId,
+    slot_map::{SlotMap, Error}
 };
 
-pub use sparse_set::{
-    SparseSet, TypeErasedSparseSet,
-    indices::{SparseIndices, SparsetKey},
-};
+pub const fn needs_drop<T>() -> Option<unsafe fn(*mut u8, usize)> {
+    #[inline]
+    unsafe fn drop<T>(raw: *mut u8, len: usize) {
+        unsafe {
+            std::ptr::slice_from_raw_parts_mut(raw.cast::<T>(), len).drop_in_place();
+        }
+    }
 
-pub use iterator::{TreeChildIter, TreeDepthIter};
+    if std::mem::needs_drop::<T>() {
+        Some(drop::<T>)
+    } else {
+        None
+    }
+}
