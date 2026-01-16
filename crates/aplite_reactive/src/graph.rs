@@ -259,8 +259,6 @@ impl Observer {
 #########################################################
 */
 
-pub struct NodeId(SlotId);
-
 pub struct Node<R> {
     pub(crate) id: SlotId,
     marker: PhantomData<R>,

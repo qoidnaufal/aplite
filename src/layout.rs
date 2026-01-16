@@ -5,8 +5,7 @@ use aplite_types::{
     Length
 };
 
-use crate::context::Context;
-use crate::widget::Widget;
+use crate::context::{Context, ViewPath};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlignH {
@@ -88,7 +87,8 @@ pub enum LayoutResult {
 
 pub struct LayoutCx<'a> {
     pub(crate) cx: &'a mut Context,
-    pub(crate) next_pos: Vec2f,
+    pub(crate) path: ViewPath,
+    pub(crate) bound: Rect,
     pub(crate) rules: LayoutRules,
 }
 
@@ -96,30 +96,18 @@ impl<'a> LayoutCx<'a> {
     pub fn new(
         cx: &'a mut Context,
         rules: LayoutRules,
-        rect: Rect,
-        child_size: f32,
-        child_count: usize
+        bound: Rect,
     ) -> Self {
-        let next_pos = rules.start_pos(rect, child_size, child_count as f32);
         Self {
             cx,
+            path: ViewPath::new(),
+            bound,
             rules,
-            next_pos,
         }
     }
 
-    pub fn get_next_pos(&mut self, size: Size) -> Vec2f {
-        let ret = self.next_pos;
-        match self.rules.orientation {
-            Axis::Horizontal => {
-                self.next_pos.x += size.width + self.rules.spacing.0 as f32;
-            },
-            Axis::Vertical => {
-                self.next_pos.y += size.height + self.rules.spacing.0 as f32;
-            },
-        }
-
-        ret
+    pub fn get_available_space(&self) -> Size {
+        self.bound.size()
     }
 }
 

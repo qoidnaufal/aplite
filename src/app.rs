@@ -52,7 +52,7 @@ impl<IV: IntoView> Aplite<IV> {
         Self {
             view: view.into_view(),
             renderer: None,
-            cx: Context::new(config.window_inner_size, config.allocation_size),
+            cx: Context::new(config.window_inner_size),
             window: None,
 
             #[cfg(feature = "render_stats")]
@@ -79,21 +79,21 @@ impl<IV: IntoView> Aplite<IV> {
         self.track_window(Arc::clone(&window));
         self.window = Some(window);
 
-        let rect = self.cx.window_rect;
-        let mut layout_cx = LayoutCx::new(
-            &mut self.cx,
-            LayoutRules {
-                padding: Padding::splat(5),
-                orientation: Axis::Vertical,
-                align_h: AlignH::Left,
-                align_v: AlignV::Top,
-                spacing: Spacing(5),
-            },
-            rect,
-            0.,
-            0
-        );
-        self.view.layout(&mut layout_cx);
+        // let rect = self.cx.window_rect;
+        // let mut layout_cx = LayoutCx::new(
+        //     &mut self.cx,
+        //     LayoutRules {
+        //         padding: Padding::splat(5),
+        //         orientation: Axis::Vertical,
+        //         align_h: AlignH::Left,
+        //         align_v: AlignV::Top,
+        //         spacing: Spacing(5),
+        //     },
+        //     rect,
+        //     0.,
+        //     0
+        // );
+        // self.view.layout(&mut layout_cx);
 
         Ok(())
     }

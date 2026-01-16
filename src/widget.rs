@@ -1,10 +1,10 @@
 use aplite_reactive::*;
-use aplite_types::{Length, Color, Vec2f, rgb, rgba};
+use aplite_types::{Color, Length, Rect, rgb, rgba};
 
 use crate::state::BorderWidth;
 use crate::layout::LayoutCx;
 use crate::view::{ForEachView, IntoView};
-use crate::context::Context;
+use crate::context::BuildCx;
 
 mod button;
 mod image;
@@ -30,11 +30,9 @@ pub trait Widget {
         std::any::type_name::<Self>()
     }
 
-    fn layout(&self, cx: &mut LayoutCx<'_>);
-}
+    fn build(&self, cx: &mut BuildCx<'_>);
 
-pub trait InteractiveWidget: Widget {
-    fn trigger(&self) {}
+    fn layout(&self, cx: &mut LayoutCx<'_>);
 }
 
 /*
@@ -54,6 +52,10 @@ where
         self().into_view().debug_name()
     }
 
+    fn build(&self, cx: &mut BuildCx<'_>) {
+        self().build(cx)
+    }
+
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         self().into_view().layout(cx);
     }
@@ -69,21 +71,14 @@ where
 
 pub fn circle() -> CircleWidget {
     CircleWidget {
-        pos: Vec2f::default(),
         radius: Length::Grow,
-        background: rgba(0xff6969ff),
-        border_color: rgb(0x000000),
-        border_width: BorderWidth(0.),
+        style_fn: None,
     }
 }
 
-#[derive(Clone, PartialEq)]
 pub struct CircleWidget {
-    pos: Vec2f,
     radius: Length,
-    background: Color,
-    border_color: Color,
-    border_width: BorderWidth,
+    style_fn: Option<Box<dyn Fn(&mut CircleState)>>,
 }
 
 impl CircleWidget {
@@ -91,29 +86,41 @@ impl CircleWidget {
         Self { radius, ..self }
     }
 
-    pub fn background(self, background: Color) -> Self {
+    pub fn style(self, style_fn: impl Fn(&mut CircleState) + 'static) -> Self {
         Self {
-            background,
-            ..self
-        }
-    }
-
-    pub fn border_color(self, border_color: Color) -> Self {
-        Self {
-            border_color,
-            ..self
-        }
-    }
-
-    pub fn border_width(self, border_width: f32) -> Self {
-        Self {
-            border_width: BorderWidth(border_width),
+            style_fn: Some(Box::new(style_fn)),
             ..self
         }
     }
 }
 
+pub struct CircleState {
+    pub rect: Rect,
+    pub background: Color,
+    pub border_color: Color,
+    pub border_width: BorderWidth,
+}
+
+impl CircleState {
+    fn new() -> Self {
+        Self {
+            rect: Rect::default(),
+            background: rgba(0xff6969ff),
+            border_color: rgb(0x000000),
+            border_width: BorderWidth(0.),
+        }
+    }
+}
+
 impl Widget for CircleWidget {
+    fn build(&self, cx: &mut BuildCx<'_>) {
+        let mut state = CircleState::new();
+        if let Some(style_fn) = self.style_fn.as_ref() {
+            style_fn(&mut state);
+        }
+        cx.insert_state(CircleState::new());
+    }
+
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         let _ = cx;
     }
@@ -139,14 +146,22 @@ where
 {
     fn debug_name(&self) -> &'static str {
         match self {
-            Either::True(iv1) => iv1.debug_name(),
-            Either::False(iv2) => iv2.debug_name(),
+            Either::True(t) => t.debug_name(),
+            Either::False(f) => f.debug_name(),
         }
     }
+
+    fn build(&self, cx: &mut BuildCx<'_>) {
+        match self {
+            Either::True(t) => t.build(cx),
+            Either::False(f) => f.build(cx),
+        }
+    }
+
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         match self {
-            Either::True(iv1) => iv1.layout(cx),
-            Either::False(iv2) => iv2.layout(cx),
+            Either::True(t) => t.layout(cx),
+            Either::False(f) => f.layout(cx),
         }
     }
 }
@@ -180,8 +195,12 @@ where
 */
 
 impl<IV: IntoView> Widget for Vec<IV> {
+    fn build(&self, cx: &mut BuildCx<'_>) {
+        self.for_each(|widget| widget.build(cx));
+    }
+
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        self.iter().for_each(|widget| widget.layout(cx));
+        self.for_each(|widget| widget.layout(cx));
     }
 }
 
@@ -208,6 +227,10 @@ impl<IV: IntoView> ForEachView for Vec<IV> {
 */
 
 impl<IV: IntoView> Widget for Box<[IV]> {
+    fn build(&self, cx: &mut BuildCx<'_>) {
+        self.for_each(|w| w.build(cx));
+    }
+
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         self.for_each(|w| w.layout(cx));
     }
@@ -236,6 +259,10 @@ impl<IV: IntoView> ForEachView for Box<[IV]> {
 */
 
 impl<IV: IntoView, const N: usize> Widget for [IV; N] {
+    fn build(&self, cx: &mut BuildCx<'_>) {
+        self.for_each(|w| w.build(cx));
+    }
+
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         self.for_each(|w| w.layout(cx));
     }
@@ -265,6 +292,13 @@ impl<IV: IntoView, const N: usize> ForEachView for [IV; N] {
 
 // -- Option<IV>
 impl<IV: IntoView> Widget for Option<IV> {
+    fn build(&self, cx: &mut BuildCx<'_>) {
+        match self {
+            Some(widget) => widget.build(cx),
+            None => {},
+        }
+    }
+
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         match self {
             Some(widget) => widget.layout(cx),
@@ -283,7 +317,8 @@ impl<IV: IntoView> Widget for Option<IV> {
 
 // -- ()
 impl Widget for () {
-    fn layout(&self, _: &mut LayoutCx<'_>) {}
+    fn build(&self, _cx: &mut BuildCx<'_>) {}
+    fn layout(&self, _cx: &mut LayoutCx<'_>) {}
 }
 
 /*
@@ -295,6 +330,10 @@ impl Widget for () {
 */
 
 impl<IV: IntoView> Widget for SignalRead<IV> {
+    fn build(&self, cx: &mut BuildCx<'_>) {
+        self.with(|w| w.build(cx))
+    }
+
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         self.with(|w| w.layout(cx))
     }
@@ -309,6 +348,10 @@ impl<IV: IntoView> Widget for SignalRead<IV> {
 */
 
 impl<IV: IntoView> Widget for Signal<IV> {
+    fn build(&self, cx: &mut BuildCx<'_>) {
+        self.with(|w| w.build(cx))
+    }
+
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         self.with(|w| w.layout(cx))
     }
@@ -323,6 +366,10 @@ impl<IV: IntoView> Widget for Signal<IV> {
 */
 
 impl<IV: IntoView + PartialEq> Widget for Memo<IV> {
+    fn build(&self, cx: &mut BuildCx<'_>) {
+        self.with(|w| w.build(cx))
+    }
+
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         self.with(|w| w.layout(cx))
     }
@@ -337,7 +384,17 @@ impl<IV: IntoView + PartialEq> Widget for Memo<IV> {
 */
 
 impl Widget for &'static str {
+    fn build(&self, cx: &mut BuildCx<'_>) {
+        cx.insert_state(());
+    }
+
     fn layout(&self, _: &mut LayoutCx<'_>) {}
+}
+
+impl Widget for String {
+    fn build(&self, _cx: &mut BuildCx<'_>) {}
+
+    fn layout(&self, _cx: &mut LayoutCx<'_>) {}
 }
 
 /*
@@ -351,7 +408,9 @@ impl Widget for &'static str {
 macro_rules! impl_view_primitive {
     ($name:ty) => {
         impl Widget for $name {
-            fn layout(&self, _: &mut LayoutCx<'_>) {}
+            fn build(&self, _cx: &mut BuildCx<'_>) {}
+
+            fn layout(&self, _cx: &mut LayoutCx<'_>) {}
         }
     };
 

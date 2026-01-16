@@ -2,7 +2,7 @@ use std::path::Path;
 
 use aplite_types::{ImageData, Length};
 
-use crate::context::Context;
+use crate::context::{Context, BuildCx};
 use crate::layout::LayoutCx;
 use crate::widget::Widget;
 
@@ -34,26 +34,37 @@ pub enum AspectRatio {
 
 
 pub struct Image {
-    width: Length,
-    height: Length,
-    aspect_ratio: AspectRatio,
     data: ImageData,
 }
 
 impl Image {
     fn new<F: Fn() -> ImageData + 'static>(image_fn: F) -> Self {
         Self {
-            width: Length::Grow,
-            height: Length::Grow,
-            aspect_ratio: AspectRatio::Source,
             data: image_fn(),
         }
     }
 }
 
-impl Widget for Image {
-    fn layout(&self, _: &mut LayoutCx<'_>) {
-        let _ = self.aspect_ratio;
-        todo!()
+pub struct ImageState {
+    pub width: Length,
+    pub height: Length,
+    pub aspect_ratio: AspectRatio,
+}
+
+impl ImageState {
+    fn new() -> Self {
+        Self {
+            width: Length::Grow,
+            height: Length::Grow,
+            aspect_ratio: AspectRatio::Source,
+        }
     }
+}
+
+impl Widget for Image {
+    fn build(&self, cx: &mut BuildCx<'_>) {
+        cx.insert_state(ImageState::new());
+    }
+
+    fn layout(&self, _cx: &mut LayoutCx<'_>) {}
 }

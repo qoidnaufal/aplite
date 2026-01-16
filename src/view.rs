@@ -1,8 +1,6 @@
-use aplite_renderer::Scene;
-use aplite_types::Size;
-
 use crate::layout::LayoutCx;
 use crate::widget::Widget;
+use crate::context::BuildCx;
 
 /*
 #########################################################
@@ -45,6 +43,8 @@ pub trait ForEachView: IntoView {
     }
 }
 
+// pub struct Children<FE: ForEachView>(FE);
+
 /*
 #########################################################
 #
@@ -80,8 +80,12 @@ impl AnyView {
 }
 
 impl Widget for AnyView {
+    fn build(&self, cx: &mut BuildCx<'_>) {
+        self.widget.build(cx);
+    }
+
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        self.as_ref().layout(cx);
+        self.widget.layout(cx);
     }
 }
 
@@ -105,7 +109,11 @@ macro_rules! impl_tuple_macro {
 
 macro_rules! view_tuple {
     ($($name:ident),*) => {
-        impl<$($name: IntoView),*> ForEachView for ($($name,)*) {
+        impl<$($name),*> ForEachView for ($($name,)*)
+        where
+            // ($($name,)*): IntoView,
+            $($name: IntoView),*,
+        {
             fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
                 #[allow(non_snake_case)]
                 let ($($name,)*) = self;
@@ -121,21 +129,32 @@ macro_rules! view_tuple {
             }
         }
 
-        impl<$($name: IntoView),*> Widget for ($($name,)*) {
+        impl<$($name),*> Widget for ($($name,)*)
+        where
+            // ($($name,)*): IntoView,
+            $($name: IntoView),*,
+        {
+            fn build(&self, cx: &mut BuildCx<'_>) {
+                let mut path_id = 0;
+
+                #[allow(non_snake_case)]
+                let ($($name,)*) = self;
+
+                ($(
+                    cx.with_id(path_id, |cx| {
+                        $name.build(cx);
+                        path_id += 1;
+                    }),
+                )*);
+            }
+
             fn layout(&self, cx: &mut LayoutCx<'_>) {
-                self.for_each(|w| w.layout(cx));
+                #[allow(non_snake_case)]
+                let ($($name,)*) = self;
+
+                ($($name.layout(cx),)*);
             }
         }
-
-        // impl<$($name: IntoView),*> IntoView for ($($name,)*) {
-        //     type View = ($($name::View,)*);
-
-        //     fn into_view(self) -> Self::View {
-        //         #[allow(non_snake_case)]
-        //         let ($($name,)*) = self;
-        //         ($($name.into_view(),)*)
-        //     }
-        // }
     };
 }
 
@@ -153,13 +172,14 @@ impl_tuple_macro!(
 mod view_test {
     use std::any::{TypeId, Any};
     use super::*;
+    use crate::layout::Padding;
+    use crate::context::Context;
     use crate::widget::*;
     use aplite_reactive::*;
 
     #[test]
     fn view_fn() {
         let name = Signal::new("Balo");
-
         let view = move || name.get();
 
         let debug_name = view.debug_name();
@@ -203,16 +223,14 @@ mod view_test {
             || button("+", || {}),
         );
 
-        let widget = e.into_view();
-
-        let name = widget.debug_name();
+        let name = e.debug_name();
         println!("{name}");
         assert!(name.contains("Button"));
 
         println!();
         set_when.set(true);
 
-        let name = widget.debug_name();
+        let name = e.debug_name();
         println!("{name}");
         assert!(name.contains("Stack"));
     }
@@ -234,5 +252,22 @@ mod view_test {
         let stack = hstack(widget);
 
         stack.for_each(|_| {});
+    }
+
+    #[test]
+    fn build() {
+        let mut context = Context::new((500, 500).into());
+        let mut cx = BuildCx::new(&mut context);
+
+        let w = hstack((
+            circle(),
+            button("", || {}),
+        ))
+        .style(|state| state.padding = Padding::splat(5));
+
+        cx.with_id(0, |cx| w.build(cx));
+
+        println!("{:?}", cx.cx.states);
+        println!("{:?}", cx.cx.view_ids);
     }
 }

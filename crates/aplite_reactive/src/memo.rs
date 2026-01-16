@@ -1,10 +1,10 @@
 use std::sync::{Arc, Weak, RwLock};
+use std::cell::UnsafeCell;
 
 use crate::graph::{ReactiveStorage, Node, Observer, Scope};
 use crate::source::{AnySource, Source, Sources, ToAnySource};
 use crate::subscriber::{AnySubscriber, Subscriber, Subscribers, ToAnySubscriber};
 use crate::reactive_traits::*;
-use crate::stored_value::Value;
 
 pub struct Memo<T> {
     node: Node<Arc<MemoState<T>>>
@@ -12,7 +12,7 @@ pub struct Memo<T> {
 
 struct MemoState<T> {
     scope: Scope,
-    stored_value: Value<Option<T>>,
+    value: UnsafeCell<Option<T>>,
     f: Box<dyn Fn(Option<T>) -> (T, bool)>,
     state: RwLock<State>
 }
@@ -39,7 +39,7 @@ impl<T> MemoState<T> {
     fn new(f: Box<dyn Fn(Option<T>) -> (T, bool)>, this: AnySubscriber) -> Self {
         Self {
             scope: Scope::new(),
-            stored_value: Value::new(None::<T>),
+            value: UnsafeCell::new(None::<T>),
             f,
             state: RwLock::new(State {
                 sources: Sources::default(),
@@ -51,11 +51,15 @@ impl<T> MemoState<T> {
     }
 
     fn read_value(&self) -> &Option<T> {
-        self.stored_value.read()
+        unsafe {
+            &*self.value.get()
+        }
     }
 
     fn write_value(&self) -> &mut Option<T> {
-        self.stored_value.write()
+        unsafe {
+            &mut *self.value.get()
+        }
     }
 
     #[inline(always)]
@@ -345,5 +349,7 @@ mod memo_test {
         });
 
         std::thread::sleep(std::time::Duration::from_millis(delta * 4));
+
+        Executor::deinit();
     }
 }

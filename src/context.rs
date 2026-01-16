@@ -1,8 +1,9 @@
-use std::num::NonZeroUsize;
 use std::any::Any;
+use std::collections::HashMap;
 
 use aplite_reactive::*;
 use aplite_renderer::Renderer;
+use aplite_storage::SlotId;
 use aplite_types::{Rect, Size, Vec2f};
 
 use crate::view::IntoView;
@@ -10,27 +11,32 @@ use crate::cursor::{Cursor, MouseAction, MouseButton};
 use crate::widget::Widget;
 // use crate::callback::CallbackStorage;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ViewId(u64);
+
+pub struct ViewPath(Vec<u32>);
+
+pub struct BuildCx<'a> {
+    pub(crate) cx: &'a mut Context,
+    pub(crate) id: u64,
+    pub(crate) path: ViewPath,
+}
+
 pub struct Context {
-    pub(crate) view_state: Vec<Box<dyn Any>>,
+    pub(crate) states: Vec<Box<dyn Any>>,
+    pub(crate) view_ids: HashMap<Box<[u32]>, ViewId>,
     // pub(crate) callbacks: CallbackStorage,
     pub(crate) dirty: Signal<bool>,
     pub(crate) cursor: Cursor,
     pub(crate) window_rect: Rect,
-    pub(crate) pending_update: Vec<NodeId>,
+    pub(crate) pending_update: Vec<SlotId>,
 }
 
-/*
-########################################################
-#
-# Data
-#
-########################################################
-*/
-
 impl Context {
-    pub(crate) fn new(size: Size, _allocation_size: NonZeroUsize) -> Self {
+    pub(crate) fn new(size: Size) -> Self {
         Self {
-            view_state: Vec::new(),
+            states: Vec::new(),
+            view_ids: HashMap::new(),
             // callbacks: CallbackStorage::default(),
             cursor: Cursor::default(),
             dirty: Signal::new(false),
@@ -39,22 +45,11 @@ impl Context {
         }
     }
 
-    pub fn insert_state<S: Send + Sync + 'static>(&mut self, state: S) -> Node<S> {
-        ReactiveStorage::insert(state)
+    pub fn build<IV: IntoView>(&mut self, view: &IV) {
+        let mut cx = BuildCx::new(self);
+        cx.with_id(0, |cx| view.build(cx));
     }
-
-    pub fn map_state_mut<F, R, U>(&self, node: &Node<R>, f: F) -> Option<U>
-    where
-        F: FnOnce(&R) -> U,
-        R: 'static,
-    {
-        ReactiveStorage::map_with_downcast(node, f)
-    }
-
-    pub fn mount<IV: IntoView>(&mut self, widget: IV) {
-        let _ = widget;
-    }
-
+ 
     pub fn layout(&mut self) {}
 
     pub(crate) fn toggle_dirty(&self) {
@@ -62,40 +57,15 @@ impl Context {
     }
 
     pub(crate) fn process_pending_update(&mut self) {
-        // NODE_STORAGE.with_borrow(|s| {
-        //     s.iter()
-        //         .filter_map(|(id, state)| {
-        //             let id = state.borrow().flag.needs_relayout.then_some(id);
-        //             state.borrow_mut().flag.needs_relayout = false;
-        //             id
-        //         })
-        //         .for_each(|id| self.pending_update.push(*id));
-        // });
 
         if !self.pending_update.is_empty() {
             self.pending_update
                 .drain(..)
                 .for_each(|_id| {
-                    // if let Some(widget) = self.view.find_parent(&id)
-                    //     && let Some(children) = widget.children_ref()
-                    // {
-                    //     widget.calculate_size(None);
-                    //     let mut cx = LayoutCx::new(widget.as_ref());
-                    //     children.iter()
-                    //         .for_each(|child| child.calculate_layout(&mut cx));
-                    // }
                 });
             self.toggle_dirty();
         }
     }
-
-/*
-#########################################################
-#
-# Cursor Event
-#
-#########################################################
-*/
 
     pub(crate) fn handle_mouse_move(&mut self, pos: impl Into<Vec2f>) {
         self.cursor.hover.pos = pos.into();
@@ -140,37 +110,99 @@ impl Context {
         // }
     }
 
-// #########################################################
-// #                                                       #
-// #                         Render                        #
-// #                                                       #
-// #########################################################
-
-    pub(crate) fn render<W: Widget>(&self, widget: &W, renderer: &mut Renderer) {
-        let mut scene = renderer.scene();
+    pub(crate) fn render<W: Widget>(&self, _widget: &W, renderer: &mut Renderer) {
+        let _scene = renderer.scene();
     }
 }
 
-// pub struct RenderCx<'a> {
-//     pub cx: &'a mut Context,
-//     pub scene: &'a mut Scene<'a>,
-// }
+/*
+#########################################################
+#
+# impl BuildCx
+#
+#########################################################
+*/
 
-// pub struct Theme {
-//     pub red0: Rgba,
-//     pub red1: Rgba,
-//     pub green0: Rgba,
-//     pub green1: Rgba,
-//     pub blue0: Rgba,
-//     pub blue1: Rgba,
-//     pub yellow0: Rgba,
-//     pub yellow1: Rgba,
-//     pub orange0: Rgba,
-//     pub orange1: Rgba,
-//     pub purple0: Rgba,
-//     pub purple1: Rgba,
-//     pub background0: Rgba,
-//     pub background1: Rgba,
-//     pub foreground0: Rgba,
-//     pub foreground1: Rgba,
-// }
+impl<'a> BuildCx<'a> {
+    pub(crate) fn new(cx: &'a mut Context) -> Self {
+        Self {
+            cx,
+            id: 0,
+            path: ViewPath::new(),
+        }
+    }
+
+    pub fn insert_state<S: 'static>(&mut self, state: S) {
+        let id = self.create_id();
+        let path = self.get_path();
+        self.cx.view_ids.insert(path, id);
+        self.cx.states.push(Box::new(state));
+    }
+
+    pub fn with_id<R: 'static>(&mut self, id_path: u32, f: impl FnOnce(&mut Self) -> R) -> R {
+        self.path.0.push(id_path);
+        let res = f(self);
+        self.path.0.pop();
+        res
+    }
+
+    pub fn create_id(&mut self) -> ViewId {
+        let view_id = ViewId(self.id);
+        self.id += 1;
+        view_id
+    }
+
+    pub fn get_id(&self) -> Option<&ViewId> {
+        let path = self.get_path();
+        self.cx.view_ids.get(&path)
+    }
+
+    pub fn get_parent_id(&self) -> Option<&ViewId> {
+        if self.path.0.is_empty() {
+            None
+        } else {
+            let parent_path = self.path
+                .0[..self.path.0.len() - 1]
+                .iter()
+                .copied()
+                .collect::<Box<[_]>>();
+            self.cx.view_ids.get(&parent_path)
+        }
+    }
+
+    pub fn get_path(&self) -> Box<[u32]> {
+        self.path.0.clone().into_boxed_slice()
+    }
+
+    pub fn get_z_index(&self) -> u32 {
+        self.path.0.len() as u32
+    }
+
+    pub fn get_state<S: 'static>(&mut self, id: ViewId) -> Option<&mut S> {
+        self.cx.states.get_mut(id.0 as usize)
+            .and_then(|any| any.downcast_mut())
+    }
+}
+
+/*
+#########################################################
+#
+# impl ViewPath & ViewId
+#
+#########################################################
+*/
+
+impl ViewPath {
+    pub(crate) fn new() -> Self {
+        Self(Vec::new())
+    }
+}
+
+impl From<&[u32]> for ViewId {
+    fn from(array: &[u32]) -> Self {
+        use std::hash::{DefaultHasher, Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        Hash::hash_slice(array, &mut hasher);
+        Self(hasher.finish())
+    }
+}

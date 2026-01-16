@@ -7,6 +7,14 @@ use crate::reactive_traits::*;
 use crate::source::*;
 use crate::subscriber::*;
 
+pub fn create_signal<T: 'static>(value: T) -> (SignalRead<T>, SignalWrite<T>) {
+    Signal::split(value)
+}
+
+pub fn create_rw_signal<T: 'static>(value: T) -> Signal<T> {
+    Signal::new(value)
+}
+
 /*
 #########################################################
 #

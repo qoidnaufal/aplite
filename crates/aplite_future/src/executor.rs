@@ -1,10 +1,16 @@
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, RwLock};
 use std::pin::Pin;
 use std::sync::mpsc::{SyncSender, Receiver, sync_channel};
 use std::task::{Wake, Waker, Context, Poll};
 use std::thread;
 
-pub(crate) static SPAWNER: OnceLock<SyncSender<Arc<Task>>> = OnceLock::new();
+/*
+#########################################################
+#
+# Task
+#
+#########################################################
+*/
 
 type PinnedFuture = Pin<Box<dyn Future<Output = ()>>>;
 
@@ -25,21 +31,54 @@ impl Task {
 
 impl Wake for Task {
     fn wake(self: Arc<Self>) {
-        if let Some(spawner) = SPAWNER.get() {
-            let _ = spawner.send(self);
-        }
+        Spawner::send(self);
     }
 }
 
 unsafe impl Send for Task {}
 unsafe impl Sync for Task {}
 
+/*
+#########################################################
+#
+# Spawner & Worker
+#
+#########################################################
+*/
+
+static SPAWNER: RwLock<Spawner> = RwLock::new(Spawner::new());
+
+struct Spawner(Option<SyncSender<Arc<Task>>>);
+
+impl Spawner {
+    const fn new() -> Self {
+        Self(None)
+    }
+
+    fn init(tx: SyncSender<Arc<Task>>) {
+        if SPAWNER.read().unwrap().0.is_some() {
+            drop(tx);
+            return;
+        }
+        SPAWNER.write().unwrap().0 = Some(tx);
+    }
+
+    fn send(task: Arc<Task>) {
+        if let Some(spawner) = SPAWNER.read().unwrap().0.as_ref() {
+            let _ = spawner.send(task);
+        }
+    }
+}
+
+unsafe impl Send for Spawner {}
+unsafe impl Sync for Spawner {}
+
 struct Worker {
     rx: Receiver<Arc<Task>>,
 }
 
 impl Worker {
-    pub fn work(&self) {
+    fn work(&self) {
         // WARN: is this a busy loop?
         while let Ok(task) = self.rx.recv() {
             if let Ok(mut future) = task.future.write() {
@@ -69,7 +108,7 @@ impl Executor {
             let (tx, rx) = sync_channel(capacity);
             let worker = Worker { rx };
 
-            SPAWNER.set(tx).expect("Executor can only be initialized once");
+            Spawner::init(tx);
 
             let worker_thread = thread::Builder::new().name("async worker".to_string());
             let _ = worker_thread.spawn(move || worker.work());
@@ -77,17 +116,19 @@ impl Executor {
     }
 
     pub fn spawn(future: impl Future<Output = ()> + 'static) {
-        let spawner = SPAWNER.get().expect("Executor must be initialized once");
-
         let task = Arc::new(Task::new(future));
+        Spawner::send(task);
+    }
 
-        let _ = spawner.send(task);
+    pub fn deinit() {
+        let sender = SPAWNER.write().unwrap().0.take();
+        drop(sender);
     }
 }
 
 #[cfg(test)]
-mod excutor_test {
-    use super::Executor;
+mod executor_test {
+    use super::*;
     
     async fn dummy_async() -> std::io::Result<String> {
         use std::fs::File;
@@ -105,7 +146,12 @@ mod excutor_test {
 
         Executor::spawn(async {
             let result = dummy_async().await;
+            println!("{:?}", result);
             assert!(result.is_ok());
         });
+
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
+        Executor::deinit();
     }
 }
