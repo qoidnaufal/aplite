@@ -27,21 +27,21 @@ impl<IV: Widget + Sized + 'static> IntoView for IV {
     }
 }
 
-pub trait ForEachView: IntoView {
-    fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
-        f(self);
-    }
+// pub trait ForEachView: IntoView {
+//     fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
+//         f(self);
+//     }
 
-    fn for_each_mut(&mut self, mut f: impl FnMut(&mut dyn Widget)) {
-        f(self)
-    }
+//     fn for_each_mut(&mut self, mut f: impl FnMut(&mut dyn Widget)) {
+//         f(self)
+//     }
 
-    fn count(&self) -> usize {
-        let mut count = 0;
-        self.for_each(|_| count += 1);
-        count
-    }
-}
+//     fn count(&self) -> usize {
+//         let mut count = 0;
+//         self.for_each(|_| count += 1);
+//         count
+//     }
+// }
 
 // pub struct Children<FE: ForEachView>(FE);
 
@@ -109,31 +109,7 @@ macro_rules! impl_tuple_macro {
 
 macro_rules! view_tuple {
     ($($name:ident),*) => {
-        impl<$($name),*> ForEachView for ($($name,)*)
-        where
-            // ($($name,)*): IntoView,
-            $($name: IntoView),*,
-        {
-            fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
-                #[allow(non_snake_case)]
-                let ($($name,)*) = self;
-
-                ($(f($name),)*);
-            }
-
-            fn for_each_mut(&mut self, mut f: impl FnMut(&mut dyn Widget)) {
-                #[allow(non_snake_case)]
-                let ($($name,)*) = self;
-
-                ($(f($name),)*);
-            }
-        }
-
-        impl<$($name),*> Widget for ($($name,)*)
-        where
-            // ($($name,)*): IntoView,
-            $($name: IntoView),*,
-        {
+        impl<$($name: IntoView),*> Widget for ($($name,)*) {
             fn build(&self, cx: &mut BuildCx<'_>) {
                 let mut path_id = cx.pop();
 
@@ -157,6 +133,26 @@ macro_rules! view_tuple {
                 ($($name.layout(cx),)*);
             }
         }
+
+        // impl<$($name),*> ForEachView for ($($name,)*)
+        // where
+        //     // ($($name,)*): IntoView,
+        //     $($name: IntoView),*,
+        // {
+        //     fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
+        //         #[allow(non_snake_case)]
+        //         let ($($name,)*) = self;
+
+        //         ($(f($name),)*);
+        //     }
+
+        //     fn for_each_mut(&mut self, mut f: impl FnMut(&mut dyn Widget)) {
+        //         #[allow(non_snake_case)]
+        //         let ($($name,)*) = self;
+
+        //         ($(f($name),)*);
+        //     }
+        // }
     };
 }
 
@@ -235,25 +231,6 @@ mod view_test {
         let name = e.debug_name();
         println!("{name}");
         assert!(name.contains("Stack"));
-    }
-
-    #[test]
-    fn for_each_view() {
-        let tuple = (
-            either(|| false, || button("", || {}), circle),
-            vstack((circle, circle)),
-            circle,
-            circle(),
-            button(("", circle), || {}),
-        );
-
-        let widget = tuple.into_view();
-
-        widget.for_each(|_| {});
-
-        let stack = hstack(widget);
-
-        stack.for_each(|_| {});
     }
 
     #[test]

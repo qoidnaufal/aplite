@@ -5,13 +5,12 @@ use aplite_types::theme::basic;
 use crate::layout::{AlignH, AlignV, LayoutCx, Axis, Padding, Spacing};
 use crate::context::BuildCx;
 use crate::state::BorderWidth;
-use crate::view::{ForEachView, IntoView};
+use crate::view::IntoView;
 use crate::widget::Widget;
 
 pub fn hstack<C>(widget: C) -> Stack<C, Horizontal>
 where
     C: IntoView,
-    C::View: ForEachView,
 {
     Stack::<C, Horizontal>::new(widget)
 }
@@ -19,7 +18,6 @@ where
 pub fn vstack<C>(widget: C) -> Stack<C, Vertical>
 where
     C: IntoView,
-    C::View: ForEachView,
 {
     Stack::<C, Vertical>::new(widget)
 }
@@ -39,7 +37,6 @@ pub struct Vertical; impl StackDirection for Vertical {
 pub struct Stack<C, AX>
 where
     C: IntoView,
-    C::View: ForEachView,
 {
     pub(crate) content: C::View,
     style_fn: Option<Box<dyn Fn(&mut StackState)>>,
@@ -49,7 +46,6 @@ where
 impl<C, AX: StackDirection> Stack<C, AX>
 where
     C: IntoView,
-    C::View: ForEachView,
 {
     fn new(widget: C) -> Self {
         Self {
@@ -70,7 +66,6 @@ where
 impl<C, AX> Widget for Stack<C, AX>
 where
     C: IntoView,
-    C::View: ForEachView,
     AX: StackDirection + 'static,
 {
     fn build(&self, cx: &mut BuildCx<'_>) {
@@ -88,20 +83,20 @@ where
     }
 }
 
-impl<C, AX> ForEachView for Stack<C, AX>
-where
-    C: IntoView,
-    C::View: ForEachView,
-    AX: StackDirection + 'static,
-{
-    fn for_each(&self, f: impl FnMut(&dyn Widget)) {
-        self.content.for_each(f);
-    }
+// impl<C, AX> ForEachView for Stack<C, AX>
+// where
+//     C: IntoView,
+//     C::View: ForEachView,
+//     AX: StackDirection + 'static,
+// {
+//     fn for_each(&self, f: impl FnMut(&dyn Widget)) {
+//         self.content.for_each(f);
+//     }
 
-    fn for_each_mut(&mut self, f: impl FnMut(&mut dyn Widget)) {
-        self.content.for_each_mut(f);
-    }
-}
+//     fn for_each_mut(&mut self, f: impl FnMut(&mut dyn Widget)) {
+//         self.content.for_each_mut(f);
+//     }
+// }
 
 pub struct StackState {
     pub width: Length,

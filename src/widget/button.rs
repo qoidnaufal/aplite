@@ -5,7 +5,7 @@ use aplite_types::theme::gruvbox_dark as theme;
 use crate::context::BuildCx;
 use crate::layout::{AlignH, AlignV, LayoutCx, Axis, Padding, Spacing};
 use crate::state::BorderWidth;
-use crate::view::{ForEachView, IntoView};
+use crate::view::IntoView;
 use crate::widget::Widget;
 
 pub fn button<IV, F>(content: IV, f: F) -> Button<IV, F>

@@ -3,7 +3,7 @@ use aplite_types::{Color, Length, Rect, rgb, rgba};
 
 use crate::state::BorderWidth;
 use crate::layout::LayoutCx;
-use crate::view::{ForEachView, IntoView};
+use crate::view::IntoView;
 use crate::context::BuildCx;
 
 mod button;
@@ -196,25 +196,11 @@ where
 
 impl<IV: IntoView> Widget for Vec<IV> {
     fn build(&self, cx: &mut BuildCx<'_>) {
-        self.for_each(|widget| widget.build(cx));
+        self.iter().for_each(|widget| widget.build(cx));
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        self.for_each(|widget| widget.layout(cx));
-    }
-}
-
-impl<IV: IntoView> ForEachView for Vec<IV> {
-    fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
-        self.iter().for_each(|w| f(w));
-    }
-
-    fn for_each_mut(&mut self, mut f: impl FnMut(&mut dyn Widget)) {
-        self.iter_mut().for_each(|w| f(w));
-    }
-
-    fn count(&self) -> usize {
-        self.len()
+        self.iter().for_each(|widget| widget.layout(cx));
     }
 }
 
@@ -228,25 +214,11 @@ impl<IV: IntoView> ForEachView for Vec<IV> {
 
 impl<IV: IntoView> Widget for Box<[IV]> {
     fn build(&self, cx: &mut BuildCx<'_>) {
-        self.for_each(|w| w.build(cx));
+        self.iter().for_each(|w| w.build(cx));
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        self.for_each(|w| w.layout(cx));
-    }
-}
-
-impl<IV: IntoView> ForEachView for Box<[IV]> {
-    fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
-        self.iter().for_each(|w| f(w));
-    }
-
-    fn for_each_mut(&mut self, mut f: impl FnMut(&mut dyn Widget)) {
-        self.iter_mut().for_each(|w| f(w));
-    }
-
-    fn count(&self) -> usize {
-        self.len()
+        self.iter().for_each(|w| w.layout(cx));
     }
 }
 
@@ -260,25 +232,11 @@ impl<IV: IntoView> ForEachView for Box<[IV]> {
 
 impl<IV: IntoView, const N: usize> Widget for [IV; N] {
     fn build(&self, cx: &mut BuildCx<'_>) {
-        self.for_each(|w| w.build(cx));
+        self.iter().for_each(|w| w.build(cx));
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        self.for_each(|w| w.layout(cx));
-    }
-}
-
-impl<IV: IntoView, const N: usize> ForEachView for [IV; N] {
-    fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
-        self.iter().for_each(|w| f(w));
-    }
-
-    fn for_each_mut(&mut self, mut f: impl FnMut(&mut dyn Widget)) {
-        self.iter_mut().for_each(|w| f(w));
-    }
-
-    fn count(&self) -> usize {
-        N
+        self.iter().for_each(|w| w.layout(cx));
     }
 }
 

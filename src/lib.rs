@@ -36,7 +36,6 @@ pub mod prelude {
     pub use crate::view::{
         IntoView,
         ToAnyView,
-        ForEachView,
     };
 
     pub type ApliteResult = Result<(), crate::error::ApliteError>;
