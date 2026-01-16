@@ -78,15 +78,9 @@ where
         if let Some(style_fn) = self.style_fn.as_ref() {
             style_fn(&mut state);
         }
-        cx.insert_state(StackState::new());
-        self.content.build(cx);
 
-        // let mut id = 0;
-
-        // self.content.for_each(|w| {
-        //     cx.with_id(id, |cx| w.build(cx));
-        //     id += 1;
-        // });
+        cx.set_state(StackState::new());
+        cx.with_id(0, |cx| self.content.build(cx));
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {

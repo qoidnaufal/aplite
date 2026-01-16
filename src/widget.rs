@@ -118,7 +118,7 @@ impl Widget for CircleWidget {
         if let Some(style_fn) = self.style_fn.as_ref() {
             style_fn(&mut state);
         }
-        cx.insert_state(CircleState::new());
+        cx.set_state(CircleState::new());
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
@@ -385,7 +385,7 @@ impl<IV: IntoView + PartialEq> Widget for Memo<IV> {
 
 impl Widget for &'static str {
     fn build(&self, cx: &mut BuildCx<'_>) {
-        cx.insert_state(());
+        cx.set_state(());
     }
 
     fn layout(&self, _: &mut LayoutCx<'_>) {}
@@ -408,7 +408,9 @@ impl Widget for String {
 macro_rules! impl_view_primitive {
     ($name:ty) => {
         impl Widget for $name {
-            fn build(&self, _cx: &mut BuildCx<'_>) {}
+            fn build(&self, cx: &mut BuildCx<'_>) {
+                cx.set_state(())
+            }
 
             fn layout(&self, _cx: &mut LayoutCx<'_>) {}
         }

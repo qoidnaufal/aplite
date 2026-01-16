@@ -48,6 +48,9 @@ impl Context {
     pub fn build<IV: IntoView>(&mut self, view: &IV) {
         let mut cx = BuildCx::new(self);
         cx.with_id(0, |cx| view.build(cx));
+
+        let len = cx.id as usize;
+        self.states.truncate(len);
     }
  
     pub fn layout(&mut self) {}
@@ -132,11 +135,24 @@ impl<'a> BuildCx<'a> {
         }
     }
 
-    pub fn insert_state<S: 'static>(&mut self, state: S) {
+    pub fn set_state<S: 'static>(&mut self, state: S) {
         let id = self.create_id();
         let path = self.get_path();
         self.cx.view_ids.insert(path, id);
-        self.cx.states.push(Box::new(state));
+
+        if let Some(any) = self.cx.states.get_mut(id.0 as usize) {
+            *any = Box::new(state);
+        } else {
+            self.cx.states.push(Box::new(state));
+        }
+    }
+
+    pub(crate) fn pop(&mut self) -> u32 {
+        self.path.0.pop().unwrap_or_default()
+    }
+
+    pub(crate) fn push(&mut self, path_id: u32) {
+        self.path.0.push(path_id);
     }
 
     pub fn with_id<R: 'static>(&mut self, id_path: u32, f: impl FnOnce(&mut Self) -> R) -> R {

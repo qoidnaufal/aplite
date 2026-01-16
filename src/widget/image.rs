@@ -2,7 +2,7 @@ use std::path::Path;
 
 use aplite_types::{ImageData, Length};
 
-use crate::context::{Context, BuildCx};
+use crate::context::BuildCx;
 use crate::layout::LayoutCx;
 use crate::widget::Widget;
 
@@ -63,7 +63,7 @@ impl ImageState {
 
 impl Widget for Image {
     fn build(&self, cx: &mut BuildCx<'_>) {
-        cx.insert_state(ImageState::new());
+        cx.set_state(ImageState::new());
     }
 
     fn layout(&self, _cx: &mut LayoutCx<'_>) {}

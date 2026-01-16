@@ -135,7 +135,7 @@ macro_rules! view_tuple {
             $($name: IntoView),*,
         {
             fn build(&self, cx: &mut BuildCx<'_>) {
-                let mut path_id = 0;
+                let mut path_id = cx.pop();
 
                 #[allow(non_snake_case)]
                 let ($($name,)*) = self;
@@ -146,6 +146,8 @@ macro_rules! view_tuple {
                         path_id += 1;
                     }),
                 )*);
+
+                cx.push(path_id);
             }
 
             fn layout(&self, cx: &mut LayoutCx<'_>) {
@@ -256,18 +258,18 @@ mod view_test {
 
     #[test]
     fn build() {
-        let mut context = Context::new((500, 500).into());
-        let mut cx = BuildCx::new(&mut context);
+        let mut cx = Context::new((500, 500).into());
 
         let w = hstack((
             circle(),
-            button("", || {}),
+            button((69, ""), || {}),
+            circle,
         ))
         .style(|state| state.padding = Padding::splat(5));
 
-        cx.with_id(0, |cx| w.build(cx));
+        cx.build(&w);
 
-        println!("{:?}", cx.cx.states);
-        println!("{:?}", cx.cx.view_ids);
+        println!("{:?}", cx.states);
+        println!("{:?}", cx.view_ids);
     }
 }

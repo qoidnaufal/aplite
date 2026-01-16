@@ -49,18 +49,12 @@ impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
         if let Some(style_fn) = self.style_fn.as_ref() {
             style_fn(&mut state);
         }
-        cx.insert_state(state);
+        cx.set_state(state);
         cx.with_id(0, |cx| self.content.build(cx));
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {}
 }
-
-impl<IV, F> ForEachView for Button<IV, F>
-where
-    IV: IntoView,
-    IV::View: ForEachView,
-    F: Fn() + 'static, {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ButtonState {
