@@ -29,8 +29,6 @@ pub mod prelude {
         AlignH
     };
 
-    pub use crate::callback::WidgetEvent;
-
     pub use crate::widget::*;
 
     pub use crate::view::{

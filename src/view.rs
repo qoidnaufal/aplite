@@ -1,6 +1,6 @@
 use crate::layout::LayoutCx;
 use crate::widget::Widget;
-use crate::context::BuildCx;
+use crate::context::{BuildCx, Context};
 
 /*
 #########################################################
@@ -87,6 +87,11 @@ impl Widget for AnyView {
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         self.widget.layout(cx);
     }
+
+    fn detect_hover(&self, cx: &mut Context) {
+        let rect = cx.get_layout_node().unwrap();
+        if rect.contains(&cx.cursor.hover.pos) {}
+    }
 }
 
 /*
@@ -141,6 +146,22 @@ macro_rules! view_tuple {
 
                 cx.push(path_id);
             }
+
+            fn detect_hover(&self, cx: &mut Context) {
+                let mut path_id = cx.pop();
+
+                #[allow(non_snake_case)]
+                let ($($name,)*) = self;
+
+                ($(
+                    cx.with_id(path_id, |cx| {
+                        $name.detect_hover(cx);
+                        path_id += 1;
+                    }),
+                )*);
+
+                cx.push(path_id);
+            }
         }
 
         // impl<$($name),*> ForEachView for ($($name,)*)
@@ -188,7 +209,7 @@ mod view_test {
     #[test]
     fn view_fn() {
         let name = Signal::new("Balo");
-        let view = move || name.get();
+        let view = move || name;
 
         let debug_name = view.debug_name();
         println!("{debug_name}");
@@ -248,7 +269,7 @@ mod view_test {
             circle().style(|state| state.radius = Length::Fixed(20.)),
             either(
                 move || when.get(),
-                || button("", || {}),
+                || button((69, ""), || {}),
                 circle,
             ),
         ))

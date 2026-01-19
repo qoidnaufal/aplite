@@ -1,12 +1,13 @@
-use aplite_types::{Length, Rect};
+use aplite_renderer::Scene;
+use aplite_types::{Length, Matrix3x2, PaintRef, Rect};
 use aplite_types::{CornerRadius, Color};
 use aplite_types::theme::gruvbox_dark as theme;
 
-use crate::context::BuildCx;
+use crate::context::{BuildCx, Context};
 use crate::layout::{AlignH, AlignV, Axis, LayoutCx, LayoutRules, Padding, Spacing};
 use crate::state::BorderWidth;
 use crate::view::IntoView;
-use crate::widget::Widget;
+use crate::widget::{Renderable, Widget};
 
 pub fn button<IV, F>(content: IV, f: F) -> Button<IV, F>
 where
@@ -19,7 +20,7 @@ where
 pub struct Button<IV: IntoView, F> {
     content: IV::View,
     callback: F,
-    style_fn: Option<Box<dyn Fn(&mut ButtonState)>>,
+    style_fn: Option<Box<dyn Fn(&mut ButtonElement)>>,
 }
 
 impl<IV: IntoView, F: Fn() + 'static> Button<IV, F> {
@@ -31,7 +32,7 @@ impl<IV: IntoView, F: Fn() + 'static> Button<IV, F> {
         }
     }
 
-    pub fn style(self, style_fn: impl Fn(&mut ButtonState) + 'static) -> Self {
+    pub fn style(self, style_fn: impl Fn(&mut ButtonElement) + 'static) -> Self {
         Self {
             style_fn: Some(Box::new(style_fn)),
             ..self
@@ -42,9 +43,9 @@ impl<IV: IntoView, F: Fn() + 'static> Button<IV, F> {
 impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
     fn build(&self, cx: &mut BuildCx<'_>) {
         let z_index = cx.get_z_index();
-        let mut state = ButtonState {
+        let mut state = ButtonElement {
             z_index,
-            ..ButtonState::new()
+            ..ButtonElement::new()
         };
 
         if let Some(style_fn) = self.style_fn.as_ref() {
@@ -56,9 +57,7 @@ impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        let id = cx.get_id().copied().unwrap();
-        let any = &cx.cx.states[id.0 as usize];
-        let state = any.downcast_ref::<ButtonState>().unwrap();
+        let state = cx.get_state::<ButtonElement>().unwrap();
         let bound = cx.bound;
 
         let width = match state.width {
@@ -102,10 +101,18 @@ impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
 
         cx.with_id(0, |cx| self.content.layout(cx));
     }
+
+    fn detect_hover(&self, cx: &mut Context) {
+        let rect = cx.get_layout_node().unwrap();
+        if rect.contains(&cx.cursor.hover.pos) {
+            // let cb: *const dyn Fn() = &self.callback;
+            cx.with_id(0, |cx| self.content.detect_hover(cx))
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ButtonState {
+pub struct ButtonElement {
     pub width: Length,
     pub height: Length,
     pub padding: Padding,
@@ -120,11 +127,11 @@ pub struct ButtonState {
     z_index: u32,
 }
 
-impl ButtonState {
+impl ButtonElement {
     fn new() -> Self {
         Self {
-            width: Length::FitContent,
-            height: Length::FitContent,
+            width: Length::Grow,
+            height: Length::Grow,
             padding: Padding::splat(5),
             spacing: Spacing(5),
             align_h: AlignH::Center,
@@ -136,5 +143,18 @@ impl ButtonState {
             corner_radius: CornerRadius::splat(5),
             z_index: 0,
         }
+    }
+}
+
+impl Renderable for ButtonElement {
+    fn render(&self, rect: &Rect, scene: &mut Scene) {
+        scene.draw_rounded_rect(
+            rect,
+            &Matrix3x2::identity(),
+            &PaintRef::from(&self.background),
+            &PaintRef::from(&self.border_color),
+            &self.border_width.0,
+            &self.corner_radius,
+        );
     }
 }

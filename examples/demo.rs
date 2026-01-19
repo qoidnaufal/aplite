@@ -1,23 +1,14 @@
 use aplite::prelude::*;
 
-fn leaf() -> impl IntoView {
-    vstack((
-        button("", || {}),
-        button("", || {}),
-        button("", || {}),
-    ))
-}
-
 fn root() -> impl IntoView {
     let (counter, set_counter) = Signal::split(0i32);
 
     let inc = move || set_counter.update(|num| *num += 1);
     let dec = move || set_counter.update(|num| *num -= 1);
 
-    Effect::new(move |_| eprintln!("{:?}", counter.get()));
+    Effect::new(move |_| eprintln!("count: {:?}", counter.get()));
 
-    let button_1 = button("+", inc)
-        .style(|state| state.corner_radius = CornerRadius::splat(10));
+    let button_1 = button("+", inc).style(|s| s.corner_radius = CornerRadius::splat(10));
     let button_2 = button("-", dec);
 
     vstack((
@@ -27,7 +18,6 @@ fn root() -> impl IntoView {
             circle,
             || button("dummy", || {}),
         ),
-        leaf
     ))
     .style(|state| state.padding = Padding::splat(5))
 }
@@ -35,109 +25,11 @@ fn root() -> impl IntoView {
 
 fn main() -> ApliteResult {
     let config = AppConfig {
-        allocation_size: unsafe { std::num::NonZeroUsize::new_unchecked(100) },
         executor_capacity: 1,
-        window_inner_size: (400, 400).into(),
+        window_inner_size: (500, 700).into(),
     };
 
     // root.launch(config)
     // root.launch_with_default_config()
     Aplite::new(config, root).launch()
 }
-
-// const IMAGE_1: &str = "../../Wallpaper/milky-way-over-mountains-4k-fl-1680x1050-2045764561.jpg";
-// const IMAGE_2: &str = "../../Wallpaper/1352909.jpeg";
-// const IMAGE_3: &str = "../../Wallpaper/pexels-daejeung-2734512.jpg";
-
-// fn image_row(counter: SignalRead<i32>) -> impl IntoView {
-//     let image1 = image(|| image_reader(IMAGE_1))
-//         .min_width(350.)
-//         .image_aspect_ratio(AspectRatio::Defined(16, 9));
-
-//     let image2 = image(|| image_reader(IMAGE_2))
-//         .min_width(350.)
-//         .image_aspect_ratio(AspectRatio::Defined(16, 9));
-
-//     let image3 = image(|| image_reader(IMAGE_3))
-//         .min_width(350.)
-//         .image_aspect_ratio(AspectRatio::Defined(16, 9));
-
-//     let node1 = image1.node_ref().unwrap();
-//     let node2 = image2.node_ref().unwrap();
-//     let node3 = image3.node_ref().unwrap();
-
-//     Effect::new(move |_| {
-//         let num = counter.get().abs();
-//         node1.hide(num > 0 && num % 2 == 0);
-//         node2.hide(num > 0 && num % 3 == 0);
-//         node3.hide(num > 0 && num % 5 == 0);
-//     });
-
-//     vstack()
-//         .child(image1)
-//         .child(image2)
-//         .child(image3)
-//         .spacing(20)
-//         .shape(Shape::RoundedRect)
-//         .corner_radius(CornerRadius::splat(10))
-//         .padding(Padding::new(20, 20, 40, 40))
-//         .border_width(5.0)
-//         .border_color(Rgba::DARK_GRAY)
-// }
-
-// fn button_stack(
-//     inc: impl Fn() + 'static,
-//     dec: impl Fn() + 'static,
-//     set_counter: SignalWrite<i32>,
-// ) -> impl IntoView {
-//     h_stack()
-//         .child(
-//             button()
-//                 .hover_color(Rgba::BLUE)
-//                 .click_color(Rgba::DARK_GRAY)
-//                 .border_width(5.0)
-//                 .corner_radius(CornerRadius::splat(50))
-//                 .on(LeftClick, dec)
-//         )
-//         .child(
-//             button()
-//                 .color(Rgba::GREEN)
-//                 .hover_color(Rgba::LIGHT_GRAY)
-//                 .click_color(Rgba::DARK_GREEN)
-//                 .border_width(5.0)
-//                 .corner_radius(CornerRadius::splat(50))
-//                 .on(LeftClick, move || set_counter.set(0))
-//         )
-//         .child(
-//             button()
-//                 .color(Rgba::BLUE)
-//                 .hover_color(Rgba::PURPLE)
-//                 .border_width(5.0)
-//                 .corner_radius(CornerRadius::splat(50))
-//                 .on(LeftClick, inc)
-//         )
-//         .border_color(Rgba::DARK_GRAY)
-//         .padding(Padding::splat(7))
-//         .shape(Shape::RoundedRect)
-//         .corner_radius(CornerRadius::splat(10))
-//         .spacing(10)
-//         .min_width(430.)
-//         .align_h(AlignH::Center)
-//         .align_v(AlignV::Middle)
-// }
-
-// fn root() -> impl IntoView {
-//     let (counter, set_counter) = Signal::split(0i32);
-
-//     let inc = move || set_counter.update(|num| *num += 1);
-//     let dec = move || set_counter.update(|num| *num -= 1);
-
-//     Effect::new(move |_| eprint!("{:?}   \r", counter.get()));
-
-//     v_stack()
-//         .child(button_stack(inc, dec, set_counter))
-//         .child(image_row(counter))
-//         .align_h(AlignH::Left)
-//         .padding(Padding::splat(20))
-//         .spacing(8)
-// }

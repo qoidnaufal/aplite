@@ -1,12 +1,13 @@
 use std::marker::PhantomData;
-use aplite_types::{Color, Length, Rect};
+use aplite_renderer::Scene;
+use aplite_types::{Color, CornerRadius, Length, Matrix3x2, PaintRef, Rect};
 use aplite_types::theme::basic;
 
 use crate::layout::{AlignH, AlignV, Axis, LayoutCx, LayoutRules, Padding, Spacing};
-use crate::context::BuildCx;
+use crate::context::{BuildCx, Context};
 use crate::state::BorderWidth;
 use crate::view::IntoView;
-use crate::widget::Widget;
+use crate::widget::{Renderable, Widget};
 
 pub fn hstack<C>(widget: C) -> Stack<C, Horizontal>
 where
@@ -39,7 +40,7 @@ where
     C: IntoView,
 {
     pub(crate) content: C::View,
-    style_fn: Option<Box<dyn Fn(&mut StackState)>>,
+    style_fn: Option<Box<dyn Fn(&mut StackElement)>>,
     marker: PhantomData<AX>
 }
 
@@ -55,7 +56,7 @@ where
         }
     }
 
-    pub fn style(self, style_fn: impl Fn(&mut StackState) + 'static) -> Self {
+    pub fn style(self, style_fn: impl Fn(&mut StackElement) + 'static) -> Self {
         Self {
             style_fn: Some(Box::new(style_fn)),
             ..self
@@ -69,9 +70,9 @@ where
     AX: StackDirection + 'static,
 {
     fn build(&self, cx: &mut BuildCx<'_>) {
-        let mut state = StackState {
+        let mut state = StackElement {
             z_index: cx.get_z_index(),
-            ..StackState::new()
+            ..StackElement::new()
         };
 
         if let Some(style_fn) = self.style_fn.as_ref() {
@@ -83,9 +84,7 @@ where
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        let id = cx.get_id().copied().unwrap();
-        let any = &cx.cx.states[id.0 as usize];
-        let state = any.downcast_ref::<StackState>().unwrap();
+        let state = cx.get_state::<StackElement>().unwrap();
         let bound = cx.bound;
 
         let width = match state.width {
@@ -129,6 +128,13 @@ where
 
         cx.with_id(0, |cx| self.content.layout(cx));
     }
+
+    fn detect_hover(&self, cx: &mut Context) {
+        let rect = cx.get_layout_node().unwrap();
+        if rect.contains(&cx.cursor.hover.pos) {
+            cx.with_id(0, |cx| self.content.detect_hover(cx))
+        }
+    }
 }
 
 // impl<C, AX> ForEachView for Stack<C, AX>
@@ -146,12 +152,13 @@ where
 //     }
 // }
 
-pub struct StackState {
+pub struct StackElement {
     pub width: Length,
     pub height: Length,
     pub background: Color,
     pub border_color: Color,
     pub border_width: BorderWidth,
+    pub corner_radius: CornerRadius,
     pub padding: Padding,
     pub spacing: Spacing,
     pub align_h: AlignH,
@@ -159,7 +166,7 @@ pub struct StackState {
     z_index: u32,
 }
 
-impl StackState {
+impl StackElement {
     fn new() -> Self {
         Self {
             width: Length::Grow,
@@ -167,11 +174,25 @@ impl StackState {
             background: basic::TRANSPARENT,
             border_color: basic::TRANSPARENT,
             border_width: BorderWidth(0.),
+            corner_radius: CornerRadius::splat(0),
             padding: Padding::splat(5),
             align_h: AlignH::Left,
             align_v: AlignV::Top,
             spacing: Spacing(5),
             z_index: 0,
         }
+    }
+}
+
+impl Renderable for StackElement {
+    fn render(&self, rect: &Rect, scene: &mut Scene) {
+        scene.draw_rounded_rect(
+            rect,
+            &Matrix3x2::identity(),
+            &PaintRef::from(&self.background),
+            &PaintRef::from(&self.border_color),
+            &self.border_width.0,
+            &self.corner_radius,
+        );
     }
 }

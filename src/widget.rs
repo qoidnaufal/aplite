@@ -1,12 +1,15 @@
 use std::sync::Arc;
 
 use aplite_reactive::*;
-use aplite_types::{Color, Length, Rect, rgb, rgba};
+use aplite_renderer::Scene;
+use aplite_types::{
+    Color, Length, Matrix3x2, PaintRef, Rect, rgb, rgba
+};
 
 use crate::{layout::Axis, state::BorderWidth};
 use crate::layout::LayoutCx;
 use crate::view::IntoView;
-use crate::context::BuildCx;
+use crate::context::{BuildCx, Context};
 
 mod button;
 mod image;
@@ -35,6 +38,16 @@ pub trait Widget {
     fn build(&self, cx: &mut BuildCx<'_>);
 
     fn layout(&self, cx: &mut LayoutCx<'_>);
+
+    fn detect_hover(&self, cx: &mut Context);
+}
+
+pub trait Renderable {
+    fn render(&self, rect: &Rect, scene: &mut Scene);
+}
+
+impl Renderable for () {
+    fn render(&self, _rect: &Rect, _scene: &mut Scene) {}
 }
 
 /*
@@ -60,6 +73,10 @@ where
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         self().layout(cx);
+    }
+
+    fn detect_hover(&self, cx: &mut Context) {
+        self().detect_hover(cx);
     }
 }
 
@@ -92,7 +109,6 @@ impl CircleWidget {
 
 pub struct CircleState {
     pub radius: Length,
-    pub rect: Rect,
     pub background: Color,
     pub border_color: Color,
     pub border_width: BorderWidth,
@@ -102,11 +118,22 @@ impl CircleState {
     fn new() -> Self {
         Self {
             radius: Length::Grow,
-            rect: Rect::default(),
             background: rgba(0xff6969ff),
             border_color: rgb(0x000000),
             border_width: BorderWidth(0.),
         }
+    }
+}
+
+impl Renderable for CircleState {
+    fn render(&self, rect: &Rect, scene: &mut Scene) {
+        scene.draw_circle(
+            rect,
+            &Matrix3x2::identity(),
+            &PaintRef::from(&self.background),
+            &PaintRef::from(&self.border_color),
+            &self.border_width.0
+        );
     }
 }
 
@@ -121,9 +148,7 @@ impl Widget for CircleWidget {
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        let id = cx.get_id().copied().unwrap();
-        let any = &cx.cx.states[id.0 as usize];
-        let state = any.downcast_ref::<CircleState>().unwrap();
+        let state = cx.get_state::<CircleState>().unwrap();
         let bound = cx.bound;
 
         let radius = match state.radius {
@@ -144,6 +169,11 @@ impl Widget for CircleWidget {
         }
 
         cx.set_node(layout_node);
+    }
+
+    fn detect_hover(&self, cx: &mut Context) {
+        let rect = cx.get_layout_node().unwrap();
+        if rect.contains(&cx.cursor.hover.pos) {}
     }
 }
 
@@ -185,6 +215,11 @@ where
             Either::False(f) => f.layout(cx),
         }
     }
+
+    fn detect_hover(&self, cx: &mut Context) {
+        let rect = cx.get_layout_node().unwrap();
+        if rect.contains(&cx.cursor.hover.pos) {}
+    }
 }
 
 pub fn either<W, TrueFn, FalseFn, VT, VF>(
@@ -210,54 +245,64 @@ where
 /*
 #########################################################
 #
-# Vec<W>
+# Iterables
 #
 #########################################################
 */
+
+macro_rules! handle_iterables {
+    ($name:ident, $cx:ident, $cmd:ident) => {
+        let mut path_id = $cx.pop();
+        $name.iter().for_each(|w| {
+            $cx.with_id(path_id, |cx| w.$cmd(cx));
+            path_id += 1;
+        });
+        $cx.push(path_id);
+    };
+}
 
 impl<IV: IntoView> Widget for Vec<IV> {
     fn build(&self, cx: &mut BuildCx<'_>) {
-        self.iter().for_each(|widget| widget.build(cx));
+        handle_iterables!(self, cx, build);
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        self.iter().for_each(|widget| widget.layout(cx));
+        handle_iterables!(self, cx, layout);
+    }
+
+    fn detect_hover(&self, cx: &mut Context) {
+        let rect = cx.get_layout_node().unwrap();
+        if rect.contains(&cx.cursor.hover.pos) {}
     }
 }
-
-/*
-#########################################################
-#
-# Box<[W]>
-#
-#########################################################
-*/
 
 impl<IV: IntoView> Widget for Box<[IV]> {
     fn build(&self, cx: &mut BuildCx<'_>) {
-        self.iter().for_each(|w| w.build(cx));
+        handle_iterables!(self, cx, build);
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        self.iter().for_each(|w| w.layout(cx));
+        handle_iterables!(self, cx, layout);
+    }
+
+    fn detect_hover(&self, cx: &mut Context) {
+        let rect = cx.get_layout_node().unwrap();
+        if rect.contains(&cx.cursor.hover.pos) {}
     }
 }
 
-/*
-#########################################################
-#
-# [W; N]
-#
-#########################################################
-*/
-
 impl<IV: IntoView, const N: usize> Widget for [IV; N] {
     fn build(&self, cx: &mut BuildCx<'_>) {
-        self.iter().for_each(|w| w.build(cx));
+        handle_iterables!(self, cx, build);
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        self.iter().for_each(|w| w.layout(cx));
+        handle_iterables!(self, cx, layout);
+    }
+
+    fn detect_hover(&self, cx: &mut Context) {
+        let rect = cx.get_layout_node().unwrap();
+        if rect.contains(&cx.cursor.hover.pos) {}
     }
 }
 
@@ -284,6 +329,11 @@ impl<IV: IntoView> Widget for Option<IV> {
             None => {},
         }
     }
+
+    fn detect_hover(&self, cx: &mut Context) {
+        let rect = cx.get_layout_node().unwrap();
+        if rect.contains(&cx.cursor.hover.pos) {}
+    }
 }
 
 /*
@@ -298,61 +348,40 @@ impl<IV: IntoView> Widget for Option<IV> {
 impl Widget for () {
     fn build(&self, _cx: &mut BuildCx<'_>) {}
     fn layout(&self, _cx: &mut LayoutCx<'_>) {}
+    fn detect_hover(&self, _cx: &mut Context) {}
 }
 
 /*
 #########################################################
 #
-# SignalRead<W>
+# ReactiveNodes
 #
 #########################################################
 */
 
-impl<IV: IntoView> Widget for SignalRead<IV> {
-    fn build(&self, cx: &mut BuildCx<'_>) {
-        self.with(|w| w.build(cx))
-    }
+macro_rules! impl_reactive_nodes {
+    ($name:ident <$($generics:tt)?> where $($where_clause:tt)*) => {
+        impl<$($generics,)?> Widget for $name<$($generics,)?>
+        where $($where_clause)?
+        {
+            fn build(&self, cx: &mut BuildCx<'_>) {
+                self.with_untracked(|w| w.build(cx))
+            }
 
-    fn layout(&self, cx: &mut LayoutCx<'_>) {
-        self.with(|w| w.layout(cx))
-    }
+            fn layout(&self, cx: &mut LayoutCx<'_>) {
+                self.with_untracked(|w| w.layout(cx))
+            }
+
+            fn detect_hover(&self, cx: &mut Context) {
+                self.with_untracked(|w| w.detect_hover(cx))
+            }
+        }
+    };
 }
 
-/*
-#########################################################
-#
-# Signal<W>
-#
-#########################################################
-*/
-
-impl<IV: IntoView> Widget for Signal<IV> {
-    fn build(&self, cx: &mut BuildCx<'_>) {
-        self.with(|w| w.build(cx))
-    }
-
-    fn layout(&self, cx: &mut LayoutCx<'_>) {
-        self.with(|w| w.layout(cx))
-    }
-}
-
-/*
-#########################################################
-#
-# Memo<W>
-#
-#########################################################
-*/
-
-impl<IV: IntoView + PartialEq> Widget for Memo<IV> {
-    fn build(&self, cx: &mut BuildCx<'_>) {
-        self.with(|w| w.build(cx))
-    }
-
-    fn layout(&self, cx: &mut LayoutCx<'_>) {
-        self.with(|w| w.layout(cx))
-    }
-}
+impl_reactive_nodes!(SignalRead<IV> where IV: IntoView);
+impl_reactive_nodes!(Signal<IV> where IV: IntoView);
+impl_reactive_nodes!(Memo<IV> where IV: IntoView + PartialEq);
 
 /*
 #########################################################
@@ -374,71 +403,44 @@ pub struct Label {
 
 pub struct TextState {}
 
-impl Widget for Label {
-    fn build(&self, cx: &mut BuildCx<'_>) {
-        cx.set_state(TextState {});
-    }
-
-    fn layout(&self, cx: &mut LayoutCx<'_>) {
-        let bound = cx.bound;
-        let layout_node = bound;
-
-        match cx.rules.axis {
-            Axis::Horizontal => {
-                cx.bound.x += layout_node.width + cx.rules.spacing.0 as f32;
-            },
-            Axis::Vertical =>  {
-                cx.bound.y += layout_node.height + cx.rules.spacing.0 as f32;
-            },
-        }
-
-        cx.set_node(layout_node);
-    }
+impl Renderable for TextState {
+    fn render(&self, _rect: &Rect, _scene: &mut Scene) {}
 }
 
-impl Widget for &'static str {
-    fn build(&self, cx: &mut BuildCx<'_>) {
-        cx.set_state(TextState {});
-    }
+macro_rules! impl_text {
+    ($(&$lifetime:lifetime)? $name:ident) => {
+        impl Widget for $(&$lifetime)? $name {
+            fn build(&self, cx: &mut BuildCx<'_>) {
+                cx.set_state(TextState {});
+            }
 
-    fn layout(&self, cx: &mut LayoutCx<'_>) {
-        let bound = cx.bound;
-        let layout_node = bound;
+            fn layout(&self, cx: &mut LayoutCx<'_>) {
+                let bound = cx.bound;
+                let layout_node = bound;
 
-        match cx.rules.axis {
-            Axis::Horizontal => {
-                cx.bound.x += layout_node.width + cx.rules.spacing.0 as f32;
-            },
-            Axis::Vertical =>  {
-                cx.bound.y += layout_node.height + cx.rules.spacing.0 as f32;
-            },
+                match cx.rules.axis {
+                    Axis::Horizontal => {
+                        cx.bound.x += layout_node.width + cx.rules.spacing.0 as f32;
+                    },
+                    Axis::Vertical =>  {
+                        cx.bound.y += layout_node.height + cx.rules.spacing.0 as f32;
+                    },
+                }
+
+                cx.set_node(layout_node);
+            }
+
+            fn detect_hover(&self, cx: &mut Context) {
+                let rect = cx.get_layout_node().unwrap();
+                if rect.contains(&cx.cursor.hover.pos) {}
+            }
         }
-
-        cx.set_node(layout_node);
-    }
+    };
 }
 
-impl Widget for String {
-    fn build(&self, cx: &mut BuildCx<'_>) {
-        cx.set_state(TextState {});
-    }
-
-    fn layout(&self, cx: &mut LayoutCx<'_>) {
-        let bound = cx.bound;
-        let layout_node = bound;
-
-        match cx.rules.axis {
-            Axis::Horizontal => {
-                cx.bound.x += layout_node.width + cx.rules.spacing.0 as f32;
-            },
-            Axis::Vertical =>  {
-                cx.bound.y += layout_node.height + cx.rules.spacing.0 as f32;
-            },
-        }
-
-        cx.set_node(layout_node);
-    }
-}
+impl_text!(Label);
+impl_text!(String);
+impl_text!(&'static str);
 
 /*
 #########################################################
@@ -448,24 +450,43 @@ impl Widget for String {
 #########################################################
 */
 
-macro_rules! impl_view_primitive {
+macro_rules! impl_integers {
     ($name:ty) => {
         impl Widget for $name {
             fn build(&self, cx: &mut BuildCx<'_>) {
-                cx.set_state(())
+                cx.set_state(TextState {})
             }
 
-            fn layout(&self, _cx: &mut LayoutCx<'_>) {}
+            fn layout(&self, cx: &mut LayoutCx<'_>) {
+                let bound = cx.bound;
+                let layout_node = bound;
+
+                match cx.rules.axis {
+                    Axis::Horizontal => {
+                        cx.bound.x += layout_node.width + cx.rules.spacing.0 as f32;
+                    },
+                    Axis::Vertical =>  {
+                        cx.bound.y += layout_node.height + cx.rules.spacing.0 as f32;
+                    },
+                }
+
+                cx.set_node(layout_node);
+            }
+
+            fn detect_hover(&self, cx: &mut Context) {
+                let rect = cx.get_layout_node().unwrap();
+                if rect.contains(&cx.cursor.hover.pos) {}
+            }
         }
     };
 
     ($next:ty, $($rest:ty),*) => {
-        impl_view_primitive!{ $next }
-        impl_view_primitive!{ $($rest),* }
+        impl_integers!{ $next }
+        impl_integers!{ $($rest),* }
     };
 }
 
-impl_view_primitive!(
+impl_integers!(
     u8,    i8,
     u16,   i16,
     u32,   i32,

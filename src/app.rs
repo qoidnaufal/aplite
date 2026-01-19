@@ -1,4 +1,3 @@
-use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use winit::dpi::{PhysicalPosition, PhysicalSize};
@@ -12,16 +11,13 @@ use aplite_renderer::Renderer;
 use aplite_future::{Executor, block_on};
 use aplite_types::Size;
 
-use crate::layout::{AlignH, AlignV, LayoutCx, LayoutRules, Axis, Padding, Spacing};
 use crate::prelude::ApliteResult;
 use crate::context::Context;
 use crate::error::ApliteError;
 use crate::view::IntoView;
-use crate::widget::Widget;
 
 pub struct AppConfig {
     pub window_inner_size: Size,
-    pub allocation_size: NonZeroUsize,
     pub executor_capacity: usize,
 }
 
@@ -29,7 +25,6 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             window_inner_size: Size::new(600., 400.),
-            allocation_size: unsafe { NonZeroUsize::new_unchecked(1024 * 1024) },
             executor_capacity: 128,
         }
     }
@@ -79,21 +74,8 @@ impl<IV: IntoView> Aplite<IV> {
         self.track_window(Arc::clone(&window));
         self.window = Some(window);
 
-        // let rect = self.cx.window_rect;
-        // let mut layout_cx = LayoutCx::new(
-        //     &mut self.cx,
-        //     LayoutRules {
-        //         padding: Padding::splat(5),
-        //         orientation: Axis::Vertical,
-        //         align_h: AlignH::Left,
-        //         align_v: AlignV::Top,
-        //         spacing: Spacing(5),
-        //     },
-        //     rect,
-        //     0.,
-        //     0
-        // );
-        // self.view.layout(&mut layout_cx);
+        self.cx.build(&self.view);
+        self.cx.layout(&self.view);
 
         Ok(())
     }
@@ -124,7 +106,7 @@ impl<IV: IntoView> Aplite<IV> {
     fn handle_mouse_move(&mut self, _window_id: &WindowId, pos: PhysicalPosition<f64>) {
         if let Some(renderer) = self.renderer.as_mut() {
             let logical_pos = pos.to_logical::<f32>(renderer.scale_factor());
-            self.cx.handle_mouse_move((logical_pos.x, logical_pos.y));
+            self.cx.handle_mouse_move((logical_pos.x, logical_pos.y), &self.view);
         }
     }
 
@@ -137,6 +119,8 @@ impl<IV: IntoView> Aplite<IV> {
             drop(window);
             event_loop.exit();
         }
+
+        Executor::deinit();
     }
 
     // WARN: not sure if retained mode works like this

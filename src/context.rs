@@ -9,7 +9,7 @@ use aplite_types::{Rect, Size, Vec2f};
 use crate::layout::{AlignH, AlignV, Axis, LayoutCx, LayoutRules, Padding, Spacing};
 use crate::view::IntoView;
 use crate::cursor::{Cursor, MouseAction, MouseButton};
-use crate::widget::Widget;
+use crate::widget::{Renderable, Widget};
 // use crate::callback::CallbackStorage;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -24,11 +24,10 @@ pub struct BuildCx<'a> {
 }
 
 pub struct Context {
-    pub(crate) states: Vec<Box<dyn Any>>,
+    pub(crate) states: Vec<Box<dyn Renderable>>,
     pub(crate) layout_nodes: Vec<Rect>,
     pub(crate) view_ids: HashMap<Box<[u32]>, ViewId>,
     pub(crate) view_path: ViewPath,
-    // pub(crate) callbacks: CallbackStorage,
     pub(crate) dirty: Signal<bool>,
     pub(crate) cursor: Cursor,
     pub(crate) window_rect: Rect,
@@ -42,7 +41,6 @@ impl Context {
             layout_nodes: Vec::new(),
             view_ids: HashMap::new(),
             view_path: ViewPath::new(),
-            // callbacks: CallbackStorage::default(),
             cursor: Cursor::default(),
             dirty: Signal::new(false),
             window_rect: Rect::from_size(size),
@@ -74,6 +72,31 @@ impl Context {
         self.layout_nodes.truncate(len);
     }
 
+    pub(crate) fn pop(&mut self) -> u32 {
+        self.view_path.0.pop().unwrap_or_default()
+    }
+
+    pub(crate) fn push(&mut self, path_id: u32) {
+        self.view_path.0.push(path_id);
+    }
+
+    pub fn with_id<R: 'static>(&mut self, id_path: u32, f: impl FnOnce(&mut Self) -> R) -> R {
+        self.push(id_path);
+        let res = f(self);
+        self.pop();
+        res
+    }
+
+    pub fn get_layout_node(&self) -> Option<&Rect> {
+        self.get_id()
+            .map(|id| &self.layout_nodes[id.0 as usize])
+    }
+
+    fn get_id(&self) -> Option<&ViewId> {
+        let path = self.view_path.0.clone().into_boxed_slice();
+        self.view_ids.get(&path)
+    }
+
     pub(crate) fn toggle_dirty(&self) {
         self.dirty.set(true);
     }
@@ -88,18 +111,18 @@ impl Context {
         }
     }
 
-    pub(crate) fn handle_mouse_move(&mut self, pos: impl Into<Vec2f>) {
+    pub(crate) fn handle_mouse_move<IV: IntoView>(&mut self, pos: impl Into<Vec2f>, view: &IV) {
         self.cursor.hover.pos = pos.into();
 
         #[cfg(feature = "cursor_stats")] let start = std::time::Instant::now();
-        self.detect_hover();
+        self.detect_hover(view);
         #[cfg(feature = "cursor_stats")] eprint!("{:?}     \r", start.elapsed());
 
         self.handle_drag();
     }
 
-    fn detect_hover(&mut self) {
-        // let query = self.storage.query::<(&Vec2f, &mut Size)>();
+    fn detect_hover<IV: IntoView>(&mut self, view: &IV) {
+        self.with_id(0, |cx| view.detect_hover(cx))
     }
 
     pub(crate) fn handle_drag(&mut self) {}
@@ -132,7 +155,11 @@ impl Context {
     }
 
     pub(crate) fn render<W: Widget>(&self, _widget: &W, renderer: &mut Renderer) {
-        let _scene = renderer.scene();
+        let mut scene = renderer.scene();
+        self.layout_nodes
+            .iter()
+            .zip(&self.states)
+            .for_each(|(rect, state)| state.render(rect, &mut scene));
     }
 }
 
@@ -152,7 +179,7 @@ impl<'a> BuildCx<'a> {
         }
     }
 
-    pub fn set_state<S: 'static>(&mut self, state: S) {
+    pub fn set_state<R: Renderable + 'static>(&mut self, state: R) {
         let id = self.create_id();
         let path = self.get_path();
         self.cx.view_ids.insert(path, id);
@@ -213,7 +240,10 @@ impl<'a> BuildCx<'a> {
 
     pub fn get_state<S: 'static>(&mut self, id: ViewId) -> Option<&mut S> {
         self.cx.states.get_mut(id.0 as usize)
-            .and_then(|any| any.downcast_mut())
+            .map(|state| unsafe {
+                let ptr: *mut dyn Renderable = state.as_mut();
+                &mut *ptr.cast::<S>()
+            })
     }
 }
 

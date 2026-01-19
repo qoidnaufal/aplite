@@ -63,3 +63,21 @@ impl From<ImageData> for Paint {
         Self::Image(img)
     }
 }
+
+impl<'a> From<&'a Color> for PaintRef<'a> {
+    fn from(rgba: &'a Color) -> Self {
+        Self::Color(rgba)
+    }
+}
+
+impl<'a> From<&'a ImageData> for PaintRef<'a> {
+    fn from(img: &'a ImageData) -> Self {
+        Self::Image(img.downgrade())
+    }
+}
+
+impl<'a> From<ImageRef> for PaintRef<'a> {
+    fn from(img: ImageRef) -> Self {
+        Self::Image(img)
+    }
+}

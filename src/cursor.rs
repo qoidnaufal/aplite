@@ -1,7 +1,6 @@
-#![allow(unused)]
-
-use aplite_storage::SlotId;
 use aplite_types::Vec2f;
+
+use crate::context::ViewId;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseAction {
@@ -52,14 +51,14 @@ pub struct MouseState {
 #[derive(Default, Debug)]
 pub struct MouseHover {
     pub(crate) pos: Vec2f,
-    pub(crate) curr: Option<SlotId>,
+    pub(crate) curr: Option<ViewId>,
 }
 
 #[derive(Default, Debug)]
 pub struct MouseClick {
     pub(crate) pos: Vec2f,
     pub(crate) offset: Vec2f,
-    pub(crate) captured: Option<SlotId>,
+    pub(crate) captured: Option<ViewId>,
 }
 
 #[derive(Default, Debug)]
@@ -72,8 +71,8 @@ pub struct Cursor {
 
 pub enum EmittedClickEvent {
     NoOp,
-    Captured(SlotId),
-    TriggerCallback(SlotId),
+    Captured(ViewId),
+    TriggerCallback(ViewId),
 }
 
 impl Cursor {

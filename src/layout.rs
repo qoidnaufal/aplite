@@ -5,7 +5,7 @@ use aplite_types::{
     Length
 };
 
-use crate::context::{Context, ViewId, ViewPath};
+use crate::{context::{Context, ViewId, ViewPath}, widget::Renderable};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlignH {
@@ -102,6 +102,15 @@ impl<'a> LayoutCx<'a> {
             bound,
             rules,
         }
+    }
+
+    pub fn get_state<S: 'static>(&self) -> Option<&S> {
+        let id = self.get_id()?;
+        self.cx.states.get(id.0 as usize)
+            .map(|state| unsafe {
+                let ptr: *const dyn Renderable = state.as_ref();
+                &*ptr.cast::<S>()
+            })
     }
 
     pub fn set_node(&mut self, rect: Rect) {
