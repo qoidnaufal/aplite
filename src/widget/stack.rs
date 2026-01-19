@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
-use aplite_types::{Length, Color};
+use aplite_types::{Color, Length, Rect};
 use aplite_types::theme::basic;
 
-use crate::layout::{AlignH, AlignV, LayoutCx, Axis, Padding, Spacing};
+use crate::layout::{AlignH, AlignV, Axis, LayoutCx, LayoutRules, Padding, Spacing};
 use crate::context::BuildCx;
 use crate::state::BorderWidth;
 use crate::view::IntoView;
@@ -69,17 +69,65 @@ where
     AX: StackDirection + 'static,
 {
     fn build(&self, cx: &mut BuildCx<'_>) {
-        let mut state = StackState::new();
+        let mut state = StackState {
+            z_index: cx.get_z_index(),
+            ..StackState::new()
+        };
+
         if let Some(style_fn) = self.style_fn.as_ref() {
             style_fn(&mut state);
         }
 
-        cx.set_state(StackState::new());
+        cx.set_state(state);
         cx.with_id(0, |cx| self.content.build(cx));
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        let _available_space = cx.get_available_space();
+        let id = cx.get_id().copied().unwrap();
+        let any = &cx.cx.states[id.0 as usize];
+        let state = any.downcast_ref::<StackState>().unwrap();
+        let bound = cx.bound;
+
+        let width = match state.width {
+            Length::Grow => bound.width,
+            Length::Fixed(val) => val,
+            Length::FitContent => 0.,
+        };
+
+        let height = match state.height {
+            Length::Grow => bound.height,
+            Length::Fixed(val) => val,
+            Length::FitContent => 0.,
+        };
+
+        let rules = LayoutRules {
+            padding: state.padding,
+            axis: AX::AXIS,
+            align_h: state.align_h,
+            align_v: state.align_v,
+            spacing: state.spacing,
+        };
+
+        let layout_node = Rect::new(bound.x, bound.y, width, height);
+
+        match cx.rules.axis {
+            Axis::Horizontal => {
+                cx.bound.x += width + cx.rules.spacing.0 as f32;
+            },
+            Axis::Vertical =>  {
+                cx.bound.y += height + cx.rules.spacing.0 as f32;
+            },
+        }
+
+        cx.set_node(layout_node);
+
+        let x = layout_node.x + rules.padding.left as f32;
+        let y = layout_node.x + rules.padding.top as f32;
+        let bound = Rect::new(x, y, width, height);
+
+        let mut cx = LayoutCx::new(cx.cx, rules, bound);
+
+        cx.with_id(0, |cx| self.content.layout(cx));
     }
 }
 
@@ -108,6 +156,7 @@ pub struct StackState {
     pub spacing: Spacing,
     pub align_h: AlignH,
     pub align_v: AlignV,
+    z_index: u32,
 }
 
 impl StackState {
@@ -122,6 +171,7 @@ impl StackState {
             align_h: AlignH::Left,
             align_v: AlignV::Top,
             spacing: Spacing(5),
+            z_index: 0,
         }
     }
 }

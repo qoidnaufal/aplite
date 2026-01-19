@@ -1,7 +1,9 @@
+use std::sync::Arc;
+
 use aplite_reactive::*;
 use aplite_types::{Color, Length, Rect, rgb, rgba};
 
-use crate::state::BorderWidth;
+use crate::{layout::Axis, state::BorderWidth};
 use crate::layout::LayoutCx;
 use crate::view::IntoView;
 use crate::context::BuildCx;
@@ -49,7 +51,7 @@ where
     IV: IntoView,
 {
     fn debug_name(&self) -> &'static str {
-        self().into_view().debug_name()
+        self().debug_name()
     }
 
     fn build(&self, cx: &mut BuildCx<'_>) {
@@ -57,7 +59,7 @@ where
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        self().into_view().layout(cx);
+        self().layout(cx);
     }
 }
 
@@ -71,21 +73,15 @@ where
 
 pub fn circle() -> CircleWidget {
     CircleWidget {
-        radius: Length::Grow,
         style_fn: None,
     }
 }
 
 pub struct CircleWidget {
-    radius: Length,
     style_fn: Option<Box<dyn Fn(&mut CircleState)>>,
 }
 
 impl CircleWidget {
-    pub fn radius(self, radius: Length) -> Self {
-        Self { radius, ..self }
-    }
-
     pub fn style(self, style_fn: impl Fn(&mut CircleState) + 'static) -> Self {
         Self {
             style_fn: Some(Box::new(style_fn)),
@@ -95,6 +91,7 @@ impl CircleWidget {
 }
 
 pub struct CircleState {
+    pub radius: Length,
     pub rect: Rect,
     pub background: Color,
     pub border_color: Color,
@@ -104,6 +101,7 @@ pub struct CircleState {
 impl CircleState {
     fn new() -> Self {
         Self {
+            radius: Length::Grow,
             rect: Rect::default(),
             background: rgba(0xff6969ff),
             border_color: rgb(0x000000),
@@ -118,11 +116,34 @@ impl Widget for CircleWidget {
         if let Some(style_fn) = self.style_fn.as_ref() {
             style_fn(&mut state);
         }
-        cx.set_state(CircleState::new());
+
+        cx.set_state(state);
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        let _ = cx;
+        let id = cx.get_id().copied().unwrap();
+        let any = &cx.cx.states[id.0 as usize];
+        let state = any.downcast_ref::<CircleState>().unwrap();
+        let bound = cx.bound;
+
+        let radius = match state.radius {
+            Length::Grow => bound.width.max(bound.height),
+            Length::Fixed(val) => val,
+            Length::FitContent => 0.,
+        };
+
+        let layout_node = Rect::new(bound.x, bound.y, radius, radius);
+
+        match cx.rules.axis {
+            Axis::Horizontal => {
+                cx.bound.x += radius + cx.rules.spacing.0 as f32;
+            },
+            Axis::Vertical =>  {
+                cx.bound.y += radius + cx.rules.spacing.0 as f32;
+            },
+        }
+
+        cx.set_node(layout_node);
     }
 }
 
@@ -341,18 +362,82 @@ impl<IV: IntoView + PartialEq> Widget for Memo<IV> {
 #########################################################
 */
 
-impl Widget for &'static str {
+pub fn label(text: impl AsRef<str>) -> Label {
+    Label {
+        text: Arc::from(text.as_ref())
+    }
+}
+
+pub struct Label {
+    text: Arc<str>
+}
+
+pub struct TextState {}
+
+impl Widget for Label {
     fn build(&self, cx: &mut BuildCx<'_>) {
-        cx.set_state(());
+        cx.set_state(TextState {});
     }
 
-    fn layout(&self, _: &mut LayoutCx<'_>) {}
+    fn layout(&self, cx: &mut LayoutCx<'_>) {
+        let bound = cx.bound;
+        let layout_node = bound;
+
+        match cx.rules.axis {
+            Axis::Horizontal => {
+                cx.bound.x += layout_node.width + cx.rules.spacing.0 as f32;
+            },
+            Axis::Vertical =>  {
+                cx.bound.y += layout_node.height + cx.rules.spacing.0 as f32;
+            },
+        }
+
+        cx.set_node(layout_node);
+    }
+}
+
+impl Widget for &'static str {
+    fn build(&self, cx: &mut BuildCx<'_>) {
+        cx.set_state(TextState {});
+    }
+
+    fn layout(&self, cx: &mut LayoutCx<'_>) {
+        let bound = cx.bound;
+        let layout_node = bound;
+
+        match cx.rules.axis {
+            Axis::Horizontal => {
+                cx.bound.x += layout_node.width + cx.rules.spacing.0 as f32;
+            },
+            Axis::Vertical =>  {
+                cx.bound.y += layout_node.height + cx.rules.spacing.0 as f32;
+            },
+        }
+
+        cx.set_node(layout_node);
+    }
 }
 
 impl Widget for String {
-    fn build(&self, _cx: &mut BuildCx<'_>) {}
+    fn build(&self, cx: &mut BuildCx<'_>) {
+        cx.set_state(TextState {});
+    }
 
-    fn layout(&self, _cx: &mut LayoutCx<'_>) {}
+    fn layout(&self, cx: &mut LayoutCx<'_>) {
+        let bound = cx.bound;
+        let layout_node = bound;
+
+        match cx.rules.axis {
+            Axis::Horizontal => {
+                cx.bound.x += layout_node.width + cx.rules.spacing.0 as f32;
+            },
+            Axis::Vertical =>  {
+                cx.bound.y += layout_node.height + cx.rules.spacing.0 as f32;
+            },
+        }
+
+        cx.set_node(layout_node);
+    }
 }
 
 /*

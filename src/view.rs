@@ -127,10 +127,19 @@ macro_rules! view_tuple {
             }
 
             fn layout(&self, cx: &mut LayoutCx<'_>) {
+                let mut path_id = cx.pop();
+
                 #[allow(non_snake_case)]
                 let ($($name,)*) = self;
 
-                ($($name.layout(cx),)*);
+                ($(
+                    cx.with_id(path_id, |cx| {
+                        $name.layout(cx);
+                        path_id += 1;
+                    }),
+                )*);
+
+                cx.push(path_id);
             }
         }
 
@@ -170,10 +179,11 @@ impl_tuple_macro!(
 mod view_test {
     use std::any::{TypeId, Any};
     use super::*;
-    use crate::layout::Padding;
+    use crate::layout::{Padding, Spacing};
     use crate::context::Context;
     use crate::widget::*;
     use aplite_reactive::*;
+    use aplite_types::Length;
 
     #[test]
     fn view_fn() {
@@ -205,10 +215,10 @@ mod view_test {
             circle().into_any(),
         ]);
 
-        assert_eq!(size_of_val(&s_tuple) > size_of_val(&s_arr), size_of_val(&s_arr) > size_of_val(&s_vec));
         assert_eq!(s_vec.type_id(), TypeId::of::<Stack<Vec<AnyView>, Horizontal>>());
         assert_eq!(s_arr.type_id(), TypeId::of::<Stack<[AnyView; 3], Horizontal>>());
         assert_ne!(s_vec.type_id(), s_arr.type_id());
+        assert_ne!(s_tuple.type_id(), s_arr.type_id());
     }
 
     #[test]
@@ -233,20 +243,47 @@ mod view_test {
         assert!(name.contains("Stack"));
     }
 
-    #[test]
-    fn build() {
-        let mut cx = Context::new((500, 500).into());
-
-        let w = hstack((
-            circle(),
-            button((69, ""), || {}),
-            circle,
+    fn view(when: SignalRead<bool>) -> impl IntoView {
+        vstack((
+            circle().style(|state| state.radius = Length::Fixed(20.)),
+            either(
+                move || when.get(),
+                || button("", || {}),
+                circle,
+            ),
         ))
-        .style(|state| state.padding = Padding::splat(5));
+        .style(|state| {
+            state.padding = Padding::splat(5);
+            state.spacing = Spacing(5);
+        })
+    }
 
-        cx.build(&w);
+    #[test]
+    fn build_and_layout() {
+        let mut cx = Context::new((500, 500).into());
+        let (signal, set_signal) = Signal::split(false);
+        let view = view(signal);
 
-        println!("{:?}", cx.states);
-        println!("{:?}", cx.view_ids);
+        cx.build(&view);
+        cx.layout(&view);
+
+        println!("{:?}", cx.layout_nodes);
+        println!("{:?}\n", cx.view_ids);
+
+        set_signal.set(true);
+
+        cx.build(&view);
+        cx.layout(&view);
+
+        println!("{:?}", cx.layout_nodes);
+        println!("{:?}\n", cx.view_ids);
+
+        set_signal.set(false);
+
+        cx.build(&view);
+        cx.layout(&view);
+
+        println!("{:?}", cx.layout_nodes);
+        println!("{:?}\n", cx.view_ids);
     }
 }

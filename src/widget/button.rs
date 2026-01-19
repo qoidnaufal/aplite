@@ -1,9 +1,9 @@
-use aplite_types::Length;
+use aplite_types::{Length, Rect};
 use aplite_types::{CornerRadius, Color};
 use aplite_types::theme::gruvbox_dark as theme;
 
 use crate::context::BuildCx;
-use crate::layout::{AlignH, AlignV, LayoutCx, Axis, Padding, Spacing};
+use crate::layout::{AlignH, AlignV, Axis, LayoutCx, LayoutRules, Padding, Spacing};
 use crate::state::BorderWidth;
 use crate::view::IntoView;
 use crate::widget::Widget;
@@ -18,15 +18,15 @@ where
 
 pub struct Button<IV: IntoView, F> {
     content: IV::View,
-    f: F,
+    callback: F,
     style_fn: Option<Box<dyn Fn(&mut ButtonState)>>,
 }
 
 impl<IV: IntoView, F: Fn() + 'static> Button<IV, F> {
-    fn new(content: IV, f: F) -> Self {
+    fn new(content: IV, callback: F) -> Self {
         Self {
             content: content.into_view(),
-            f,
+            callback,
             style_fn: None,
         }
     }
@@ -46,14 +46,62 @@ impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
             z_index,
             ..ButtonState::new()
         };
+
         if let Some(style_fn) = self.style_fn.as_ref() {
             style_fn(&mut state);
         }
+
         cx.set_state(state);
         cx.with_id(0, |cx| self.content.build(cx));
     }
 
-    fn layout(&self, cx: &mut LayoutCx<'_>) {}
+    fn layout(&self, cx: &mut LayoutCx<'_>) {
+        let id = cx.get_id().copied().unwrap();
+        let any = &cx.cx.states[id.0 as usize];
+        let state = any.downcast_ref::<ButtonState>().unwrap();
+        let bound = cx.bound;
+
+        let width = match state.width {
+            Length::Grow => bound.width,
+            Length::Fixed(val) => val,
+            Length::FitContent => 0.,
+        };
+
+        let height = match state.height {
+            Length::Grow => bound.height,
+            Length::Fixed(val) => val,
+            Length::FitContent => 0.,
+        };
+
+        let rules = LayoutRules {
+            padding: state.padding,
+            axis: state.axis,
+            align_h: state.align_h,
+            align_v: state.align_v,
+            spacing: state.spacing,
+        };
+
+        let layout_node = Rect::new(bound.x, bound.y, width, height);
+
+        match cx.rules.axis {
+            Axis::Horizontal => {
+                cx.bound.x += width + cx.rules.spacing.0 as f32;
+            },
+            Axis::Vertical =>  {
+                cx.bound.y += height + cx.rules.spacing.0 as f32;
+            },
+        }
+
+        cx.set_node(layout_node);
+
+        let x = layout_node.x + rules.padding.left as f32;
+        let y = layout_node.x + rules.padding.top as f32;
+        let bound = Rect::new(x, y, width, height);
+
+        let mut cx = LayoutCx::new(cx.cx, rules, bound);
+
+        cx.with_id(0, |cx| self.content.layout(cx));
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,7 +116,7 @@ pub struct ButtonState {
     pub border_color: Color,
     pub border_width: BorderWidth,
     pub corner_radius: CornerRadius,
-    content_layout: Axis,
+    axis: Axis,
     z_index: u32,
 }
 
@@ -81,7 +129,7 @@ impl ButtonState {
             spacing: Spacing(5),
             align_h: AlignH::Center,
             align_v: AlignV::Middle,
-            content_layout: Axis::Horizontal,
+            axis: Axis::Horizontal,
             background: theme::GREEN_0,
             border_color: theme::GREEN_1,
             border_width: BorderWidth(5.),

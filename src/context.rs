@@ -6,25 +6,28 @@ use aplite_renderer::Renderer;
 use aplite_storage::SlotId;
 use aplite_types::{Rect, Size, Vec2f};
 
+use crate::layout::{AlignH, AlignV, Axis, LayoutCx, LayoutRules, Padding, Spacing};
 use crate::view::IntoView;
 use crate::cursor::{Cursor, MouseAction, MouseButton};
 use crate::widget::Widget;
 // use crate::callback::CallbackStorage;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ViewId(u64);
+pub struct ViewId(pub(crate) u64);
 
-pub struct ViewPath(Vec<u32>);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ViewPath(pub(crate) Vec<u32>);
 
 pub struct BuildCx<'a> {
     pub(crate) cx: &'a mut Context,
     pub(crate) id: u64,
-    pub(crate) path: ViewPath,
 }
 
 pub struct Context {
     pub(crate) states: Vec<Box<dyn Any>>,
+    pub(crate) layout_nodes: Vec<Rect>,
     pub(crate) view_ids: HashMap<Box<[u32]>, ViewId>,
+    pub(crate) view_path: ViewPath,
     // pub(crate) callbacks: CallbackStorage,
     pub(crate) dirty: Signal<bool>,
     pub(crate) cursor: Cursor,
@@ -36,7 +39,9 @@ impl Context {
     pub(crate) fn new(size: Size) -> Self {
         Self {
             states: Vec::new(),
+            layout_nodes: Vec::new(),
             view_ids: HashMap::new(),
+            view_path: ViewPath::new(),
             // callbacks: CallbackStorage::default(),
             cursor: Cursor::default(),
             dirty: Signal::new(false),
@@ -53,14 +58,27 @@ impl Context {
         self.states.truncate(len);
     }
  
-    pub fn layout(&mut self) {}
+    pub fn layout<IV: IntoView>(&mut self, view: &IV) {
+        let rules = LayoutRules {
+            padding: Padding::default(),
+            axis: Axis::Vertical,
+            align_h: AlignH::Left,
+            align_v: AlignV::Top,
+            spacing: Spacing(5),
+        };
+
+        let mut cx = LayoutCx::new(self, rules, self.window_rect);
+        cx.with_id(0, |cx| view.layout(cx));
+
+        let len = self.states.len();
+        self.layout_nodes.truncate(len);
+    }
 
     pub(crate) fn toggle_dirty(&self) {
         self.dirty.set(true);
     }
 
     pub(crate) fn process_pending_update(&mut self) {
-
         if !self.pending_update.is_empty() {
             self.pending_update
                 .drain(..)
@@ -131,7 +149,6 @@ impl<'a> BuildCx<'a> {
         Self {
             cx,
             id: 0,
-            path: ViewPath::new(),
         }
     }
 
@@ -148,21 +165,21 @@ impl<'a> BuildCx<'a> {
     }
 
     pub(crate) fn pop(&mut self) -> u32 {
-        self.path.0.pop().unwrap_or_default()
+        self.cx.view_path.0.pop().unwrap_or_default()
     }
 
     pub(crate) fn push(&mut self, path_id: u32) {
-        self.path.0.push(path_id);
+        self.cx.view_path.0.push(path_id);
     }
 
     pub fn with_id<R: 'static>(&mut self, id_path: u32, f: impl FnOnce(&mut Self) -> R) -> R {
-        self.path.0.push(id_path);
+        self.push(id_path);
         let res = f(self);
-        self.path.0.pop();
+        self.pop();
         res
     }
 
-    pub fn create_id(&mut self) -> ViewId {
+    fn create_id(&mut self) -> ViewId {
         let view_id = ViewId(self.id);
         self.id += 1;
         view_id
@@ -174,11 +191,11 @@ impl<'a> BuildCx<'a> {
     }
 
     pub fn get_parent_id(&self) -> Option<&ViewId> {
-        if self.path.0.is_empty() {
+        if self.cx.view_path.0.is_empty() {
             None
         } else {
-            let parent_path = self.path
-                .0[..self.path.0.len() - 1]
+            let parent_path = self.cx.view_path
+                .0[..self.cx.view_path.0.len() - 1]
                 .iter()
                 .copied()
                 .collect::<Box<[_]>>();
@@ -187,11 +204,11 @@ impl<'a> BuildCx<'a> {
     }
 
     pub fn get_path(&self) -> Box<[u32]> {
-        self.path.0.clone().into_boxed_slice()
+        self.cx.view_path.0.clone().into_boxed_slice()
     }
 
     pub fn get_z_index(&self) -> u32 {
-        self.path.0.len() as u32
+        self.cx.view_path.0.len() as u32
     }
 
     pub fn get_state<S: 'static>(&mut self, id: ViewId) -> Option<&mut S> {

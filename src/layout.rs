@@ -5,7 +5,7 @@ use aplite_types::{
     Length
 };
 
-use crate::context::{Context, ViewPath};
+use crate::context::{Context, ViewId, ViewPath};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlignH {
@@ -87,7 +87,6 @@ pub enum LayoutResult {
 
 pub struct LayoutCx<'a> {
     pub(crate) cx: &'a mut Context,
-    pub(crate) path: ViewPath,
     pub(crate) bound: Rect,
     pub(crate) rules: LayoutRules,
 }
@@ -100,10 +99,39 @@ impl<'a> LayoutCx<'a> {
     ) -> Self {
         Self {
             cx,
-            path: ViewPath::new(),
             bound,
             rules,
         }
+    }
+
+    pub fn set_node(&mut self, rect: Rect) {
+        let id = self.get_id().copied().unwrap();
+
+        if let Some(r) = self.cx.layout_nodes.get_mut(id.0 as usize) {
+            *r = rect;
+        } else {
+            self.cx.layout_nodes.push(rect);
+        }
+    }
+
+    pub(crate) fn pop(&mut self) -> u32 {
+        self.cx.view_path.0.pop().unwrap_or_default()
+    }
+
+    pub(crate) fn push(&mut self, path_id: u32) {
+        self.cx.view_path.0.push(path_id);
+    }
+
+    pub fn get_id(&self) -> Option<&ViewId> {
+        let path = self.cx.view_path.0.clone().into_boxed_slice();
+        self.cx.view_ids.get(&path)
+    }
+
+    pub fn with_id<R: 'static>(&mut self, id_path: u32, f: impl FnOnce(&mut Self) -> R) -> R {
+        self.push(id_path);
+        let res = f(self);
+        self.pop();
+        res
     }
 
     pub fn get_available_space(&self) -> Size {
@@ -116,11 +144,11 @@ pub struct Spacing(pub(crate) u8);
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LayoutRules {
-    pub(crate) padding: Padding,
-    pub(crate) orientation: Axis,
-    pub(crate) align_h: AlignH,
-    pub(crate) align_v: AlignV,
-    pub(crate) spacing: Spacing,
+    pub padding: Padding,
+    pub axis: Axis,
+    pub align_h: AlignH,
+    pub align_v: AlignV,
+    pub spacing: Spacing,
 }
 
 impl LayoutRules {
@@ -156,7 +184,7 @@ impl LayoutRules {
         let stretch_factor = self.spacing.0 as f32 * (child_count - 1.);
         let stretch = child_dimension_along_axis + stretch_factor;
 
-        match self.orientation {
+        match self.axis {
             Axis::Vertical => {
                 let y = match self.align_v {
                     AlignV::Top => offset_y,
