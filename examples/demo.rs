@@ -8,7 +8,7 @@ fn root() -> impl IntoView {
 
     Effect::new(move |_| eprintln!("count: {:?}", counter.get()));
 
-    let button_1 = button("+", inc).style(|s| s.corner_radius = CornerRadius::splat(10));
+    let button_1 = button("+", inc);
     let button_2 = button("-", dec);
 
     vstack((

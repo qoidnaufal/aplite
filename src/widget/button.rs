@@ -1,10 +1,10 @@
 use aplite_renderer::Scene;
-use aplite_types::{Length, Matrix3x2, PaintRef, Rect};
+use aplite_types::{Length, Matrix3x2, PaintRef, Rect, rgb};
 use aplite_types::{CornerRadius, Color};
 use aplite_types::theme::gruvbox_dark as theme;
 
-use crate::context::{BuildCx, Context};
-use crate::layout::{AlignH, AlignV, Axis, LayoutCx, LayoutRules, Padding, Spacing};
+use crate::context::{BuildCx, CursorCx, LayoutCx};
+use crate::layout::{AlignH, AlignV, Axis, LayoutRules, Padding, Spacing};
 use crate::state::BorderWidth;
 use crate::view::IntoView;
 use crate::widget::{Renderable, Widget};
@@ -52,12 +52,12 @@ impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
             style_fn(&mut state);
         }
 
-        cx.set_state(state);
+        cx.register_element(state);
         cx.with_id(0, |cx| self.content.build(cx));
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        let state = cx.get_state::<ButtonElement>().unwrap();
+        let state = cx.get_element::<ButtonElement>().unwrap();
         let bound = cx.bound;
 
         let width = match state.width {
@@ -102,16 +102,31 @@ impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
         cx.with_id(0, |cx| self.content.layout(cx));
     }
 
-    fn detect_hover(&self, cx: &mut Context) {
-        let rect = cx.get_layout_node().unwrap();
-        if rect.contains(&cx.cursor.hover.pos) {
-            // let cb: *const dyn Fn() = &self.callback;
-            cx.with_id(0, |cx| self.content.detect_hover(cx))
+    fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
+        let hovered = cx.get_layout_node()
+            .map(|rect| rect.contains(cx.hover_pos()))
+            .unwrap_or_default();
+
+        if hovered {
+            if !cx.with_id(0, |cx| self.content.detect_hover(cx)) {
+                cx.set_id();
+                cx.set_callback(Some(&self.callback));
+            }
         }
+
+        hovered
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+impl<IV: IntoView, F: Fn() + 'static> IntoView for Button<IV, F> {
+    type View = Self;
+
+    fn into_view(self) -> Self::View {
+        self
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
 pub struct ButtonElement {
     pub width: Length,
     pub height: Length,
@@ -125,6 +140,13 @@ pub struct ButtonElement {
     pub corner_radius: CornerRadius,
     axis: Axis,
     z_index: u32,
+}
+
+impl std::fmt::Debug for ButtonElement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ButtonElement")
+            .finish_non_exhaustive()
+    }
 }
 
 impl ButtonElement {

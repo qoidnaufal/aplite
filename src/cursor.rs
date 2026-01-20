@@ -1,6 +1,27 @@
+use std::ptr::NonNull;
+
 use aplite_types::Vec2f;
 
 use crate::context::ViewId;
+
+pub struct CallbackRef<F: Fn()> {
+    inner: NonNull<F>
+}
+
+impl<F: Fn()> CallbackRef<F> {
+    pub(crate) fn trigger(&self) {
+        unsafe {
+            self.inner.cast::<F>().as_ref()()
+        }
+    }
+}
+
+impl<F: Fn()> std::fmt::Debug for CallbackRef<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CallbackRef")
+            .finish_non_exhaustive()
+    }
+}
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseAction {
@@ -61,18 +82,31 @@ pub struct MouseClick {
     pub(crate) captured: Option<ViewId>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Cursor {
     pub(crate) state: MouseState,
     pub(crate) hover: MouseHover,
     pub(crate) click: MouseClick,
     pub(crate) is_dragging: bool,
+    pub(crate) captured_callback: Option<*const dyn Fn()>,
+}
+
+impl Default for Cursor {
+    fn default() -> Self {
+        Self {
+            state: Default::default(),
+            hover: Default::default(),
+            click: Default::default(),
+            is_dragging: Default::default(),
+            captured_callback: None,
+        }
+    }
 }
 
 pub enum EmittedClickEvent {
     NoOp,
     Captured(ViewId),
-    TriggerCallback(ViewId),
+    TriggerCallback(*const dyn Fn()),
 }
 
 impl Cursor {
@@ -127,8 +161,9 @@ impl Cursor {
                 if let Some(captured) = captured
                     && self.hover.curr.is_some_and(|hovered| hovered == captured)
                     && !was_dragging
+                    && let Some(cb) = self.captured_callback.take()
                 {
-                    EmittedClickEvent::TriggerCallback(captured)
+                    EmittedClickEvent::TriggerCallback(cb)
                 } else {
                     EmittedClickEvent::NoOp
                 }

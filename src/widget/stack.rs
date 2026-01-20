@@ -3,27 +3,27 @@ use aplite_renderer::Scene;
 use aplite_types::{Color, CornerRadius, Length, Matrix3x2, PaintRef, Rect};
 use aplite_types::theme::basic;
 
-use crate::layout::{AlignH, AlignV, Axis, LayoutCx, LayoutRules, Padding, Spacing};
-use crate::context::{BuildCx, Context};
+use crate::layout::{AlignH, AlignV, Axis, LayoutRules, Padding, Spacing};
+use crate::context::{CursorCx, BuildCx, LayoutCx};
 use crate::state::BorderWidth;
 use crate::view::IntoView;
 use crate::widget::{Renderable, Widget};
 
-pub fn hstack<C>(widget: C) -> Stack<C, Horizontal>
+pub fn hstack<IV>(widget: IV) -> Stack<IV, Horizontal>
 where
-    C: IntoView,
+    IV: IntoView,
 {
-    Stack::<C, Horizontal>::new(widget)
+    Stack::<IV, Horizontal>::new(widget)
 }
 
-pub fn vstack<C>(widget: C) -> Stack<C, Vertical>
+pub fn vstack<IV>(widget: IV) -> Stack<IV, Vertical>
 where
-    C: IntoView,
+    IV: IntoView,
 {
-    Stack::<C, Vertical>::new(widget)
+    Stack::<IV, Vertical>::new(widget)
 }
 
-pub trait StackDirection {
+pub trait StackDirection: 'static {
     const AXIS: Axis;
 }
 
@@ -35,20 +35,20 @@ pub struct Vertical; impl StackDirection for Vertical {
     const AXIS: Axis = Axis::Vertical;
 }
 
-pub struct Stack<C, AX>
+pub struct Stack<IV, AX>
 where
-    C: IntoView,
+    IV: IntoView,
 {
-    pub(crate) content: C::View,
+    pub(crate) content: IV::View,
     style_fn: Option<Box<dyn Fn(&mut StackElement)>>,
     marker: PhantomData<AX>
 }
 
-impl<C, AX: StackDirection> Stack<C, AX>
+impl<IV, AX: StackDirection> Stack<IV, AX>
 where
-    C: IntoView,
+    IV: IntoView,
 {
-    fn new(widget: C) -> Self {
+    fn new(widget: IV) -> Self {
         Self {
             content: widget.into_view(),
             style_fn: None,
@@ -64,9 +64,9 @@ where
     }
 }
 
-impl<C, AX> Widget for Stack<C, AX>
+impl<IV, AX> Widget for Stack<IV, AX>
 where
-    C: IntoView,
+    IV: IntoView,
     AX: StackDirection + 'static,
 {
     fn build(&self, cx: &mut BuildCx<'_>) {
@@ -79,12 +79,12 @@ where
             style_fn(&mut state);
         }
 
-        cx.set_state(state);
-        cx.with_id(0, |cx| self.content.build(cx));
+        cx.register_element(state);
+        cx.with_id(0, |cx| self.content.build(cx))
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        let state = cx.get_state::<StackElement>().unwrap();
+        let state = cx.get_element::<StackElement>().unwrap();
         let bound = cx.bound;
 
         let width = match state.width {
@@ -129,29 +129,29 @@ where
         cx.with_id(0, |cx| self.content.layout(cx));
     }
 
-    fn detect_hover(&self, cx: &mut Context) {
-        let rect = cx.get_layout_node().unwrap();
-        if rect.contains(&cx.cursor.hover.pos) {
-            cx.with_id(0, |cx| self.content.detect_hover(cx))
+    fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
+        let hovered = cx.get_layout_node()
+            .map(|rect| rect.contains(cx.hover_pos()))
+            .unwrap_or_default();
+
+        if hovered {
+            let any_hovered_child = cx.with_id(0, |cx| self.content.detect_hover(cx));
+            any_hovered_child || hovered
+        } else {
+            false
         }
     }
 }
 
-// impl<C, AX> ForEachView for Stack<C, AX>
-// where
-//     C: IntoView,
-//     C::View: ForEachView,
-//     AX: StackDirection + 'static,
-// {
-//     fn for_each(&self, f: impl FnMut(&dyn Widget)) {
-//         self.content.for_each(f);
-//     }
+impl<IV: IntoView, AX: StackDirection> IntoView for Stack<IV, AX> {
+    type View = Self;
 
-//     fn for_each_mut(&mut self, f: impl FnMut(&mut dyn Widget)) {
-//         self.content.for_each_mut(f);
-//     }
-// }
+    fn into_view(self) -> Self::View {
+        self
+    }
+}
 
+#[derive(PartialEq, Eq)]
 pub struct StackElement {
     pub width: Length,
     pub height: Length,
@@ -164,6 +164,13 @@ pub struct StackElement {
     pub align_h: AlignH,
     pub align_v: AlignV,
     z_index: u32,
+}
+
+impl std::fmt::Debug for StackElement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StackElement")
+            .finish_non_exhaustive()
+    }
 }
 
 impl StackElement {

@@ -2,10 +2,7 @@ use aplite_types::{
     Rect,
     Vec2f,
     Size,
-    Length
 };
-
-use crate::{context::{Context, ViewId, ViewPath}, widget::Renderable};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlignH {
@@ -85,68 +82,6 @@ pub enum LayoutResult {
     OverFlow,
 }
 
-pub struct LayoutCx<'a> {
-    pub(crate) cx: &'a mut Context,
-    pub(crate) bound: Rect,
-    pub(crate) rules: LayoutRules,
-}
-
-impl<'a> LayoutCx<'a> {
-    pub fn new(
-        cx: &'a mut Context,
-        rules: LayoutRules,
-        bound: Rect,
-    ) -> Self {
-        Self {
-            cx,
-            bound,
-            rules,
-        }
-    }
-
-    pub fn get_state<S: 'static>(&self) -> Option<&S> {
-        let id = self.get_id()?;
-        self.cx.states.get(id.0 as usize)
-            .map(|state| unsafe {
-                let ptr: *const dyn Renderable = state.as_ref();
-                &*ptr.cast::<S>()
-            })
-    }
-
-    pub fn set_node(&mut self, rect: Rect) {
-        let id = self.get_id().copied().unwrap();
-
-        if let Some(r) = self.cx.layout_nodes.get_mut(id.0 as usize) {
-            *r = rect;
-        } else {
-            self.cx.layout_nodes.push(rect);
-        }
-    }
-
-    pub(crate) fn pop(&mut self) -> u32 {
-        self.cx.view_path.0.pop().unwrap_or_default()
-    }
-
-    pub(crate) fn push(&mut self, path_id: u32) {
-        self.cx.view_path.0.push(path_id);
-    }
-
-    pub fn get_id(&self) -> Option<&ViewId> {
-        let path = self.cx.view_path.0.clone().into_boxed_slice();
-        self.cx.view_ids.get(&path)
-    }
-
-    pub fn with_id<R: 'static>(&mut self, id_path: u32, f: impl FnOnce(&mut Self) -> R) -> R {
-        self.push(id_path);
-        let res = f(self);
-        self.pop();
-        res
-    }
-
-    pub fn get_available_space(&self) -> Size {
-        self.bound.size()
-    }
-}
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Spacing(pub(crate) u8);

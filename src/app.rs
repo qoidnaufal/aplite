@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use winit::dpi::{PhysicalPosition, PhysicalSize};
+use winit::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowAttributes, WindowId};
 use winit::event::{ElementState, MouseButton, WindowEvent};
@@ -67,7 +67,11 @@ impl<IV: IntoView> Aplite<IV> {
         event_loop: &ActiveEventLoop,
     ) -> Result<(), ApliteError> {
         let window_attributes = WindowAttributes::default()
-            .with_inner_size(PhysicalSize::new(self.cx.window_rect.width, self.cx.window_rect.height));
+            .with_inner_size(LogicalSize::new(
+                self.cx.window_rect.width,
+                self.cx.window_rect.height
+            ));
+
         let window = Arc::new(event_loop.create_window(window_attributes)?);
 
         self.renderer = Some(block_on(Renderer::new(Arc::clone(&window)))?);

@@ -3,8 +3,8 @@ use std::path::Path;
 use aplite_renderer::Scene;
 use aplite_types::{ImageData, ImageRef, Length, Matrix3x2, PaintRef, Rect, rgb};
 
-use crate::context::{BuildCx, Context};
-use crate::layout::{Axis, LayoutCx};
+use crate::context::{BuildCx, LayoutCx, CursorCx};
+use crate::layout::Axis;
 use crate::widget::{Renderable, Widget};
 
 pub fn image<F: Fn() -> ImageData + 'static>(image_fn: F) -> Image {
@@ -47,11 +47,11 @@ impl Image {
 
 impl Widget for Image {
     fn build(&self, cx: &mut BuildCx<'_>) {
-        cx.set_state(ImageState::new(&self.data));
+        cx.register_element(ImageElement::new(&self.data));
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        let state = cx.get_state::<ImageState>().unwrap();
+        let state = cx.get_element::<ImageElement>().unwrap();
         let bound = cx.bound;
 
         let width = match state.width {
@@ -80,20 +80,27 @@ impl Widget for Image {
         cx.set_node(layout_node);
     }
 
-    fn detect_hover(&self, cx: &mut Context) {
+    fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
         let rect = cx.get_layout_node().unwrap();
-        if rect.contains(&cx.cursor.hover.pos) {}
+        rect.contains(cx.hover_pos())
     }
 }
 
-pub struct ImageState {
+pub struct ImageElement {
     pub width: Length,
     pub height: Length,
     pub aspect_ratio: AspectRatio,
     data: ImageRef,
 }
 
-impl ImageState {
+impl std::fmt::Debug for ImageElement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ImageElement")
+            .finish_non_exhaustive()
+    }
+}
+
+impl ImageElement {
     fn new(data: &ImageData) -> Self {
         Self {
             width: Length::Grow,
@@ -104,7 +111,7 @@ impl ImageState {
     }
 }
 
-impl Renderable for ImageState {
+impl Renderable for ImageElement {
     fn render(&self, rect: &Rect, scene: &mut Scene) {
         scene.draw_rect(
             rect,

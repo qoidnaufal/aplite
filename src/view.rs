@@ -1,6 +1,10 @@
-use crate::layout::LayoutCx;
+use std::ptr::NonNull;
+
+use aplite_types::Rect;
+
+use crate::layout::Axis;
 use crate::widget::Widget;
-use crate::context::{BuildCx, Context};
+use crate::context::{BuildCx, CursorCx, LayoutCx};
 
 /*
 #########################################################
@@ -14,36 +18,18 @@ use crate::context::{BuildCx, Context};
 /// - any type that implement Widget: `impl Widget for T`,
 /// - any type that implement Mount: `impl Mount for T`,
 /// - any function that produce IntoView: `FnOnce() -> IV where IV: IntoView` or `fn() -> impl IntoView`
-pub trait IntoView: Widget + Sized + 'static {
+pub trait IntoView: Sized + 'static {
     type View: Widget;
     fn into_view(self) -> Self::View;
 }
 
-impl<IV: Widget + Sized + 'static> IntoView for IV {
-    type View = IV;
+// impl<IV: Widget + Sized + 'static> IntoView for IV {
+//     type View = IV;
 
-    fn into_view(self) -> Self::View {
-        self
-    }
-}
-
-// pub trait ForEachView: IntoView {
-//     fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
-//         f(self);
-//     }
-
-//     fn for_each_mut(&mut self, mut f: impl FnMut(&mut dyn Widget)) {
-//         f(self)
-//     }
-
-//     fn count(&self) -> usize {
-//         let mut count = 0;
-//         self.for_each(|_| count += 1);
-//         count
+//     fn into_view(self) -> Self::View {
+//         self
 //     }
 // }
-
-// pub struct Children<FE: ForEachView>(FE);
 
 /*
 #########################################################
@@ -55,49 +41,75 @@ impl<IV: Widget + Sized + 'static> IntoView for IV {
 
 pub trait ToAnyView: IntoView {
     fn into_any(self) -> AnyView {
-        AnyView::new(Box::new(self.into_view()))
+        AnyView::new(self.into_view())
     }
 }
 
 impl<IV: IntoView> ToAnyView for IV {}
 
 pub struct AnyView {
-    pub(crate) widget: Box<dyn Widget>,
+    widget: NonNull<()>,
+    drop_fn: Option<unsafe fn(NonNull<()>)>,
+}
+
+impl Drop for AnyView {
+    fn drop(&mut self) {
+        let drop_fn = self.drop_fn.take();
+        if let Some(drop_fn) = drop_fn {
+            unsafe { drop_fn(self.widget) }
+        }
+        self.drop_fn = drop_fn;
+    }
 }
 
 impl AnyView {
-    pub(crate) fn new(widget: Box<dyn Widget>) -> Self {
-        Self { widget }
+    pub(crate) fn new<W: Widget + Sized>(widget: W) -> Self {
+        #[inline]
+        unsafe fn drop_fn<W>(ptr: NonNull<()>) {
+            unsafe {
+                let _ = Box::from_raw(ptr.cast::<W>().as_ptr());
+            }
+        }
+
+        Self {
+            widget: NonNull::from_mut(Box::leak(Box::new(widget))).cast(),
+            drop_fn: Some(drop_fn::<W>)
+        }
     }
 
     pub fn as_ref<'a>(&'a self) -> &'a dyn Widget {
-        self.widget.as_ref()
+        unsafe {
+            let ptr = self.widget.as_ptr() as *const dyn Widget;
+            &*ptr
+        }
     }
 
     pub fn as_mut<'a>(&'a mut self) -> &'a mut dyn Widget {
-        self.widget.as_mut()
+        unsafe {
+            let ptr = self.widget.as_ptr() as *mut dyn Widget;
+            &mut *ptr
+        }
     }
 }
 
 impl Widget for AnyView {
     fn build(&self, cx: &mut BuildCx<'_>) {
-        self.widget.build(cx);
+        self.as_ref().build(cx);
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        self.widget.layout(cx);
+        self.as_ref().layout(cx);
     }
 
-    fn detect_hover(&self, cx: &mut Context) {
-        let rect = cx.get_layout_node().unwrap();
-        if rect.contains(&cx.cursor.hover.pos) {}
+    fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
+        self.as_ref().detect_hover(cx)
     }
 }
 
 /*
 #########################################################
 #
-# Macros
+# ViewTuple
 #
 #########################################################
 */
@@ -114,7 +126,7 @@ macro_rules! impl_tuple_macro {
 
 macro_rules! view_tuple {
     ($($name:ident),*) => {
-        impl<$($name: IntoView),*> Widget for ($($name,)*) {
+        impl<$($name: Widget),*> Widget for ($($name,)*) {
             fn build(&self, cx: &mut BuildCx<'_>) {
                 let mut path_id = cx.pop();
 
@@ -132,57 +144,86 @@ macro_rules! view_tuple {
             }
 
             fn layout(&self, cx: &mut LayoutCx<'_>) {
-                let mut path_id = cx.pop();
+                #[allow(non_snake_case)]
+                fn for_each<$($name: Widget),*>(
+                    $($name: &$name,)*
+                    mut f: impl FnMut(&dyn Widget)
+                ) {
+                    ($(f($name),)*);
+                }
 
                 #[allow(non_snake_case)]
                 let ($($name,)*) = self;
 
-                ($(
-                    cx.with_id(path_id, |cx| {
-                        $name.layout(cx);
-                        path_id += 1;
-                    }),
-                )*);
+                let mut count = 0;
+
+                for_each($($name,)* |_| count += 1);
+
+                let mut path_id = cx.pop();
+
+                let bound = match cx.rules.axis {
+                    Axis::Horizontal => {
+                        let width = cx.bound.width / count as f32;
+                        Rect::new(cx.bound.x, cx.bound.y, width, cx.bound.height)
+                    },
+                    Axis::Vertical => {
+                        let height = cx.bound.height / count as f32;
+                        Rect::new(cx.bound.x, cx.bound.y, cx.bound.width, height)
+                    },
+                };
+
+                let mut cx = LayoutCx::new(cx.cx, cx.rules, bound);
+
+                for_each($($name,)* |w| cx.with_id(path_id, |cx| {
+                    w.layout(cx);
+                    path_id += 1;
+                }));
 
                 cx.push(path_id);
             }
 
-            fn detect_hover(&self, cx: &mut Context) {
+            fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
+                #[allow(non_snake_case)]
+                fn any<$($name: Widget),*>(
+                    $($name: &$name,)*
+                    mut f: impl FnMut(&dyn Widget) -> bool
+                ) -> bool {
+                    ($(
+                        if f($name) {
+                            return true;
+                        }
+                    ,)*);
+
+                    false
+                }
+
                 let mut path_id = cx.pop();
 
                 #[allow(non_snake_case)]
                 let ($($name,)*) = self;
 
-                ($(
-                    cx.with_id(path_id, |cx| {
-                        $name.detect_hover(cx);
-                        path_id += 1;
-                    }),
-                )*);
+                let res = any($($name,)* |w| cx.with_id(path_id, |cx| {
+                    let res = w.detect_hover(cx);
+                    path_id += 1;
+                    res
+                }));
 
                 cx.push(path_id);
+
+                res
             }
         }
 
-        // impl<$($name),*> ForEachView for ($($name,)*)
-        // where
-        //     // ($($name,)*): IntoView,
-        //     $($name: IntoView),*,
-        // {
-        //     fn for_each(&self, mut f: impl FnMut(&dyn Widget)) {
-        //         #[allow(non_snake_case)]
-        //         let ($($name,)*) = self;
+        impl<$($name: IntoView),*> IntoView for ($($name,)*) {
+            type View = ($($name::View,)*);
 
-        //         ($(f($name),)*);
-        //     }
+            fn into_view(self) -> Self::View {
+                #[allow(non_snake_case)]
+                let ($($name,)*) = self;
 
-        //     fn for_each_mut(&mut self, mut f: impl FnMut(&mut dyn Widget)) {
-        //         #[allow(non_snake_case)]
-        //         let ($($name,)*) = self;
-
-        //         ($(f($name),)*);
-        //     }
-        // }
+                ($($name.into_view(),)*)
+            }
+        }
     };
 }
 
@@ -208,12 +249,13 @@ mod view_test {
 
     #[test]
     fn view_fn() {
-        let name = Signal::new("Balo");
+        let (name, set_name) = Signal::split("Balo");
         let view = move || name;
+        let view = view.into_view();
 
-        let debug_name = view.debug_name();
-        println!("{debug_name}");
-        assert_eq!(debug_name, "&str");
+        println!("{}", view.with_untracked(|v| v.get()));
+        set_name.set("Nunez");
+        println!("{}", view.with_untracked(|v| v.get()));
     }
 
     #[test]
@@ -252,14 +294,16 @@ mod view_test {
             || button("+", || {}),
         );
 
-        let name = e.debug_name();
+        let widget = e.into_view();
+
+        let name = widget.debug_name();
         println!("{name}");
         assert!(name.contains("Button"));
 
         println!();
         set_when.set(true);
 
-        let name = e.debug_name();
+        let name = widget.debug_name();
         println!("{name}");
         assert!(name.contains("Stack"));
     }
@@ -283,13 +327,13 @@ mod view_test {
     fn build_and_layout() {
         let mut cx = Context::new((500, 500).into());
         let (signal, set_signal) = Signal::split(false);
-        let view = view(signal);
+        let view = view(signal).into_view();
 
         cx.build(&view);
         cx.layout(&view);
 
         println!("{:?}", cx.layout_nodes);
-        println!("{:?}\n", cx.view_ids);
+        println!("{:?}\n", cx.elements);
 
         set_signal.set(true);
 
@@ -297,7 +341,7 @@ mod view_test {
         cx.layout(&view);
 
         println!("{:?}", cx.layout_nodes);
-        println!("{:?}\n", cx.view_ids);
+        println!("{:?}\n", cx.elements);
 
         set_signal.set(false);
 
@@ -305,6 +349,6 @@ mod view_test {
         cx.layout(&view);
 
         println!("{:?}", cx.layout_nodes);
-        println!("{:?}\n", cx.view_ids);
+        println!("{:?}\n", cx.elements);
     }
 }
