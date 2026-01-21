@@ -94,27 +94,22 @@ pub enum EmittedClickEvent {
 }
 
 impl Cursor {
-    #[inline(always)]
     pub fn hover_pos(&self) -> Vec2f {
         self.hover.pos
     }
 
-    #[inline(always)]
     pub fn click_pos(&self) -> Vec2f {
         self.click.pos
     }
 
-    #[inline(always)]
     pub fn button(&self) -> MouseButton {
         self.state.button
     }
 
-    #[inline(always)]
     pub fn action(&self) -> MouseAction {
         self.state.action
     }
 
-    #[inline(always)]
     fn set_state(&mut self, action: MouseAction, button: MouseButton) {
         self.state = MouseState { action, button };
     }
@@ -151,14 +146,12 @@ impl Cursor {
         }
     }
 
-    #[inline(always)]
     pub(crate) fn is_dragging(&self) -> bool {
         self.is_left_clicking()
             && self.captured.id.is_some()
             && self.hover.pos != self.click.pos
     }
 
-    #[inline(always)]
     pub(crate) fn is_left_clicking(&self) -> bool {
         matches!(self.state.action, MouseAction::Pressed)
             && matches!(self.state.button, MouseButton::Left)

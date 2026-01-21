@@ -8,18 +8,25 @@ fn root() -> impl IntoView {
 
     Effect::new(move |_| eprintln!("count: {:?}", counter.get()));
 
-    let button_1 = button("+", inc);
-    let button_2 = button("-", dec);
+    let button_1 = button("-", dec);
+    let button_2 = button("+", inc);
 
     vstack((
-        hstack((button_1, button_2)),
+        hstack((button_1, button_2))
+            .style(|state| {
+                state.padding = Padding::splat(5);
+                state.spacing = Spacing::new(10);
+            }),
         either(
             move || counter.get() % 2 == 0,
             circle,
             || button("dummy", || {}),
         ),
     ))
-    .style(|state| state.padding = Padding::splat(5))
+    .style(|state| {
+        state.padding = Padding::splat(5);
+        state.spacing = Spacing::new(5);
+    })
 }
 
 

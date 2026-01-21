@@ -177,9 +177,3 @@ fn fs_main(in: FragmentPayload) -> @location(0) vec4<f32> {
     return mix(color, border_color, blend);
 }
 ";
-
-// pub const COMPUTE_SDF: &str = r"
-// @compute @workgroup_size(16, 16)
-// fn compute(@builtin(global_invocation_id) id: vec3u) {
-// }
-// ";

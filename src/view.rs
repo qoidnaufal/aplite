@@ -14,22 +14,10 @@ use crate::context::{BuildCx, CursorCx, LayoutCx};
 #########################################################
 */
 
-/// Types that automatically implement IntoView are:
-/// - any type that implement Widget: `impl Widget for T`,
-/// - any type that implement Mount: `impl Mount for T`,
-/// - any function that produce IntoView: `FnOnce() -> IV where IV: IntoView` or `fn() -> impl IntoView`
 pub trait IntoView: Sized + 'static {
     type View: Widget;
     fn into_view(self) -> Self::View;
 }
-
-// impl<IV: Widget + Sized + 'static> IntoView for IV {
-//     type View = IV;
-
-//     fn into_view(self) -> Self::View {
-//         self
-//     }
-// }
 
 /*
 #########################################################

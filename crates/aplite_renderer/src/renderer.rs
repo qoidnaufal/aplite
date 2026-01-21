@@ -172,6 +172,7 @@ impl Renderer {
 
             let bundle_encoder = self.encode(&pipeline);
             let render_bundle = bundle_encoder.finish(&Default::default());
+
             self.bundle = Some(render_bundle);
         }
 
@@ -426,12 +427,6 @@ impl Scene<'_> {
     }
 }
 
-// pub(crate) enum Pipeline {
-//     Render(wgpu::RenderPipeline),
-//     // TODO: this is deep & complex topic, but nevertheless an interesting one to study
-//     Compute(wgpu::ComputePipeline),
-// }
-
 struct Pipeline;
 
 impl Pipeline {
@@ -494,13 +489,6 @@ impl Pipeline {
             cache: None,
         })
     }
-
-    // pub(crate) fn get_render_pipeline(&self) -> &wgpu::RenderPipeline {
-    //     match self {
-    //         Pipeline::Render(render_pipeline) => render_pipeline,
-    //         Pipeline::Compute(_) => panic!("expected render pipeline, get a compute instead"),
-    //     }
-    // }
 }
 
 #[inline]

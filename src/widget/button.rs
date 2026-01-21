@@ -9,7 +9,7 @@ use crate::context::{BuildCx, CursorCx, LayoutCx};
 use crate::layout::{AlignH, AlignV, Axis, LayoutRules, Padding, Spacing};
 use crate::state::BorderWidth;
 use crate::view::IntoView;
-use crate::widget::{Renderable, Widget};
+use crate::widget::{Renderable, Widget, InteractionState};
 
 pub fn button<IV, F>(content: IV, f: F) -> Button<IV, F>
 where
@@ -22,7 +22,7 @@ where
 pub struct Button<IV: IntoView, F> {
     content: IV::View,
     callback: F,
-    style_fn: Option<Box<dyn Fn(&mut ButtonElement)>>,
+    style_fn: Option<Box<dyn Fn(&mut ButtonElement, InteractionState)>>,
 }
 
 impl<IV: IntoView, F: Fn() + 'static> Button<IV, F> {
@@ -34,7 +34,7 @@ impl<IV: IntoView, F: Fn() + 'static> Button<IV, F> {
         }
     }
 
-    pub fn style(self, style_fn: impl Fn(&mut ButtonElement) + 'static) -> Self {
+    pub fn style(self, style_fn: impl Fn(&mut ButtonElement, InteractionState) + 'static) -> Self {
         Self {
             style_fn: Some(Box::new(style_fn)),
             ..self
@@ -51,7 +51,7 @@ impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
         };
 
         if let Some(style_fn) = self.style_fn.as_ref() {
-            style_fn(&mut state);
+            style_fn(&mut state, InteractionState::Idle);
         }
 
         cx.register_element(state);
@@ -112,10 +112,6 @@ impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
         if hovered {
             if !cx.with_id(0, |cx| self.content.detect_hover(cx)) {
                 cx.set_id();
-                // if let Some(style_fn) = self.style_fn.as_ref() {
-                //     let element = cx.get_element_mut::<ButtonElement>().unwrap();
-                //     style_fn(element)
-                // }
                 cx.set_callback_on_click(|| {
                     NonNull::from_ref(&self.callback as &dyn Fn())
                 });

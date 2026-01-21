@@ -25,6 +25,7 @@ pub mod prelude {
     pub use crate::layout::{
         Axis,
         Padding,
+        Spacing,
         AlignV,
         AlignH
     };

@@ -193,10 +193,10 @@ impl StackElement {
             border_color: basic::TRANSPARENT,
             border_width: BorderWidth(0.),
             corner_radius: CornerRadius::splat(0),
-            padding: Padding::splat(5),
+            padding: Padding::splat(0),
             align_h: AlignH::Left,
             align_v: AlignV::Top,
-            spacing: Spacing(5),
+            spacing: Spacing(0),
             z_index: 0,
         }
     }

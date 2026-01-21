@@ -21,7 +21,6 @@ pub struct BuildCx<'a> {
     view_path: &'a mut ViewPath,
     view_ids: &'a mut HashMap<PathId, ViewId>,
     elements: &'a mut Vec<Box<dyn Renderable>>,
-    // pub(crate) cx: &'a mut Context,
     pub(crate) id: u64,
 }
 
@@ -40,14 +39,15 @@ pub struct CursorCx<'a> {
     elements: &'a mut Vec<Box<dyn Renderable>>,
     cursor: &'a mut Cursor,
     layout_nodes: &'a mut Vec<Rect>,
-}
-
-pub struct UpdateCx<'a> {
-    view_path: &'a mut ViewPath,
-    view_ids: &'a mut HashMap<PathId, ViewId>,
-    elements: &'a mut Vec<Box<dyn Renderable>>,
     dirty: Signal<bool>,
 }
+
+// pub struct UpdateCx<'a> {
+//     view_path: &'a mut ViewPath,
+//     view_ids: &'a mut HashMap<PathId, ViewId>,
+//     elements: &'a mut Vec<Box<dyn Renderable>>,
+//     dirty: Signal<bool>,
+// }
 
 pub struct Context {
     pub(crate) elements: Vec<Box<dyn Renderable>>,
@@ -88,7 +88,7 @@ impl Context {
             axis: Axis::Vertical,
             align_h: AlignH::Left,
             align_v: AlignV::Top,
-            spacing: Spacing(5),
+            spacing: Spacing(0),
         };
 
         let mut cx = LayoutCx::new(self, rules, self.window_rect);
@@ -131,7 +131,7 @@ impl Context {
                     self.cursor.captured.callback = None;
                 }
 
-                // let pos = self.cursor.click.offset;
+                // let pos = self.cursor.hover.pos - self.cursor.click.offset;
                 // let node = &mut self.layout_nodes[captured.0 as usize];
                 // node.set_pos(pos);
                 // self.toggle_dirty();
@@ -243,22 +243,26 @@ impl<'a> BuildCx<'a> {
         }
     }
 
-    pub fn register_element<R: Renderable + 'static>(&mut self, state: R) {
-        let id = self.create_id();
-        let path = self.view_path.get_path_id();
-        self.view_ids.insert(path, id);
+    pub fn register_element<R: Renderable + 'static>(&mut self, element: R) {
+        let id = self.get_or_create_id();
 
         if let Some(any) = self.elements.get_mut(id.0 as usize) {
-            *any = Box::new(state);
+            *any = Box::new(element);
         } else {
-            self.elements.push(Box::new(state));
+            self.elements.push(Box::new(element));
         }
     }
 
-    fn create_id(&mut self) -> ViewId {
-        let view_id = ViewId(self.id);
-        self.id += 1;
-        view_id
+    fn get_or_create_id(&mut self) -> ViewId {
+        let path_id = self.view_path.get_path_id();
+        if let Some(view_id) = self.view_ids.get(&path_id) {
+            *view_id
+        } else {
+            let view_id = ViewId(self.id);
+            self.view_ids.insert(path_id, view_id);
+            self.id += 1;
+            view_id
+        }
     }
 }
 
@@ -333,6 +337,7 @@ impl<'a> CursorCx<'a> {
             elements: &mut cx.elements,
             layout_nodes: &mut cx.layout_nodes,
             cursor: &mut cx.cursor,
+            dirty: cx.dirty,
         }
     }
 
@@ -356,6 +361,14 @@ impl<'a> CursorCx<'a> {
 
     pub fn set_id(&mut self) {
         self.cursor.hover.curr = self.get_id().copied();
+    }
+
+    pub fn is_clicking(&self) -> bool {
+        self.cursor.is_left_clicking()
+    }
+
+    pub fn set_dirty(&self) {
+        self.dirty.set(true);
     }
 }
 

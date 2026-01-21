@@ -86,6 +86,12 @@ pub enum LayoutResult {
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Spacing(pub(crate) u8);
 
+impl Spacing {
+    pub fn new(spacing: u8) -> Self {
+        Self(spacing)
+    }
+}
+
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LayoutRules {
     pub padding: Padding,

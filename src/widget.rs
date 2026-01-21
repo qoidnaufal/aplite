@@ -28,6 +28,13 @@ pub use {
 #########################################################
 */
 
+pub enum InteractionState {
+    Idle,
+    Hovered,
+    Focused,
+    Clicked,
+}
+
 /// main building block to create a renderable component
 pub trait Widget: 'static {
     fn debug_name(&self) -> &'static str {
@@ -115,25 +122,21 @@ where
     fn debug_name(&self) -> &'static str {
         self.update();
         self.with(|view| view.debug_name())
-        // self.view.read().unwrap().debug_name()
     }
 
     fn build(&self, cx: &mut BuildCx<'_>) {
         self.update();
         self.with(|view| view.build(cx))
-        // self.view.read().unwrap().build(cx);
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         self.update();
         self.with(|view| view.layout(cx))
-        // self.view.read().unwrap().layout(cx);
     }
 
     fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
         self.update();
         self.with(|view| view.detect_hover(cx))
-        // self.view.read().unwrap().detect_hover(cx)
     }
 }
 
