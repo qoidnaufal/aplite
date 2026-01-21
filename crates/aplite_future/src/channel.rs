@@ -28,20 +28,6 @@ impl Sender {
         self.0.dirty.store(true, Ordering::Relaxed);
         self.0.wake_by_ref();
     }
-
-    pub fn close(self) {
-        unsafe {
-            Arc::decrement_strong_count(Arc::as_ptr(&self.0))
-        }
-    }
-}
-
-impl Drop for Sender {
-    fn drop(&mut self) {
-        unsafe {
-            Arc::decrement_strong_count(Arc::as_ptr(&self.0))
-        }
-    }
 }
 
 impl Clone for Sender {
@@ -234,8 +220,6 @@ mod channel_test {
 
     #[test]
     fn poll() {
-        Executor::init(4);
-
         let (tx, mut rx) = aplite_channel();
 
         Executor::spawn(async move {

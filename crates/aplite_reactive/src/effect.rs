@@ -179,8 +179,6 @@ mod effect_test {
 
     #[test]
     fn effect() {
-        Executor::init(3);
-
         let use_last = Signal::new(false);
         let (first, set_first) = Signal::split("Dario");
         let (last, set_last) = Signal::split("");

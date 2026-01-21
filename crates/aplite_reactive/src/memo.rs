@@ -13,11 +13,11 @@ pub struct Memo<T> {
 struct MemoState<T> {
     scope: Scope,
     value: UnsafeCell<Option<T>>,
-    f: Box<dyn Fn(Option<T>) -> (T, bool)>,
-    state: RwLock<State>
+    f: Arc<dyn Fn(Option<T>) -> (T, bool)>,
+    state: RwLock<ReactiveState>
 }
 
-struct State {
+struct ReactiveState {
     sources: Sources,
     subscribers: Subscribers,
     this: AnySubscriber,
@@ -36,12 +36,15 @@ unsafe impl<T> Sync for MemoState<T> {}
 */
 
 impl<T> MemoState<T> {
-    fn new(f: Box<dyn Fn(Option<T>) -> (T, bool)>, this: AnySubscriber) -> Self {
+    fn new<F>(f: F, this: AnySubscriber) -> Self
+    where
+        F: Fn(Option<T>) -> (T, bool) + 'static,
+    {
         Self {
             scope: Scope::new(),
             value: UnsafeCell::new(None::<T>),
-            f,
-            state: RwLock::new(State {
+            f: Arc::new(f),
+            state: RwLock::new(ReactiveState {
                 sources: Sources::default(),
                 subscribers: Subscribers::default(),
                 this,
@@ -63,12 +66,12 @@ impl<T> MemoState<T> {
     }
 
     #[inline(always)]
-    fn state_reader(&self) -> std::sync::RwLockReadGuard<'_, State> {
+    fn state_reader(&self) -> std::sync::RwLockReadGuard<'_, ReactiveState> {
         self.state.read().unwrap()
     }
 
     #[inline(always)]
-    fn state_writer(&self) -> std::sync::RwLockWriteGuard<'_, State> {
+    fn state_writer(&self) -> std::sync::RwLockWriteGuard<'_, ReactiveState> {
         self.state.write().unwrap()
     }
 }
@@ -176,20 +179,31 @@ impl<T: 'static> Memo<T> {
                 (new_value, changed)
             };
 
-            MemoState::new(Box::new(f), this)
+            MemoState::new(f, this)
         });
 
         Self { node: ReactiveStorage::insert(state) }
     }
 }
 
-impl<T> Clone for Memo<T> {
-    fn clone(&self) -> Self {
-        Self { node: self.node }
+impl<T: 'static> Dispose for Memo<T> {
+    fn dispose(&self) {
+        let scope = ReactiveStorage::map_with_downcast(&self.node, |state| {
+            state.scope.downgrade()
+        });
+
+        if let Some(scope) = scope.as_ref()
+            .and_then(crate::graph::WeakScope::upgrade) {
+            scope.cleanup();
+        }
+
+        ReactiveStorage::remove(self.node);
+    }
+
+    fn is_disposed(&self) -> bool {
+        ReactiveStorage::is_removed(&self.node)
     }
 }
-
-impl<T> Copy for Memo<T> {}
 
 impl<T: 'static> Source for Memo<T> {
     fn add_subscriber(&self, subscriber: AnySubscriber) {
@@ -307,6 +321,24 @@ impl<T: 'static> With for Memo<T> {
     }
 }
 
+impl<T> Clone for Memo<T> {
+    fn clone(&self) -> Self {
+        Self { node: self.node }
+    }
+}
+
+impl<T> Copy for Memo<T> {}
+
+impl<T: PartialEq + 'static> PartialEq for Memo<T> {
+    fn eq(&self, o: &Self) -> bool {
+        self.with_untracked(|this| {
+            o.with_untracked(|other| {
+                this == other
+            })
+        })
+    }
+}
+
 #[cfg(test)]
 mod memo_test {
     use aplite_future::{Executor, sleep};
@@ -316,8 +348,6 @@ mod memo_test {
 
     #[test]
     fn effect() {
-        Executor::init(2);
-
         let (name, set_name) = Signal::split("");
 
         let memoized = Memo::new(move |_| name.get());
@@ -349,7 +379,33 @@ mod memo_test {
         });
 
         std::thread::sleep(std::time::Duration::from_millis(delta * 4));
+    }
 
-        Executor::deinit();
+    #[test]
+    fn parent_child() {
+        let name = Signal::new("Signal");
+
+        let parent = Memo::new(move |_| {
+            let child = Memo::new(move |_| name.get());
+
+            Effect::new(move |_| {
+                child.with(|name| eprintln!("signal: {name}"))
+            });
+
+            child
+        });
+
+        let child = parent.get();
+        std::thread::sleep(std::time::Duration::from_millis(200));
+
+        let is_disposed = child.is_disposed();
+        assert!(!is_disposed);
+        println!("child is disposed: {}", is_disposed);
+
+        parent.dispose();
+
+        let is_disposed = child.is_disposed();
+        assert!(is_disposed);
+        println!("child is disposed: {}", is_disposed);
     }
 }

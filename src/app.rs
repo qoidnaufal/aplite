@@ -8,7 +8,7 @@ use winit::application::ApplicationHandler;
 
 use aplite_reactive::*;
 use aplite_renderer::Renderer;
-use aplite_future::{Executor, block_on};
+use aplite_future::block_on;
 use aplite_types::Size;
 
 use crate::prelude::ApliteResult;
@@ -18,14 +18,12 @@ use crate::view::IntoView;
 
 pub struct AppConfig {
     pub window_inner_size: Size,
-    pub executor_capacity: usize,
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            window_inner_size: Size::new(600., 400.),
-            executor_capacity: 128,
+            window_inner_size: Size::new(400., 400.),
         }
     }
 }
@@ -42,8 +40,6 @@ pub struct Aplite<IV: IntoView> {
 
 impl<IV: IntoView> Aplite<IV> {
     pub fn new(config: AppConfig, view: IV) -> Self {
-        Executor::init(config.executor_capacity.max(1));
-
         Self {
             view: view.into_view(),
             renderer: None,
@@ -97,7 +93,10 @@ impl<IV: IntoView> Aplite<IV> {
         if let Some(renderer) = self.renderer.as_mut()
             && size.width > 0 && size.height > 0
         {
-            renderer.resize(size);
+            renderer.resize(size, |scaled| {
+                self.cx.window_rect.set_size(scaled);
+            });
+            self.cx.layout(&self.view);
         }
     }
 
@@ -123,8 +122,6 @@ impl<IV: IntoView> Aplite<IV> {
             drop(window);
             event_loop.exit();
         }
-
-        Executor::deinit();
     }
 
     // WARN: not sure if retained mode works like this

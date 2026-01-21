@@ -114,7 +114,11 @@ impl Renderer {
         self.screen.scale_factor = scale_factor;
     }
 
-    pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
+    pub fn surface_size(&self) -> Size {
+        self.screen.screen_resolution
+    }
+
+    pub fn resize(&mut self, new_size: PhysicalSize<u32>, f: impl FnOnce(Size)) {
         self.config.width = new_size.width;
         self.config.height = new_size.height;
         self.surface.configure(&self.device, &self.config);
@@ -122,11 +126,13 @@ impl Renderer {
         let logical: winit::dpi::LogicalSize<f32> = new_size.to_logical(self.scale_factor());
         let res = self.screen.screen_resolution;
         let ns = Size::new(logical.width, logical.height);
+        f(ns);
         let scale = res / ns;
         let sx = scale.width;
         let sy = scale.height;
         let matrix = Matrix3x2::from_scale_translate(sx, sy, sx - 1.0, 1.0 - sy);
 
+        // self.screen.screen_resolution = ns;
         self.screen.write(&self.device, &self.queue, matrix);
     }
 

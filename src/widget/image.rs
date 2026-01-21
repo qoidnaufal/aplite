@@ -82,7 +82,12 @@ impl Widget for Image {
 
     fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
         let rect = cx.get_layout_node().unwrap();
-        rect.contains(cx.hover_pos())
+        let hovered = rect.contains(cx.hover_pos());
+        if hovered {
+            cx.set_id();
+        }
+
+        hovered
     }
 }
 

@@ -1,6 +1,6 @@
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, OnceLock};
 use std::pin::Pin;
-use std::sync::mpsc::{SyncSender, Receiver, sync_channel};
+use std::sync::mpsc::{Sender, Receiver, channel};
 use std::task::{Wake, Waker, Context, Poll};
 use std::thread;
 
@@ -31,7 +31,8 @@ impl Task {
 
 impl Wake for Task {
     fn wake(self: Arc<Self>) {
-        Spawner::send(self);
+        let spawner = SPAWNER.get().unwrap();
+        spawner.send(self);
     }
 }
 
@@ -46,27 +47,14 @@ unsafe impl Sync for Task {}
 #########################################################
 */
 
-static SPAWNER: RwLock<Spawner> = RwLock::new(Spawner::new());
+static SPAWNER: OnceLock<Spawner> = OnceLock::new();
 
-struct Spawner(Option<SyncSender<Arc<Task>>>);
+#[derive(Debug)]
+struct Spawner(Sender<Arc<Task>>);
 
 impl Spawner {
-    const fn new() -> Self {
-        Self(None)
-    }
-
-    fn init(tx: SyncSender<Arc<Task>>) {
-        if SPAWNER.read().unwrap().0.is_some() {
-            drop(tx);
-            return;
-        }
-        SPAWNER.write().unwrap().0 = Some(tx);
-    }
-
-    fn send(task: Arc<Task>) {
-        if let Some(spawner) = SPAWNER.read().unwrap().0.as_ref() {
-            let _ = spawner.send(task);
-        }
+    fn send(&self, task: Arc<Task>) {
+        self.0.send(task).unwrap()
     }
 }
 
@@ -103,26 +91,19 @@ unsafe impl Sync for Worker {}
 pub struct Executor;
 
 impl Executor {
-    pub fn init(capacity: usize) {
-        if capacity > 0 {
-            let (tx, rx) = sync_channel(capacity);
+    pub fn spawn(future: impl Future<Output = ()> + 'static) {
+        let spawner = SPAWNER.get_or_init(|| {
+            let (tx, rx) = channel();
             let worker = Worker { rx };
-
-            Spawner::init(tx);
 
             let worker_thread = thread::Builder::new().name("async worker".to_string());
             let _ = worker_thread.spawn(move || worker.work());
-        }
-    }
 
-    pub fn spawn(future: impl Future<Output = ()> + 'static) {
+            Spawner(tx)
+        });
+
         let task = Arc::new(Task::new(future));
-        Spawner::send(task);
-    }
-
-    pub fn deinit() {
-        let sender = SPAWNER.write().unwrap().0.take();
-        drop(sender);
+        spawner.send(task);
     }
 }
 
@@ -142,8 +123,6 @@ mod executor_test {
 
     #[test]
     fn spawn_test() {
-        Executor::init(1);
-
         Executor::spawn(async {
             let result = dummy_async().await;
             println!("{:?}", result);
@@ -151,7 +130,5 @@ mod executor_test {
         });
 
         std::thread::sleep(std::time::Duration::from_secs(1));
-
-        Executor::deinit();
     }
 }

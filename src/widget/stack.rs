@@ -85,16 +85,15 @@ where
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         let state = cx.get_element::<StackElement>().unwrap();
-        let bound = cx.bound;
 
         let width = match state.width {
-            Length::Grow => bound.width,
+            Length::Grow => cx.bound.width,
             Length::Fixed(val) => val,
             Length::FitContent => 0.,
         };
 
         let height = match state.height {
-            Length::Grow => bound.height,
+            Length::Grow => cx.bound.height,
             Length::Fixed(val) => val,
             Length::FitContent => 0.,
         };
@@ -107,7 +106,12 @@ where
             spacing: state.spacing,
         };
 
-        let layout_node = Rect::new(bound.x, bound.y, width, height);
+        let layout_node = Rect::new(
+            cx.bound.x,
+            cx.bound.y,
+            width,
+            height,
+        );
 
         match cx.rules.axis {
             Axis::Horizontal => {
@@ -122,9 +126,15 @@ where
 
         let x = layout_node.x + rules.padding.left as f32;
         let y = layout_node.x + rules.padding.top as f32;
-        let bound = Rect::new(x, y, width, height);
 
-        let mut cx = LayoutCx::new(cx.cx, rules, bound);
+        let bound = Rect::new(
+            x,
+            y,
+            width - rules.padding.horizontal() as f32,
+            height - rules.padding.vertical() as f32
+        );
+
+        let mut cx = LayoutCx::derive(cx, rules, bound);
 
         cx.with_id(0, |cx| self.content.layout(cx));
     }
@@ -135,11 +145,12 @@ where
             .unwrap_or_default();
 
         if hovered {
-            let any_hovered_child = cx.with_id(0, |cx| self.content.detect_hover(cx));
-            any_hovered_child || hovered
-        } else {
-            false
+            if !cx.with_id(0, |cx| self.content.detect_hover(cx)) {
+                cx.set_id();
+            }
         }
+
+        hovered
     }
 }
 

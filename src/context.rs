@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::ptr::NonNull;
+use std::hash::{Hash, Hasher, DefaultHasher};
 
 use aplite_reactive::*;
 use aplite_renderer::Renderer;
@@ -16,24 +18,41 @@ pub struct ViewId(pub(crate) u64);
 pub struct ViewPath(pub(crate) Vec<u32>);
 
 pub struct BuildCx<'a> {
-    pub(crate) cx: &'a mut Context,
+    view_path: &'a mut ViewPath,
+    view_ids: &'a mut HashMap<PathId, ViewId>,
+    elements: &'a mut Vec<Box<dyn Renderable>>,
+    // pub(crate) cx: &'a mut Context,
     pub(crate) id: u64,
 }
 
 pub struct LayoutCx<'a> {
-    pub(crate) cx: &'a mut Context,
+    view_path: &'a mut ViewPath,
+    view_ids: &'a mut HashMap<PathId, ViewId>,
+    elements: &'a mut Vec<Box<dyn Renderable>>,
+    layout_nodes: &'a mut Vec<Rect>,
     pub(crate) bound: Rect,
     pub(crate) rules: LayoutRules,
 }
 
 pub struct CursorCx<'a> {
-    pub(crate) cx: &'a mut Context,
+    view_path: &'a mut ViewPath,
+    view_ids: &'a mut HashMap<PathId, ViewId>,
+    elements: &'a mut Vec<Box<dyn Renderable>>,
+    cursor: &'a mut Cursor,
+    layout_nodes: &'a mut Vec<Rect>,
+}
+
+pub struct UpdateCx<'a> {
+    view_path: &'a mut ViewPath,
+    view_ids: &'a mut HashMap<PathId, ViewId>,
+    elements: &'a mut Vec<Box<dyn Renderable>>,
+    dirty: Signal<bool>,
 }
 
 pub struct Context {
     pub(crate) elements: Vec<Box<dyn Renderable>>,
     pub(crate) layout_nodes: Vec<Rect>,
-    pub(crate) view_ids: HashMap<Box<[u32]>, ViewId>,
+    view_ids: HashMap<PathId, ViewId>,
     pub(crate) view_path: ViewPath,
     pub(crate) dirty: Signal<bool>,
     pub(crate) cursor: Cursor,
@@ -77,6 +96,8 @@ impl Context {
 
         let len = self.elements.len();
         self.layout_nodes.truncate(len);
+
+        self.toggle_dirty();
     }
 
     pub(crate) fn toggle_dirty(&self) {
@@ -87,8 +108,7 @@ impl Context {
         if !self.pending_update.is_empty() {
             self.pending_update
                 .drain(..)
-                .for_each(|_id| {
-                });
+                .for_each(|_id| {});
             self.toggle_dirty();
         }
     }
@@ -104,7 +124,20 @@ impl Context {
         self.handle_drag();
     }
 
-    pub(crate) fn handle_drag(&mut self) {}
+    pub(crate) fn handle_drag(&mut self) {
+        if self.cursor.is_dragging() {
+            if let Some(captured) = self.cursor.captured.id {
+                if !self.cursor.hover.curr.is_some_and(|id| id == captured) {
+                    self.cursor.captured.callback = None;
+                }
+
+                // let pos = self.cursor.click.offset;
+                // let node = &mut self.layout_nodes[captured.0 as usize];
+                // node.set_pos(pos);
+                // self.toggle_dirty();
+            }
+        }
+    }
 
     pub(crate) fn handle_click(
         &mut self,
@@ -119,7 +152,7 @@ impl Context {
             },
             EmittedClickEvent::TriggerCallback(callback) => {
                 unsafe {
-                    let cb = &*callback;
+                    let cb = &*callback.as_ptr();
                     cb()
                 }
             },
@@ -140,11 +173,11 @@ macro_rules! impl_context {
     ($cx:ident<$lifetime:lifetime>) => {
         impl<$lifetime> $cx<$lifetime> {
             pub(crate) fn pop(&mut self) -> u32 {
-                self.cx.view_path.0.pop().unwrap_or_default()
+                self.view_path.0.pop().unwrap_or_default()
             }
 
             pub(crate) fn push(&mut self, path_id: u32) {
-                self.cx.view_path.0.push(path_id);
+                self.view_path.0.push(path_id);
             }
 
             pub fn with_id<R: 'static>(&mut self, id_path: u32, f: impl FnOnce(&mut Self) -> R) -> R {
@@ -155,35 +188,23 @@ macro_rules! impl_context {
             }
 
             pub fn get_id(&self) -> Option<&ViewId> {
-                let path = self.get_path();
-                self.cx.view_ids.get(&path)
+                let path_id = self.view_path.get_path_id();
+                self.view_ids.get(&path_id)
             }
 
             pub fn get_parent_id(&self) -> Option<&ViewId> {
-                if self.cx.view_path.0.is_empty() {
-                    None
-                } else {
-                    let parent_path = self.cx.view_path
-                        .0[..self.cx.view_path.0.len() - 1]
-                        .iter()
-                        .copied()
-                        .collect::<Box<[_]>>();
-                    self.cx.view_ids.get(&parent_path)
-                }
-            }
-
-            pub fn get_path(&self) -> Box<[u32]> {
-                self.cx.view_path.0.clone().into_boxed_slice()
+                self.view_path.get_parent_path_id()
+                    .and_then(|id| self.view_ids.get(&id))
             }
 
             pub fn get_z_index(&self) -> u32 {
-                self.cx.view_path.0.len() as u32
+                self.view_path.0.len() as u32
             }
 
             pub fn get_element<S: 'static>(&self) -> Option<&S> {
                 self.get_id()
                     .map(|id| unsafe {
-                        let ptr: *const dyn Renderable = self.cx.elements[id.0 as usize].as_ref();
+                        let ptr: *const dyn Renderable = self.elements[id.0 as usize].as_ref();
                         &*ptr.cast::<S>()
                     })
             }
@@ -192,7 +213,7 @@ macro_rules! impl_context {
                 self.get_id()
                     .copied()
                     .map(|id| unsafe {
-                        let ptr: *mut dyn Renderable = self.cx.elements[id.0 as usize].as_mut();
+                        let ptr: *mut dyn Renderable = self.elements[id.0 as usize].as_mut();
                         &mut *ptr.cast::<S>()
                     })
             }
@@ -215,20 +236,22 @@ impl_context!(CursorCx<'a>);
 impl<'a> BuildCx<'a> {
     pub(crate) fn new(cx: &'a mut Context) -> Self {
         Self {
-            cx,
+            view_path: &mut cx.view_path,
+            view_ids: &mut cx.view_ids,
+            elements: &mut cx.elements,
             id: 0,
         }
     }
 
     pub fn register_element<R: Renderable + 'static>(&mut self, state: R) {
         let id = self.create_id();
-        let path = self.get_path();
-        self.cx.view_ids.insert(path, id);
+        let path = self.view_path.get_path_id();
+        self.view_ids.insert(path, id);
 
-        if let Some(any) = self.cx.elements.get_mut(id.0 as usize) {
+        if let Some(any) = self.elements.get_mut(id.0 as usize) {
             *any = Box::new(state);
         } else {
-            self.cx.elements.push(Box::new(state));
+            self.elements.push(Box::new(state));
         }
     }
 
@@ -248,13 +271,27 @@ impl<'a> BuildCx<'a> {
 */
 
 impl<'a> LayoutCx<'a> {
-    pub fn new(
-        cx: &'a mut Context,
+    pub fn new(cx: &'a mut Context, rules: LayoutRules, bound: Rect) -> Self {
+        Self {
+            view_path: &mut cx.view_path,
+            view_ids: &mut cx.view_ids,
+            elements: &mut cx.elements,
+            layout_nodes: &mut cx.layout_nodes,
+            rules,
+            bound,
+        }
+    }
+
+    pub fn derive<'b: 'a>(
+        prev: &'b mut LayoutCx<'_>,
         rules: LayoutRules,
-        bound: Rect,
+        bound: Rect
     ) -> Self {
         Self {
-            cx,
+            view_path: prev.view_path,
+            view_ids: prev.view_ids,
+            elements: prev.elements,
+            layout_nodes: prev.layout_nodes,
             bound,
             rules,
         }
@@ -263,16 +300,16 @@ impl<'a> LayoutCx<'a> {
     pub fn set_node(&mut self, rect: Rect) {
         let id = self.get_id().copied().unwrap();
 
-        if let Some(r) = self.cx.layout_nodes.get_mut(id.0 as usize) {
+        if let Some(r) = self.layout_nodes.get_mut(id.0 as usize) {
             *r = rect;
         } else {
-            self.cx.layout_nodes.push(rect);
+            self.layout_nodes.push(rect);
         }
     }
 
     pub fn get_layout_node(&self) -> Option<&Rect> {
         self.get_id()
-            .map(|id| &self.cx.layout_nodes[id.0 as usize])
+            .map(|id| &self.layout_nodes[id.0 as usize])
     }
 
     pub fn get_available_space(&self) -> Size {
@@ -291,25 +328,34 @@ impl<'a> LayoutCx<'a> {
 impl<'a> CursorCx<'a> {
     pub fn new(cx: &'a mut Context) -> Self {
         Self {
-            cx,
+            view_path: &mut cx.view_path,
+            view_ids: &mut cx.view_ids,
+            elements: &mut cx.elements,
+            layout_nodes: &mut cx.layout_nodes,
+            cursor: &mut cx.cursor,
         }
     }
 
     pub fn get_layout_node(&self) -> Option<&Rect> {
         self.get_id()
-            .map(|id| &self.cx.layout_nodes[id.0 as usize])
+            .map(|id| &self.layout_nodes[id.0 as usize])
     }
 
     pub fn hover_pos(&self) -> &Vec2f {
-        &self.cx.cursor.hover.pos
+        &self.cursor.hover.pos
     }
 
-    pub fn set_callback(&mut self, callback: Option<*const dyn Fn()>) {
-        self.cx.cursor.captured_callback = callback;
+    pub fn set_callback_on_click<F>(&mut self, callback: F)
+    where
+        F: FnOnce() -> NonNull<dyn Fn()>
+    {
+        if self.cursor.is_left_clicking() {
+            self.cursor.captured.callback = Some(callback());
+        }
     }
 
     pub fn set_id(&mut self) {
-        self.cx.cursor.hover.curr = self.get_id().copied();
+        self.cursor.hover.curr = self.get_id().copied();
     }
 }
 
@@ -321,17 +367,30 @@ impl<'a> CursorCx<'a> {
 #########################################################
 */
 
+#[derive(PartialEq, Eq)]
+struct PathId(u64);
+
+impl Hash for PathId {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u64(self.0);
+    }
+}
+
 impl ViewPath {
     pub(crate) fn new() -> Self {
         Self(Vec::new())
     }
-}
 
-impl From<&[u32]> for ViewId {
-    fn from(array: &[u32]) -> Self {
-        use std::hash::{DefaultHasher, Hash, Hasher};
+    fn get_path_id(&self) -> PathId {
         let mut hasher = DefaultHasher::new();
-        Hash::hash_slice(array, &mut hasher);
-        Self(hasher.finish())
+        Hash::hash_slice(&self.0, &mut hasher);
+        PathId(hasher.finish())
+    }
+
+    fn get_parent_path_id(&self) -> Option<PathId> {
+        if self.0.is_empty() { return None; }
+        let mut hasher = DefaultHasher::new();
+        Hash::hash_slice(&self.0[..self.0.len() - 1], &mut hasher);
+        Some(PathId(hasher.finish()))
     }
 }

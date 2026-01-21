@@ -21,27 +21,33 @@ use crate::subscriber::AnySubscriber;
 #########################################################
 */
 
-pub(crate) struct ReactiveScope {
+static SCOPE: RwLock<Option<WeakScope>> = RwLock::new(None);
+
+pub struct Scope(Arc<RwLock<ReactiveScope>>);
+
+pub struct WeakScope(Weak<RwLock<ReactiveScope>>);
+
+struct ReactiveScope {
     parent: Option<WeakScope>,
     children: Vec<WeakScope>,
     node_ids: Vec<SlotId>,
     paused: bool,
 }
 
-static SCOPE: RwLock<Option<WeakScope>> = RwLock::new(None);
-
-pub struct Scope(Arc<RwLock<ReactiveScope>>);
-
 impl Scope {
     pub fn new() -> Self {
-        let current_scope = SCOPE.read().unwrap().as_ref().map(WeakScope::clone);
+        let current_scope = SCOPE.read()
+            .unwrap()
+            .as_ref()
+            .map(WeakScope::clone);
 
-        Self(Arc::new_cyclic(|weak| {
-            if let Some(current) = current_scope.as_ref().and_then(WeakScope::upgrade) {
+        Self(Arc::new_cyclic(|this| {
+            if let Some(current) = current_scope.as_ref()
+                .and_then(WeakScope::upgrade) {
                 current.0.write()
                     .unwrap()
                     .children
-                    .push(WeakScope(weak.clone()));
+                    .push(WeakScope(Weak::clone(this)));
             }
 
             RwLock::new(ReactiveScope {
@@ -57,10 +63,18 @@ impl Scope {
         WeakScope(Arc::downgrade(&self.0))
     }
 
+    pub fn with_current<R>(f: impl FnOnce(&WeakScope) -> R) -> Option<R> {
+        let lock = SCOPE.read().unwrap();
+        let weak = lock.as_ref().map(Clone::clone);
+        drop(lock);
+        weak.as_ref().map(f)
+    }
+
     pub fn with<R>(&self, f: impl FnOnce() -> R) -> R {
         let mut lock = SCOPE.write().unwrap();
         let prev = lock.replace(self.downgrade());
         drop(lock);
+
         let res = f();
         *SCOPE.write().unwrap() = prev;
         res
@@ -97,22 +111,65 @@ impl Scope {
         drop(write_lock);
 
         let read_lock = self.0.read().unwrap();
-        read_lock.children.iter()
-            .for_each(|weak| {
-                if let Some(child_scope) = weak.upgrade() {
-                    child_scope.pause();
-                }
-            });
+        let children = read_lock.children.clone();
+        drop(read_lock);
+
+        children.iter().for_each(|weak| {
+            if let Some(child_scope) = weak.upgrade() {
+                child_scope.pause();
+            }
+        });
     }
 
-    pub fn resume(&self) {}
+    // WARN: this may cause infinite locking
+    pub fn resume(&self) {
+        let mut write_lock = self.0.write().unwrap();
+
+        if let Some(parent) = write_lock.parent
+            .as_ref() && parent.is_paused() {
+            return;
+        }
+
+        write_lock.paused = false;
+        drop(write_lock);
+
+        let read_lock = self.0.read().unwrap();
+        let children = read_lock.children.clone();
+        drop(read_lock);
+
+        children.iter().for_each(|weak| {
+            if let Some(child_scope) = weak.upgrade() {
+                child_scope.resume();
+            }
+        });
+    }
 
     pub fn is_paused(&self) -> bool {
         self.0.read().unwrap().paused
     }
 }
 
-pub struct WeakScope(Weak<RwLock<ReactiveScope>>);
+impl WeakScope {
+    #[inline(always)]
+    pub fn upgrade(&self) -> Option<Scope> {
+        self.0.upgrade().map(Scope)
+    }
+
+    fn add_id(&self, id: SlotId) {
+        if let Some(scope) = self.upgrade() {
+            let mut lock = scope.0.write().unwrap();
+            if !lock.node_ids.contains(&id) {
+                lock.node_ids.push(id);
+            }
+        }
+    }
+
+    fn is_paused(&self) -> bool {
+        self.upgrade()
+            .map(|scope| scope.is_paused())
+            .unwrap_or_default()
+    }
+}
 
 impl Clone for WeakScope {
     fn clone(&self) -> Self {
@@ -120,10 +177,40 @@ impl Clone for WeakScope {
     }
 }
 
-impl WeakScope {
-    #[inline(always)]
-    fn upgrade(&self) -> Option<Scope> {
-        self.0.upgrade().map(Scope)
+impl PartialEq for WeakScope {
+    fn eq(&self, other: &Self) -> bool {
+        Weak::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl std::fmt::Debug for Scope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let lock = self.0.read().unwrap();
+        let reactive_scope = &*lock;
+        reactive_scope.fmt(f)
+    }
+}
+
+impl std::fmt::Debug for WeakScope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Scope")
+            .field("id", &Weak::as_ptr(&self.0).addr())
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for ReactiveScope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Scope")
+            .field("parent", &self.parent)
+            .field("children", &self.children
+                .iter()
+                .map(|c| c.upgrade())
+                .collect::<Vec<_>>()
+            )
+            .field("ids", &self.node_ids)
+            .field("is_paused", &self.paused)
+            .finish()
     }
 }
 
@@ -211,6 +298,9 @@ impl ReactiveStorage {
     pub fn insert<R: Send + Sync + 'static>(r: R) -> Node<R> {
         let mut storage = Self::write();
         let id = storage.inner.insert(Box::new(r));
+
+        Scope::with_current(|weak| weak.add_id(id));
+
         Node { id, marker: PhantomData }
     }
 
@@ -233,20 +323,19 @@ impl ReactiveStorage {
 #########################################################
 */
 
-static OBSERVER: RwLock<Option<AnySubscriber>> = RwLock::new(None);
+static OBSERVER: RwLock<Observer> = RwLock::new(Observer(None));
 
-pub struct Observer;
+pub struct Observer(Option<AnySubscriber>);
 
 impl Observer {
-    #[inline(always)]
     pub fn with<U>(f: impl FnOnce(Option<&AnySubscriber>) -> U) -> U {
-        f(OBSERVER.read().unwrap().as_ref())
+        f(OBSERVER.read().unwrap().0.as_ref())
     }
 
     pub fn swap_observer(subscriber: Option<AnySubscriber>) -> Option<AnySubscriber> {
         let mut current = OBSERVER.write().unwrap();
-        let prev = current.take();
-        *current = subscriber;
+        let prev = current.0.take();
+        current.0 = subscriber;
         prev
     }
 }

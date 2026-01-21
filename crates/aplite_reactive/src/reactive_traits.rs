@@ -144,10 +144,11 @@ pub trait Update: Notify {
 */
 
 pub trait Dispose {
-    /// remove and untrack this signal from the reactive system
-    /// be careful accessing the value of disposed signal will cause [`panic!()`](core::panic)
+    /// Remove and untrack this reactive node from the reactive system
+    /// # Panic
+    /// Accessing the value of disposed reactive node will cause [`panic!()`](core::panic)
     fn dispose(&self);
 
-    /// check if a signal has been disposed or not
+    /// Check if a reactive node has been disposed or not
     fn is_disposed(&self) -> bool;
 }

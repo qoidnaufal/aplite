@@ -1,9 +1,9 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use aplite_reactive::*;
 use aplite_renderer::Scene;
 use aplite_types::{
-    Color, Length, Matrix3x2, PaintRef, Rect, rgb, rgba
+    Color, Length, Matrix3x2, PaintRef, Rect, rgb, rgba, theme
 };
 
 use crate::{layout::Axis, state::BorderWidth};
@@ -57,63 +57,103 @@ impl Renderable for () {
 /*
 #########################################################
 #
-# ViewFn
+# MemoizedView
 #
 #########################################################
 */
 
-pub struct MemoizedView<T, State: PartialEq = bool> {
-    pub(crate) view: T,
-    pub(crate) state: State,
+pub struct MemoizedView<IV: IntoView> {
+    pub(crate) view: Arc<RwLock<IV::View>>,
+    view_fn: Arc<dyn Fn() -> IV>,
+    scope: Scope,
+    pub(crate) dirty: Signal<bool>,
 }
 
-impl<T: Widget, State: PartialEq> MemoizedView<T, State> {
-    pub fn new<IV: IntoView<View = T>>(view: IV, state: State) -> Self {
+impl<IV> MemoizedView<IV>
+where
+    IV: IntoView,
+{
+    pub fn new<F: Fn() -> IV + 'static>(view_fn: F) -> Self {
+        let view = view_fn().into_view();
         Self {
-            view: view.into_view(),
-            state,
+            view: Arc::new(RwLock::new(view)),
+            view_fn: Arc::new(view_fn),
+            scope: Scope::new(),
+            dirty: Signal::new(false),
         }
     }
-}
 
-impl<T, State: PartialEq> PartialEq for MemoizedView<T, State> {
-    fn eq(&self, other: &Self) -> bool {
-        self.state == other.state
+    pub(crate) fn update(&self) {
+        if self.dirty.get() {
+            self.scope.with_cleanup(|| {
+                let mut lock = self.view.write().unwrap();
+                *lock = (self.view_fn)().into_view();
+            });
+            self.dirty.set(false);
+        }
+    }
+
+    pub fn get<'a>(&'a self) -> std::sync::RwLockReadGuard<'a, IV::View> {
+        self.view.read().unwrap()
+    }
+
+    pub fn with<R>(&self, f: impl FnOnce(&IV::View) -> R) -> R {
+        f(&*self.view.read().unwrap())
     }
 }
 
-impl<T> Widget for MemoizedView<T>
+impl<IV: IntoView> PartialEq for MemoizedView<IV> {
+    fn eq(&self, _: &Self) -> bool {
+        self.dirty.get()
+    }
+}
+
+impl<IV> Widget for MemoizedView<IV>
 where
-    T: Widget,
+    IV: IntoView,
 {
     fn debug_name(&self) -> &'static str {
-        self.view.debug_name()
+        self.update();
+        self.with(|view| view.debug_name())
+        // self.view.read().unwrap().debug_name()
     }
 
     fn build(&self, cx: &mut BuildCx<'_>) {
-        self.view.build(cx);
+        self.update();
+        self.with(|view| view.build(cx))
+        // self.view.read().unwrap().build(cx);
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        self.view.layout(cx);
+        self.update();
+        self.with(|view| view.layout(cx))
+        // self.view.read().unwrap().layout(cx);
     }
 
     fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
-        self.view.detect_hover(cx)
+        self.update();
+        self.with(|view| view.detect_hover(cx))
+        // self.view.read().unwrap().detect_hover(cx)
     }
 }
+
+/*
+#########################################################
+#
+# ViewFn
+#
+#########################################################
+*/
 
 impl<F, IV> IntoView for F
 where
     F: Fn() -> IV + 'static,
     IV: IntoView,
 {
-    // type View = Memo<MemoizedView<IV::View>>;
-    type View = Memo<IV::View>;
+    type View = MemoizedView<IV>;
 
     fn into_view(self) -> Self::View {
-        Memo::with_compare(move |_| self().into_view(), |_, _| false)
-        // Memo::new(move |_| MemoizedView::new(self(), false))
+        MemoizedView::new(self)
     }
 }
 
@@ -249,7 +289,7 @@ impl Widget for CircleWidget {
         let bound = cx.bound;
 
         let radius = match state.radius {
-            Length::Grow => bound.width.max(bound.height),
+            Length::Grow => bound.width.min(bound.height),
             Length::Fixed(val) => val,
             Length::FitContent => 0.,
         };
@@ -270,7 +310,11 @@ impl Widget for CircleWidget {
 
     fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
         let rect = cx.get_layout_node().unwrap();
-        rect.contains(cx.hover_pos())
+        let hovered = rect.contains(cx.hover_pos());
+        if hovered {
+            cx.set_id();
+        }
+        hovered
     }
 }
 
@@ -293,9 +337,9 @@ impl CircleElement {
     fn new() -> Self {
         Self {
             radius: Length::Grow,
-            background: rgba(0xff6969ff),
-            border_color: rgb(0x000000),
-            border_width: BorderWidth(0.),
+            background: theme::gruvbox_dark::RED_0,
+            border_color: theme::gruvbox_dark::RED_1,
+            border_width: BorderWidth(10.),
         }
     }
 }
@@ -348,7 +392,7 @@ macro_rules! layout {
             },
         };
 
-        let mut cx = LayoutCx::new($cx.cx, $cx.rules, bound);
+        let mut cx = LayoutCx::derive($cx, $cx.rules, bound);
 
         let mut path_id = cx.pop();
 
@@ -371,6 +415,7 @@ fn detect_hover<'a, T: Widget>(mut name: impl Iterator<Item = &'a T>, cx: &mut C
     });
 
     cx.push(id_path);
+
     any
 }
 
@@ -465,12 +510,7 @@ impl<T: Widget + 'static> Widget for Option<T> {
     }
 
     fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
-        match self {
-            Some(widget) => {
-                widget.detect_hover(cx)
-            },
-            None => false,
-        }
+        self.as_ref().is_some_and(|w| w.detect_hover(cx))
     }
 }
 
@@ -609,7 +649,13 @@ macro_rules! impl_text {
 
             fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
                 let rect = cx.get_layout_node().unwrap();
-                rect.contains(cx.hover_pos())
+                let hovered = rect.contains(cx.hover_pos());
+
+                if hovered {
+                    cx.set_id()
+                }
+
+                hovered
             }
         }
 

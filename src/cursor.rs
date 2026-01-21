@@ -4,25 +4,6 @@ use aplite_types::Vec2f;
 
 use crate::context::ViewId;
 
-pub struct CallbackRef<F: Fn()> {
-    inner: NonNull<F>
-}
-
-impl<F: Fn()> CallbackRef<F> {
-    pub(crate) fn trigger(&self) {
-        unsafe {
-            self.inner.cast::<F>().as_ref()()
-        }
-    }
-}
-
-impl<F: Fn()> std::fmt::Debug for CallbackRef<F> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CallbackRef")
-            .finish_non_exhaustive()
-    }
-}
-
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseAction {
     Pressed,
@@ -47,7 +28,7 @@ pub enum MouseButton {
     Middle,
     Back,
     Forward,
-    Other(u16),
+    Other,
 }
 
 impl From<winit::event::MouseButton> for MouseButton {
@@ -58,7 +39,7 @@ impl From<winit::event::MouseButton> for MouseButton {
             winit::event::MouseButton::Middle => Self::Middle,
             winit::event::MouseButton::Back => Self::Back,
             winit::event::MouseButton::Forward => Self::Forward,
-            winit::event::MouseButton::Other(n) => Self::Other(n),
+            winit::event::MouseButton::Other(_) => Self::Other,
         }
     }
 }
@@ -79,7 +60,12 @@ pub struct MouseHover {
 pub struct MouseClick {
     pub(crate) pos: Vec2f,
     pub(crate) offset: Vec2f,
-    pub(crate) captured: Option<ViewId>,
+}
+
+#[derive(Default, Debug)]
+pub struct MouseCapture {
+    pub(crate) id: Option<ViewId>,
+    pub(crate) callback: Option<NonNull<dyn Fn()>>,
 }
 
 #[derive(Debug)]
@@ -87,8 +73,7 @@ pub struct Cursor {
     pub(crate) state: MouseState,
     pub(crate) hover: MouseHover,
     pub(crate) click: MouseClick,
-    pub(crate) is_dragging: bool,
-    pub(crate) captured_callback: Option<*const dyn Fn()>,
+    pub(crate) captured: MouseCapture,
 }
 
 impl Default for Cursor {
@@ -97,8 +82,7 @@ impl Default for Cursor {
             state: Default::default(),
             hover: Default::default(),
             click: Default::default(),
-            is_dragging: Default::default(),
-            captured_callback: None,
+            captured: Default::default(),
         }
     }
 }
@@ -106,7 +90,7 @@ impl Default for Cursor {
 pub enum EmittedClickEvent {
     NoOp,
     Captured(ViewId),
-    TriggerCallback(*const dyn Fn()),
+    TriggerCallback(NonNull<dyn Fn()>),
 }
 
 impl Cursor {
@@ -145,25 +129,20 @@ impl Cursor {
         match (self.state.action, self.state.button) {
             (MouseAction::Pressed, MouseButton::Left) => {
                 self.click.pos = self.hover.pos;
-                self.click.captured = self.hover.curr;
+                self.captured.id = self.hover.curr;
 
-                if let Some(captured) = self.click.captured {
+                if let Some(captured) = self.captured.id {
                     EmittedClickEvent::Captured(captured)
                 } else {
                     EmittedClickEvent::NoOp
                 }
             },
             (MouseAction::Released, MouseButton::Left) => {
-                let captured = self.click.captured.take();
-                let was_dragging = self.is_dragging;
-                self.is_dragging = false;
-
-                if let Some(captured) = captured
-                    && self.hover.curr.is_some_and(|hovered| hovered == captured)
-                    && !was_dragging
-                    && let Some(cb) = self.captured_callback.take()
+                if let Some(id) = self.captured.id.take()
+                    && self.hover.curr.is_some_and(|hovered| hovered == id)
+                    && let Some(callback) = self.captured.callback.take()
                 {
-                    EmittedClickEvent::TriggerCallback(cb)
+                    EmittedClickEvent::TriggerCallback(callback)
                 } else {
                     EmittedClickEvent::NoOp
                 }
@@ -175,7 +154,7 @@ impl Cursor {
     #[inline(always)]
     pub(crate) fn is_dragging(&self) -> bool {
         self.is_left_clicking()
-            && self.click.captured.is_some()
+            && self.captured.id.is_some()
             && self.hover.pos != self.click.pos
     }
 

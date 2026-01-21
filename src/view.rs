@@ -71,8 +71,10 @@ impl AnyView {
             }
         }
 
+        let ptr = Box::into_raw(Box::new(widget));
+
         Self {
-            widget: NonNull::from_mut(Box::leak(Box::new(widget))).cast(),
+            widget: unsafe { NonNull::new_unchecked(ptr).cast() },
             drop_fn: Some(drop_fn::<W>)
         }
     }
@@ -159,20 +161,22 @@ macro_rules! view_tuple {
 
                 for_each($($name,)* |_| count += 1);
 
-                let mut path_id = cx.pop();
+                let spacing = cx.rules.spacing.0 as f32;
 
                 let bound = match cx.rules.axis {
                     Axis::Horizontal => {
-                        let width = cx.bound.width / count as f32;
+                        let width = (cx.bound.width - spacing * (count - 1) as f32) / count as f32;
                         Rect::new(cx.bound.x, cx.bound.y, width, cx.bound.height)
                     },
                     Axis::Vertical => {
-                        let height = cx.bound.height / count as f32;
+                        let height = (cx.bound.height - spacing * (count - 1) as f32) / count as f32;
                         Rect::new(cx.bound.x, cx.bound.y, cx.bound.width, height)
                     },
                 };
 
-                let mut cx = LayoutCx::new(cx.cx, cx.rules, bound);
+                let mut cx = LayoutCx::derive(cx, cx.rules, bound);
+
+                let mut path_id = cx.pop();
 
                 for_each($($name,)* |w| cx.with_id(path_id, |cx| {
                     w.layout(cx);
@@ -250,12 +254,12 @@ mod view_test {
     #[test]
     fn view_fn() {
         let (name, set_name) = Signal::split("Balo");
-        let view = move || name;
+        let view = move || name.get();
         let view = view.into_view();
 
-        println!("{}", view.with_untracked(|v| v.get()));
+        println!("{}", view.get());
         set_name.set("Nunez");
-        println!("{}", view.with_untracked(|v| v.get()));
+        println!("{}", view.get());
     }
 
     #[test]

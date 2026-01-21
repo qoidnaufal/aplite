@@ -25,11 +25,8 @@ fn root() -> impl IntoView {
 
 fn main() -> ApliteResult {
     let config = AppConfig {
-        executor_capacity: 1,
         window_inner_size: (500, 700).into(),
     };
 
-    // root.launch(config)
-    // root.launch_with_default_config()
     Aplite::new(config, root).launch()
 }

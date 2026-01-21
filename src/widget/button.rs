@@ -1,5 +1,7 @@
+use std::ptr::NonNull;
+
 use aplite_renderer::Scene;
-use aplite_types::{Length, Matrix3x2, PaintRef, Rect, rgb};
+use aplite_types::{Length, Matrix3x2, PaintRef, Rect};
 use aplite_types::{CornerRadius, Color};
 use aplite_types::theme::gruvbox_dark as theme;
 
@@ -97,7 +99,7 @@ impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
         let y = layout_node.x + rules.padding.top as f32;
         let bound = Rect::new(x, y, width, height);
 
-        let mut cx = LayoutCx::new(cx.cx, rules, bound);
+        let mut cx = LayoutCx::derive(cx, rules, bound);
 
         cx.with_id(0, |cx| self.content.layout(cx));
     }
@@ -110,7 +112,13 @@ impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
         if hovered {
             if !cx.with_id(0, |cx| self.content.detect_hover(cx)) {
                 cx.set_id();
-                cx.set_callback(Some(&self.callback));
+                // if let Some(style_fn) = self.style_fn.as_ref() {
+                //     let element = cx.get_element_mut::<ButtonElement>().unwrap();
+                //     style_fn(element)
+                // }
+                cx.set_callback_on_click(|| {
+                    NonNull::from_ref(&self.callback as &dyn Fn())
+                });
             }
         }
 
