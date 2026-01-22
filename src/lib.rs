@@ -19,7 +19,7 @@ pub mod prelude {
     pub use aplite_types::Length::{Fixed, Grow, FitContent};
 
     pub use crate::app::{Aplite, AppConfig, Launch};
-    pub use crate::context::Context;
+    pub use crate::context::{BuildCx, LayoutCx, CursorCx};
     pub use crate::cursor::Cursor;
 
     pub use crate::layout::{

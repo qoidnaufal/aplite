@@ -29,7 +29,7 @@ impl Stats {
         }
 
         let fps = (0.1_f64 / d.as_secs_f64()).round() as usize;
-        eprint!("fps: {fps}      \r");
+        // eprint!("fps: {fps}      \r");
 
         if self.counter > 0 { self.fps += fps }
         self.counter += 1;

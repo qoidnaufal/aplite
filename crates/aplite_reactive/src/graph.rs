@@ -63,7 +63,7 @@ impl Scope {
         WeakScope(Arc::downgrade(&self.0))
     }
 
-    pub fn with_current<R>(f: impl FnOnce(&WeakScope) -> R) -> Option<R> {
+    fn with_current<R>(f: impl FnOnce(&WeakScope) -> R) -> Option<R> {
         let lock = SCOPE.read().unwrap();
         let weak = lock.as_ref().map(Clone::clone);
         drop(lock);
@@ -257,18 +257,19 @@ impl ReactiveStorage {
         f(&mut Self::write())
     }
 
+    #[track_caller]
     pub fn with_downcast<R, F, U>(node: &Node<R>, f: F) -> U
     where
         R: 'static,
         F: FnOnce(&R) -> U,
     {
-        let storage = Self::read();
-        let r = storage
+        Self::read()
             .inner
             .get(&node.id)
             .and_then(|any| any.downcast_ref::<R>())
-            .unwrap();
-        f(r)
+            .map(f)
+            .unwrap()
+        // f(r)
     }
 
     pub fn try_with_downcast<R, F, U>(node: &Node<R>, f: F) -> Option<U>

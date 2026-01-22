@@ -1,23 +1,25 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use aplite_reactive::*;
 use aplite_renderer::Scene;
 use aplite_types::{
-    Color, Length, Matrix3x2, PaintRef, Rect, rgb, rgba, theme
+    Color, Length, Matrix3x2, PaintRef, Rect, rgb, theme
 };
 
 use crate::{layout::Axis, state::BorderWidth};
 use crate::view::IntoView;
-use crate::context::{BuildCx, CursorCx, LayoutCx};
+use crate::context::{BuildCx, LayoutCx, CursorCx};
 
 mod button;
 mod image;
 mod stack;
+mod either;
 
 pub use {
     button::*,
     image::*,
     stack::*,
+    either::*,
 };
 
 /*
@@ -46,104 +48,43 @@ pub trait Widget: 'static {
             .unwrap_or(name)
     }
 
-    fn build(&self, cx: &mut BuildCx<'_>);
+    fn build(&self, cx: &mut BuildCx<'_>) -> bool;
 
     fn layout(&self, cx: &mut LayoutCx<'_>);
 
     fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool;
+
+    fn diff(&self, prev: &dyn Widget) -> bool {
+        use std::any::Any;
+        self.type_id() == prev.type_id()
+        // false
+    }
 }
 
-pub trait Renderable: std::fmt::Debug {
+pub trait Renderable: std::fmt::Debug + 'static {
     fn render(&self, rect: &Rect, scene: &mut Scene);
+
+    fn type_id(&self) -> std::any::TypeId;
+
+    fn equal(&self, other: &dyn Renderable) -> bool;
 }
 
 impl Renderable for () {
     fn render(&self, _rect: &Rect, _scene: &mut Scene) {}
-}
 
-/*
-#########################################################
-#
-# MemoizedView
-#
-#########################################################
-*/
-
-pub struct MemoizedView<IV: IntoView> {
-    pub(crate) view: Arc<RwLock<IV::View>>,
-    view_fn: Arc<dyn Fn() -> IV>,
-    scope: Scope,
-    pub(crate) dirty: Signal<bool>,
-}
-
-impl<IV> MemoizedView<IV>
-where
-    IV: IntoView,
-{
-    pub fn new<F: Fn() -> IV + 'static>(view_fn: F) -> Self {
-        let view = view_fn().into_view();
-        Self {
-            view: Arc::new(RwLock::new(view)),
-            view_fn: Arc::new(view_fn),
-            scope: Scope::new(),
-            dirty: Signal::new(false),
-        }
+    fn type_id(&self) -> std::any::TypeId {
+        std::any::TypeId::of::<Self>()
     }
 
-    pub(crate) fn update(&self) {
-        if self.dirty.get() {
-            self.scope.with_cleanup(|| {
-                let mut lock = self.view.write().unwrap();
-                *lock = (self.view_fn)().into_view();
-            });
-            self.dirty.set(false);
-        }
-    }
-
-    pub fn get<'a>(&'a self) -> std::sync::RwLockReadGuard<'a, IV::View> {
-        self.view.read().unwrap()
-    }
-
-    pub fn with<R>(&self, f: impl FnOnce(&IV::View) -> R) -> R {
-        f(&*self.view.read().unwrap())
-    }
-}
-
-impl<IV: IntoView> PartialEq for MemoizedView<IV> {
-    fn eq(&self, _: &Self) -> bool {
-        self.dirty.get()
-    }
-}
-
-impl<IV> Widget for MemoizedView<IV>
-where
-    IV: IntoView,
-{
-    fn debug_name(&self) -> &'static str {
-        self.update();
-        self.with(|view| view.debug_name())
-    }
-
-    fn build(&self, cx: &mut BuildCx<'_>) {
-        self.update();
-        self.with(|view| view.build(cx))
-    }
-
-    fn layout(&self, cx: &mut LayoutCx<'_>) {
-        self.update();
-        self.with(|view| view.layout(cx))
-    }
-
-    fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
-        self.update();
-        self.with(|view| view.detect_hover(cx))
+    fn equal(&self, other: &dyn Renderable) -> bool {
+        self.type_id() == other.type_id()
     }
 }
 
 /*
 #########################################################
 #
-# ViewFn
+# Fn
 #
 #########################################################
 */
@@ -153,92 +94,10 @@ where
     F: Fn() -> IV + 'static,
     IV: IntoView,
 {
-    type View = MemoizedView<IV>;
+    type View = IV::View;
 
     fn into_view(self) -> Self::View {
-        MemoizedView::new(self)
-    }
-}
-
-/*
-#########################################################
-#
-# Either
-#
-#########################################################
-*/
-
-enum Either<VT, VF> {
-    True(VT),
-    False(VF)
-}
-
-impl<VT, VF> Widget for Either<VT, VF>
-where
-    VT: Widget,
-    VF: Widget,
-{
-    fn debug_name(&self) -> &'static str {
-        match self {
-            Either::True(t) => t.debug_name(),
-            Either::False(f) => f.debug_name(),
-        }
-    }
-
-    fn build(&self, cx: &mut BuildCx<'_>) {
-        match self {
-            Either::True(t) => t.build(cx),
-            Either::False(f) => f.build(cx),
-        }
-    }
-
-    fn layout(&self, cx: &mut LayoutCx<'_>) {
-        match self {
-            Either::True(t) => t.layout(cx),
-            Either::False(f) => f.layout(cx),
-        }
-    }
-
-    fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
-        match self {
-            Either::True(t) => t.detect_hover(cx),
-            Either::False(f) => f.detect_hover(cx),
-        }
-    }
-}
-
-impl<VT, VF> IntoView for Either<VT, VF>
-where
-    VT: IntoView,
-    VF: IntoView,
-{
-    type View = Either<VT::View, VF::View>;
-
-    fn into_view(self) -> Self::View {
-        match self {
-            Either::True(t) => Either::True(t.into_view()),
-            Either::False(f) => Either::False(f.into_view()),
-        }
-    }
-}
-
-pub fn either<W, TrueFn, FalseFn, VT, VF>(
-    when: W,
-    content_true: TrueFn,
-    content_false: FalseFn,
-) -> impl IntoView
-where
-    W: Fn() -> bool + 'static,
-    TrueFn: Fn() -> VT + 'static,
-    FalseFn: Fn() -> VF + 'static,
-    VT: IntoView,
-    VF: IntoView,
-{
-    let when = Memo::new(move |_| when());
-
-    move || match when.get() {
-        true => Either::True(content_true()),
-        false => Either::False(content_false()),
+        self().into_view()
     }
 }
 
@@ -278,13 +137,14 @@ impl IntoView for CircleWidget {
 }
 
 impl Widget for CircleWidget {
-    fn build(&self, cx: &mut BuildCx<'_>) {
+    fn build(&self, cx: &mut BuildCx<'_>) -> bool {
         let mut state = CircleElement::new();
+
         if let Some(style_fn) = self.style_fn.as_ref() {
             style_fn(&mut state);
         }
 
-        cx.register_element(state);
+        cx.register_element(state)
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
@@ -357,6 +217,21 @@ impl Renderable for CircleElement {
             &self.border_width.0
         );
     }
+
+    fn type_id(&self) -> std::any::TypeId {
+        std::any::TypeId::of::<Self>()
+    }
+
+    fn equal(&self, other: &dyn Renderable) -> bool {
+        if other.type_id() == self.type_id() {
+            unsafe {
+                let ptr = other as *const dyn Renderable as *const Self;
+                (&*ptr).eq(self)
+            }
+        } else {
+            false
+        }
+    }
 }
 
 /*
@@ -367,45 +242,44 @@ impl Renderable for CircleElement {
 #########################################################
 */
 
-macro_rules! build {
-    ($name:ident, $cx:ident) => {
-        let mut path_id = $cx.pop();
+fn build<'a, T: Widget>(mut name: impl Iterator<Item = &'a T>, cx: &mut BuildCx<'_>) -> bool {
+    let mut path_id = cx.pop();
 
-        $name.iter().for_each(|w| {
-            $cx.with_id(path_id, |cx| w.build(cx));
-            path_id += 1;
-        });
+    let dirty = name.any(|widget| {
+        let dirty = cx.with_id(path_id, |cx| widget.build(cx));
+        path_id += 1;
+        dirty
+    });
 
-        $cx.push(path_id);
-    };
+    cx.push(path_id);
+
+    dirty
 }
 
-macro_rules! layout {
-    ($name:ident, $cx:ident) => {
-        let count = $name.len();
+fn layout<'a, T: Widget>(name: &'a [T], cx: &mut LayoutCx<'_>) {
+    let count = name.len();
 
-        let bound = match $cx.rules.axis {
-            Axis::Horizontal => {
-                let width = $cx.bound.width / count as f32;
-                Rect::new($cx.bound.x, $cx.bound.y, width, $cx.bound.height)
-            },
-            Axis::Vertical => {
-                let height = $cx.bound.height / count as f32;
-                Rect::new($cx.bound.x, $cx.bound.y, $cx.bound.width, height)
-            },
-        };
-
-        let mut cx = LayoutCx::derive($cx, $cx.rules, bound);
-
-        let mut path_id = cx.pop();
-
-        $name.iter().for_each(|w| {
-            cx.with_id(path_id, |cx| w.layout(cx));
-            path_id += 1;
-        });
-
-        cx.push(path_id);
+    let bound = match cx.rules.axis {
+        Axis::Horizontal => {
+            let width = cx.bound.width / count as f32;
+            Rect::new(cx.bound.x, cx.bound.y, width, cx.bound.height)
+        },
+        Axis::Vertical => {
+            let height = cx.bound.height / count as f32;
+            Rect::new(cx.bound.x, cx.bound.y, cx.bound.width, height)
+        },
     };
+
+    let mut cx = LayoutCx::derive(cx, cx.rules, bound);
+
+    let mut path_id = cx.pop();
+
+    name.iter().for_each(|w| {
+        cx.with_id(path_id, |cx| w.layout(cx));
+        path_id += 1;
+    });
+
+    cx.push(path_id);
 }
 
 fn detect_hover<'a, T: Widget>(mut name: impl Iterator<Item = &'a T>, cx: &mut CursorCx<'_>) -> bool {
@@ -423,12 +297,12 @@ fn detect_hover<'a, T: Widget>(mut name: impl Iterator<Item = &'a T>, cx: &mut C
 }
 
 impl<T: Widget> Widget for Vec<T> {
-    fn build(&self, cx: &mut BuildCx<'_>) {
-        build!(self, cx);
+    fn build(&self, cx: &mut BuildCx<'_>) -> bool {
+        build(self.iter(), cx)
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        layout!(self, cx);
+        layout(self, cx);
     }
 
     fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
@@ -445,12 +319,12 @@ impl<T: Widget> IntoView for Vec<T> {
 }
 
 impl<T: Widget> Widget for Box<[T]> {
-    fn build(&self, cx: &mut BuildCx<'_>) {
-        build!(self, cx);
+    fn build(&self, cx: &mut BuildCx<'_>) -> bool {
+        build(self.iter(), cx)
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        layout!(self, cx);
+        layout(self, cx);
     }
 
     fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
@@ -467,12 +341,12 @@ impl<T: Widget + 'static> IntoView for Box<[T]> {
 }
 
 impl<T: Widget + 'static, const N: usize> Widget for [T; N] {
-    fn build(&self, cx: &mut BuildCx<'_>) {
-        build!(self, cx);
+    fn build(&self, cx: &mut BuildCx<'_>) -> bool {
+        build(self.iter(), cx)
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        layout!(self, cx);
+        layout(self, cx);
     }
 
     fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
@@ -498,10 +372,10 @@ impl<T: Widget + 'static, const N: usize> IntoView for [T; N] {
 
 // -- Option<IV>
 impl<T: Widget + 'static> Widget for Option<T> {
-    fn build(&self, cx: &mut BuildCx<'_>) {
+    fn build(&self, cx: &mut BuildCx<'_>) -> bool {
         match self {
             Some(widget) => widget.build(cx),
-            None => {},
+            None => false,
         }
     }
 
@@ -538,7 +412,7 @@ impl<IV: IntoView> IntoView for Option<IV> {
 
 // -- ()
 impl Widget for () {
-    fn build(&self, _cx: &mut BuildCx<'_>) {}
+    fn build(&self, _cx: &mut BuildCx<'_>) -> bool { false }
     fn layout(&self, _cx: &mut LayoutCx<'_>) {}
     fn detect_hover(&self, _cx: &mut CursorCx<'_>) -> bool { false }
 }
@@ -563,19 +437,19 @@ macro_rules! impl_reactive_nodes {
         where $($where_clause)?
         {
             fn debug_name(&self) -> &'static str {
-                self.with_untracked(|w| w.debug_name())
+                self.with(|w| w.debug_name())
             }
 
-            fn build(&self, cx: &mut BuildCx<'_>) {
-                self.with_untracked(|w| w.build(cx))
+            fn build(&self, cx: &mut BuildCx<'_>) -> bool {
+                self.with(|w| w.build(cx))
             }
 
             fn layout(&self, cx: &mut LayoutCx<'_>) {
-                self.with_untracked(|w| w.layout(cx))
+                self.with(|w| w.layout(cx))
             }
 
             fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
-                self.with_untracked(|w| w.detect_hover(cx))
+                self.with(|w| w.detect_hover(cx))
             }
         }
 
@@ -621,13 +495,13 @@ impl std::fmt::Display for Label {
 macro_rules! impl_text {
     ($name:ty) => {
         impl Widget for $name {
-            fn build(&self, cx: &mut BuildCx<'_>) {
+            fn build(&self, cx: &mut BuildCx<'_>) -> bool {
                 let text = self.to_string();
 
                 cx.register_element(TextElement {
                     len: text.len(),
                     color: rgb(0x000000),
-                });
+                })
             }
 
             fn layout(&self, cx: &mut LayoutCx<'_>) {
@@ -704,4 +578,19 @@ impl std::fmt::Debug for TextElement {
 
 impl Renderable for TextElement {
     fn render(&self, _rect: &Rect, _scene: &mut Scene) {}
+
+    fn type_id(&self) -> std::any::TypeId {
+        std::any::TypeId::of::<Self>()
+    }
+
+    fn equal(&self, other: &dyn Renderable) -> bool {
+        if other.type_id() == self.type_id() {
+            unsafe {
+                let ptr = other as *const dyn Renderable as *const Self;
+                (&*ptr).eq(self)
+            }
+        } else {
+            false
+        }
+    }
 }

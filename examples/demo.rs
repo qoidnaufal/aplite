@@ -8,8 +8,8 @@ fn root() -> impl IntoView {
 
     Effect::new(move |_| eprintln!("count: {:?}", counter.get()));
 
-    let button_1 = button("-", dec);
-    let button_2 = button("+", inc);
+    let button_1 = button((), dec);
+    let button_2 = button((), inc);
 
     vstack((
         hstack((button_1, button_2))
@@ -20,7 +20,7 @@ fn root() -> impl IntoView {
         either(
             move || counter.get() % 2 == 0,
             circle,
-            || button("dummy", || {}),
+            || button((), || {}),
         ),
     ))
     .style(|state| {

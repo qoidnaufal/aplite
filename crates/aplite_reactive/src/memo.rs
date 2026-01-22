@@ -13,7 +13,7 @@ pub struct Memo<T> {
 struct MemoState<T> {
     scope: Scope,
     value: UnsafeCell<Option<T>>,
-    f: Arc<dyn Fn(Option<T>) -> (T, bool)>,
+    f: Box<dyn Fn(Option<T>) -> (T, bool)>,
     state: RwLock<ReactiveState>
 }
 
@@ -43,7 +43,7 @@ impl<T> MemoState<T> {
         Self {
             scope: Scope::new(),
             value: UnsafeCell::new(None::<T>),
-            f: Arc::new(f),
+            f: Box::new(f),
             state: RwLock::new(ReactiveState {
                 sources: Sources::default(),
                 subscribers: Subscribers::default(),

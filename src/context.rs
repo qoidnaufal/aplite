@@ -2,9 +2,7 @@ use std::collections::HashMap;
 use std::ptr::NonNull;
 use std::hash::{Hash, Hasher, DefaultHasher};
 
-use aplite_reactive::*;
 use aplite_renderer::Renderer;
-use aplite_storage::SlotId;
 use aplite_types::{Rect, Size, Vec2f};
 
 use crate::layout::{AlignH, AlignV, Axis, LayoutRules, Padding, Spacing};
@@ -21,7 +19,7 @@ pub struct BuildCx<'a> {
     view_path: &'a mut ViewPath,
     view_ids: &'a mut HashMap<PathId, ViewId>,
     elements: &'a mut Vec<Box<dyn Renderable>>,
-    pub(crate) id: u64,
+    next_id: u64,
 }
 
 pub struct LayoutCx<'a> {
@@ -39,25 +37,16 @@ pub struct CursorCx<'a> {
     elements: &'a mut Vec<Box<dyn Renderable>>,
     cursor: &'a mut Cursor,
     layout_nodes: &'a mut Vec<Rect>,
-    dirty: Signal<bool>,
 }
-
-// pub struct UpdateCx<'a> {
-//     view_path: &'a mut ViewPath,
-//     view_ids: &'a mut HashMap<PathId, ViewId>,
-//     elements: &'a mut Vec<Box<dyn Renderable>>,
-//     dirty: Signal<bool>,
-// }
 
 pub struct Context {
     pub(crate) elements: Vec<Box<dyn Renderable>>,
     pub(crate) layout_nodes: Vec<Rect>,
     view_ids: HashMap<PathId, ViewId>,
     pub(crate) view_path: ViewPath,
-    pub(crate) dirty: Signal<bool>,
     pub(crate) cursor: Cursor,
     pub(crate) window_rect: Rect,
-    pub(crate) pending_update: Vec<SlotId>,
+    pub(crate) redraw_phase: bool,
 }
 
 impl Context {
@@ -68,18 +57,38 @@ impl Context {
             view_ids: HashMap::new(),
             view_path: ViewPath::new(),
             cursor: Cursor::default(),
-            dirty: Signal::new(false),
             window_rect: Rect::from_size(size),
-            pending_update: Vec::new(),
+            redraw_phase: false,
         }
     }
 
-    pub fn build<T: Widget>(&mut self, view: &T) {
-        let mut cx = BuildCx::new(self);
-        cx.with_id(0, |cx| view.build(cx));
+    #[must_use]
+    pub fn build<T: Widget>(&mut self, view: &T) -> bool {
+        if self.redraw_phase {
+            self.redraw_phase = false;
+            return false;
+        }
 
-        let len = cx.id as usize;
-        self.elements.truncate(len);
+        let mut cx = BuildCx::new(self);
+        let dirty = cx.with_id(0, |cx| view.build(cx));
+
+        let count = cx.next_id as usize;
+        let len = self.elements.len();
+        self.elements.truncate(count);
+
+
+        let dirty = dirty || count != len;
+        self.redraw_phase = dirty;
+        dirty
+    }
+
+    pub fn rebuild<T: Widget>(&mut self, view: &T) -> bool {
+        if self.build(view) {
+            self.layout(view);
+            return true;
+        }
+
+        false
     }
  
     pub fn layout<T: Widget>(&mut self, view: &T) {
@@ -96,21 +105,6 @@ impl Context {
 
         let len = self.elements.len();
         self.layout_nodes.truncate(len);
-
-        self.toggle_dirty();
-    }
-
-    pub(crate) fn toggle_dirty(&self) {
-        self.dirty.set(true);
-    }
-
-    pub(crate) fn process_pending_update(&mut self) {
-        if !self.pending_update.is_empty() {
-            self.pending_update
-                .drain(..)
-                .for_each(|_id| {});
-            self.toggle_dirty();
-        }
     }
 
     pub(crate) fn handle_mouse_move<T: Widget>(&mut self, pos: impl Into<Vec2f>, view: &T) {
@@ -160,7 +154,7 @@ impl Context {
         }
     }
 
-    pub(crate) fn render<W: Widget>(&self, _widget: &W, renderer: &mut Renderer) {
+    pub(crate) fn render(&self, renderer: &mut Renderer) {
         let mut scene = renderer.scene();
         self.layout_nodes
             .iter()
@@ -201,20 +195,28 @@ macro_rules! impl_context {
                 self.view_path.0.len() as u32
             }
 
-            pub fn get_element<S: 'static>(&self) -> Option<&S> {
+            pub fn get_element<S: Renderable + 'static>(&self) -> Option<&S> {
                 self.get_id()
-                    .map(|id| unsafe {
-                        let ptr: *const dyn Renderable = self.elements[id.0 as usize].as_ref();
-                        &*ptr.cast::<S>()
+                    .and_then(|id| unsafe {
+                        let ptr = self.elements[id.0 as usize].as_ref() as *const dyn Renderable;
+                        if (&*ptr).type_id() == std::any::TypeId::of::<S>() {
+                            Some(&*ptr.cast::<S>())
+                        } else {
+                            None
+                        }
                     })
             }
 
-            pub fn get_element_mut<S: 'static>(&mut self) -> Option<&mut S> {
+            pub fn get_element_mut<S: Renderable + 'static>(&mut self) -> Option<&mut S> {
                 self.get_id()
                     .copied()
-                    .map(|id| unsafe {
-                        let ptr: *mut dyn Renderable = self.elements[id.0 as usize].as_mut();
-                        &mut *ptr.cast::<S>()
+                    .and_then(|id| unsafe {
+                        let ptr = self.elements[id.0 as usize].as_mut() as *mut dyn Renderable;
+                        if (&*ptr).type_id() == std::any::TypeId::of::<S>() {
+                            Some(&mut *ptr.cast::<S>())
+                        } else {
+                            None
+                        }
                     })
             }
         }
@@ -239,30 +241,40 @@ impl<'a> BuildCx<'a> {
             view_path: &mut cx.view_path,
             view_ids: &mut cx.view_ids,
             elements: &mut cx.elements,
-            id: 0,
+            next_id: 0,
         }
     }
 
-    pub fn register_element<R: Renderable + 'static>(&mut self, element: R) {
+    #[must_use]
+    pub fn register_element<R: Renderable + 'static>(&mut self, element: R) -> bool {
         let id = self.get_or_create_id();
 
-        if let Some(any) = self.elements.get_mut(id.0 as usize) {
-            *any = Box::new(element);
+        if let Some(exist) = self.elements.get_mut(id.0 as usize) {
+            if exist.equal(&element) {
+                false
+            } else {
+                *exist = Box::new(element);
+                true
+            }
         } else {
             self.elements.push(Box::new(element));
+            true
         }
     }
 
     fn get_or_create_id(&mut self) -> ViewId {
         let path_id = self.view_path.get_path_id();
-        if let Some(view_id) = self.view_ids.get(&path_id) {
+
+        let view_id = if let Some(view_id) = self.view_ids.get(&path_id) {
             *view_id
         } else {
-            let view_id = ViewId(self.id);
+            let view_id = ViewId(self.next_id);
             self.view_ids.insert(path_id, view_id);
-            self.id += 1;
             view_id
-        }
+        };
+
+        self.next_id += 1;
+        view_id
     }
 }
 
@@ -337,7 +349,6 @@ impl<'a> CursorCx<'a> {
             elements: &mut cx.elements,
             layout_nodes: &mut cx.layout_nodes,
             cursor: &mut cx.cursor,
-            dirty: cx.dirty,
         }
     }
 
@@ -366,10 +377,6 @@ impl<'a> CursorCx<'a> {
     pub fn is_clicking(&self) -> bool {
         self.cursor.is_left_clicking()
     }
-
-    pub fn set_dirty(&self) {
-        self.dirty.set(true);
-    }
 }
 
 /*
@@ -380,7 +387,7 @@ impl<'a> CursorCx<'a> {
 #########################################################
 */
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 struct PathId(u64);
 
 impl Hash for PathId {

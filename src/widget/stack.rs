@@ -69,18 +69,20 @@ where
     IV: IntoView,
     AX: StackDirection + 'static,
 {
-    fn build(&self, cx: &mut BuildCx<'_>) {
-        let mut state = StackElement {
+    fn build(&self, cx: &mut BuildCx<'_>) -> bool {
+        let mut elem = StackElement {
             z_index: cx.get_z_index(),
             ..StackElement::new()
         };
 
         if let Some(style_fn) = self.style_fn.as_ref() {
-            style_fn(&mut state);
+            style_fn(&mut elem);
         }
 
-        cx.register_element(state);
-        cx.with_id(0, |cx| self.content.build(cx))
+        let dirty = cx.register_element(elem);
+        let content_dirty = cx.with_id(0, |cx| self.content.build(cx));
+
+        dirty || content_dirty
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
@@ -212,5 +214,20 @@ impl Renderable for StackElement {
             &self.border_width.0,
             &self.corner_radius,
         );
+    }
+
+    fn type_id(&self) -> std::any::TypeId {
+        std::any::TypeId::of::<Self>()
+    }
+
+    fn equal(&self, other: &dyn Renderable) -> bool {
+        if other.type_id() == self.type_id() {
+            unsafe {
+                let ptr = other as *const dyn Renderable as *const Self;
+                (&*ptr).eq(self)
+            }
+        } else {
+            false
+        }
     }
 }

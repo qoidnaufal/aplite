@@ -6,7 +6,6 @@ use winit::window::{Window, WindowAttributes, WindowId};
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::application::ApplicationHandler;
 
-use aplite_reactive::*;
 use aplite_renderer::Renderer;
 use aplite_future::block_on;
 use aplite_types::Size;
@@ -71,22 +70,14 @@ impl<IV: IntoView> Aplite<IV> {
         let window = Arc::new(event_loop.create_window(window_attributes)?);
 
         self.renderer = Some(block_on(Renderer::new(Arc::clone(&window)))?);
-        self.track_window(Arc::clone(&window));
+
+        let _ = self.cx.build(&self.view);
+        self.cx.layout(&self.view);
+        window.request_redraw();
+
         self.window = Some(window);
 
-        self.cx.build(&self.view);
-        self.cx.layout(&self.view);
-
         Ok(())
-    }
-
-    /// Track the [`Window`] with the associated root [`ViewId`] for rendering
-    fn track_window(&self, window: Arc<Window>) {
-        let dirty = self.cx.dirty;
-
-        Effect::new(move |_| if dirty.get() {
-            window.request_redraw();
-        });
     }
 
     fn handle_resize(&mut self, size: PhysicalSize<u32>) {
@@ -133,7 +124,7 @@ impl<IV: IntoView> Aplite<IV> {
             #[cfg(feature = "render_stats")] let start = std::time::Instant::now();
 
             renderer.begin();
-            self.cx.render(&self.view, renderer);
+            self.cx.render(renderer);
             renderer.finish(window);
 
             #[cfg(feature = "render_stats")] self.stats.inc(start.elapsed());
@@ -163,7 +154,11 @@ impl<IV: IntoView> ApplicationHandler for Aplite<IV> {
             _ => {}
         }
 
-        self.cx.process_pending_update();
+        let dirty = self.cx.rebuild(&self.view);
+
+        if let Some(window) = self.window.as_ref() && dirty {
+            window.request_redraw();
+        }
     }
 }
 

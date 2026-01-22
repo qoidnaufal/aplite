@@ -5,7 +5,7 @@ use aplite_types::{Length, Matrix3x2, PaintRef, Rect};
 use aplite_types::{CornerRadius, Color};
 use aplite_types::theme::gruvbox_dark as theme;
 
-use crate::context::{BuildCx, CursorCx, LayoutCx};
+use crate::context::{BuildCx, LayoutCx, CursorCx};
 use crate::layout::{AlignH, AlignV, Axis, LayoutRules, Padding, Spacing};
 use crate::state::BorderWidth;
 use crate::view::IntoView;
@@ -43,19 +43,20 @@ impl<IV: IntoView, F: Fn() + 'static> Button<IV, F> {
 }
 
 impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
-    fn build(&self, cx: &mut BuildCx<'_>) {
-        let z_index = cx.get_z_index();
-        let mut state = ButtonElement {
-            z_index,
+    fn build(&self, cx: &mut BuildCx<'_>) -> bool {
+        let mut elem = ButtonElement {
+            z_index: cx.get_z_index(),
             ..ButtonElement::new()
         };
 
         if let Some(style_fn) = self.style_fn.as_ref() {
-            style_fn(&mut state, InteractionState::Idle);
+            style_fn(&mut elem, InteractionState::Idle);
         }
 
-        cx.register_element(state);
-        cx.with_id(0, |cx| self.content.build(cx));
+        let dirty = cx.register_element(elem);
+        let content_dirty = cx.with_id(0, |cx| self.content.build(cx));
+
+        dirty || content_dirty
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
@@ -182,5 +183,20 @@ impl Renderable for ButtonElement {
             &self.border_width.0,
             &self.corner_radius,
         );
+    }
+
+    fn type_id(&self) -> std::any::TypeId {
+        std::any::TypeId::of::<Self>()
+    }
+
+    fn equal(&self, other: &dyn Renderable) -> bool {
+        if other.type_id() == self.type_id() {
+            unsafe {
+                let ptr = other as *const dyn Renderable as *const Self;
+                (&*ptr).eq(self)
+            }
+        } else {
+            false
+        }
     }
 }

@@ -26,7 +26,7 @@ pub fn image_reader<P: AsRef<Path>>(path: P) -> ImageData {
     ImageData::new(img.dimensions(), &img.to_rgba8())
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AspectRatio {
     Defined(u8, u8),
     Source,
@@ -46,8 +46,8 @@ impl Image {
 }
 
 impl Widget for Image {
-    fn build(&self, cx: &mut BuildCx<'_>) {
-        cx.register_element(ImageElement::new(&self.data));
+    fn build(&self, cx: &mut BuildCx<'_>) -> bool {
+        cx.register_element(ImageElement::new(&self.data))
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
@@ -91,6 +91,7 @@ impl Widget for Image {
     }
 }
 
+#[derive(PartialEq, Eq)]
 pub struct ImageElement {
     pub width: Length,
     pub height: Length,
@@ -125,5 +126,20 @@ impl Renderable for ImageElement {
             &PaintRef::from(&rgb(0x000000)),
             &0.
         );
+    }
+
+    fn type_id(&self) -> std::any::TypeId {
+        std::any::TypeId::of::<Self>()
+    }
+
+    fn equal(&self, other: &dyn Renderable) -> bool {
+        if other.type_id() == self.type_id() {
+            unsafe {
+                let ptr = other as *const dyn Renderable as *const Self;
+                (&*ptr).eq(self)
+            }
+        } else {
+            false
+        }
     }
 }

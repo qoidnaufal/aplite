@@ -1,8 +1,4 @@
-use aplite_types::{
-    Rect,
-    Vec2f,
-    Size,
-};
+use aplite_types::{Rect, Vec2f};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlignH {
@@ -76,11 +72,11 @@ impl Padding {
     }
 }
 
-pub enum LayoutResult {
-    Fit,
-    UnderFlow,
-    OverFlow,
-}
+// pub enum LayoutResult {
+//     Fit,
+//     UnderFlow,
+//     OverFlow,
+// }
 
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
