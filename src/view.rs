@@ -345,26 +345,22 @@ mod build_and_layout {
         let (signal, set_signal) = Signal::split(false);
         let view = view(signal).into_view();
 
-        let _ =cx.build(&view);
+        cx.build(&view);
         cx.layout(&view);
 
-        // println!("{:?}", cx.layout_nodes);
+        println!("{:?}", cx.layout_nodes);
         println!("{:?}\n", cx.elements);
 
         set_signal.set(true);
+        cx.rebuild(&view);
 
-        let _ =cx.build(&view);
-        // cx.layout(&view);
-
-        // println!("{:?}", cx.layout_nodes);
+        println!("{:?}", cx.layout_nodes);
         println!("{:?}\n", cx.elements);
 
         set_signal.set(false);
+        cx.rebuild(&view);
 
-        let _ =cx.build(&view);
-        // cx.layout(&view);
-
-        // println!("{:?}", cx.layout_nodes);
+        println!("{:?}", cx.layout_nodes);
         println!("{:?}\n", cx.elements);
     }
 }

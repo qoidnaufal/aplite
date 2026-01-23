@@ -71,7 +71,7 @@ impl<IV: IntoView> Aplite<IV> {
 
         self.renderer = Some(block_on(Renderer::new(Arc::clone(&window)))?);
 
-        let _ = self.cx.build(&self.view);
+        self.cx.build(&self.view);
         self.cx.layout(&self.view);
         window.request_redraw();
 
@@ -111,8 +111,9 @@ impl<IV: IntoView> Aplite<IV> {
     fn handle_close_request(&mut self, window_id: &WindowId, event_loop: &ActiveEventLoop) {
         if let Some(window) = self.window.take_if(|w| w.id() == *window_id) {
             drop(window);
-            event_loop.exit();
         }
+
+        event_loop.exit();
     }
 
     // WARN: not sure if retained mode works like this

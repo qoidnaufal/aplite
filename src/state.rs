@@ -1,5 +1,5 @@
 #[derive(Debug, Clone, Copy)]
-pub struct BorderWidth(pub(crate) f32);
+pub struct BorderWidth(pub f32);
 
 macro_rules! partial_eq {
     ($name:ident) => {

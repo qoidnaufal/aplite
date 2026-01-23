@@ -1,7 +1,7 @@
-use std::collections::HashMap;
 use std::ptr::NonNull;
-use std::hash::{Hash, Hasher, DefaultHasher};
+use std::hash::{Hash, Hasher};
 
+use rustc_hash::{FxHashMap, FxHasher};
 use aplite_renderer::Renderer;
 use aplite_types::{Rect, Size, Vec2f};
 
@@ -17,14 +17,14 @@ pub struct ViewPath(pub(crate) Vec<u32>);
 
 pub struct BuildCx<'a> {
     view_path: &'a mut ViewPath,
-    view_ids: &'a mut HashMap<PathId, ViewId>,
+    view_ids: &'a mut FxHashMap<PathId, ViewId>,
     elements: &'a mut Vec<Box<dyn Renderable>>,
     next_id: u64,
 }
 
 pub struct LayoutCx<'a> {
     view_path: &'a mut ViewPath,
-    view_ids: &'a mut HashMap<PathId, ViewId>,
+    view_ids: &'a mut FxHashMap<PathId, ViewId>,
     elements: &'a mut Vec<Box<dyn Renderable>>,
     layout_nodes: &'a mut Vec<Rect>,
     pub(crate) bound: Rect,
@@ -33,7 +33,7 @@ pub struct LayoutCx<'a> {
 
 pub struct CursorCx<'a> {
     view_path: &'a mut ViewPath,
-    view_ids: &'a mut HashMap<PathId, ViewId>,
+    view_ids: &'a mut FxHashMap<PathId, ViewId>,
     elements: &'a mut Vec<Box<dyn Renderable>>,
     cursor: &'a mut Cursor,
     layout_nodes: &'a mut Vec<Rect>,
@@ -42,7 +42,7 @@ pub struct CursorCx<'a> {
 pub struct Context {
     pub(crate) elements: Vec<Box<dyn Renderable>>,
     pub(crate) layout_nodes: Vec<Rect>,
-    view_ids: HashMap<PathId, ViewId>,
+    view_ids: FxHashMap<PathId, ViewId>,
     pub(crate) view_path: ViewPath,
     pub(crate) cursor: Cursor,
     pub(crate) window_rect: Rect,
@@ -54,7 +54,7 @@ impl Context {
         Self {
             elements: Vec::new(),
             layout_nodes: Vec::new(),
-            view_ids: HashMap::new(),
+            view_ids: FxHashMap::default(),
             view_path: ViewPath::new(),
             cursor: Cursor::default(),
             window_rect: Rect::from_size(size),
@@ -62,7 +62,6 @@ impl Context {
         }
     }
 
-    #[must_use]
     pub fn build<T: Widget>(&mut self, view: &T) -> bool {
         if self.redraw_phase {
             self.redraw_phase = false;
@@ -75,7 +74,6 @@ impl Context {
         let count = cx.next_id as usize;
         let len = self.elements.len();
         self.elements.truncate(count);
-
 
         let dirty = dirty || count != len;
         self.redraw_phase = dirty;
@@ -251,15 +249,14 @@ impl<'a> BuildCx<'a> {
 
         if let Some(exist) = self.elements.get_mut(id.0 as usize) {
             if exist.equal(&element) {
-                false
-            } else {
-                *exist = Box::new(element);
-                true
+                return false;
             }
+            *exist = Box::new(element);
         } else {
             self.elements.push(Box::new(element));
-            true
         }
+
+        true
     }
 
     fn get_or_create_id(&mut self) -> ViewId {
@@ -402,14 +399,14 @@ impl ViewPath {
     }
 
     fn get_path_id(&self) -> PathId {
-        let mut hasher = DefaultHasher::new();
+        let mut hasher = FxHasher::default();
         Hash::hash_slice(&self.0, &mut hasher);
         PathId(hasher.finish())
     }
 
     fn get_parent_path_id(&self) -> Option<PathId> {
-        if self.0.is_empty() { return None; }
-        let mut hasher = DefaultHasher::new();
+        if self.0.len() <= 1 { return None; }
+        let mut hasher = FxHasher::default();
         Hash::hash_slice(&self.0[..self.0.len() - 1], &mut hasher);
         Some(PathId(hasher.finish()))
     }

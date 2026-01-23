@@ -41,19 +41,19 @@ impl Effect {
 
         let scope = Scope::new();
         let effect_state = EffectState::new(tx);
-        let subscriber = effect_state.to_any_subscriber();
+        let this = effect_state.to_any_subscriber();
         let node = ReactiveStorage::insert(effect_state);
 
         Executor::spawn(async move {
             let mut value = None::<R>;
 
             while rx.recv().await.is_some() {
-                if !scope.is_paused() && subscriber.needs_update() {
-                    subscriber.clear_sources();
+                if !scope.is_paused() && this.needs_update() {
+                    this.clear_sources();
 
                     let prev_value = value.take();
                     let new_value = scope.with_cleanup(|| {
-                        subscriber.as_observer(|| {
+                        this.as_observer(|| {
                             f(prev_value)
                         })
                     });

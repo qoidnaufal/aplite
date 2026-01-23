@@ -1,9 +1,7 @@
-use std::sync::Arc;
-
 use aplite_reactive::*;
 use aplite_renderer::Scene;
 use aplite_types::{
-    Color, Length, Matrix3x2, PaintRef, Rect, rgb, theme
+    Color, Length, Matrix3x2, PaintRef, Rect, theme
 };
 
 use crate::{layout::Axis, state::BorderWidth};
@@ -14,12 +12,15 @@ mod button;
 mod image;
 mod stack;
 mod either;
+mod text;
+mod iterables;
 
 pub use {
     button::*,
     image::*,
     stack::*,
     either::*,
+    text::*,
 };
 
 /*
@@ -53,12 +54,6 @@ pub trait Widget: 'static {
     fn layout(&self, cx: &mut LayoutCx<'_>);
 
     fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool;
-
-    fn diff(&self, prev: &dyn Widget) -> bool {
-        use std::any::Any;
-        self.type_id() == prev.type_id()
-        // false
-    }
 }
 
 pub trait Renderable: std::fmt::Debug + 'static {
@@ -237,134 +232,6 @@ impl Renderable for CircleElement {
 /*
 #########################################################
 #
-# Iterables
-#
-#########################################################
-*/
-
-fn build<'a, T: Widget>(mut name: impl Iterator<Item = &'a T>, cx: &mut BuildCx<'_>) -> bool {
-    let mut path_id = cx.pop();
-
-    let dirty = name.any(|widget| {
-        let dirty = cx.with_id(path_id, |cx| widget.build(cx));
-        path_id += 1;
-        dirty
-    });
-
-    cx.push(path_id);
-
-    dirty
-}
-
-fn layout<'a, T: Widget>(name: &'a [T], cx: &mut LayoutCx<'_>) {
-    let count = name.len();
-
-    let bound = match cx.rules.axis {
-        Axis::Horizontal => {
-            let width = cx.bound.width / count as f32;
-            Rect::new(cx.bound.x, cx.bound.y, width, cx.bound.height)
-        },
-        Axis::Vertical => {
-            let height = cx.bound.height / count as f32;
-            Rect::new(cx.bound.x, cx.bound.y, cx.bound.width, height)
-        },
-    };
-
-    let mut cx = LayoutCx::derive(cx, cx.rules, bound);
-
-    let mut path_id = cx.pop();
-
-    name.iter().for_each(|w| {
-        cx.with_id(path_id, |cx| w.layout(cx));
-        path_id += 1;
-    });
-
-    cx.push(path_id);
-}
-
-fn detect_hover<'a, T: Widget>(mut name: impl Iterator<Item = &'a T>, cx: &mut CursorCx<'_>) -> bool {
-    let mut id_path = cx.pop();
-
-    let any = name.any(|widget| {
-        let res = cx.with_id(id_path, |cx| widget.detect_hover(cx));
-        id_path += 1;
-        res
-    });
-
-    cx.push(id_path);
-
-    any
-}
-
-impl<T: Widget> Widget for Vec<T> {
-    fn build(&self, cx: &mut BuildCx<'_>) -> bool {
-        build(self.iter(), cx)
-    }
-
-    fn layout(&self, cx: &mut LayoutCx<'_>) {
-        layout(self, cx);
-    }
-
-    fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
-        detect_hover(self.iter(), cx)
-    }
-}
-
-impl<T: Widget> IntoView for Vec<T> {
-    type View = Self;
-
-    fn into_view(self) -> Self::View {
-        self
-    }
-}
-
-impl<T: Widget> Widget for Box<[T]> {
-    fn build(&self, cx: &mut BuildCx<'_>) -> bool {
-        build(self.iter(), cx)
-    }
-
-    fn layout(&self, cx: &mut LayoutCx<'_>) {
-        layout(self, cx);
-    }
-
-    fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
-        detect_hover(self.iter(), cx)
-    }
-}
-
-impl<T: Widget + 'static> IntoView for Box<[T]> {
-    type View = Self;
-
-    fn into_view(self) -> Self::View {
-        self
-    }
-}
-
-impl<T: Widget + 'static, const N: usize> Widget for [T; N] {
-    fn build(&self, cx: &mut BuildCx<'_>) -> bool {
-        build(self.iter(), cx)
-    }
-
-    fn layout(&self, cx: &mut LayoutCx<'_>) {
-        layout(self, cx);
-    }
-
-    fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
-        detect_hover(self.iter(), cx)
-    }
-}
-
-impl<T: Widget + 'static, const N: usize> IntoView for [T; N] {
-    type View = Self;
-
-    fn into_view(self) -> Self::View {
-        self
-    }
-}
-
-/*
-#########################################################
-#
 # Option<IV>
 #
 #########################################################
@@ -467,130 +334,3 @@ macro_rules! impl_reactive_nodes {
 impl_reactive_nodes!(SignalRead<IV> where IV: Widget);
 impl_reactive_nodes!(Signal<IV> where IV: Widget);
 impl_reactive_nodes!(Memo<IV> where IV: Widget);
-
-/*
-#########################################################
-#
-# Text
-#
-#########################################################
-*/
-
-pub fn label(text: impl AsRef<str>) -> Label {
-    Label {
-        text: Arc::from(text.as_ref())
-    }
-}
-
-pub struct Label {
-    text: Arc<str>
-}
-
-impl std::fmt::Display for Label {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.text.as_ref())
-    }
-}
-
-macro_rules! impl_text {
-    ($name:ty) => {
-        impl Widget for $name {
-            fn build(&self, cx: &mut BuildCx<'_>) -> bool {
-                let text = self.to_string();
-
-                cx.register_element(TextElement {
-                    len: text.len(),
-                    color: rgb(0x000000),
-                })
-            }
-
-            fn layout(&self, cx: &mut LayoutCx<'_>) {
-                let element = cx.get_element::<TextElement>().unwrap();
-                let len = element.len as f32;
-
-                let node = match cx.rules.axis {
-                    Axis::Horizontal => {
-                        let width = cx.bound.width.min(len);
-                        cx.bound.x += width + cx.rules.spacing.0 as f32;
-                        Rect::new(cx.bound.x, cx.bound.y, width, cx.bound.height)
-                    },
-                    Axis::Vertical =>  {
-                        let height = cx.bound.height.min(len);
-                        cx.bound.y += height + cx.rules.spacing.0 as f32;
-                        Rect::new(cx.bound.x, cx.bound.y, cx.bound.width, height)
-                    },
-                };
-
-                cx.set_node(node);
-            }
-
-            fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
-                let rect = cx.get_layout_node().unwrap();
-                let hovered = rect.contains(cx.hover_pos());
-
-                if hovered {
-                    cx.set_id()
-                }
-
-                hovered
-            }
-        }
-
-        impl IntoView for $name {
-            type View = Self;
-
-            fn into_view(self) -> Self::View {
-                self
-            }
-        }
-    };
-
-    ($next:ty, $($rest:ty),*) => {
-        impl_text!{ $next }
-        impl_text!{ $($rest),* }
-    };
-}
-
-impl_text!(
-    u8,    i8,
-    u16,   i16,
-    u32,   i32,
-    u64,   i64,
-    usize, isize,
-    u128,  i128,
-    &'static str,
-    String,
-    Label
-);
-
-#[derive(PartialEq, Eq)]
-pub struct TextElement {
-    pub len: usize,
-    pub color: Color,
-}
-
-impl std::fmt::Debug for TextElement {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TextElement")
-            .finish_non_exhaustive()
-    }
-}
-
-impl Renderable for TextElement {
-    fn render(&self, _rect: &Rect, _scene: &mut Scene) {}
-
-    fn type_id(&self) -> std::any::TypeId {
-        std::any::TypeId::of::<Self>()
-    }
-
-    fn equal(&self, other: &dyn Renderable) -> bool {
-        if other.type_id() == self.type_id() {
-            unsafe {
-                let ptr = other as *const dyn Renderable as *const Self;
-                (&*ptr).eq(self)
-            }
-        } else {
-            false
-        }
-    }
-}

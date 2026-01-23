@@ -19,8 +19,8 @@ where
     let when = Memo::new(move |_| when());
 
     let f = move || match when.get() {
-        true => Either::True(content_true()),
-        false => Either::False(content_false()),
+        true => Either::True(content_true().into_view()),
+        false => Either::False(content_false().into_view()),
     };
 
     ViewFn::new(f)
@@ -133,15 +133,27 @@ where
 
 impl<VT, VF> IntoView for Either<VT, VF>
 where
-    VT: IntoView,
-    VF: IntoView,
+    VT: Widget,
+    VF: Widget,
 {
-    type View = Either<VT::View, VF::View>;
+    type View = Self;
 
     fn into_view(self) -> Self::View {
-        match self {
-            Either::True(t) => Either::True(t.into_view()),
-            Either::False(f) => Either::False(f.into_view()),
-        }
+        self
     }
 }
+
+// impl<VT, VF> IntoView for Either<VT, VF>
+// where
+//     VT: IntoView,
+//     VF: IntoView,
+// {
+//     type View = Either<VT::View, VF::View>;
+
+//     fn into_view(self) -> Self::View {
+//         match self {
+//             Either::True(t) => Either::True(t.into_view()),
+//             Either::False(f) => Either::False(f.into_view()),
+//         }
+//     }
+// }
