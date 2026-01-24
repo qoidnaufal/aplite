@@ -1,72 +1,67 @@
 use std::sync::{Arc, Weak, RwLock};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::task::{Context, Poll, Waker};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::task::{Context, Poll, Waker, Wake};
 use std::pin::Pin;
-use std::task::Wake;
 
 use crate::stream::*;
 
-pub fn aplite_channel() -> (Sender, Receiver) {
-    let inner = Arc::new(Inner::default());
-    let rx = Receiver(Arc::downgrade(&inner));
-    let tx = Sender(inner);
+pub fn notifier() -> (Notifier, Rx) {
+    let inner = Arc::new(NotifierState::new());
+    let rx = Rx(Arc::downgrade(&inner));
+    let tx = Notifier(inner);
     (tx, rx)
 }
 
-pub struct Sender(Arc<Inner>);
+pub struct Notifier(Arc<NotifierState>);
 
-pub struct Receiver(Weak<Inner>);
+pub struct Rx(Weak<NotifierState>);
 
-#[derive(Default)]
-struct Inner {
+struct NotifierState {
     dirty: AtomicBool,
-    waker: RwLock<Option<Waker>>,
+    waker: AtomicWaker,
 }
 
-impl Sender {
+impl NotifierState {
+    const fn new() -> Self {
+        Self {
+            dirty: AtomicBool::new(false),
+            waker: AtomicWaker::new(),
+        }
+    }
+}
+
+impl Notifier {
     pub fn notify(&self) {
         self.0.dirty.store(true, Ordering::Relaxed);
         self.0.wake_by_ref();
     }
 }
 
-impl Clone for Sender {
+impl Clone for Notifier {
     fn clone(&self) -> Self {
         Self(Arc::clone(&self.0))
     }
 }
 
-impl Inner {
-    fn set_waker(&self, new: &Waker) {
-        let mut inner = self.waker.write().unwrap();
-        match inner.as_ref() {
-            Some(old) if old.will_wake(new) => {},
-            _ => *inner = Some(new.clone()),
-        }
-    }
-}
-
-impl Wake for Inner {
+impl Wake for NotifierState {
     fn wake(self: Arc<Self>) {
         self.wake_by_ref();
     }
 
     fn wake_by_ref(self: &Arc<Self>) {
-        if let Ok(mut lock) = self.waker.write()
-            && let Some(waker) = lock.take()
-        {
+        if let Some(waker) = self.waker.take() {
             waker.wake();
         }
     }
 }
 
-impl Stream for Receiver {
+impl Stream for Rx {
     type Item = ();
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match self.0.upgrade() {
             Some(inner) => {
-                inner.set_waker(cx.waker());
+                inner.waker.set(cx.waker());
 
                 if inner.dirty.swap(false, Ordering::Relaxed) {
                     Poll::Ready(Some(()))
@@ -79,10 +74,120 @@ impl Stream for Receiver {
     }
 }
 
-impl Receiver {
+impl Rx {
     pub fn recv(&mut self) -> impl Future<Output = Option<<Self as Stream>::Item>> {
         crate::stream::Recv {
             inner: Pin::new(self),
+        }
+    }
+}
+
+/*
+#########################################################
+#
+# Mutable
+#
+#########################################################
+*/
+
+#[repr(transparent)]
+struct Mutable<T> {
+    value: T
+}
+
+impl<T: Sized> Mutable<T> {
+    const fn new(value: T) -> Self {
+        Self {
+            value
+        }
+    }
+
+    unsafe fn get(&self) -> *mut T {
+        &self.value as *const T as *mut T
+    }
+}
+
+/*
+#########################################################
+#
+# AtomicWaker
+#
+#########################################################
+*/
+
+struct AtomicWaker {
+    state: AtomicUsize,
+    waker: Mutable<Option<Waker>>,
+}
+
+unsafe impl Send for AtomicWaker {}
+unsafe impl Sync for AtomicWaker {}
+
+impl AtomicWaker {
+    const EMPTY: usize = 0;
+    const SET: usize = 0b01;
+    const WAKING: usize = 0b10;
+
+    const fn new() -> Self {
+        Self {
+            state: AtomicUsize::new(Self::EMPTY),
+            waker: Mutable::new(None),
+        }
+    }
+
+    fn set(&self, new: &Waker) {
+        let state = self.state
+            .compare_exchange(
+                Self::EMPTY,
+                Self::SET,
+                Ordering::Acquire,
+                Ordering::Acquire
+            )
+            .unwrap_or_else(|current| current);
+
+        match state {
+            Self::EMPTY => {
+                unsafe {
+                    let opt = &mut *self.waker.get();
+
+                    match &opt {
+                        Some(old) if old.will_wake(new) => {},
+                        _ => *opt = Some(new.clone()),
+                    }
+
+                    if self.state
+                        .compare_exchange(
+                            Self::SET,
+                            Self::EMPTY,
+                            Ordering::AcqRel,
+                            Ordering::Acquire,
+                        )
+                        .is_err()
+                    {
+                        let waker = (&mut *self.waker.get()).take().unwrap();
+                        self.state.swap(Self::EMPTY, Ordering::AcqRel);
+                        waker.wake();
+                    }
+                }
+            },
+            Self::WAKING => new.wake_by_ref(),
+            _ => {}
+        }
+    }
+
+    fn take(&self) -> Option<Waker> {
+        match self.state.fetch_or(Self::WAKING, Ordering::AcqRel) {
+            Self::EMPTY => {
+                let waker = unsafe {
+                    let opt = &mut *self.waker.get();
+                    opt.take()
+                };
+
+                self.state.fetch_and(!Self::WAKING, Ordering::Release);
+
+                waker
+            }
+            _ => None,
         }
     }
 }
@@ -95,94 +200,76 @@ impl Receiver {
 #########################################################
 */
 
-pub fn aplite_typed_channel<T>() -> (TypedSender<T>, TypedReceiver<T>) {
-    let inner = Arc::new(TypedInner::default());
-    let rx = TypedReceiver(Arc::downgrade(&inner));
-    let tx = TypedSender(inner);
+pub fn async_channel<T>() -> (Sender<T>, Receiver<T>) {
+    let inner = Arc::new(ChannelState::default());
+    let rx = Receiver(Arc::downgrade(&inner));
+    let tx = Sender(inner);
     (tx, rx)
 }
 
-pub struct TypedSender<T>(Arc<TypedInner<T>>);
+pub struct Sender<T>(Arc<ChannelState<T>>);
 
-pub struct TypedReceiver<T>(Weak<TypedInner<T>>);
+pub struct Receiver<T>(Weak<ChannelState<T>>);
 
-struct TypedInner<T> {
+struct ChannelState<T> {
     value: RwLock<Option<T>>,
-    waker: RwLock<Option<Waker>>,
+    waker: AtomicWaker,
 }
 
-impl<T> Default for TypedInner<T> {
+impl<T> Default for ChannelState<T> {
     fn default() -> Self {
         Self {
             value: RwLock::new(None),
-            waker: RwLock::new(None),
+            waker: AtomicWaker::new(),
         }
     }
 }
 
-impl<T> TypedSender<T> {
+impl<T> Sender<T> {
     pub fn notify(&self, value: T) {
         *self.0.value.write().unwrap() = Some(value);
         self.0.wake_by_ref();
     }
 
     pub fn close(self) {
-        unsafe {
-            Arc::decrement_strong_count(Arc::as_ptr(&self.0))
-        }
+        drop(self)
     }
 }
 
-impl<T> Drop for TypedSender<T> {
+impl<T> Drop for Sender<T> {
     fn drop(&mut self) {
         if std::mem::needs_drop::<T>()
-        && let Some(pending_data) = self.0.value.write().unwrap().take() {
+            && let Some(pending_data) = self.0.value.write().unwrap().take() {
             drop(pending_data)
-        }
-
-        unsafe {
-            Arc::decrement_strong_count(Arc::as_ptr(&self.0))
         }
     }
 }
 
-impl<T> Clone for TypedSender<T> {
+impl<T> Clone for Sender<T> {
     fn clone(&self) -> Self {
         Self(Arc::clone(&self.0))
     }
 }
 
-impl<T> TypedInner<T> {
-    fn set_waker(&self, new: &Waker) {
-        let mut inner = self.waker.write().unwrap();
-        match inner.as_ref() {
-            Some(old) if old.will_wake(new) => {},
-            _ => *inner = Some(new.clone()),
-        }
-    }
-}
-
-impl<T> Wake for TypedInner<T> {
+impl<T> Wake for ChannelState<T> {
     fn wake(self: Arc<Self>) {
         self.wake_by_ref();
     }
 
     fn wake_by_ref(self: &Arc<Self>) {
-        if let Ok(mut lock) = self.waker.write()
-            && let Some(waker) = lock.take()
-        {
+        if let Some(waker) = self.waker.take() {
             waker.wake();
         }
     }
 }
 
-impl<T> Stream for TypedReceiver<T> {
+impl<T> Stream for Receiver<T> {
     type Item = T;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match self.0.upgrade() {
             Some(inner) => {
-                inner.set_waker(cx.waker());
+                inner.waker.set(cx.waker());
 
                 if let Some(val) = inner.value.write().unwrap().take() {
                     Poll::Ready(Some(val))
@@ -195,7 +282,7 @@ impl<T> Stream for TypedReceiver<T> {
     }
 }
 
-impl<T> TypedReceiver<T> {
+impl<T> Receiver<T> {
     pub fn recv(&mut self) -> impl Future<Output = Option<<Self as Stream>::Item>> {
         crate::stream::Recv {
             inner: Pin::new(self),
@@ -220,7 +307,7 @@ mod channel_test {
 
     #[test]
     fn poll() {
-        let (tx, mut rx) = aplite_channel();
+        let (tx, mut rx) = notifier();
 
         Executor::spawn(async move {
             while rx.recv().await.is_some() {
@@ -237,7 +324,7 @@ mod channel_test {
 
         #[derive(Debug)] struct Obj { _age: u8, _name: String }
 
-        let (tx, mut rx) = aplite_typed_channel::<Obj>();
+        let (tx, mut rx) = async_channel::<Obj>();
 
         Executor::spawn(async move {
             while let Some(val) = rx.recv().await {

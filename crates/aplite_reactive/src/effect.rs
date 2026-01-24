@@ -1,7 +1,7 @@
 use std::sync::{Arc, RwLock};
 use aplite_future::{
-    aplite_channel,
-    Sender,
+    notifier,
+    Notifier,
     Executor,
 };
 
@@ -32,7 +32,7 @@ impl Effect {
         F: FnMut(Option<R>) -> R + 'static,
         R: 'static,
     {
-        let (tx, mut rx) = aplite_channel();
+        let (tx, mut rx) = notifier();
         tx.notify();
 
         let scope = Scope::new();
@@ -70,7 +70,7 @@ impl Effect {
 }
 
 struct EffectState {
-    sender: Sender,
+    sender: Notifier,
     source: Sources,
     dirty: bool,
 }
@@ -79,7 +79,7 @@ unsafe impl Send for EffectState {}
 unsafe impl Sync for EffectState {}
 
 impl EffectState {
-    fn new(sender: Sender) -> Arc<RwLock<Self>> {
+    fn new(sender: Notifier) -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(Self {
             sender,
             source: Sources::default(),
