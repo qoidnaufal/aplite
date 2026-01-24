@@ -3,51 +3,48 @@ use std::sync::{Weak, Arc};
 use crate::subscriber::AnySubscriber;
 use crate::reactive_traits::*;
 
-pub trait Source: Reactive {
+pub(crate) trait Source: Reactive {
     fn add_subscriber(&self, subscriber: AnySubscriber);
     fn clear_subscribers(&self);
 }
 
-pub struct AnySource(pub(crate) Weak<dyn Source>);
+pub(crate) struct AnySource(pub(crate) Weak<dyn Source>);
 
 #[derive(Default)]
-pub struct Sources(pub(crate) Vec<AnySource>);
+pub(crate) struct Sources(pub(crate) Vec<AnySource>);
 
 impl Sources {
-    #[inline(always)]
-    pub fn add_source(&mut self, any_source: AnySource) {
+    pub(crate) fn add_source(&mut self, any_source: AnySource) {
         if !self.0.contains(&any_source) {
             self.0.push(any_source);
         }
     }
 
-    #[inline(always)]
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.0.clear();
     }
 
-    #[inline(always)]
-    pub fn try_update(&self) -> bool {
-        self.0.iter().any(AnySource::update_if_necessary)
+    pub(crate) fn try_update(&self) -> bool {
+        self.0.iter().any(AnySource::try_update)
     }
 }
 
 impl AnySource {
-    pub fn new<T: Source + 'static>(arc: &Arc<T>) -> Self {
+    pub(crate) fn new<T: Source + 'static>(arc: &Arc<T>) -> Self {
         let weak: Weak<T> = Arc::downgrade(arc);
         Self(weak)
     }
 
-    pub fn empty<T: Source + 'static>() -> Self {
+    pub(crate) fn empty<T: Source + 'static>() -> Self {
         let weak: Weak<T> = Weak::new();
         Self(weak)
     }
 
-    pub fn upgrade(&self) -> Option<Arc<dyn Source>> {
+    fn upgrade(&self) -> Option<Arc<dyn Source>> {
         self.0.upgrade()
     }
 
-    pub fn update_if_necessary(&self) -> bool {
+    fn try_update(&self) -> bool {
         self.upgrade()
             .map(|source| source.try_update())
             .unwrap_or(false)
@@ -68,7 +65,7 @@ impl Reactive for AnySource {
     }
 
     fn try_update(&self) -> bool {
-        self.update_if_necessary()
+        self.try_update()
     }
 }
 
@@ -94,7 +91,7 @@ impl PartialEq for AnySource {
 
 impl std::fmt::Debug for AnySource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "AnySource({:?})", self.0)
+        write!(f, "AnySource({})", Weak::as_ptr(&self.0).addr())
     }
 }
 

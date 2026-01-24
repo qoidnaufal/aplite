@@ -109,7 +109,6 @@ impl<T: 'static> Reactive for Signal<T> {
     #[inline(always)]
     fn mark_dirty(&self) {
         ReactiveStorage::map_with_downcast(&self.node, |state| state.mark_dirty());
-        // ReactiveStorage::with_downcast(&self.node, |state| { state.mark_dirty() })
     }
 
     fn try_update(&self) -> bool {
@@ -129,10 +128,8 @@ impl<T: 'static> Source for Signal<T> {
 
 impl<T: 'static> ToAnySource for Signal<T> {
     fn to_any_source(&self) -> AnySource {
-        // WARN: check here if something doesn't work
         ReactiveStorage::map_with_downcast(&self.node, AnySource::new)
             .unwrap_or_else(AnySource::empty::<RwLock<SignalState<T>>>)
-        // ReactiveStorage::with_downcast(&self.node, AnySource::new)
     }
 }
 

@@ -27,10 +27,6 @@ pub struct Effect {
 type EffectNode = Node<Arc<RwLock<EffectState>>>;
 
 impl Effect {
-    pub fn pause(&self) { }
-}
-
-impl Effect {
     pub fn new<F, R>(mut f: F) -> Self
     where
         F: FnMut(Option<R>) -> R + 'static,
@@ -48,14 +44,13 @@ impl Effect {
             let mut value = None::<R>;
 
             while rx.recv().await.is_some() {
-                if !scope.is_paused() && this.needs_update() {
+                if this.needs_update() {
                     this.clear_sources();
 
                     let prev_value = value.take();
+
                     let new_value = scope.with_cleanup(|| {
-                        this.as_observer(|| {
-                            f(prev_value)
-                        })
+                        this.as_observer(|| f(prev_value))
                     });
 
                     value = Some(new_value);
@@ -133,12 +128,15 @@ impl Reactive for RwLock<EffectState> {
 
     fn try_update(&self) -> bool {
         let mut lock = self.write().unwrap();
+
         if lock.dirty {
             lock.dirty = false;
             return true;
         }
 
-        lock.source.try_update()
+        drop(lock);
+
+        self.read().unwrap().source.try_update()
     }
 }
 

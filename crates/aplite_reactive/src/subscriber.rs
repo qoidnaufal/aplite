@@ -14,20 +14,21 @@ use crate::source::AnySource;
 
 #[derive(Default)]
 // TODO: Conside using SparseSet to make removal of a single AnySubscriber much more convenient
-pub struct Subscribers(pub(crate) Vec<AnySubscriber>);
+pub(crate) struct Subscribers(pub(crate) Vec<AnySubscriber>);
 
 impl Subscribers {
-    pub fn mark_dirty(&mut self) {
-        self.0.drain(..).for_each(AnySubscriber::mark_dirty_owned);
+    pub(crate) fn mark_dirty(&mut self) {
+        let subs = std::mem::take(&mut self.0);
+        subs.iter().for_each(AnySubscriber::mark_dirty);
     }
 
-    pub fn push(&mut self, subscriber: AnySubscriber) {
+    pub(crate) fn push(&mut self, subscriber: AnySubscriber) {
         if !self.0.contains(&subscriber) {
             self.0.push(subscriber);
         }
     }
 
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.0.clear();
     }
 }
@@ -40,30 +41,31 @@ impl Subscribers {
 #########################################################
 */
 
-pub struct AnySubscriber(pub(crate) Weak<dyn Subscriber>);
+pub(crate) struct AnySubscriber(pub(crate) Weak<dyn Subscriber>);
 
 unsafe impl Send for AnySubscriber {}
 unsafe impl Sync for AnySubscriber {}
 
 impl AnySubscriber {
-    pub fn from_weak<T: Subscriber + 'static>(weak: Weak<T>) -> Self {
+    pub(crate) fn from_weak<T: Subscriber + 'static>(weak: Weak<T>) -> Self {
         Self(weak)
     }
 
-    pub fn new<T: Subscriber + 'static>(arc: &Arc<T>) -> Self {
+    pub(crate) fn new<T: Subscriber + 'static>(arc: &Arc<T>) -> Self {
         let weak: Weak<T> = Arc::downgrade(arc);
         Self(weak)
     }
 
-    pub fn upgrade(&self) -> Option<Arc<dyn Subscriber>> {
+    pub(crate) fn empty<T: Subscriber + 'static>() -> Self {
+        let weak: Weak<T> = Weak::new();
+        Self(weak)
+    }
+
+    fn upgrade(&self) -> Option<Arc<dyn Subscriber>> {
         self.0.upgrade()
     }
 
-    pub fn mark_dirty_owned(self) {
-        self.mark_dirty();
-    }
-
-    pub fn needs_update(&self) -> bool {
+    pub(crate) fn needs_update(&self) -> bool {
         self.as_observer(|| self.try_update())
     }
 
@@ -84,7 +86,7 @@ impl AnySubscriber {
 #########################################################
 */
 
-pub trait Subscriber: Reactive {
+pub(crate) trait Subscriber: Reactive {
     fn add_source(&self, source: AnySource);
     fn clear_sources(&self);
 }

@@ -25,13 +25,12 @@ static SCOPE: RwLock<Option<WeakScope>> = RwLock::new(None);
 
 pub struct Scope(Arc<RwLock<ReactiveScope>>);
 
-pub struct WeakScope(Weak<RwLock<ReactiveScope>>);
+pub(crate) struct WeakScope(Weak<RwLock<ReactiveScope>>);
 
 struct ReactiveScope {
     parent: Option<WeakScope>,
     children: Vec<WeakScope>,
     node_ids: Vec<SlotId>,
-    paused: bool,
 }
 
 impl Scope {
@@ -54,20 +53,12 @@ impl Scope {
                 parent: current_scope,
                 children: Vec::new(),
                 node_ids: Vec::new(),
-                paused: false,
             })
         }))
     }
 
-    pub fn downgrade(&self) -> WeakScope {
+    pub(crate) fn downgrade(&self) -> WeakScope {
         WeakScope(Arc::downgrade(&self.0))
-    }
-
-    fn with_current<R>(f: impl FnOnce(&WeakScope) -> R) -> Option<R> {
-        let lock = SCOPE.read().unwrap();
-        let weak = lock.as_ref().map(Clone::clone);
-        drop(lock);
-        weak.as_ref().map(f)
     }
 
     pub fn with<R>(&self, f: impl FnOnce() -> R) -> R {
@@ -104,54 +95,16 @@ impl Scope {
         });
     }
 
-    // WARN: this may cause infinite locking
-    pub fn pause(&self) {
-        let mut write_lock = self.0.write().unwrap();
-        write_lock.paused = true;
-        drop(write_lock);
-
-        let read_lock = self.0.read().unwrap();
-        let children = read_lock.children.clone();
-        drop(read_lock);
-
-        children.iter().for_each(|weak| {
-            if let Some(child_scope) = weak.upgrade() {
-                child_scope.pause();
-            }
-        });
-    }
-
-    // WARN: this may cause infinite locking
-    pub fn resume(&self) {
-        let mut write_lock = self.0.write().unwrap();
-
-        if let Some(parent) = write_lock.parent
-            .as_ref() && parent.is_paused() {
-            return;
-        }
-
-        write_lock.paused = false;
-        drop(write_lock);
-
-        let read_lock = self.0.read().unwrap();
-        let children = read_lock.children.clone();
-        drop(read_lock);
-
-        children.iter().for_each(|weak| {
-            if let Some(child_scope) = weak.upgrade() {
-                child_scope.resume();
-            }
-        });
-    }
-
-    pub fn is_paused(&self) -> bool {
-        self.0.read().unwrap().paused
+    pub(crate) fn with_current<R>(f: impl FnOnce(&WeakScope) -> R) -> Option<R> {
+        let lock = SCOPE.read().unwrap();
+        let weak = lock.as_ref().map(Clone::clone);
+        drop(lock);
+        weak.as_ref().map(f)
     }
 }
 
 impl WeakScope {
-    #[inline(always)]
-    pub fn upgrade(&self) -> Option<Scope> {
+    pub(crate) fn upgrade(&self) -> Option<Scope> {
         self.0.upgrade().map(Scope)
     }
 
@@ -162,12 +115,6 @@ impl WeakScope {
                 lock.node_ids.push(id);
             }
         }
-    }
-
-    fn is_paused(&self) -> bool {
-        self.upgrade()
-            .map(|scope| scope.is_paused())
-            .unwrap_or_default()
     }
 }
 
@@ -209,7 +156,6 @@ impl std::fmt::Debug for ReactiveScope {
                 .collect::<Vec<_>>()
             )
             .field("ids", &self.node_ids)
-            .field("is_paused", &self.paused)
             .finish()
     }
 }
@@ -257,19 +203,15 @@ impl ReactiveStorage {
         f(&mut Self::write())
     }
 
-    #[track_caller]
     pub fn with_downcast<R, F, U>(node: &Node<R>, f: F) -> U
     where
         R: 'static,
         F: FnOnce(&R) -> U,
     {
-        Self::read()
-            .inner
-            .get(&node.id)
+        Self::read().inner.get(&node.id)
             .and_then(|any| any.downcast_ref::<R>())
             .map(f)
             .unwrap()
-        // f(r)
     }
 
     pub fn try_with_downcast<R, F, U>(node: &Node<R>, f: F) -> Option<U>
@@ -329,11 +271,11 @@ static OBSERVER: RwLock<Observer> = RwLock::new(Observer(None));
 pub struct Observer(Option<AnySubscriber>);
 
 impl Observer {
-    pub fn with<U>(f: impl FnOnce(Option<&AnySubscriber>) -> U) -> U {
+    pub(crate) fn with<U>(f: impl FnOnce(Option<&AnySubscriber>) -> U) -> U {
         f(OBSERVER.read().unwrap().0.as_ref())
     }
 
-    pub fn swap_observer(subscriber: Option<AnySubscriber>) -> Option<AnySubscriber> {
+    pub(crate) fn swap_observer(subscriber: Option<AnySubscriber>) -> Option<AnySubscriber> {
         let mut current = OBSERVER.write().unwrap();
         let prev = current.0.take();
         current.0 = subscriber;
@@ -352,12 +294,6 @@ impl Observer {
 pub struct Node<R> {
     pub(crate) id: SlotId,
     marker: PhantomData<R>,
-}
-
-impl<R> Node<R> {
-    pub fn id(&self) -> SlotId {
-        self.id
-    }
 }
 
 impl<R> Clone for Node<R> {

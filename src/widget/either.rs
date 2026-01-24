@@ -18,7 +18,9 @@ where
 {
     let when = Memo::new(move |_| when());
 
-    let f = move || match when.get() {
+    // NOTE: no need to track, Widgets are managed internally in Context,
+    // intead of outside by Reactive Graph
+    let f = move || match when.get_untracked() {
         true => Either::True(content_true().into_view()),
         false => Either::False(content_false().into_view()),
     };

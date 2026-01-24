@@ -65,12 +65,10 @@ impl<T> MemoState<T> {
         }
     }
 
-    #[inline(always)]
     fn state_reader(&self) -> std::sync::RwLockReadGuard<'_, ReactiveState> {
         self.state.read().unwrap()
     }
 
-    #[inline(always)]
     fn state_writer(&self) -> std::sync::RwLockWriteGuard<'_, ReactiveState> {
         self.state.write().unwrap()
     }
@@ -114,34 +112,37 @@ impl<T> Reactive for MemoState<T> {
     }
 
     fn try_update(&self) -> bool {
-        let state_read_lock = self.state_reader();
+        let lock = self.state_reader();
 
-        if state_read_lock.dirty {
-            let val = self.write_value();
-            let prev_value = val.take();
+        if lock.dirty {
+            let prev_value = {
+                let val = self.write_value();
+                val.take()
+            };
 
-            let this = state_read_lock.this.clone();
-            drop(state_read_lock);
+            let this = lock.this.clone();
+
+            drop(lock);
             this.clear_sources();
 
             let (new_value, changed) = self.scope.with_cleanup(|| {
                 this.as_observer(|| (self.f)(prev_value))
             });
 
-            val.replace(new_value);
+            self.write_value().replace(new_value);
 
-            let mut state_write_lock = self.state_writer();
-            state_write_lock.dirty = false;
+            // let mut state_write_lock = self.state_writer();
+            // state_write_lock.dirty = false;
 
-            if changed {
-                let subscribers = &state_write_lock.subscribers.0;
+            // if changed {
+            //     let subscribers = &state_write_lock.subscribers.0;
 
-                Observer::with(|current| for sub in subscribers {
-                    if current.is_some_and(|any| any != sub) {
-                        sub.mark_dirty();
-                    }
-                });
-            }
+            //     Observer::with(|current| for sub in subscribers {
+            //         if current.is_some_and(|any| any != sub) {
+            //             sub.mark_dirty();
+            //         }
+            //     });
+            // }
 
             return changed
         }
@@ -221,7 +222,8 @@ impl<T: 'static> Source for Memo<T> {
 
 impl<T: 'static> ToAnySource for Memo<T> {
     fn to_any_source(&self) -> AnySource {
-        ReactiveStorage::with_downcast(&self.node, AnySource::new)
+        ReactiveStorage::map_with_downcast(&self.node, AnySource::new)
+            .unwrap_or_else(|| AnySource::empty::<MemoState<T>>())
     }
 }
 
@@ -241,7 +243,8 @@ impl<T: 'static> Subscriber for Memo<T> {
 
 impl<T: 'static> ToAnySubscriber for Memo<T> {
     fn to_any_subscriber(&self) -> AnySubscriber {
-        ReactiveStorage::with_downcast(&self.node, AnySubscriber::new)
+        ReactiveStorage::map_with_downcast(&self.node, AnySubscriber::new)
+            .unwrap_or_else(|| AnySubscriber::empty::<MemoState<T>>())
     }
 }
 
@@ -253,9 +256,8 @@ impl<T: 'static> Reactive for Memo<T> {
     }
 
     fn try_update(&self) -> bool {
-        ReactiveStorage::map_with_downcast(&self.node, Arc::downgrade)
-            .and_then(|weak| weak.upgrade())
-            .map(|arc| arc.try_update())
+        ReactiveStorage::map_with_downcast(&self.node, Arc::clone)
+            .map(|state| state.try_update())
             .unwrap_or_default()
     }
 }
