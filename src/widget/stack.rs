@@ -126,8 +126,17 @@ where
 
         cx.set_node(layout_node);
 
-        let x = layout_node.x + rules.padding.left as f32;
-        let y = layout_node.x + rules.padding.top as f32;
+        let x = match rules.align_h {
+            AlignH::Left => layout_node.x + rules.padding.left as f32,
+            AlignH::Center => layout_node.x + layout_node.width / 2.,
+            AlignH::Right => layout_node.max_x() - rules.padding.right as f32,
+        };
+
+        let y = match rules.align_v {
+            AlignV::Top => layout_node.y + rules.padding.top as f32,
+            AlignV::Middle => layout_node.y + layout_node.height / 2.,
+            AlignV::Bottom => layout_node.max_y() - rules.padding.bottom as f32,
+        };
 
         let bound = Rect::new(
             x,

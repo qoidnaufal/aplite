@@ -158,6 +158,7 @@ impl Renderer {
             mesh: &mut self.mesh,
             atlas: &mut self.atlas,
             font_handler: &mut self.font_handler,
+            scale: self.screen.scale_factor as f32,
         }
     }
 
@@ -259,6 +260,7 @@ pub struct Scene<'a> {
     atlas: &'a mut Atlas,
     font_handler: &'a mut FontHandler,
     size: &'a Size,
+    scale: f32,
 }
 
 pub struct DrawArgs<'a> {
@@ -380,27 +382,27 @@ impl Scene<'_> {
     pub fn draw_text(
         &mut self,
         text: &str,
+        size: &f32,
         rect: &Rect,
         transform: &Matrix3x2,
         color: &aplite_types::Color,
     ) {
-        let text_data = self.font_handler.render_text(
+        let text_data = self.font_handler.rasterize_text(
             text,
-            rect.width as u32,
-            1.0,
+            *size,
+            self.scale,
             Some(rect.width),
             color,
             self.atlas,
         );
 
         text_data.iter().for_each(|(element, uv)| {
-            println!("{element:?}");
-            println!("{uv:?}");
-
             let offset = self.mesh.offset;
 
             let vertices = Vertices::new(
-                rect,
+                // rect,
+                // &Rect::from_vec2f_size(rect.vec2f(), element.size),
+                &Rect::new(rect.x, rect.y, rect.width, element.size.height / 2.),
                 *uv,
                 self.size,
                 offset as _,
@@ -527,13 +529,16 @@ impl Pipeline {
         bind_group_layouts: &[&wgpu::BindGroupLayout],
     ) -> wgpu::RenderPipeline {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("shader"), source: wgpu::ShaderSource::Wgsl(crate::shader::render())
+            label: Some("shader"),
+            source: wgpu::ShaderSource::Wgsl(crate::shader::SHADER)
         });
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("pipeline layout"),
             bind_group_layouts,
             immediate_size: 0,
         });
+
         let blend_comp = wgpu::BlendComponent {
             operation: wgpu::BlendOperation::Add,
             src_factor: wgpu::BlendFactor::SrcAlpha,

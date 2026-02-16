@@ -60,27 +60,27 @@ impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        let state = cx.get_element::<ButtonElement>().unwrap();
+        let elem = cx.get_element::<ButtonElement>().unwrap();
         let bound = cx.bound;
 
-        let width = match state.width {
+        let width = match elem.width {
             Length::Grow => bound.width,
             Length::Fixed(val) => val,
             Length::FitContent => 0.,
         };
 
-        let height = match state.height {
+        let height = match elem.height {
             Length::Grow => bound.height,
             Length::Fixed(val) => val,
             Length::FitContent => 0.,
         };
 
         let rules = LayoutRules {
-            padding: state.padding,
-            axis: state.axis,
-            align_h: state.align_h,
-            align_v: state.align_v,
-            spacing: state.spacing,
+            padding: elem.padding,
+            axis: elem.axis,
+            align_h: elem.align_h,
+            align_v: elem.align_v,
+            spacing: elem.spacing,
         };
 
         let layout_node = Rect::new(bound.x, bound.y, width, height);
@@ -96,9 +96,27 @@ impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
 
         cx.set_node(layout_node);
 
-        let x = layout_node.x + rules.padding.left as f32;
-        let y = layout_node.x + rules.padding.top as f32;
-        let bound = Rect::new(x, y, width, height);
+        let bound_width = width - rules.padding.horizontal() as f32;
+        let bound_height = height - rules.padding.vertical() as f32;
+
+        let x = match rules.align_h {
+            AlignH::Left => layout_node.x + rules.padding.left as f32,
+            AlignH::Center => layout_node.x + width / 2.,
+            AlignH::Right => layout_node.max_x() - rules.padding.right as f32,
+        };
+
+        let y = match rules.align_v {
+            AlignV::Top => layout_node.y + rules.padding.top as f32,
+            AlignV::Middle => layout_node.y + height / 2.,
+            AlignV::Bottom => layout_node.max_y() - rules.padding.bottom as f32,
+        };
+
+        let bound = Rect::new(
+            x,
+            y,
+            bound_width,
+            bound_height,
+        );
 
         let mut cx = LayoutCx::derive(cx, rules, bound);
 

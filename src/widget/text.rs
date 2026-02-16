@@ -11,7 +11,7 @@ use aplite_types::{
 use crate::view::IntoView;
 use crate::widget::{Widget, Renderable};
 use crate::context::{BuildCx, LayoutCx, CursorCx};
-use crate::layout::Axis;
+use crate::layout::{AlignH, AlignV, Axis};
 
 pub fn text<T: std::fmt::Display>(text: T) -> Text<T> {
     Text {
@@ -43,17 +43,46 @@ impl<T: std::fmt::Display + 'static> Widget for Text<T> {
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         let element = cx.get_element::<TextElement>().unwrap();
         let size = element.size;
+        let bound = cx.bound.width.min(cx.bound.height);
 
         let node = match cx.rules.axis {
             Axis::Horizontal => {
-                let size = cx.bound.width.min(size);
-                cx.bound.x += size + cx.rules.spacing.0 as f32;
-                Rect::new(cx.bound.x, cx.bound.y, size, size)
+                let bound_size = bound.min(size);
+
+                let x = match cx.rules.align_h {
+                    AlignH::Left => cx.bound.x,
+                    AlignH::Center => cx.bound.x - bound_size / 2.,
+                    AlignH::Right => cx.bound.x - bound_size,
+                };
+
+                let y = match cx.rules.align_v {
+                    AlignV::Top => cx.bound.y,
+                    AlignV::Middle => cx.bound.y - bound_size / 2.,
+                    AlignV::Bottom => cx.bound.y - bound_size,
+                };
+
+                cx.bound.x += bound_size + cx.rules.spacing.0 as f32;
+
+                Rect::new(x, y, bound_size, bound_size)
             },
             Axis::Vertical =>  {
-                let size = cx.bound.height.min(size);
-                cx.bound.y += size + cx.rules.spacing.0 as f32;
-                Rect::new(cx.bound.x, cx.bound.y, size, size)
+                let bound_height = bound.min(size);
+
+                let x = match cx.rules.align_h {
+                    AlignH::Left => cx.bound.x,
+                    AlignH::Center => cx.bound.x - bound_height / 2.,
+                    AlignH::Right => cx.bound.x - bound_height,
+                };
+
+                let y = match cx.rules.align_v {
+                    AlignV::Top => cx.bound.y,
+                    AlignV::Middle => cx.bound.y - bound_height / 2.,
+                    AlignV::Bottom => cx.bound.y - bound_height,
+                };
+
+                cx.bound.y += bound_height + cx.rules.spacing.0 as f32;
+
+                Rect::new(x, y, bound_height, bound_height)
             },
         };
 
@@ -107,6 +136,7 @@ impl Renderable for TextElement {
     fn render(&self, rect: &Rect, scene: &mut Scene) {
         scene.draw_text(
             &self.text.0,
+            &self.size,
             rect,
             &Matrix3x2::identity(),
             &self.color
@@ -191,17 +221,46 @@ macro_rules! impl_widget {
             fn layout(&self, cx: &mut LayoutCx<'_>) {
                 let element = cx.get_element::<TextElement>().unwrap();
                 let size = element.size;
+                let bound = cx.bound.width.min(cx.bound.height);
 
                 let node = match cx.rules.axis {
                     Axis::Horizontal => {
-                        let size = cx.bound.width.min(size);
-                        cx.bound.x += size + cx.rules.spacing.0 as f32;
-                        Rect::new(cx.bound.x, cx.bound.y, size, size)
+                        let bound_width = bound.min(size);
+
+                        let x = match cx.rules.align_h {
+                            AlignH::Left => cx.bound.x,
+                            AlignH::Center => cx.bound.x - bound_width / 2.,
+                            AlignH::Right => cx.bound.x - bound_width,
+                        };
+
+                        let y = match cx.rules.align_v {
+                            AlignV::Top => cx.bound.y,
+                            AlignV::Middle => cx.bound.y - bound_width / 2.,
+                            AlignV::Bottom => cx.bound.y - bound_width,
+                        };
+
+                        cx.bound.x += bound_width + cx.rules.spacing.0 as f32;
+
+                        Rect::new(x, y, bound_width, bound_width)
                     },
                     Axis::Vertical =>  {
-                        let size = cx.bound.height.min(size);
-                        cx.bound.y += size + cx.rules.spacing.0 as f32;
-                        Rect::new(cx.bound.x, cx.bound.y, size, size)
+                        let bound_height = bound.min(size);
+
+                        let x = match cx.rules.align_h {
+                            AlignH::Left => cx.bound.x,
+                            AlignH::Center => cx.bound.x - bound_height / 2.,
+                            AlignH::Right => cx.bound.x - bound_height,
+                        };
+
+                        let y = match cx.rules.align_v {
+                            AlignV::Top => cx.bound.y,
+                            AlignV::Middle => cx.bound.y - bound_height / 2.,
+                            AlignV::Bottom => cx.bound.y - bound_height,
+                        };
+
+                        cx.bound.y += bound_height + cx.rules.spacing.0 as f32;
+
+                        Rect::new(x, y, bound_height, bound_height)
                     },
                 };
 

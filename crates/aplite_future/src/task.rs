@@ -28,9 +28,5 @@ impl Wake for Task {
     }
 }
 
-pub(crate) struct TaskManager {
-    executors: RwLock<std::collections::HashMap<u64, std::sync::mpsc::SyncSender<Arc<Task>>>>,
-}
-
 unsafe impl Send for Task {}
 unsafe impl Sync for Task {}

@@ -1,4 +1,4 @@
-use aplite_types::{Rect, Vec2f};
+// use aplite_types::{Rect, Vec2f};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlignH {
@@ -97,56 +97,56 @@ pub struct LayoutRules {
     pub spacing: Spacing,
 }
 
-impl LayoutRules {
-    fn offset_x(&self, rect: &Rect) -> f32 {
-        let pl = self.padding.left as f32;
-        let pr = self.padding.right as f32;
+// impl LayoutRules {
+//     fn offset_x(&self, rect: &Rect) -> f32 {
+//         let pl = self.padding.left as f32;
+//         let pr = self.padding.right as f32;
 
-        match self.align_h {
-            AlignH::Left => rect.x + pl,
-            AlignH::Center => {
-                rect.x + rect.width / 2. + pl - pr
-            }
-            AlignH::Right => rect.max_x() - pr
-        }
-    }
+//         match self.align_h {
+//             AlignH::Left => rect.x + pl,
+//             AlignH::Center => {
+//                 rect.x + rect.width / 2. + pl - pr
+//             }
+//             AlignH::Right => rect.max_x() - pr
+//         }
+//     }
 
-    fn offset_y(&self, rect: &Rect) -> f32 {
-        let pt = self.padding.top as f32;
-        let pb = self.padding.bottom as f32;
+//     fn offset_y(&self, rect: &Rect) -> f32 {
+//         let pt = self.padding.top as f32;
+//         let pb = self.padding.bottom as f32;
 
-        match self.align_v {
-            AlignV::Top => rect.y + pt,
-            AlignV::Middle => {
-                rect.y + rect.height / 2. + pt - pb
-            }
-            AlignV::Bottom => rect.max_y() - pb,
-        }
-    }
+//         match self.align_v {
+//             AlignV::Top => rect.y + pt,
+//             AlignV::Middle => {
+//                 rect.y + rect.height / 2. + pt - pb
+//             }
+//             AlignV::Bottom => rect.max_y() - pb,
+//         }
+//     }
 
-    fn start_pos(&self, rect: Rect, child_dimension_along_axis: f32, child_count: f32) -> Vec2f {
-        let offset_x = self.offset_x(&rect);
-        let offset_y = self.offset_y(&rect);
-        let stretch_factor = self.spacing.0 as f32 * (child_count - 1.);
-        let stretch = child_dimension_along_axis + stretch_factor;
+//     fn start_pos(&self, rect: Rect, child_dimension_along_axis: f32, child_count: f32) -> Vec2f {
+//         let offset_x = self.offset_x(&rect);
+//         let offset_y = self.offset_y(&rect);
+//         let stretch_factor = self.spacing.0 as f32 * (child_count - 1.);
+//         let stretch = child_dimension_along_axis + stretch_factor;
 
-        match self.axis {
-            Axis::Vertical => {
-                let y = match self.align_v {
-                    AlignV::Top => offset_y,
-                    AlignV::Middle => offset_y - stretch / 2.,
-                    AlignV::Bottom => offset_y - stretch,
-                };
-                Vec2f::new(offset_x, y)
-            },
-            Axis::Horizontal => {
-                let x = match self.align_h {
-                    AlignH::Left => offset_x,
-                    AlignH::Center => offset_x - stretch / 2.,
-                    AlignH::Right => offset_x - stretch,
-                };
-                Vec2f::new(x, offset_y)
-            }
-        }
-    }
-}
+//         match self.axis {
+//             Axis::Vertical => {
+//                 let y = match self.align_v {
+//                     AlignV::Top => offset_y,
+//                     AlignV::Middle => offset_y - stretch / 2.,
+//                     AlignV::Bottom => offset_y - stretch,
+//                 };
+//                 Vec2f::new(offset_x, y)
+//             },
+//             Axis::Horizontal => {
+//                 let x = match self.align_h {
+//                     AlignH::Left => offset_x,
+//                     AlignH::Center => offset_x - stretch / 2.,
+//                     AlignH::Right => offset_x - stretch,
+//                 };
+//                 Vec2f::new(x, offset_y)
+//             }
+//         }
+//     }
+// }

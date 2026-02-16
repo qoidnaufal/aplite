@@ -8,8 +8,8 @@ fn root() -> impl IntoView {
 
     Effect::new(move |_| eprintln!("count: {:?}", counter.get()));
 
-    let button_1 = button("-", dec);
-    let button_2 = button("+", inc);
+    let button_1 = button("A", dec);
+    let button_2 = button("B", inc);
 
     vstack((
         hstack((button_1, button_2))

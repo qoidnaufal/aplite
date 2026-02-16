@@ -12,6 +12,7 @@ pub struct Element {
     pub(crate) border_width: f32,
 }
 
+#[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shape {
     Circle = 0,
