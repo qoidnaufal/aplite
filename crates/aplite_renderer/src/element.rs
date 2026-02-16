@@ -18,6 +18,7 @@ pub enum Shape {
     Rect = 1,
     RoundedRect = 2,
     Triangle = 3,
+    Text = 4,
 }
 
 impl Element {

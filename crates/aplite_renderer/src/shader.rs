@@ -145,6 +145,11 @@ fn sdf(uv: vec2<f32>, element: Element) -> f32 {
             let r = unpack_corners(element.corners, size.x);
             return sdRoundedRect(p, b, r);
         }
+        case 4u: {
+            let p = uv * size.x;
+            let b = size - border_width;
+            return sdRect(p, b);
+        }
         default: { return -1.0; }
     }
 }

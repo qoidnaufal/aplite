@@ -1,16 +1,18 @@
 mod atlas;
 mod buffer;
-mod shader;
-mod util;
 mod element;
-mod storage;
-mod screen;
-mod renderer;
+mod glyph;
 mod mesh;
+mod renderer;
+mod screen;
+mod shader;
+mod storage;
+mod util;
 
 pub use renderer::{Renderer, Scene, DrawArgs};
 pub use element::{Element, Shape};
 pub use mesh::Vertices;
+pub use atlas::{TextureRef, TextureData};
 
 #[derive(Debug)]
 pub enum InitiationError {

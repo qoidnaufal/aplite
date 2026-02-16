@@ -2,7 +2,7 @@ use crate::map::id::SlotId;
 use super::node::SubTree;
 use crate::tree::node::Node;
 
-/// Sparse array based data structure, where the related information is allocated parallel to the main [`EntityId`].
+/// Sparse array based data structure, where the related information is allocated parallel to the main index.
 /// This should enable fast and efficient indexing when accessing the data.
 /// This Tree can contains more than one roots.
 pub struct SparseTree {

@@ -5,12 +5,12 @@ use crate::{Fraction, Color, Size};
 pub struct ImageData {
     pub width: u32,
     pub height: u32,
-    pub bytes: Arc<Vec<u8>>,
+    pub bytes: Arc<[u8]>,
 }
 
 impl ImageData {
     pub fn new((width, height): (u32, u32), data: &[u8]) -> Self {
-        Self { width, height, bytes: Arc::new(data.to_vec()) }
+        Self { width, height, bytes: Arc::from(data) }
     }
 
     pub fn downgrade(&self) -> ImageRef {
@@ -29,7 +29,7 @@ impl ImageData {
 impl std::ops::Deref for ImageData {
     type Target = [u8];
     fn deref(&self) -> &Self::Target {
-        self.bytes.as_slice()
+        self.bytes.as_ref()
     }
 }
 
@@ -41,7 +41,7 @@ impl From<Color> for ImageData {
 
 impl std::hash::Hash for ImageData {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_usize(Arc::as_ptr(&self.bytes) as usize);
+        state.write_usize(Arc::as_ptr(&self.bytes).addr());
     }
 }
 
@@ -66,7 +66,7 @@ impl Eq for ImageData {}
 pub struct ImageRef {
     pub width: u32,
     pub height: u32,
-    pub bytes: Weak<Vec<u8>>,
+    pub bytes: Weak<[u8]>,
 }
 
 impl ImageRef {

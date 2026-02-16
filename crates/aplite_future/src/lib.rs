@@ -4,6 +4,7 @@ mod channel;
 mod sleep;
 mod stream;
 mod task;
+mod waker;
 
 pub use block_on::block_on;
 pub use sleep::*;

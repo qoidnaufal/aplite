@@ -193,10 +193,10 @@ impl Renderable for ButtonElement {
         if other.type_id() == self.type_id() {
             unsafe {
                 let ptr = other as *const dyn Renderable as *const Self;
-                (&*ptr).eq(self)
+                return (&*ptr).eq(self)
             }
-        } else {
-            false
         }
+
+        false
     }
 }

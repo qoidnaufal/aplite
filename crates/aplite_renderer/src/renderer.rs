@@ -7,12 +7,14 @@ use aplite_types::{Rect, Matrix3x2, Size, PaintRef, CornerRadius};
 // use super::RenderError;
 use super::InitiationError;
 
+use crate::TextureRef;
 use crate::atlas::{Atlas, Uv};
 use crate::element::{Element, Shape};
 use crate::screen::Screen;
 use crate::storage::StorageBuffers;
 use crate::mesh::{Indices, MeshBuffer, Vertices};
 use crate::util::Sampler;
+use crate::glyph::FontHandler;
 
 pub struct Renderer {
     pub device: wgpu::Device,
@@ -31,6 +33,8 @@ pub struct Renderer {
     mesh: MeshBuffer,
 
     atlas: Atlas,
+    font_handler: FontHandler,
+
     sampler: Sampler,
     offset: u64,
 }
@@ -83,8 +87,11 @@ impl Renderer {
         let logical: winit::dpi::LogicalSize<f32> = size.to_logical(scale_factor);
         let screen_size = Size::new(logical.width, logical.height);
 
+        let font_handler = FontHandler::new();
+
         let screen = Screen::new(&device, screen_size, scale_factor);
-        let atlas = Atlas::new(&device, Size::new(2000., 2000.));
+        let s = 1024 * 4;
+        let atlas = Atlas::new(&device, Size::new(s as f32, s as f32));
         let sampler = Sampler::new(&device);
 
         let storage = StorageBuffers::new(&device);
@@ -98,6 +105,7 @@ impl Renderer {
             bundle: None,
             storage,
             sampler,
+            font_handler,
             atlas,
             mesh,
             screen,
@@ -149,6 +157,7 @@ impl Renderer {
             storage: &mut self.storage,
             mesh: &mut self.mesh,
             atlas: &mut self.atlas,
+            font_handler: &mut self.font_handler,
         }
     }
 
@@ -194,7 +203,7 @@ impl Renderer {
                 &wgpu::CommandEncoderDescriptor { label: Some("render encoder") }
             );
 
-        self.atlas.update(&self.queue);
+        self.atlas.update(&self.device, &mut encoder);
 
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("render pass"),
@@ -248,6 +257,7 @@ pub struct Scene<'a> {
     storage: &'a mut StorageBuffers,
     mesh: &'a mut MeshBuffer,
     atlas: &'a mut Atlas,
+    font_handler: &'a mut FontHandler,
     size: &'a Size,
 }
 
@@ -308,7 +318,14 @@ impl Scene<'_> {
                 )
             },
             PaintRef::Image(image_ref) => {
-                let uv = self.atlas.append(image_ref).unwrap();
+                let uv = self.atlas
+                    .append(&TextureRef::new(
+                        image_ref.width,
+                        image_ref.height,
+                        image_ref.bytes.clone()
+                    ))
+                    .unwrap();
+
                 Vertices::new(
                     rect,
                     uv,
@@ -358,6 +375,79 @@ impl Scene<'_> {
             );
 
         self.mesh.offset += 1;
+    }
+
+    pub fn draw_text(
+        &mut self,
+        text: &str,
+        rect: &Rect,
+        transform: &Matrix3x2,
+        color: &aplite_types::Color,
+    ) {
+        let text_data = self.font_handler.render_text(
+            text,
+            rect.width as u32,
+            1.0,
+            Some(rect.width),
+            color,
+            self.atlas,
+        );
+
+        text_data.iter().for_each(|(element, uv)| {
+            println!("{element:?}");
+            println!("{uv:?}");
+
+            let offset = self.mesh.offset;
+
+            let vertices = Vertices::new(
+                rect,
+                *uv,
+                self.size,
+                offset as _,
+                1,
+            );
+
+            let indices = Indices::new(offset as _);
+
+            self.mesh
+                .indices
+                .write(
+                    self.device,
+                    self.queue,
+                    offset * Indices::COUNT,
+                    indices.as_slice(),
+                );
+
+            self.mesh
+                .vertices
+                .write(
+                    self.device,
+                    self.queue,
+                    offset * Vertices::COUNT,
+                    vertices.as_slice(),
+                );
+
+            self.storage
+                .elements
+                .write(
+                    self.device,
+                    self.queue,
+                    offset,
+                    &[*element],
+                );
+
+            self.storage
+                .transforms
+                .write(
+                    self.device,
+                    self.queue,
+                    offset,
+                    &[transform.as_array()],
+                );
+
+            self.mesh.offset += 1;
+        });
+
     }
 
     pub fn draw_rect(

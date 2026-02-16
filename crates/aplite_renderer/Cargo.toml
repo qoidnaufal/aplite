@@ -9,5 +9,7 @@ repository.workspace = true
 [dependencies]
 aplite_types.workspace = true
 aplite_storage.workspace = true
+fontdue.workspace = true
+rustc-hash.workspace = true
 winit.workspace = true
 wgpu.workspace = true

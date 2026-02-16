@@ -29,11 +29,12 @@ wgpu.workspace = true
 aplite_types.workspace = true
 aplite_storage.workspace = true
 aplite_bitset.workspace = true
+fontdue.workspace = true
+rustc-hash.workspace = true
 aplite_stats = { path = "crates/aplite_stats", default-features = false, optional = true }
 aplite_reactive = { path = "crates/aplite_reactive" }
 aplite_renderer = { path = "crates/aplite_renderer" }
 aplite_future = { path = "crates/aplite_future" }
-rustc-hash = "2.1.1"
 
 [dependencies.image]
 version = "0.25.9"
@@ -47,6 +48,8 @@ aplite_storage = { path = "crates/aplite_storage" }
 aplite_types = { path = "crates/aplite_types" }
 wgpu = "28.0.0"
 winit = "0.30.12"
+rustc-hash = "2.1.1"
+fontdue = "0.9.3"
 
 [features]
 default = ["image"]

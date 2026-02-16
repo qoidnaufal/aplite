@@ -1,43 +1,9 @@
-use std::sync::{Arc, RwLock, OnceLock};
-use std::pin::Pin;
-use std::sync::mpsc::{Sender, Receiver, channel};
-use std::task::{Wake, Waker, Context, Poll};
+use std::sync::{Arc, OnceLock};
+use std::sync::mpsc::{SyncSender, Receiver, sync_channel};
+use std::task::{Waker, Context, Poll};
 use std::thread;
 
-/*
-#########################################################
-#
-# Task
-#
-#########################################################
-*/
-
-type PinnedFuture = Pin<Box<dyn Future<Output = ()>>>;
-
-pub(crate) struct Task {
-    pub(crate) future: RwLock<PinnedFuture>,
-}
-
-impl Task {
-    pub(crate) fn new<F>(future: F) -> Self
-    where
-        F: Future<Output = ()> + 'static,
-    {
-        Self {
-            future: RwLock::new(Box::pin(future)),
-        }
-    }
-}
-
-impl Wake for Task {
-    fn wake(self: Arc<Self>) {
-        let spawner = SPAWNER.get().unwrap();
-        spawner.send(self);
-    }
-}
-
-unsafe impl Send for Task {}
-unsafe impl Sync for Task {}
+use crate::task::Task;
 
 /*
 #########################################################
@@ -47,13 +13,13 @@ unsafe impl Sync for Task {}
 #########################################################
 */
 
-static SPAWNER: OnceLock<Spawner> = OnceLock::new();
+pub(crate) static SPAWNER: OnceLock<Spawner> = const { OnceLock::new() };
 
 #[derive(Debug)]
-struct Spawner(Sender<Arc<Task>>);
+pub(crate) struct Spawner(SyncSender<Arc<Task>>);
 
 impl Spawner {
-    fn send(&self, task: Arc<Task>) {
+    pub(crate) fn send(&self, task: Arc<Task>) {
         self.0.send(task).unwrap()
     }
 }
@@ -67,7 +33,6 @@ struct Worker {
 
 impl Worker {
     fn work(&self) {
-        // WARN: is this a busy loop?
         while let Ok(task) = self.rx.recv() {
             if let Ok(mut future) = task.future.write() {
                 let waker = Waker::from(Arc::clone(&task));
@@ -79,7 +44,6 @@ impl Worker {
                 }
             }
 
-            // not sure if these drops are needed, just in case
             drop(task)
         };
     }
@@ -93,7 +57,7 @@ pub struct Executor;
 impl Executor {
     pub fn spawn(future: impl Future<Output = ()> + 'static) {
         let spawner = SPAWNER.get_or_init(|| {
-            let (tx, rx) = channel();
+            let (tx, rx) = sync_channel(128);
             let worker = Worker { rx };
 
             let worker_thread = thread::Builder::new().name("async worker".to_string());

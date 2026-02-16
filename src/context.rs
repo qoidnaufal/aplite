@@ -157,7 +157,7 @@ impl Context {
         self.layout_nodes
             .iter()
             .zip(&self.elements)
-            .for_each(|(rect, state)| state.render(rect, &mut scene));
+            .for_each(|(rect, element)| element.render(rect, &mut scene));
     }
 }
 

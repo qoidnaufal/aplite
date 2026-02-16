@@ -1,7 +1,12 @@
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
-use aplite_types::{Rect, Color, rgb};
 use aplite_renderer::Scene;
+use aplite_types::{
+    Matrix3x2,
+    Rect,
+    Color,
+    rgb
+};
 
 use crate::view::IntoView;
 use crate::widget::{Widget, Renderable};
@@ -23,7 +28,8 @@ pub struct Text<T> {
 impl<T: std::fmt::Display + 'static> Widget for Text<T> {
     fn build(&self, cx: &mut BuildCx<'_>) -> bool {
         let mut text_element = TextElement {
-            text: ArcStr::new(self.text.to_string()),
+            text: TextData::new(self.text.to_string()),
+            size: 25.,
             color: rgb(0x000000),
         };
 
@@ -36,18 +42,18 @@ impl<T: std::fmt::Display + 'static> Widget for Text<T> {
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         let element = cx.get_element::<TextElement>().unwrap();
-        let len = element.text.len() as f32;
+        let size = element.size;
 
         let node = match cx.rules.axis {
             Axis::Horizontal => {
-                let width = cx.bound.width.min(len);
-                cx.bound.x += width + cx.rules.spacing.0 as f32;
-                Rect::new(cx.bound.x, cx.bound.y, width, cx.bound.height)
+                let size = cx.bound.width.min(size);
+                cx.bound.x += size + cx.rules.spacing.0 as f32;
+                Rect::new(cx.bound.x, cx.bound.y, size, size)
             },
             Axis::Vertical =>  {
-                let height = cx.bound.height.min(len);
-                cx.bound.y += height + cx.rules.spacing.0 as f32;
-                Rect::new(cx.bound.x, cx.bound.y, cx.bound.width, height)
+                let size = cx.bound.height.min(size);
+                cx.bound.y += size + cx.rules.spacing.0 as f32;
+                Rect::new(cx.bound.x, cx.bound.y, size, size)
             },
         };
 
@@ -74,11 +80,21 @@ impl<T: std::fmt::Display + 'static> IntoView for Text<T> {
     }
 }
 
-#[derive(PartialEq, Eq)]
 pub struct TextElement {
-    text: ArcStr,
+    text: TextData,
+    size: f32,
     pub color: Color,
 }
+
+impl PartialEq for TextElement {
+    fn eq(&self, other: &Self) -> bool {
+        self.text.eq(&other.text)
+            && self.size.eq(&other.size)
+            && self.color.eq(&other.color)
+    }
+}
+
+impl Eq for TextElement {}
 
 impl std::fmt::Debug for TextElement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -88,7 +104,14 @@ impl std::fmt::Debug for TextElement {
 }
 
 impl Renderable for TextElement {
-    fn render(&self, _rect: &Rect, _scene: &mut Scene) {}
+    fn render(&self, rect: &Rect, scene: &mut Scene) {
+        scene.draw_text(
+            &self.text.0,
+            rect,
+            &Matrix3x2::identity(),
+            &self.color
+        );
+    }
 
     fn type_id(&self) -> std::any::TypeId {
         std::any::TypeId::of::<Self>()
@@ -98,32 +121,59 @@ impl Renderable for TextElement {
         if other.type_id() == self.type_id() {
             unsafe {
                 let ptr = other as *const dyn Renderable as *const Self;
-                (&*ptr).eq(self)
+                return (&*ptr).eq(self)
             }
-        } else {
-            false
         }
+
+        false
     }
 }
 
 #[derive(Clone, PartialEq, Eq)]
-struct ArcStr(Arc<str>);
+pub struct TextData(Arc<str>);
 
-impl ArcStr {
-    fn new(text: impl AsRef<str>) -> Self {
+impl TextData {
+    pub fn new(text: impl AsRef<str>) -> Self {
         Self(Arc::from(text.as_ref()))
     }
 
-    fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    pub fn downgrade(&self) -> TextRef {
+        TextRef(Arc::downgrade(&self.0))
     }
 }
 
-impl AsRef<str> for ArcStr {
+impl AsRef<str> for TextData {
     fn as_ref(&self) -> &str {
         self.0.as_ref()
     }
 }
+
+#[derive(Clone)]
+pub struct TextRef(Weak<str>);
+
+impl TextRef {
+    pub fn upgrade(&self) -> Option<TextData> {
+        self.0.upgrade().map(TextData)
+    }
+}
+
+impl std::hash::Hash for TextRef {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write_usize(Weak::as_ptr(&self.0).addr());
+    }
+}
+
+impl PartialEq for TextRef {
+    fn eq(&self, other: &Self) -> bool {
+        Weak::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for TextRef {}
 
 macro_rules! impl_widget {
     ($name:ty) => {
@@ -131,6 +181,7 @@ macro_rules! impl_widget {
             fn build(&self, cx: &mut BuildCx<'_>) -> bool {
                 let text_element = TextElement {
                     text: self.into(),
+                    size: 50.,
                     color: rgb(0x000000),
                 };
 
@@ -139,18 +190,18 @@ macro_rules! impl_widget {
 
             fn layout(&self, cx: &mut LayoutCx<'_>) {
                 let element = cx.get_element::<TextElement>().unwrap();
-                let len = element.text.len() as f32;
+                let size = element.size;
 
                 let node = match cx.rules.axis {
                     Axis::Horizontal => {
-                        let width = cx.bound.width.min(len);
-                        cx.bound.x += width + cx.rules.spacing.0 as f32;
-                        Rect::new(cx.bound.x, cx.bound.y, width, cx.bound.height)
+                        let size = cx.bound.width.min(size);
+                        cx.bound.x += size + cx.rules.spacing.0 as f32;
+                        Rect::new(cx.bound.x, cx.bound.y, size, size)
                     },
                     Axis::Vertical =>  {
-                        let height = cx.bound.height.min(len);
-                        cx.bound.y += height + cx.rules.spacing.0 as f32;
-                        Rect::new(cx.bound.x, cx.bound.y, cx.bound.width, height)
+                        let size = cx.bound.height.min(size);
+                        cx.bound.y += size + cx.rules.spacing.0 as f32;
+                        Rect::new(cx.bound.x, cx.bound.y, size, size)
                     },
                 };
 
@@ -177,15 +228,15 @@ macro_rules! impl_widget {
             }
         }
 
-        impl From<&$name> for ArcStr {
+        impl From<&$name> for TextData {
             fn from(num: &$name) -> Self {
-                ArcStr::new(num.to_string())
+                TextData::new(num.to_string())
             }
         }
 
-        impl From<$name> for ArcStr {
+        impl From<$name> for TextData {
             fn from(num: $name) -> Self {
-                ArcStr::new(num.to_string())
+                TextData::new(num.to_string())
             }
         }
 
