@@ -39,6 +39,13 @@ pub struct Renderer {
     offset: u64,
 }
 
+const CLEAR_COLOR: wgpu::Color = wgpu::Color {
+    r: 0x6 as f64 / u8::MAX as f64,
+    g: 0x6 as f64 / u8::MAX as f64,
+    b: 0x6 as f64 / u8::MAX as f64,
+    a: 1.0
+};
+
 impl Renderer {
     pub async fn new(window: Arc<Window>) -> Result<Self, InitiationError> {
         let size = window.inner_size();
@@ -192,7 +199,7 @@ impl Renderer {
         let desc = wgpu::RenderPassColorAttachment {
             view: &view,
             ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                load: wgpu::LoadOp::Clear(CLEAR_COLOR),
                 store: wgpu::StoreOp::Store,
             },
             resolve_target: None,
@@ -391,18 +398,18 @@ impl Scene<'_> {
             text,
             *size,
             self.scale,
-            Some(rect.width),
+            rect,
             color,
             self.atlas,
         );
 
-        text_data.iter().for_each(|(element, uv)| {
+        text_data.iter().for_each(|(element, (_x, _y), uv)| {
             let offset = self.mesh.offset;
 
             let vertices = Vertices::new(
-                // rect,
+                rect,
                 // &Rect::from_vec2f_size(rect.vec2f(), element.size),
-                &Rect::new(rect.x, rect.y, rect.width, element.size.height / 2.),
+                // &Rect::new(rect.x + *x, rect.y, rect.width, rect.height),
                 *uv,
                 self.size,
                 offset as _,

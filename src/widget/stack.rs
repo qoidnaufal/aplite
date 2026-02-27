@@ -79,7 +79,7 @@ where
             style_fn(&mut elem);
         }
 
-        let dirty = cx.register_element(elem);
+        let dirty = cx.add_or_update_element(elem);
         let content_dirty = cx.with_id(0, |cx| self.content.build(cx));
 
         dirty || content_dirty

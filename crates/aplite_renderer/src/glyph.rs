@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use fontdue::layout::{Layout, LayoutSettings, CoordinateSystem, TextStyle};
 use fontdue::{Font, FontSettings};
-use aplite_types::Size;
+use aplite_types::{Size, Rect};
 use rustc_hash::FxHashMap;
 
 use crate::atlas::{Atlas, Uv, TextureRef};
@@ -10,7 +10,7 @@ use crate::element::Element;
 
 const DEFAULT_FONT: &[u8] = include_bytes!("../../../resources/JetBrainsMonoNerdFont-Regular.ttf");
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 struct Char {
     c: char,
     s: u32,
@@ -70,9 +70,12 @@ impl FontHandler {
         }
     }
 
-    pub(crate) fn setup(&mut self, text: &str, size: f32, scale: f32, max_width: Option<f32>) {
+    pub(crate) fn setup(&mut self, text: &str, size: f32, scale: f32, rect: &Rect) {
         self.layout.reset(&LayoutSettings {
-            max_width: max_width.map(|w| w * scale),
+            x: rect.x,
+            y: rect.y,
+            max_width: Some(rect.width * scale),
+            max_height: Some(rect.height * scale),
             ..Default::default()
         });
 
@@ -86,11 +89,11 @@ impl FontHandler {
         text: &str,
         size: f32,
         scale: f32,
-        max_width: Option<f32>,
+        rect: &Rect,
         color: &aplite_types::Color,
         atlas: &mut Atlas,
-    ) -> Vec<(Element, Uv)> {
-        self.setup(text, size, scale, max_width);
+    ) -> Vec<(Element, (f32, f32), Uv)> {
+        self.setup(text, size, scale, rect);
 
         let s = size * scale;
 
@@ -144,7 +147,7 @@ impl FontHandler {
             element.background = packed_color;
             element.border = packed_color;
 
-            prims.push((element, uv));
+            prims.push((element, (glyph.x, glyph.y), uv));
         }
 
         prims

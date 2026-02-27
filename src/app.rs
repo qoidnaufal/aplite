@@ -38,9 +38,9 @@ pub struct Aplite<IV: IntoView> {
 }
 
 impl<IV: IntoView> Aplite<IV> {
-    pub fn new(config: AppConfig, view: IV) -> Self {
+    pub fn new(config: AppConfig, view: impl Fn() -> IV) -> Self {
         Self {
-            view: view.into_view(),
+            view: view().into_view(),
             renderer: None,
             cx: Context::new(config.window_inner_size),
             window: None,
@@ -169,7 +169,17 @@ pub trait Launch: IntoView {
     }
 
     fn launch(self, config: AppConfig) -> ApliteResult {
-        Aplite::new(config, self).launch()
+        let app: Aplite<Self> = Aplite {
+            view: self.into_view(),
+            renderer: None,
+            cx: Context::new(config.window_inner_size),
+            window: None,
+
+            #[cfg(feature = "render_stats")]
+            stats: aplite_stats::Stats::new(),
+        };
+
+        app.launch()
     }
 }
 

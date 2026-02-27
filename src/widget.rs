@@ -14,6 +14,7 @@ mod stack;
 mod either;
 mod text;
 mod iterables;
+mod view_fn;
 
 pub use {
     button::*,
@@ -21,6 +22,7 @@ pub use {
     stack::*,
     either::*,
     text::*,
+    view_fn::*,
 };
 
 /*
@@ -79,26 +81,6 @@ impl Renderable for () {
 /*
 #########################################################
 #
-# Fn
-#
-#########################################################
-*/
-
-impl<F, IV> IntoView for F
-where
-    F: Fn() -> IV + 'static,
-    IV: IntoView,
-{
-    type View = IV::View;
-
-    fn into_view(self) -> Self::View {
-        self().into_view()
-    }
-}
-
-/*
-#########################################################
-#
 # Circle
 #
 #########################################################
@@ -139,7 +121,7 @@ impl Widget for CircleWidget {
             style_fn(&mut state);
         }
 
-        cx.register_element(state)
+        cx.add_or_update_element(state)
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
@@ -262,10 +244,7 @@ impl<IV: IntoView> IntoView for Option<IV> {
     type View = Option<IV::View>;
 
     fn into_view(self) -> Self::View {
-        match self {
-            Some(w) => Some(w.into_view()),
-            None => None,
-        }
+        self.map(|widget| widget.into_view())
     }
 }
 
@@ -304,19 +283,19 @@ macro_rules! impl_reactive_nodes {
         where $($where_clause)?
         {
             fn debug_name(&self) -> &'static str {
-                self.with(|w| w.debug_name())
+                self.with_untracked(|w| w.debug_name())
             }
 
             fn build(&self, cx: &mut BuildCx<'_>) -> bool {
-                self.with(|w| w.build(cx))
+                self.with_untracked(|w| w.build(cx))
             }
 
             fn layout(&self, cx: &mut LayoutCx<'_>) {
-                self.with(|w| w.layout(cx))
+                self.with_untracked(|w| w.layout(cx))
             }
 
             fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
-                self.with(|w| w.detect_hover(cx))
+                self.with_untracked(|w| w.detect_hover(cx))
             }
         }
 

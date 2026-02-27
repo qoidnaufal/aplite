@@ -47,7 +47,7 @@ impl Image {
 
 impl Widget for Image {
     fn build(&self, cx: &mut BuildCx<'_>) -> bool {
-        cx.register_element(ImageElement::new(&self.data))
+        cx.add_or_update_element(ImageElement::new(&self.data))
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {

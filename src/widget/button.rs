@@ -1,5 +1,3 @@
-use std::ptr::NonNull;
-
 use aplite_renderer::Scene;
 use aplite_types::{Length, Matrix3x2, PaintRef, Rect};
 use aplite_types::{CornerRadius, Color};
@@ -53,7 +51,7 @@ impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
             style_fn(&mut elem, InteractionState::Idle);
         }
 
-        let dirty = cx.register_element(elem);
+        let dirty = cx.add_or_update_element(elem);
         let content_dirty = cx.with_id(0, |cx| self.content.build(cx));
 
         dirty || content_dirty
@@ -129,12 +127,13 @@ impl<IV: IntoView, F: Fn() + 'static> Widget for Button<IV, F> {
             .unwrap_or_default();
 
         if hovered {
-            if !cx.with_id(0, |cx| self.content.detect_hover(cx)) {
-                cx.set_id();
-                cx.set_callback_on_click(|| {
-                    NonNull::from_ref(&self.callback as &dyn Fn())
-                });
-            }
+            cx.set_id();
+            cx.set_callback_on_click(&self.callback);
+            // cx.set_callback_on_click(|| {
+            //     NonNull::from_ref(&self.callback as &dyn Fn())
+            // });
+            // if !cx.with_id(0, |cx| self.content.detect_hover(cx)) {
+            // }
         }
 
         hovered

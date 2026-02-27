@@ -256,11 +256,11 @@ mod view_test {
         let (name, set_name) = Signal::split("Balo");
         let view = move || name;
 
-        let widget = view.into_view();
+        let widget = view().into_view();
         println!("{:?}", widget.get());
 
         set_name.set("Nunez");
-        let widget = view.into_view();
+        let widget = view().into_view();
         println!("{:?}", widget.get());
     }
 

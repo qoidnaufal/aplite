@@ -1,4 +1,3 @@
-use std::ptr::NonNull;
 use std::hash::{Hash, Hasher};
 
 use rustc_hash::{FxHashMap, FxHasher};
@@ -244,18 +243,19 @@ impl<'a> BuildCx<'a> {
     }
 
     #[must_use]
-    pub fn register_element<R: Renderable + 'static>(&mut self, element: R) -> bool {
+    pub fn add_or_update_element<R: Renderable + 'static>(&mut self, element: R) -> bool {
         let id = self.get_or_create_id();
 
         if let Some(exist) = self.elements.get_mut(id.0 as usize) {
             if exist.equal(&element) {
                 return false;
+            } else {
+                *exist = Box::new(element);
+                return true;
             }
-            *exist = Box::new(element);
-        } else {
-            self.elements.push(Box::new(element));
         }
 
+        self.elements.push(Box::new(element));
         true
     }
 
@@ -358,12 +358,15 @@ impl<'a> CursorCx<'a> {
         &self.cursor.hover.pos
     }
 
-    pub fn set_callback_on_click<F>(&mut self, callback: F)
+    pub fn set_callback_on_click<F>(&mut self, callback: &F)
     where
-        F: FnOnce() -> NonNull<dyn Fn()>
+        F: Fn() + 'static
     {
+        use std::ptr::NonNull;
+
         if self.cursor.is_left_clicking() {
-            self.cursor.captured.callback = Some(callback());
+            let ptr = NonNull::from_ref(callback);
+            self.cursor.captured.callback = Some(ptr);
         }
     }
 

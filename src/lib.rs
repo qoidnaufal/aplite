@@ -18,6 +18,7 @@ pub mod prelude {
     pub use aplite_types::CornerRadius;
     pub use aplite_types::Length::{Fixed, Grow, FitContent};
 
+    // pub use crate::app::{Aplite, AppConfig};
     pub use crate::app::{Aplite, AppConfig, Launch};
     pub use crate::context::{BuildCx, LayoutCx, CursorCx};
     pub use crate::cursor::Cursor;
@@ -37,10 +38,8 @@ pub mod prelude {
         ToAnyView,
     };
 
-    pub type ApliteResult = Result<(), crate::error::ApliteError>;
-}
-
-pub mod color {
     pub use aplite_types::theme;
     pub use aplite_types::{Color, rgb, rgba};
+
+    pub type ApliteResult = Result<(), crate::error::ApliteError>;
 }

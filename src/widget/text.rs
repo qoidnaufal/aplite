@@ -1,5 +1,6 @@
-use std::sync::{Arc, Weak};
+use std::borrow::Cow;
 
+use aplite_reactive::{Memo, Get};
 use aplite_renderer::Scene;
 use aplite_types::{
     Matrix3x2,
@@ -13,57 +14,77 @@ use crate::widget::{Widget, Renderable};
 use crate::context::{BuildCx, LayoutCx, CursorCx};
 use crate::layout::{AlignH, AlignV, Axis};
 
-pub fn text<T: std::fmt::Display>(text: T) -> Text<T> {
+pub fn text<IV>(text: IV) -> Text
+where
+    IV: IntoView + Copy,
+    IV::View: std::fmt::Display,
+{
     Text {
-        text,
+        text: Memo::new(move |_| Cow::from(text.into_view().to_string())),
         style_fn: None,
     }
 }
 
-pub struct Text<T> {
-    text: T,
+pub struct Text {
+    text: Memo<Cow<'static, str>>,
     style_fn: Option<Box<dyn Fn(&mut TextElement)>>,
 }
 
-impl<T: std::fmt::Display + 'static> Widget for Text<T> {
+impl Text {
+    pub fn style(self, f: impl Fn(&mut TextElement) + 'static) -> Self {
+        Self {
+            text: self.text,
+            style_fn: Some(Box::new(f)),
+        }
+    }
+}
+
+impl Widget for Text {
     fn build(&self, cx: &mut BuildCx<'_>) -> bool {
         let mut text_element = TextElement {
-            text: TextData::new(self.text.to_string()),
-            size: 25.,
-            color: rgb(0x000000),
+            text: self.text.get_untracked(),
+            ..Default::default()
         };
 
         if let Some(style_fn) = self.style_fn.as_ref() {
             style_fn(&mut text_element);
         }
 
-        cx.register_element(text_element)
+        cx.add_or_update_element(text_element)
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         let element = cx.get_element::<TextElement>().unwrap();
         let size = element.size;
+        let len = element.text.len();
         let bound = cx.bound.width.min(cx.bound.height);
 
         let node = match cx.rules.axis {
             Axis::Horizontal => {
-                let bound_size = bound.min(size);
+                let bound_width = bound.min(size);
 
                 let x = match cx.rules.align_h {
                     AlignH::Left => cx.bound.x,
-                    AlignH::Center => cx.bound.x - bound_size / 2.,
-                    AlignH::Right => cx.bound.x - bound_size,
+                    AlignH::Center => cx.bound.x - bound_width / 2.,
+                    AlignH::Right => cx.bound.x - bound_width,
                 };
 
                 let y = match cx.rules.align_v {
                     AlignV::Top => cx.bound.y,
-                    AlignV::Middle => cx.bound.y - bound_size / 2.,
-                    AlignV::Bottom => cx.bound.y - bound_size,
+                    AlignV::Middle => cx.bound.y - bound_width / 2.,
+                    AlignV::Bottom => cx.bound.y - bound_width,
                 };
 
-                cx.bound.x += bound_size + cx.rules.spacing.0 as f32;
+                match element.axis {
+                    Axis::Horizontal => {
+                        cx.bound.x += bound_width * len as f32 + cx.rules.spacing.0 as f32;
+                    }
+                    Axis::Vertical => {
+                        cx.bound.x += bound_width + cx.rules.spacing.0 as f32;
+                    }
+                }
 
-                Rect::new(x, y, bound_size, bound_size)
+                Rect::new(x, y, bound_width, bound_width)
             },
             Axis::Vertical =>  {
                 let bound_height = bound.min(size);
@@ -80,7 +101,14 @@ impl<T: std::fmt::Display + 'static> Widget for Text<T> {
                     AlignV::Bottom => cx.bound.y - bound_height,
                 };
 
-                cx.bound.y += bound_height + cx.rules.spacing.0 as f32;
+                match element.axis {
+                    Axis::Horizontal => {
+                        cx.bound.y += bound_height + cx.rules.spacing.0 as f32;
+                    }
+                    Axis::Vertical => {
+                        cx.bound.y += bound_height * len as f32 + cx.rules.spacing.0 as f32;
+                    }
+                }
 
                 Rect::new(x, y, bound_height, bound_height)
             },
@@ -101,7 +129,7 @@ impl<T: std::fmt::Display + 'static> Widget for Text<T> {
     }
 }
 
-impl<T: std::fmt::Display + 'static> IntoView for Text<T> {
+impl IntoView for Text {
     type View = Self;
 
     fn into_view(self) -> Self::View {
@@ -110,14 +138,30 @@ impl<T: std::fmt::Display + 'static> IntoView for Text<T> {
 }
 
 pub struct TextElement {
-    text: TextData,
-    size: f32,
+    text: Cow<'static, str>,
+    pub size: f32,
     pub color: Color,
+    pub axis: Axis,
+    pub align_h: AlignH,
+    pub align_v: AlignV,
+}
+
+impl Default for TextElement {
+    fn default() -> Self {
+        Self {
+            text: Cow::from(""),
+            size: 50.,
+            color: rgb(0x000000),
+            axis: Axis::Horizontal,
+            align_h: AlignH::Left,
+            align_v: AlignV::Middle,
+        }
+    }
 }
 
 impl PartialEq for TextElement {
     fn eq(&self, other: &Self) -> bool {
-        self.text.eq(&other.text)
+        self.text.as_ref().eq(other.text.as_ref())
             && self.size.eq(&other.size)
             && self.color.eq(&other.color)
     }
@@ -128,6 +172,7 @@ impl Eq for TextElement {}
 impl std::fmt::Debug for TextElement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TextElement")
+            .field("text", &self.text)
             .finish_non_exhaustive()
     }
 }
@@ -135,7 +180,7 @@ impl std::fmt::Debug for TextElement {
 impl Renderable for TextElement {
     fn render(&self, rect: &Rect, scene: &mut Scene) {
         scene.draw_text(
-            &self.text.0,
+            &self.text,
             &self.size,
             rect,
             &Matrix3x2::identity(),
@@ -159,68 +204,22 @@ impl Renderable for TextElement {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
-pub struct TextData(Arc<str>);
-
-impl TextData {
-    pub fn new(text: impl AsRef<str>) -> Self {
-        Self(Arc::from(text.as_ref()))
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    pub fn downgrade(&self) -> TextRef {
-        TextRef(Arc::downgrade(&self.0))
-    }
-}
-
-impl AsRef<str> for TextData {
-    fn as_ref(&self) -> &str {
-        self.0.as_ref()
-    }
-}
-
-#[derive(Clone)]
-pub struct TextRef(Weak<str>);
-
-impl TextRef {
-    pub fn upgrade(&self) -> Option<TextData> {
-        self.0.upgrade().map(TextData)
-    }
-}
-
-impl std::hash::Hash for TextRef {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_usize(Weak::as_ptr(&self.0).addr());
-    }
-}
-
-impl PartialEq for TextRef {
-    fn eq(&self, other: &Self) -> bool {
-        Weak::ptr_eq(&self.0, &other.0)
-    }
-}
-
-impl Eq for TextRef {}
-
-macro_rules! impl_widget {
+macro_rules! impl_display_primitive {
     ($name:ty) => {
         impl Widget for $name {
             fn build(&self, cx: &mut BuildCx<'_>) -> bool {
                 let text_element = TextElement {
-                    text: self.into(),
-                    size: 50.,
-                    color: rgb(0x000000),
+                    text: Cow::from(self.to_string()),
+                    ..Default::default()
                 };
 
-                cx.register_element(text_element)
+                cx.add_or_update_element(text_element)
             }
 
             fn layout(&self, cx: &mut LayoutCx<'_>) {
                 let element = cx.get_element::<TextElement>().unwrap();
                 let size = element.size;
+                let len = element.text.len();
                 let bound = cx.bound.width.min(cx.bound.height);
 
                 let node = match cx.rules.axis {
@@ -239,7 +238,14 @@ macro_rules! impl_widget {
                             AlignV::Bottom => cx.bound.y - bound_width,
                         };
 
-                        cx.bound.x += bound_width + cx.rules.spacing.0 as f32;
+                        match element.axis {
+                            Axis::Horizontal => {
+                                cx.bound.x += bound_width * len as f32 + cx.rules.spacing.0 as f32;
+                            }
+                            Axis::Vertical => {
+                                cx.bound.x += bound_width + cx.rules.spacing.0 as f32;
+                            }
+                        }
 
                         Rect::new(x, y, bound_width, bound_width)
                     },
@@ -258,7 +264,14 @@ macro_rules! impl_widget {
                             AlignV::Bottom => cx.bound.y - bound_height,
                         };
 
-                        cx.bound.y += bound_height + cx.rules.spacing.0 as f32;
+                        match element.axis {
+                            Axis::Horizontal => {
+                                cx.bound.y += bound_height + cx.rules.spacing.0 as f32;
+                            }
+                            Axis::Vertical => {
+                                cx.bound.y += bound_height * len as f32 + cx.rules.spacing.0 as f32;
+                            }
+                        }
 
                         Rect::new(x, y, bound_height, bound_height)
                     },
@@ -287,40 +300,28 @@ macro_rules! impl_widget {
             }
         }
 
-        impl From<&$name> for TextData {
-            fn from(num: &$name) -> Self {
-                TextData::new(num.to_string())
-            }
-        }
-
-        impl From<$name> for TextData {
-            fn from(num: $name) -> Self {
-                TextData::new(num.to_string())
-            }
-        }
-
         impl TextStyle for $name {}
     };
 
     ($next:ty, $($rest:ty),*) => {
-        impl_widget!{ $next }
-        impl_widget!{ $($rest),* }
+        impl_display_primitive!{ $next }
+        impl_display_primitive!{ $($rest),* }
     };
 }
 
 pub trait TextStyle: std::fmt::Display + Sized + 'static {
-    fn style<F>(self, style_fn: F) -> Text<Self>
+    fn style<F>(self, style_fn: F) -> Text
     where
         F: Fn(&mut TextElement) + 'static,
     {
         Text {
-            text: self,
+            text: Memo::new(move |_| Cow::from(self.to_string())),
             style_fn: Some(Box::new(style_fn)),
         }
     }
 }
 
-impl_widget!(
+impl_display_primitive!(
     u8,    i8,
     u16,   i16,
     u32,   i32,
@@ -328,6 +329,7 @@ impl_widget!(
     usize, isize,
     u128,  i128,
     f32,   f64,
+    char,
     &'static str,
     String
 );
