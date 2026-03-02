@@ -144,7 +144,8 @@ fn sdf(uv: vec2<f32>, element: Element) -> f32 {
     }
 }
 
-@group(2) @binding(0) var t: texture_2d<f32>;
+@group(2) @binding(0) var atlas: texture_2d<f32>;
+@group(2) @binding(1) var glyph: texture_2d<f32>;
 @group(3) @binding(0) var s: sampler;
 
 fn toLinear(input: f32) -> f32 {
@@ -165,14 +166,14 @@ fn fs_main(in: FragmentPayload) -> @location(0) vec4<f32> {
     let blend = 1.0 - smoothstep(-fw/2.0, fw/2.0, sdf);
 
     if element.shape == 4 {
-        let a = textureSample(t, s, in.uv).r;
+        let a = textureSample(glyph, s, in.uv).r;
         var color = vec4f(background_color.rgb, toLinear(a));
         color.a *= blend;
         return color;
     }
 
     if in.atlas == 1 {
-        return textureSample(t, s, in.uv);
+        return textureSample(atlas, s, in.uv);
     }
 
     let color = select(vec4f(0.0), background_color, sdf < 0.0);

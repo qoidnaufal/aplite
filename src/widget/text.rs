@@ -66,8 +66,8 @@ where
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
         let element = cx.get_element::<TextElement>().unwrap();
-        let size = element.size;
         let len = element.text.len();
+        let size = element.size;
         let bound = cx.bound.width.min(cx.bound.height);
 
         let node = match cx.rules.axis {
@@ -196,7 +196,7 @@ impl Renderable for TextElement {
     fn render(&self, rect: &Rect, scene: &mut Scene) {
         scene.draw_text(
             self.text.as_ref(),
-            &self.size,
+            self.size,
             rect,
             &Matrix3x2::identity(),
             &self.color
@@ -229,8 +229,8 @@ macro_rules! impl_display_primitive {
 
             fn layout(&self, cx: &mut LayoutCx<'_>) {
                 let element = cx.get_element::<TextElement>().unwrap();
-                let size = element.size;
                 let len = element.text.len();
+                let size = element.size;
                 let bound = cx.bound.width.min(cx.bound.height);
 
                 let node = match cx.rules.axis {

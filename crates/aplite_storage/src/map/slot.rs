@@ -9,28 +9,29 @@ pub(crate) union Content<T> {
 pub(crate) struct Slot<T> {
     pub(crate) content: Content<T>,
 
-    /// Similar with the original [`slotmap`](https://crates.io/crates/slotmap) crates, in which only u32::MAX / 2 versions are available, and it should be plenty enough
+    /// Similar with the original [`slotmap`](https://crates.io/crates/slotmap) crate.
+    /// Only u32::MAX / 2 versions are available, and it should be plenty enough
     pub(crate) version: u32,
 }
 
 impl<T> Slot<T> {
     #[inline(always)]
-    pub(crate) fn new(data: T) -> Self {
+    pub(crate) const fn new(data: T) -> Self {
         Self {
             content: Content { data: ManuallyDrop::new(data) },
             version: 0,
         }
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
+    pub(crate) const fn is_empty(&self) -> bool {
         self.version % 2 != 0
     }
 
-    pub(crate) fn validate_occupied(&self, version: u32) -> bool {
+    pub(crate) const fn validate_occupied(&self, version: u32) -> bool {
         self.version % 2 == 0 && self.version == version
     }
 
-    pub(crate) fn get(&self) -> Option<&T> {
+    pub(crate) fn get_unvalidated(&self) -> Option<&T> {
         unsafe {
             if !self.is_empty() {
                 Some(&self.content.data)
@@ -46,7 +47,13 @@ impl<T> Slot<T> {
         }
     }
 
-    pub(crate) fn get_mut(&mut self) -> Option<&mut T> {
+    pub(crate) unsafe fn get_unchecked(&self) -> &T {
+        unsafe {
+            &self.content.data
+        }
+    }
+
+    pub(crate) fn get_unvalidated_mut(&mut self) -> Option<&mut T> {
         unsafe {
             if !self.is_empty() {
                 Some(&mut self.content.data)
@@ -59,6 +66,12 @@ impl<T> Slot<T> {
     pub(crate) fn get_validated_mut(&mut self, version: u32) -> Option<&mut T> {
         unsafe {
             self.validate_occupied(version).then_some(&mut self.content.data)
+        }
+    }
+
+    pub(crate) fn get_unchecked_mut(&mut self) -> &mut T {
+        unsafe {
+            &mut self.content.data
         }
     }
 

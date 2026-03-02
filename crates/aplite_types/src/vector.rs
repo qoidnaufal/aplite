@@ -29,60 +29,62 @@ pub fn vec2u(x: u32, y: u32) -> Vec2u {
 */
 
 impl Vec2f {
-    #[inline(always)]
     pub const fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
 
     /// same x & y value
-    #[inline(always)]
     pub const fn splat(val: f32) -> Self {
-        Self::new(val, val)
+        Self {
+            x: val,
+            y: val,
+        }
     }
 
-    #[inline(always)]
     pub const fn from_array(arr: [f32; 2]) -> Self {
-        Self::new(arr[0], arr[1])
+        Self {
+            x: arr[0],
+            y: arr[1],
+        }
     }
 
-    #[inline(always)]
     pub const fn array(self) -> [f32; 2] {
         [self.x, self.y]
     }
 
-    #[inline(always)]
     pub const fn point(self) -> crate::point::Point {
-        crate::point::Point::new(self.x, self.y)
+        crate::point::Point {
+            x: self.x,
+            y: self.y,
+        }
     }
 
-    #[inline(always)]
     pub fn vec2u(self) -> Vec2u {
-        Vec2u::new(self.x.round() as u32, self.y.round() as u32)
+        Vec2u {
+            x: self.x.round() as u32,
+            y: self.y.round() as u32,
+        }
     }
 
-    #[inline(always)]
     pub const fn min(self, other: Self) -> Self {
-        Self::new(
-            self.x.min(other.x),
-            self.y.min(other.y)
-        )
+        Self {
+            x: self.x.min(other.x),
+            y: self.y.min(other.y)
+        }
     }
 
-    #[inline(always)]
     pub const fn max(self, other: Self) -> Self {
-        Self::new(
-            self.x.max(other.x),
-            self.y.max(other.y)
-        )
+        Self {
+            x: self.x.max(other.x),
+            y: self.y.max(other.y)
+        }
     }
 
-    #[inline(always)]
     pub const fn clamp(self, start: Self, end: Self) -> Self {
         self.max(start).min(end)
     }
 
     /// turn [`Vec2f`] { x, y } into [`Vec2f`] { 1/x, 1/y }
-    #[inline(always)]
     pub fn recip(self) -> Self {
         Self {
             x: self.x.recip(),
@@ -91,7 +93,6 @@ impl Vec2f {
     }
 
     /// cross product vector multiplication
-    #[inline(always)]
     pub fn cross(self, other: Self) -> Self {
         Self {
             x: self.x * other.x,
@@ -100,19 +101,16 @@ impl Vec2f {
     }
 
     /// dot product vector multiplication
-    #[inline(always)]
     pub fn dot(self, other: Self) -> f32 {
         self.x * other.x + self.y * other.y
     }
 
     /// determinant of 2 vectors
-    #[inline(always)]
     pub fn det(self, other: Self) -> f32 {
         self.x * other.y - self.y * other.x
     }
 
     /// euclidian distance between 2 vectors
-    #[inline(always)]
     pub fn dist_euclid(self, other: Self) -> f32 {
         let x = self.x - other.x;
         let y = self.y - other.y;
@@ -120,19 +118,16 @@ impl Vec2f {
     }
 
     /// the magnitude of a vector, or the displacement from (0.0, 0.0)
-    #[inline(always)]
     pub fn length(self) -> f32 {
         (self.x.powi(2) + self.y.powi(2)).sqrt()
     }
 
     /// in radians in 4 quadrants (360)
-    #[inline(always)]
     pub fn angle(self) -> f32 {
         self.y.atan2(self.x)
     }
 
     /// in radians in 4 quadrants (360)
-    #[inline(always)]
     pub fn angle2(self, other: Self) -> f32 {
         self.det(other).atan2(self.dot(other))
     }
@@ -147,43 +142,45 @@ impl Vec2f {
 */
 
 impl Vec2u {
-    #[inline(always)]
     pub const fn new(x: u32, y: u32) -> Self {
         Self { x, y }
     }
 
-    #[inline(always)]
     pub const fn splat(val: u32) -> Self {
-        Self::new(val, val)
+        Self {
+            x: val,
+            y: val,
+        }
     }
 
-    #[inline(always)]
     pub fn point(self) -> crate::point::Point {
-        crate::point::Point::new(self.x as f32, self.y as f32)
+        crate::point::Point {
+            x: self.x as f32,
+            y: self.y as f32
+        }
     }
 
-    #[inline(always)]
     pub fn vec2f(self) -> Vec2f {
-        Vec2f::new(self.x as f32, self.y as f32)
+        Vec2f {
+            x: self.x as f32,
+            y: self.y as f32
+        }
     }
 
-    #[inline(always)]
     pub fn min(self, other: Self) -> Self {
-        Self::new(
-            self.x.min(other.x),
-            self.y.min(other.y)
-        )
+        Self {
+            x: self.x.min(other.x),
+            y: self.y.min(other.y)
+        }
     }
 
-    #[inline(always)]
     pub fn max(self, other: Self) -> Self {
-        Self::new(
-            self.x.max(other.x),
-            self.y.max(other.y)
-        )
+        Self {
+            x: self.x.max(other.x),
+            y: self.y.max(other.y)
+        }
     }
 
-    #[inline(always)]
     pub fn clamp(self, start: Self, end: Self) -> Self {
         self.max(start).min(end)
     }

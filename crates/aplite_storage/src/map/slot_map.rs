@@ -12,10 +12,28 @@ use super::id::SlotId;
 #########################################################
 */
 
+/// Similar with the original [`slotmap`](https://crates.io/crates/slotmap) crate
 pub struct SlotMap<T> {
     pub(crate) inner: Vec<Slot<T>>,
     next: u32,
     count: u32,
+}
+
+impl<T> Default for SlotMap<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T> std::fmt::Debug for SlotMap<T>
+where
+    T: std::fmt::Debug
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list()
+            .entries(self.iter())
+            .finish()
+    }
 }
 
 impl<T: Clone> Clone for SlotMap<T> {
@@ -28,9 +46,21 @@ impl<T: Clone> Clone for SlotMap<T> {
     }
 }
 
-impl<T> Default for SlotMap<T> {
-    fn default() -> Self {
-        Self::new()
+impl<T> std::ops::Index<SlotId> for SlotMap<T> {
+    type Output = T;
+
+    fn index(&self, index: SlotId) -> &Self::Output {
+        unsafe {
+            self.get_unchecked(&index)
+        }
+    }
+}
+
+impl<T> std::ops::IndexMut<SlotId> for SlotMap<T> {
+    fn index_mut(&mut self, index: SlotId) -> &mut Self::Output {
+        unsafe {
+            self.get_unchecked_mut(&index)
+        }
     }
 }
 
@@ -112,10 +142,26 @@ impl<T> SlotMap<T> {
             .and_then(|slot| slot.get_validated(index.version))
     }
 
+    pub unsafe fn get_unchecked(&self, index: &SlotId) -> &T {
+        unsafe {
+            self.inner
+                .get_unchecked(index.index())
+                .get_unchecked()
+        }
+    }
+
     pub fn get_mut(&mut self, index: &SlotId) -> Option<&mut T> {
         self.inner
             .get_mut(index.index())
             .and_then(|slot| slot.get_validated_mut(index.version))
+    }
+
+    pub unsafe fn get_unchecked_mut(&mut self, index: &SlotId) -> &mut T {
+        unsafe {
+            self.inner
+                .get_unchecked_mut(index.index())
+                .get_unchecked_mut()
+        }
     }
 
     pub fn contains(&self, index: &SlotId) -> bool {
@@ -155,31 +201,6 @@ impl<T> SlotMap<T> {
     }
 }
 
-impl<T> std::fmt::Debug for SlotMap<T>
-where
-    T: std::fmt::Debug
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_list()
-            .entries(self.iter())
-            .finish()
-    }
-}
-
-impl<T> std::ops::Index<SlotId> for SlotMap<T> {
-    type Output = T;
-
-    fn index(&self, index: SlotId) -> &Self::Output {
-        self.get(&index).unwrap()
-    }
-}
-
-impl<T> std::ops::IndexMut<SlotId> for SlotMap<T> {
-    fn index_mut(&mut self, index: SlotId) -> &mut Self::Output {
-        self.get_mut(&index).unwrap()
-    }
-}
-
 /// It's important to return the data here, in case non-copy data is being used and data is needed in error handling
 pub enum Error<T> {
     ReachedMaxCapacity(T),
@@ -216,7 +237,7 @@ impl<T> std::error::Error for Error<T> {}
 */
 
 fn filter_ref<T>((i, slot): (usize, &Slot<T>)) -> Option<(SlotId, Option<&T>)> {
-    slot.get().map(|data| (SlotId::new(i as _, slot.version), Some(data)))
+    slot.get_unvalidated().map(|data| (SlotId::new(i as _, slot.version), Some(data)))
 }
 
 type FnFilterRef<T> = fn((usize, &Slot<T>)) -> Option<(SlotId, Option<&T>)>;
@@ -253,7 +274,7 @@ impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
 
 fn filter_mut<T>((i, slot): (usize, &mut Slot<T>)) -> Option<(SlotId, Option<&mut T>)> {
     let version = slot.version;
-    slot.get_mut().map(|data| (SlotId::new(i as _, version), Some(data)))
+    slot.get_unvalidated_mut().map(|data| (SlotId::new(i as _, version), Some(data)))
 }
 
 type FnFilterMut<T> = fn((usize, &mut Slot<T>)) -> Option<(SlotId, Option<&mut T>)>;

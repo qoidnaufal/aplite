@@ -1,5 +1,7 @@
-/// accept 1 << 16 bytes of color, alpha will always be 255
+/// accept 1 << 24 bytes of color, alpha will always be 255
 pub const fn rgb(val: u32) -> Color {
+    debug_assert!(val <= 1 << 24);
+
     let r = (val >> 16) as u8;
     let g = ((val >> 8) & 0xFF) as u8;
     let b = (val & 0xFF) as u8;
@@ -7,7 +9,6 @@ pub const fn rgb(val: u32) -> Color {
     Color { r, g, b, a: 255 }
 }
 
-/// accept 1 << 24 bytes of color
 pub const fn rgba(val: u32) -> Color {
     let r = (val >> 24) as u8;
     let g = ((val >> 16) & 0xFF) as u8;
@@ -26,21 +27,19 @@ pub struct Color {
 }
 
 impl Color {
-    #[inline(always)]
     pub const fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self { r, g, b, a }
     }
 
-    #[inline(always)]
-    pub const fn from_u32(val: u32) -> Self {
+    pub const fn unpack(val: u32) -> Self {
         let r = (val >> 24) as u8;
         let g = ((val >> 16) & 0xFF) as u8;
         let b = ((val >> 8) & 0xFF) as u8;
         let a = (val & 0xFF) as u8;
-        Self::new(r, g, b, a)
+
+        Self { r, g, b, a, }
     }
 
-    #[inline(always)]
     pub fn with_alpha_u8(self, a: u8) -> Self {
         Self {
             a,
@@ -48,7 +47,6 @@ impl Color {
         }
     }
 
-    #[inline(always)]
     pub fn with_alpha_f32(self, a: f32) -> Self {
         Self {
             a: (a.clamp(0.0, 1.0) * u8::MAX as f32) as u8,
@@ -56,7 +54,6 @@ impl Color {
         }
     }
 
-    #[inline(always)]
     pub const fn pack_u32(self) -> u32 {
         ((self.r as u32) << 24)
         | ((self.g as u32) << 16)
@@ -64,7 +61,6 @@ impl Color {
         | (self.a as u32)
     }
 
-    #[inline(always)]
     pub fn as_slice(&self) -> [u8; 4] {
         [self.r, self.g, self.b, self.a]
     }

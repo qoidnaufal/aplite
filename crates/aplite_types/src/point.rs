@@ -12,32 +12,35 @@ pub fn point(x: f32, y: f32) -> Point {
 }
 
 impl Point {
-    #[inline(always)]
     pub const fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
 
-    #[inline(always)]
     pub const fn splat(val: f32) -> Self {
-        Self::new(val, val)
+        Self {
+            x: val,
+            y: val,
+        }
     }
 
-    #[inline(always)]
     pub const fn from_array(arr: [f32; 2]) -> Self {
-        Self::new(arr[0], arr[1])
+        Self {
+            x: arr[0],
+            y: arr[1],
+        }
     }
 
-    #[inline(always)]
     pub fn into_array(self) -> [f32; 2] {
         [self.x, self.y]
     }
 
-    #[inline(always)]
     pub fn vec2f(self) -> Vec2f {
-        Vec2f::new(self.x, self.y)
+        Vec2f {
+            x: self.x,
+            y: self.y,
+        }
     }
 
-    #[inline(always)]
     pub const fn min(self, other: Self) -> Self {
         Self::new(
             self.x.min(other.x),
@@ -45,7 +48,6 @@ impl Point {
         )
     }
 
-    #[inline(always)]
     pub const fn max(self, other: Self) -> Self {
         Self::new(
             self.x.max(other.x),
@@ -53,7 +55,6 @@ impl Point {
         )
     }
 
-    #[inline(always)]
     pub const fn clamp(self, start: Self, end: Self) -> Self {
         self.max(start).min(end)
     }

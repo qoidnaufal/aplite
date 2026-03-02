@@ -6,8 +6,8 @@ fn root() -> impl IntoView {
     let inc = move || set_counter.update(|num| *num += 1);
     let dec = move || set_counter.update(|num| *num -= 1);
 
-    let button_1 = button("Inc", dec);
-    let button_2 = button("B", inc);
+    let button_1 = button("Dec", dec);
+    let button_2 = button("Inc", inc);
 
     vstack((
         text(move || counter.get()).style(|s| s.color = rgb(0xebdbb2)),
@@ -16,7 +16,7 @@ fn root() -> impl IntoView {
             s.spacing = Spacing::new(10);
         }),
         either(
-            move || counter.get() % 2 == 0,
+            move || (counter.get() / 5) % 2 == 0,
             circle,
             || button((), || {}),
         ),

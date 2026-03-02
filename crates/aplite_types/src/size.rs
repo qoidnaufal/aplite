@@ -9,7 +9,6 @@ pub struct Size {
 }
 
 impl Size {
-    #[inline(always)]
     pub const fn new(width: f32, height: f32) -> Self {
         Self { width, height }
     }
@@ -21,10 +20,8 @@ impl Size {
         }
     }
 
-    #[inline(always)]
     pub const fn area(&self) -> f32 { self.width * self.height }
 
-    #[inline(always)]
     pub fn diagonal(&self) -> f32 {
         (self.width.powi(2) + self.height.powi(2)).sqrt()
     }

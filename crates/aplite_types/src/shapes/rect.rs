@@ -13,13 +13,11 @@ pub struct Rect {
 }
 
 impl Rect {
-    #[inline(always)]
     pub const fn new(x: f32, y: f32, width: f32, height: f32) -> Self {
         Self { x, y, width, height }
     }
 
     /// Calculate a [`Rect`] from the two given points
-    #[inline(always)]
     pub fn from_vec2f(p1: Vec2f, p2: Vec2f) -> Self {
         let origin = p1.min(p2);
         let size = p1.max(p2) - origin;
@@ -31,77 +29,85 @@ impl Rect {
         }
     }
 
-    #[inline(always)]
     pub const fn from_vec2f_size(vec2f: Vec2f, size: Size) -> Self {
-        Self::new(vec2f.x, vec2f.y, size.width, size.height)
+        Self {
+            x: vec2f.x,
+            y: vec2f.y,
+            width: size.width,
+            height: size.height,
+        }
     }
 
-    #[inline(always)]
     pub const fn from_point_size(point: Point, size: Size) -> Self {
-        Self::new(point.x, point.y, size.width, size.height)
+        Self {
+            x: point.x,
+            y: point.y,
+            width: size.width,
+            height: size.height,
+        }
     }
 
-    #[inline(always)]
     pub const fn from_size(size: Size) -> Self {
-        Self::new(0.0, 0.0, size.width, size.height)
+        Self {
+            x: 0.,
+            y: 0.,
+            width: size.width,
+            height: size.height,
+        }
     }
 
-    #[inline(always)]
+    pub const fn from_array(arr: [f32; 4]) -> Self {
+        Self {
+            x: arr[0],
+            y: arr[1],
+            width: arr[2],
+            height: arr[3],
+        }
+    }
+
     pub const fn vec2f(&self) -> Vec2f {
         Vec2f::new(self.x, self.y)
     }
 
-    #[inline(always)]
     pub const fn point(&self) -> crate::Point {
         crate::Point::new(self.x, self.y)
     }
 
-    #[inline(always)]
     pub const fn size(&self) -> Size {
         Size::new(self.width, self.height)
     }
 
-    #[inline(always)]
     pub const fn set_pos(&mut self, pos: Vec2f) {
         self.x = pos.x;
         self.y = pos.y;
     }
 
-    #[inline(always)]
     pub const fn set_size(&mut self, size: Size) {
         self.width = size.width;
         self.height = size.height
     }
 
-    #[inline(always)]
     pub const fn max_x(&self) -> f32 { self.x + self.width }
 
-    #[inline(always)]
     pub const fn max_y(&self) -> f32 { self.y + self.height }
 
-    #[inline(always)]
     pub const fn center_x(&self) -> f32 { self.x + self.width / 2. }
 
-    #[inline(always)]
     pub const fn center_y(&self) -> f32 { self.y + self.height / 2. }
 
-    #[inline(always)]
     pub const fn area(&self) -> f32 {
         self.width * self.height
     }
 
-    #[inline(always)]
     pub fn contains(&self, p: &Vec2f) -> bool {
         (self.x..self.max_x()).contains(&p.x)
             && (self.y..self.max_y()).contains(&p.y)
     }
 
-    #[inline(always)]
     pub fn adjust_width(&mut self, aspect_ratio: Fraction) {
         self.width = self.height * aspect_ratio
     }
 
-    #[inline(always)]
     pub fn adjust_height(&mut self, aspect_ratio: Fraction) {
         self.height = self.width / aspect_ratio
     }

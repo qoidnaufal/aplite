@@ -32,8 +32,9 @@ pub struct Renderer {
     storage: StorageBuffers,
     mesh: MeshBuffer,
 
-    atlas: Atlas,
+    texture_atlas: Atlas,
     font_handler: FontHandler,
+    texture_bind_group: wgpu::BindGroup,
 
     sampler: Sampler,
     offset: u64,
@@ -93,13 +94,26 @@ impl Renderer {
 
         let logical: winit::dpi::LogicalSize<f32> = size.to_logical(scale_factor);
         let screen_size = Size::new(logical.width, logical.height);
-
-        let font_handler = FontHandler::new();
-
         let screen = Screen::new(&device, screen_size, scale_factor);
-        let s = 1024 * 4;
-        let atlas = Atlas::new(&device, Size::new(s as f32, s as f32));
+
+        let s = 1024;
+        let texture_atlas = Atlas::new(&device, Size::square((s * 4) as f32), "atlas");
+        let font_handler = FontHandler::new(&device, Size::square((s * 2) as f32));
         let sampler = Sampler::new(&device);
+
+        let texture_bind_group = Self::bind_group(
+            &device,
+            &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&texture_atlas.view()),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&font_handler.view()),
+                }
+            ]
+        );
 
         let storage = StorageBuffers::new(&device);
         let mesh = MeshBuffer::new(&device);
@@ -113,10 +127,50 @@ impl Renderer {
             storage,
             sampler,
             font_handler,
-            atlas,
+            texture_atlas,
+            texture_bind_group,
             mesh,
             screen,
             offset: 0,
+        })
+    }
+
+    fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("texture bind group layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+            ],
+        })
+    }
+
+    fn bind_group(
+        device: &wgpu::Device,
+        entries: &[wgpu::BindGroupEntry<'_>],
+    ) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("texture bind group"),
+            layout: &Self::bind_group_layout(device),
+            entries,
         })
     }
 
@@ -141,7 +195,9 @@ impl Renderer {
         let logical: winit::dpi::LogicalSize<f32> = new_size.to_logical(self.scale_factor());
         let res = self.screen.screen_resolution;
         let ns = Size::new(logical.width, logical.height);
+
         f(ns);
+
         let scale = res / ns;
         let sx = scale.width;
         let sy = scale.height;
@@ -163,7 +219,7 @@ impl Renderer {
             queue: &self.queue,
             storage: &mut self.storage,
             mesh: &mut self.mesh,
-            atlas: &mut self.atlas,
+            texture_atlas: &mut self.texture_atlas,
             font_handler: &mut self.font_handler,
             scale: self.screen.scale_factor as f32,
         }
@@ -176,7 +232,7 @@ impl Renderer {
             let bind_group_layouts = &[
                 &Screen::bind_group_layout(&self.device),
                 &StorageBuffers::bind_group_layout(&self.device),
-                &Atlas::bind_group_layout(&self.device),
+                &Self::bind_group_layout(&self.device),
                 &Sampler::bind_group_layout(&self.device),
             ];
 
@@ -211,7 +267,8 @@ impl Renderer {
                 &wgpu::CommandEncoderDescriptor { label: Some("render encoder") }
             );
 
-        self.atlas.update(&self.device, &mut encoder);
+        self.texture_atlas.update(&self.device, &mut encoder);
+        self.font_handler.update(&self.device, &mut encoder);
 
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("render pass"),
@@ -250,7 +307,7 @@ impl Renderer {
 
         encoder.set_bind_group(0, &self.screen.bind_group, &[]);
         encoder.set_bind_group(1, &self.storage.bind_group, &[]);
-        encoder.set_bind_group(2, &self.atlas.bind_group, &[]);
+        encoder.set_bind_group(2, &self.texture_bind_group, &[]);
         encoder.set_bind_group(3, &self.sampler.bind_group, &[]);
 
         encoder.draw_indexed(0..self.mesh.offset as u32 * Indices::COUNT as u32, 0, 0..1);
@@ -264,7 +321,7 @@ pub struct Scene<'a> {
     queue: &'a wgpu::Queue,
     storage: &'a mut StorageBuffers,
     mesh: &'a mut MeshBuffer,
-    atlas: &'a mut Atlas,
+    texture_atlas: &'a mut Atlas,
     font_handler: &'a mut FontHandler,
     size: &'a Size,
     scale: f32,
@@ -322,7 +379,7 @@ impl Scene<'_> {
                 )
             },
             PaintRef::Image(image_ref) => {
-                let uv = self.atlas
+                let uv = self.texture_atlas
                     .append(&TextureRef::new(
                         image_ref.width,
                         image_ref.height,
@@ -384,29 +441,23 @@ impl Scene<'_> {
     pub fn draw_text(
         &mut self,
         text: &str,
-        size: &f32,
+        font_size: f32,
         rect: &Rect,
         transform: &Matrix3x2,
         color: &aplite_types::Color,
     ) {
         let text_data = self.font_handler.rasterize_text(
             text,
-            *size,
+            font_size,
             self.scale,
             rect,
-            self.atlas,
         );
 
         text_data.iter().for_each(|(uv, glyph)| {
             let offset = self.mesh.offset;
-            let x = glyph[0];
-            let y = glyph[1];
-            let w = glyph[2];
-            let h = glyph[3];
 
             let vertices = Vertices::new(
-                // rect,
-                &Rect::new(x, y, w, h),
+                &Rect::from_array(*glyph),
                 *uv,
                 self.size,
                 offset as _,
@@ -418,7 +469,7 @@ impl Scene<'_> {
             let packed_color = color.pack_u32();
 
             let element = Element {
-                size: Size::new(w, h) / self.size,
+                size: Size::new(glyph[2], glyph[3]) / self.size,
                 background: packed_color,
                 border: packed_color,
                 corners: 0,
@@ -525,7 +576,7 @@ impl Scene<'_> {
         });
     }
 
-    pub fn next_draw(&mut self) {
+    pub fn skip(&mut self) {
         self.mesh.offset += 1;
     }
 

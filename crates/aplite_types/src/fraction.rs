@@ -16,7 +16,6 @@ impl Default for Fraction {
 }
 
 impl Fraction {
-    #[inline(always)]
     pub const fn new(numerator: f32, denominator: f32) -> Self {
         Self { numerator, denominator }
     }

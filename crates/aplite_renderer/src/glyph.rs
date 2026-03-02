@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use fontdue::layout::{Layout, LayoutSettings, CoordinateSystem, TextStyle};
 use fontdue::{Font, FontSettings};
-use aplite_types::Rect;
+use aplite_types::{Rect, Size};
 use rustc_hash::FxHashMap;
 
 use crate::atlas::{Atlas, Uv, TextureRef};
@@ -72,29 +72,42 @@ pub(crate) struct FontHandler {
     font: Font,
     layout: Layout,
     glyphs: FxHashMap<Char, GlyphData>,
+    pub(crate) atlas: Atlas,
 }
 
 impl FontHandler {
-    pub(crate) fn new() -> Self {
-        let mut settings = FontSettings::default();
-        settings.collection_index = 0;
-        settings.scale = 100.;
+    pub(crate) fn new(device: &wgpu::Device, size: Size) -> Self {
+        let settings = FontSettings {
+            collection_index: 0,
+            scale: 100.,
+            load_substitutions: true,
+        };
 
         let font = Font::from_bytes(DEFAULT_FONT, settings).unwrap();
         let layout = Layout::new(CoordinateSystem::PositiveYDown);
         let glyphs = FxHashMap::default();
+        let atlas = Atlas::new(device, size, "glyph");
 
         Self {
             font,
             layout,
             glyphs,
+            atlas,
         }
+    }
+
+    pub(crate) fn view(&self) -> wgpu::TextureView {
+        self.atlas.view()
+    }
+
+    pub(crate) fn update(&mut self, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder) {
+        self.atlas.update(device, encoder);
     }
 
     pub(crate) fn setup(&mut self, text: &str, size: f32, scale: f32, rect: &Rect) {
         self.layout.reset(&LayoutSettings {
-            x: rect.x,
-            y: rect.y,
+            x: rect.x * scale,
+            y: rect.y * scale,
             max_width: Some(text.len() as f32 * size * scale),
             ..Default::default()
         });
@@ -107,28 +120,24 @@ impl FontHandler {
     pub(crate) fn rasterize_text(
         &mut self,
         text: &str,
-        size: f32,
+        font_size: f32,
         scale: f32,
         rect: &Rect,
-        atlas: &mut Atlas,
     ) -> Vec<(Uv, [f32; 4])> {
-        self.setup(text, size, scale, rect);
+        self.setup(text, font_size, scale, rect);
 
         let mut prims = vec![];
-        let s = size * scale;
+        let s = font_size * scale;
         let b = text.as_bytes();
-        let glyphs = self.layout.glyphs();
 
-        for (c, glyph) in b.iter().zip(glyphs) {
-            // let factor = 65536.0;
+        for (c, glyph) in b.iter().zip(self.layout.glyphs()) {
             let c = *c as char;
-            // let s = (s * factor) as u32;
             let uv = {
                 let char_data = Char { c, s };
 
                 match self.glyphs.get(&char_data) {
                     Some(glyph_data) => {
-                        atlas.append(&TextureRef::new(
+                        self.atlas.append(&TextureRef::new(
                             glyph_data.width,
                             glyph_data.height,
                             Arc::downgrade(&glyph_data.bytes))
@@ -140,7 +149,7 @@ impl FontHandler {
                         let width = metric.width as u32;
                         let height = metric.height as u32;
                         let glyph_data = GlyphData::new(data, width, height);
-                        let uv = atlas.append(
+                        let uv = self.atlas.append(
                             &TextureRef {
                                 width,
                                 height,
@@ -156,9 +165,9 @@ impl FontHandler {
                 }
             };
 
-            let w = glyph.width as f32 / scale;
+            let w = (glyph.width as f32 / scale) * 1.6;
             let h = glyph.height as f32 / scale;
-            let x = (glyph.x + rect.x) / 2.;
+            let x = rect.x.midpoint(glyph.x / scale);
             let y = if !c.is_ascii_alphanumeric() {
                 rect.y + rect.height / 2. + h
             } else {
