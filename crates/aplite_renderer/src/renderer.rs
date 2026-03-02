@@ -315,12 +315,7 @@ impl Scene<'_> {
                 element.background = rgba.pack_u32();
                 Vertices::new(
                     rect,
-                    Uv {
-                        min_x: 0.,
-                        min_y: 0.,
-                        max_x: 1.,
-                        max_y: 1.,
-                    },
+                    Uv::DEFAULT,
                     self.size,
                     offset as _,
                     0,
@@ -399,17 +394,19 @@ impl Scene<'_> {
             *size,
             self.scale,
             rect,
-            color,
             self.atlas,
         );
 
-        text_data.iter().for_each(|(element, (_x, _y), uv)| {
+        text_data.iter().for_each(|(uv, glyph)| {
             let offset = self.mesh.offset;
+            let x = glyph[0];
+            let y = glyph[1];
+            let w = glyph[2];
+            let h = glyph[3];
 
             let vertices = Vertices::new(
-                rect,
-                // &Rect::from_vec2f_size(rect.vec2f(), element.size),
-                // &Rect::new(rect.x + *x, rect.y, rect.width, rect.height),
+                // rect,
+                &Rect::new(x, y, w, h),
                 *uv,
                 self.size,
                 offset as _,
@@ -417,6 +414,17 @@ impl Scene<'_> {
             );
 
             let indices = Indices::new(offset as _);
+
+            let packed_color = color.pack_u32();
+
+            let element = Element {
+                size: Size::new(w, h) / self.size,
+                background: packed_color,
+                border: packed_color,
+                corners: 0,
+                shape: Shape::Text as u32,
+                border_width: 0.,
+            };
 
             self.mesh
                 .indices
@@ -442,7 +450,7 @@ impl Scene<'_> {
                     self.device,
                     self.queue,
                     offset,
-                    &[*element],
+                    &[element],
                 );
 
             self.storage

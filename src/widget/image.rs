@@ -128,10 +128,6 @@ impl Renderable for ImageElement {
         );
     }
 
-    fn type_id(&self) -> std::any::TypeId {
-        std::any::TypeId::of::<Self>()
-    }
-
     fn equal(&self, other: &dyn Renderable) -> bool {
         if other.type_id() == self.type_id() {
             unsafe {

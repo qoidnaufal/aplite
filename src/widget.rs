@@ -61,17 +61,15 @@ pub trait Widget: 'static {
 pub trait Renderable: std::fmt::Debug + 'static {
     fn render(&self, rect: &Rect, scene: &mut Scene);
 
-    fn type_id(&self) -> std::any::TypeId;
+    fn type_id(&self) -> std::any::TypeId {
+        std::any::TypeId::of::<Self>()
+    }
 
     fn equal(&self, other: &dyn Renderable) -> bool;
 }
 
 impl Renderable for () {
     fn render(&self, _rect: &Rect, _scene: &mut Scene) {}
-
-    fn type_id(&self) -> std::any::TypeId {
-        std::any::TypeId::of::<Self>()
-    }
 
     fn equal(&self, other: &dyn Renderable) -> bool {
         self.type_id() == other.type_id()
@@ -195,15 +193,11 @@ impl Renderable for CircleElement {
         );
     }
 
-    fn type_id(&self) -> std::any::TypeId {
-        std::any::TypeId::of::<Self>()
-    }
-
     fn equal(&self, other: &dyn Renderable) -> bool {
         if other.type_id() == self.type_id() {
             unsafe {
                 let ptr = other as *const dyn Renderable as *const Self;
-                (&*ptr).eq(self)
+                &*ptr == self
             }
         } else {
             false

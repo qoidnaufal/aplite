@@ -13,6 +13,15 @@ pub(crate) struct Uv {
     pub(crate) max_y: f32,
 }
 
+impl Uv {
+    pub(crate) const DEFAULT: Self = Self {
+        min_x: 0.,
+        min_y: 0.,
+        max_x: 1.,
+        max_y: 1.,
+    };
+}
+
 #[derive(Clone)]
 pub struct TextureRef {
     pub width: u32,
@@ -49,6 +58,9 @@ impl Eq for TextureRef {}
 
 impl std::hash::Hash for TextureRef {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // if let Some(data) = self.upgrade() {
+        //     state.write(data.bytes.as_ref());
+        // }
         state.write_usize(Weak::as_ptr(&self.bytes).addr());
     }
 }
@@ -82,7 +94,7 @@ pub(crate) struct Atlas {
     texture: wgpu::Texture,
     pub(crate) bind_group: wgpu::BindGroup,
 
-    allocator: AtlasAllocator,
+    pub(crate) allocator: AtlasAllocator,
     pending_data: Vec<(Rect, TextureRef)>,
     processed: FxHashMap<TextureRef, Uv>,
 }
@@ -124,70 +136,36 @@ impl Atlas {
         }
 
         let size = Size::new(data.width as _, data.height as _);
-        let allocated = self.allocator.alloc(size);
 
-        allocated.map(|rect| {
-            let min_x = rect.x / self.allocator.bound.width;
-            let min_y = rect.y / self.allocator.bound.height;
-            let max_x = min_x + rect.width / self.allocator.bound.width;
-            let max_y = min_y + rect.height / self.allocator.bound.height;
-
+        self.allocator.alloc(size).map(|rect| {
             self.pending_data.push((rect, data.clone()));
-
-            Uv {
-                min_x,
-                min_y,
-                max_x,
-                max_y,
-            }
+            self.allocator.get_uv(rect)
         })
     }
 
     pub(crate) fn update(&mut self, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder) {
         use wgpu::util::DeviceExt;
+        use wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as ALIGN;
 
         if !self.pending_data.is_empty() {
             std::mem::take(&mut self.pending_data)
                 .into_iter()
                 .for_each(|(rect, pending_data)| {
                     if let Some(data) = pending_data.upgrade() {
-                        let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
                         let width = data.width * 4;
-                        let padding = (alignment - width % alignment) % alignment;
+                        let padding = (ALIGN - width % ALIGN) % ALIGN;
                         let padded_width = width + padding;
+
                         let mut padded_data = Vec::with_capacity((padded_width * data.height) as usize);
 
-                        // queue.write_texture(
-                        //     wgpu::TexelCopyTextureInfo {
-                        //         texture: &self.texture,
-                        //         aspect: wgpu::TextureAspect::All,
-                        //         mip_level: 0,
-                        //         origin: wgpu::Origin3d {
-                        //             x: rect.x as u32,
-                        //             y: rect.y as u32,
-                        //             z: 0,
-                        //         },
-                        //     },
-                        //     &data.bytes,
-                        //     wgpu::TexelCopyBufferLayout {
-                        //         offset: 0,
-                        //         bytes_per_row: None,
-                        //         rows_per_image: None,
-                        //     },
-                        //     wgpu::Extent3d {
-                        //         width: data.width,
-                        //         height: data.height,
-                        //         depth_or_array_layers: 1,
-                        //     }
-                        // );
-
                         let mut i = 0;
+
                         for _ in 0..data.height {
                             for _ in 0..data.width {
                                 padded_data.push(data.bytes[i]);
                                 i += 1;
                             }
-                            while (padded_data.len() % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize) != 0 {
+                            while (padded_data.len() % ALIGN as usize) != 0 {
                                 padded_data.push(0);
                             }
                         }
@@ -286,7 +264,7 @@ pub(crate) struct AtlasAllocator {
     pub(crate) bound: Rect,
     last_root: Option<SlotId>,
     allocated: SlotMap<Rect>,
-    tree: SparseTree,
+    pub(crate) tree: SparseTree,
 }
 
 impl AtlasAllocator {
@@ -356,7 +334,7 @@ impl AtlasAllocator {
     /// scan each roots and try to find available position within the identified root
     fn scan(&self, new_size: Size) -> Option<(SlotId, Point)> {
         self.iter_roots()
-            .find_map(|(root, bound_rect)| self.identify_member(root, bound_rect, new_size))
+            .find_map(|(root, root_rect)| self.identify_member(root, root_rect, new_size))
     }
 
     #[inline(always)]
@@ -374,7 +352,7 @@ impl AtlasAllocator {
     fn identify_member(
         &self,
         root: SlotId,
-        bound_rect: &Rect,
+        root_rect: &Rect,
         new_size: Size,
     ) -> Option<(SlotId, Point)> {
         if let Some(first) = self.tree.get_first_child(root) {
@@ -389,30 +367,44 @@ impl AtlasAllocator {
                 current = sibling;
             }
 
-            // assigning as the next sibling of the first child
+            // assigning as the next sibling / child of the first child
             let last_rect = self.allocated.get(&current).unwrap();
 
-            (new_size.width <= first_rect.width
-                && new_size.height + last_rect.max_y() <= bound_rect.height)
-                    .then_some((
-                        root,
-                        Point::new(last_rect.x, last_rect.max_y())
-                    ))
-                    .or_else(|| {
-                        (new_size.width + first_rect.max_x() <= self.bound.width
-                            && new_size.height <= bound_rect.height)
-                                .then_some((
-                                    first,
-                                    Point::new(first_rect.max_x(), bound_rect.y)
-                                ))
-                    })
+            if new_size.width <= first_rect.width && new_size.height + last_rect.max_y() <= root_rect.height {
+                Some((root, Point::new(last_rect.x, last_rect.max_y())))
+            } else if new_size.width + first_rect.max_x() <= self.bound.width && new_size.height <= root_rect.height {
+                if let Some(lc) = self.tree.get_last_child(first) {
+                    let lr = self.allocated.get(&lc).unwrap();
+                    let mut curr = lc;
+                    while let Some(sib) = self.tree.get_next_sibling(curr) {
+                        let find = self.indentify_next_sibling(sib, lr, new_size);
+                        if find.is_some() { return find }
+                        curr = sib;
+                    }
+                    self.identify_member(curr, lr, new_size)
+                } else {
+                    Some((first, Point::new(first_rect.max_x(), root_rect.y)))
+                }
+
+                // let p = if let Some(lc) = self.tree.get_last_child(first) {
+                //     let r = self.allocated.get(&lc).unwrap();
+                //     Point::new(r.max_x(), root_rect.y)
+                // } else {
+                //     Point::new(first_rect.max_x(), root_rect.y)
+                // };
+                // Some((first, p))
+            } else {
+                None
+            }
         } else {
             // assign as the first child of a root if fit
-            (bound_rect.max_x() + new_size.width <= self.bound.width)
-                .then_some((
-                    root,
-                    Point::new(bound_rect.max_x(), bound_rect.y)
-                ))
+            if new_size.width + root_rect.max_x() <= self.bound.width
+                && root_rect.height <= new_size.height
+            {
+                Some((root, Point::new(root_rect.max_x(), root_rect.y)))
+            } else {
+                None
+            }
         }
     }
 
@@ -426,24 +418,26 @@ impl AtlasAllocator {
     ) -> Option<(SlotId, Point)> {
         let current_rect = self.allocated.get(&current).unwrap();
 
-        let cond1 = new_size.width + current_rect.max_x() <= first_rect_bound.max_x();
-        let cond2 = new_size.height <= current_rect.height;
+        if let Some(first_child) = self.tree.get_first_child(current) {
+            let first_child_rect = self.allocated.get(&first_child).unwrap();
 
-        if let Some(cfc) = self.tree.get_first_child(current) {
-            let cfc_rect = self.allocated.get(&cfc).unwrap();
+            let mut curr = first_child;
 
-            let mut curr = cfc;
             while let Some(next) = self.tree.get_next_sibling(curr) {
-                let find = self.indentify_next_sibling(next, cfc_rect, new_size);
+                let find = self.indentify_next_sibling(next, first_child_rect, new_size);
                 if find.is_some() { return find }
                 curr = next;
             }
         }
 
-        (cond1 && cond2).then_some((
-            current,
-            Point::new(current_rect.max_x(), current_rect.y)
-        ))
+        let cond1 = new_size.width + current_rect.max_x() <= first_rect_bound.max_x();
+        let cond2 = new_size.height <= current_rect.height;
+
+        if cond1 && cond2 {
+            Some((current, Point::new(current_rect.max_x(), current_rect.y)))
+        } else {
+            None
+        }
     }
 
     // fn remove(&mut self, id: EntityId) -> Option<Rect> {

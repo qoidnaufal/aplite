@@ -125,9 +125,7 @@ macro_rules! view_tuple {
                 ) -> bool {
                     let mut dirty = false;
 
-                    ($(
-                        dirty |= f($name)
-                    ,)*);
+                    ($(dirty |= f($name),)*);
 
                     dirty
                 }

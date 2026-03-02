@@ -12,7 +12,7 @@ use crate::widget::{Renderable, Widget};
 pub struct ViewId(pub(crate) u64);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ViewPath(pub(crate) Vec<u32>);
+pub(crate) struct ViewPath(pub(crate) Vec<u32>);
 
 pub struct BuildCx<'a> {
     view_path: &'a mut ViewPath,
@@ -38,14 +38,14 @@ pub struct CursorCx<'a> {
     layout_nodes: &'a mut Vec<Rect>,
 }
 
-pub struct Context {
+pub(crate) struct Context {
     pub(crate) elements: Vec<Box<dyn Renderable>>,
     pub(crate) layout_nodes: Vec<Rect>,
     view_ids: FxHashMap<PathId, ViewId>,
-    pub(crate) view_path: ViewPath,
-    pub(crate) cursor: Cursor,
+    view_path: ViewPath,
+    cursor: Cursor,
     pub(crate) window_rect: Rect,
-    pub(crate) redraw_phase: bool,
+    redraw_phase: bool,
 }
 
 impl Context {
@@ -195,9 +195,11 @@ macro_rules! impl_context {
             pub fn get_element<S: Renderable + 'static>(&self) -> Option<&S> {
                 self.get_id()
                     .and_then(|id| unsafe {
-                        let ptr = self.elements[id.0 as usize].as_ref() as *const dyn Renderable;
-                        if (&*ptr).type_id() == std::any::TypeId::of::<S>() {
-                            Some(&*ptr.cast::<S>())
+                        let elem = self.elements.get_unchecked(id.0 as usize).as_ref();
+
+                        if elem.type_id() == std::any::TypeId::of::<S>() {
+                            let ptr = elem as *const dyn Renderable as *const S;
+                            Some(&*ptr)
                         } else {
                             None
                         }
@@ -208,9 +210,11 @@ macro_rules! impl_context {
                 self.get_id()
                     .copied()
                     .and_then(|id| unsafe {
-                        let ptr = self.elements[id.0 as usize].as_mut() as *mut dyn Renderable;
-                        if (&*ptr).type_id() == std::any::TypeId::of::<S>() {
-                            Some(&mut *ptr.cast::<S>())
+                        let elem = self.elements.get_unchecked_mut(id.0 as usize).as_mut();
+
+                        if elem.type_id() == std::any::TypeId::of::<S>() {
+                            let ptr = elem as *mut dyn Renderable as *mut S;
+                            Some(&mut *ptr)
                         } else {
                             None
                         }
@@ -246,17 +250,18 @@ impl<'a> BuildCx<'a> {
     pub fn add_or_update_element<R: Renderable + 'static>(&mut self, element: R) -> bool {
         let id = self.get_or_create_id();
 
-        if let Some(exist) = self.elements.get_mut(id.0 as usize) {
-            if exist.equal(&element) {
-                return false;
+        match self.elements.get_mut(id.0 as usize) {
+            Some(exist) => if exist.equal(&element) {
+                false
             } else {
-                *exist = Box::new(element);
-                return true;
+                let _ = std::mem::replace(exist, Box::new(element));
+                true
+            },
+            None => {
+                self.elements.push(Box::new(element));
+                true
             }
         }
-
-        self.elements.push(Box::new(element));
-        true
     }
 
     fn get_or_create_id(&mut self) -> ViewId {
@@ -284,7 +289,7 @@ impl<'a> BuildCx<'a> {
 */
 
 impl<'a> LayoutCx<'a> {
-    pub fn new(cx: &'a mut Context, rules: LayoutRules, bound: Rect) -> Self {
+    pub(crate) fn new(cx: &'a mut Context, rules: LayoutRules, bound: Rect) -> Self {
         Self {
             view_path: &mut cx.view_path,
             view_ids: &mut cx.view_ids,
@@ -339,7 +344,7 @@ impl<'a> LayoutCx<'a> {
 */
 
 impl<'a> CursorCx<'a> {
-    pub fn new(cx: &'a mut Context) -> Self {
+    pub(crate) fn new(cx: &'a mut Context) -> Self {
         Self {
             view_path: &mut cx.view_path,
             view_ids: &mut cx.view_ids,

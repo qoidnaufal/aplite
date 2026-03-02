@@ -2,18 +2,37 @@ use std::sync::Arc;
 
 use fontdue::layout::{Layout, LayoutSettings, CoordinateSystem, TextStyle};
 use fontdue::{Font, FontSettings};
-use aplite_types::{Size, Rect};
+use aplite_types::Rect;
 use rustc_hash::FxHashMap;
 
 use crate::atlas::{Atlas, Uv, TextureRef};
-use crate::element::Element;
 
 const DEFAULT_FONT: &[u8] = include_bytes!("../../../resources/JetBrainsMonoNerdFont-Regular.ttf");
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 struct Char {
     c: char,
-    s: u32,
+    s: f32,
+}
+
+impl PartialEq for Char {
+    fn eq(&self, other: &Self) -> bool {
+        self.c == other.c
+        && self.s == other.s
+    }
+}
+
+impl Eq for Char {}
+
+impl std::hash::Hash for Char {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        unsafe {
+            let size = std::mem::size_of_val(self);
+            let ptr = self as *const Self as *const u8;
+            let slice = std::slice::from_raw_parts(ptr, size);
+            state.write(slice);
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -41,7 +60,9 @@ impl std::hash::Hash for GlyphData {
 
 impl PartialEq for GlyphData {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.bytes, &other.bytes)
+        let ptr_eq = Arc::ptr_eq(&self.bytes, &other.bytes);
+        let slice_eq = self.bytes.as_ref() == other.bytes.as_ref();
+        ptr_eq && slice_eq
     }
 }
 
@@ -60,7 +81,7 @@ impl FontHandler {
         settings.scale = 100.;
 
         let font = Font::from_bytes(DEFAULT_FONT, settings).unwrap();
-        let layout = Layout::new(CoordinateSystem::PositiveYUp);
+        let layout = Layout::new(CoordinateSystem::PositiveYDown);
         let glyphs = FxHashMap::default();
 
         Self {
@@ -74,8 +95,7 @@ impl FontHandler {
         self.layout.reset(&LayoutSettings {
             x: rect.x,
             y: rect.y,
-            max_width: Some(rect.width * scale),
-            max_height: Some(rect.height * scale),
+            max_width: Some(text.len() as f32 * size * scale),
             ..Default::default()
         });
 
@@ -90,25 +110,23 @@ impl FontHandler {
         size: f32,
         scale: f32,
         rect: &Rect,
-        color: &aplite_types::Color,
         atlas: &mut Atlas,
-    ) -> Vec<(Element, (f32, f32), Uv)> {
+    ) -> Vec<(Uv, [f32; 4])> {
         self.setup(text, size, scale, rect);
 
-        let s = size * scale;
-
         let mut prims = vec![];
-
+        let s = size * scale;
         let b = text.as_bytes();
+        let glyphs = self.layout.glyphs();
 
-        for (i, glyph) in self.layout.glyphs().iter().enumerate() {
-            let c = b[i] as char;
+        for (c, glyph) in b.iter().zip(glyphs) {
+            // let factor = 65536.0;
+            let c = *c as char;
+            // let s = (s * factor) as u32;
             let uv = {
-                let factor = 65536.0;
-                let s = (s * factor) as u32;
-                let hash = Char { c, s };
+                let char_data = Char { c, s };
 
-                match self.glyphs.get(&hash) {
+                match self.glyphs.get(&char_data) {
                     Some(glyph_data) => {
                         atlas.append(&TextureRef::new(
                             glyph_data.width,
@@ -118,36 +136,36 @@ impl FontHandler {
                         .unwrap()
                     },
                     None => {
-                        let (metric, data) = self.font.rasterize(c, size * scale);
+                        let (metric, data) = self.font.rasterize(c, s);
                         let width = metric.width as u32;
                         let height = metric.height as u32;
-
                         let glyph_data = GlyphData::new(data, width, height);
-
                         let uv = atlas.append(
-                            &TextureRef::new(
+                            &TextureRef {
                                 width,
                                 height,
-                                Arc::downgrade(&glyph_data.bytes)
-                            )
+                                bytes: Arc::downgrade(&glyph_data.bytes),
+                            }
                         )
                         .unwrap();
 
-                        self.glyphs.insert(hash, glyph_data);
+                        self.glyphs.insert(char_data, glyph_data);
 
                         uv
                     },
                 }
             };
 
-            let packed_color = color.pack_u32();
-            let size = Size::new(glyph.width as f32 / scale, glyph.height as f32 / scale);
+            let w = glyph.width as f32 / scale;
+            let h = glyph.height as f32 / scale;
+            let x = (glyph.x + rect.x) / 2.;
+            let y = if !c.is_ascii_alphanumeric() {
+                rect.y + rect.height / 2. + h
+            } else {
+                rect.max_y() - h
+            };
 
-            let mut element = Element::new(size).with_shape(crate::element::Shape::Text);
-            element.background = packed_color;
-            element.border = packed_color;
-
-            prims.push((element, (glyph.x, glyph.y), uv));
+            prims.push((uv, [x, y, w, h]));
         }
 
         prims

@@ -20,7 +20,6 @@ members = [
   "crates/aplite_stats",
   "crates/aplite_reactive",
   "crates/aplite_storage",
-  "crates/aplite_bitset",
 ]
 
 [dependencies]
@@ -28,7 +27,6 @@ winit.workspace = true
 wgpu.workspace = true
 aplite_types.workspace = true
 aplite_storage.workspace = true
-aplite_bitset.workspace = true
 fontdue.workspace = true
 rustc-hash.workspace = true
 aplite_stats = { path = "crates/aplite_stats", default-features = false, optional = true }
@@ -43,7 +41,6 @@ features = ["rayon", "jpeg", "png"]
 optional = true
 
 [workspace.dependencies]
-aplite_bitset = { path = "crates/aplite_bitset" }
 aplite_storage = { path = "crates/aplite_storage" }
 aplite_types = { path = "crates/aplite_types" }
 wgpu = "28.0.0"
