@@ -59,12 +59,6 @@ impl<T> MemoState<T> {
         }
     }
 
-    fn write_value(&self) -> &mut Option<T> {
-        unsafe {
-            &mut *self.value.get()
-        }
-    }
-
     fn state_reader(&self) -> std::sync::RwLockReadGuard<'_, ReactiveState> {
         self.state.read().unwrap()
     }
@@ -116,7 +110,7 @@ impl<T> Reactive for MemoState<T> {
 
         if lock.dirty {
             let prev_value = {
-                let val = self.write_value();
+                let val = unsafe { &mut *self.value.get() };
                 val.take()
             };
 
@@ -129,7 +123,9 @@ impl<T> Reactive for MemoState<T> {
                 this.as_observer(|| (self.f)(prev_value))
             });
 
-            self.write_value().replace(new_value);
+            unsafe {
+                (*self.value.get()).replace(new_value);
+            }
 
             // let mut state_write_lock = self.state_writer();
             // state_write_lock.dirty = false;
@@ -223,7 +219,7 @@ impl<T: 'static> Source for Memo<T> {
 impl<T: 'static> ToAnySource for Memo<T> {
     fn to_any_source(&self) -> AnySource {
         ReactiveStorage::map_with_downcast(&self.node, AnySource::new)
-            .unwrap_or_else(|| AnySource::empty::<MemoState<T>>())
+            .unwrap_or_else(AnySource::empty::<MemoState<T>>)
     }
 }
 
@@ -244,7 +240,7 @@ impl<T: 'static> Subscriber for Memo<T> {
 impl<T: 'static> ToAnySubscriber for Memo<T> {
     fn to_any_subscriber(&self) -> AnySubscriber {
         ReactiveStorage::map_with_downcast(&self.node, AnySubscriber::new)
-            .unwrap_or_else(|| AnySubscriber::empty::<MemoState<T>>())
+            .unwrap_or_else(AnySubscriber::empty::<MemoState<T>>)
     }
 }
 
@@ -325,7 +321,7 @@ impl<T: 'static> With for Memo<T> {
 
 impl<T> Clone for Memo<T> {
     fn clone(&self) -> Self {
-        Self { node: self.node }
+        *self
     }
 }
 

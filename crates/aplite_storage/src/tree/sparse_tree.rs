@@ -73,8 +73,7 @@ impl SparseTree {
 
     #[inline(always)]
     pub fn get_last_child(&self, id: SlotId) -> Option<SlotId> {
-        let Some(first) = self.get_first_child(id) else { return None };
-        let mut last = first;
+        let mut last = self.get_first_child(id)?;
         while let Some(next) = self.get_next_sibling(last) {
             last = next;
         }
@@ -140,7 +139,7 @@ impl SparseTree {
     /// If a [`TreeError`] is returned it means that the parent is invalid, usually because you haven't registered it to the tree
     pub fn try_insert_with_parent(&mut self, id: SlotId, parent: SlotId) -> Result<(), TreeError> {
         let parent_index = parent.index();
-        if parent_index >= self.parent.len() { return Err(TreeError::InvalidEntityId) }
+        if parent_index >= self.parent.len() { return Err(TreeError::InvalidId) }
 
         let index = id.index();
         self.resize_if_needed(index);
@@ -167,11 +166,10 @@ impl SparseTree {
     /// or is actually a root. Maybe you want to add a root instead
     #[inline(always)]
     pub fn try_add_sibling(&mut self, id: SlotId, sibling: SlotId) -> Result<(), TreeError> {
-        if id.index() >= self.parent.len() { return Err(TreeError::InvalidEntityId) }
+        if id.index() >= self.parent.len() { return Err(TreeError::InvalidId) }
 
-        let Some(parent) = self.get_parent(id) else { return Err(TreeError::InvalidEntityId) };
+        let parent = self.get_parent(id).ok_or(TreeError::InvalidId)?;
 
-        let parent = parent;
         self.insert_with_parent(sibling, parent);
 
         Ok(())
@@ -427,7 +425,7 @@ impl std::fmt::Debug for SparseTree {
 #[derive(Debug)]
 pub enum TreeError {
     InvalidParent,
-    InvalidEntityId,
+    InvalidId,
 }
 
 impl std::fmt::Display for TreeError {

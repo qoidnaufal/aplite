@@ -44,7 +44,7 @@ optional = true
 aplite_storage = { path = "crates/aplite_storage" }
 aplite_types = { path = "crates/aplite_types" }
 wgpu = "28.0.0"
-winit = "0.30.12"
+winit = "0.30.13"
 rustc-hash = "2.1.1"
 fontdue = "0.9.3"
 

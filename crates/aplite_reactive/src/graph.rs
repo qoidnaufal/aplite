@@ -118,6 +118,12 @@ impl WeakScope {
     }
 }
 
+impl Default for Scope {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Clone for WeakScope {
     fn clone(&self) -> Self {
         Self(Weak::clone(&self.0))

@@ -1,17 +1,12 @@
 // pub struct Width(Length);
 // pub struct Height(Length);
 
-#[derive(Clone, Copy)]
+#[derive(Default, Clone, Copy)]
 pub enum Length {
+    #[default]
     Grow,
     Fixed(f32),
     FitContent,
-}
-
-impl Default for Length {
-    fn default() -> Self {
-        Self::Grow
-    }
 }
 
 impl Length {
@@ -55,6 +50,10 @@ impl Eq for Length {}
 
 impl std::fmt::Debug for Length {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
+        match self {
+            Length::Grow => f.write_str("Grow"),
+            Length::Fixed(num) => f.write_fmt(format_args!("Fixed({})", num)),
+            Length::FitContent => f.write_str("Fit Content"),
+        }
     }
 }

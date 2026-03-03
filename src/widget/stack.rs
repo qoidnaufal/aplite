@@ -40,7 +40,10 @@ where
     IV: IntoView,
 {
     pub(crate) content: IV::View,
+
+    #[allow(clippy::type_complexity)]
     style_fn: Option<Box<dyn Fn(&mut StackElement)>>,
+
     marker: PhantomData<AX>
 }
 
@@ -155,10 +158,8 @@ where
             .map(|rect| rect.contains(cx.hover_pos()))
             .unwrap_or_default();
 
-        if hovered {
-            if !cx.with_id(0, |cx| self.content.detect_hover(cx)) {
-                cx.set_id();
-            }
+        if hovered && !cx.with_id(0, |cx| self.content.detect_hover(cx)) {
+            cx.set_id();
         }
 
         hovered

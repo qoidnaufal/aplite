@@ -30,6 +30,8 @@ where
     IV::View: std::fmt::Display,
 {
     text: IV::View,
+
+    #[allow(clippy::type_complexity)]
     style_fn: Option<Box<dyn Fn(&mut TextElement)>>,
 }
 

@@ -20,6 +20,8 @@ where
 pub struct Button<IV: IntoView, F> {
     content: IV::View,
     callback: F,
+
+    #[allow(clippy::type_complexity)]
     style_fn: Option<Box<dyn Fn(&mut ButtonElement, InteractionState)>>,
 }
 

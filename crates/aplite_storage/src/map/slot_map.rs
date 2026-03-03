@@ -142,6 +142,9 @@ impl<T> SlotMap<T> {
             .and_then(|slot| slot.get_validated(index.version))
     }
 
+    /// Get an immutable reference to the contained element at the specified [`SlotId`]
+    /// # Safety
+    /// Caller must ensure the validity of the [`SlotId`]
     pub unsafe fn get_unchecked(&self, index: &SlotId) -> &T {
         unsafe {
             self.inner
@@ -156,6 +159,9 @@ impl<T> SlotMap<T> {
             .and_then(|slot| slot.get_validated_mut(index.version))
     }
 
+    /// Get a mutable reference to the contained element at the specified [`SlotId`]
+    /// # Safety
+    /// Caller must ensure the validity of the [`SlotId`]
     pub unsafe fn get_unchecked_mut(&mut self, index: &SlotId) -> &mut T {
         unsafe {
             self.inner

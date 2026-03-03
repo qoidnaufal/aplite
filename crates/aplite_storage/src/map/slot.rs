@@ -24,11 +24,11 @@ impl<T> Slot<T> {
     }
 
     pub(crate) const fn is_empty(&self) -> bool {
-        self.version % 2 != 0
+        !self.version.is_multiple_of(2)
     }
 
     pub(crate) const fn validate_occupied(&self, version: u32) -> bool {
-        self.version % 2 == 0 && self.version == version
+        self.version.is_multiple_of(2) && self.version == version
     }
 
     pub(crate) fn get_unvalidated(&self) -> Option<&T> {

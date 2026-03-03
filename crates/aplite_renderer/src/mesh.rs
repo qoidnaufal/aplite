@@ -80,11 +80,6 @@ impl Indices {
             offset * Vertices::COUNT as u32,
             offset * Vertices::COUNT as u32 + 2,
             offset * Vertices::COUNT as u32 + 3,
-
-            // 1 + offset * Vertices::COUNT as u32,
-            // 2 + offset * Vertices::COUNT as u32,
-            // 0 + offset * Vertices::COUNT as u32,
-            // 3 + offset * Vertices::COUNT as u32,
         ])
     }
 
@@ -110,7 +105,7 @@ impl Default for Vertices {
 impl Vertices {
     pub(crate) const COUNT: u64 = 4;
 
-    pub(crate) fn new(rect: &Rect, uv: Uv, screen: &Size, id: u32, atlas: u8) -> Self {
+    pub(crate) const fn new(rect: &Rect, uv: Uv, screen: &Size, id: u32, atlas: u8) -> Self {
         let sx = screen.width;
         let sy = screen.height;
 

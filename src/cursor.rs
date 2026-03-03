@@ -68,23 +68,12 @@ pub struct MouseCapture {
     pub(crate) callback: Option<NonNull<dyn Fn()>>,
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct Cursor {
     pub(crate) state: MouseState,
     pub(crate) hover: MouseHover,
     pub(crate) click: MouseClick,
     pub(crate) captured: MouseCapture,
-}
-
-impl Default for Cursor {
-    fn default() -> Self {
-        Self {
-            state: Default::default(),
-            hover: Default::default(),
-            click: Default::default(),
-            captured: Default::default(),
-        }
-    }
 }
 
 pub enum EmittedClickEvent {

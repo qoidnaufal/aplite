@@ -109,7 +109,7 @@ impl TypeErasedBuffer {
     }
 
     pub fn push<T>(&mut self, data: T) {
-        if let Err(_) = self.raw.check(self.len) {
+        if self.raw.check(self.len).is_err() {
             self.raw.grow(&self.item_layout, self.raw.capacity + 4);
         }
 
@@ -119,7 +119,7 @@ impl TypeErasedBuffer {
     }
 
     pub fn extend<T>(&mut self, len: usize, iter: impl IntoIterator<Item = T>) {
-        if let Err(_) = self.raw.check(self.len + len) {
+        if self.raw.check(self.len + len).is_err() {
             let new_capacity = self.raw.capacity + len;
             self.raw.grow(&self.item_layout, new_capacity);
         }
@@ -135,20 +135,24 @@ impl TypeErasedBuffer {
     }
 
     #[inline(always)]
+    /// # Safety
+    /// Caller must ensure the validity of the index
     pub const unsafe fn get_unchecked_raw(&self, index: usize) -> *mut u8 {
         unsafe {
             self.raw.get_raw(index * self.item_layout.size())
         }
     }
 
-    #[inline(always)]
-    pub const unsafe fn get_unchecked<'a, T>(&'a self, index: usize) -> &'a T {
+    /// Get an immutable reference of the contained element at the specified index.
+    /// # Safety
+    /// Caller must ensure the validity of the index
+    pub const unsafe fn get_unchecked<T>(&self, index: usize) -> &T {
         unsafe {
             &*self.get_unchecked_raw(index).cast()
         }
     }
 
-    pub const fn get<'a, T>(&'a self, index: usize) -> Option<&'a T> {
+    pub const fn get<T>(&self, index: usize) -> Option<&T> {
         if index >= self.len { return None }
 
         unsafe {
@@ -156,14 +160,16 @@ impl TypeErasedBuffer {
         }
     }
 
-    #[inline(always)]
-    pub const unsafe fn get_unchecked_mut<'a, T>(&'a mut self, index: usize) -> &'a mut T {
+    /// Get a mutable reference of the contained element at the specified index.
+    /// # Safety
+    /// Caller must ensure the validity of the index
+    pub const unsafe fn get_unchecked_mut<T>(&mut self, index: usize) -> &mut T {
         unsafe {
             &mut *self.get_unchecked_raw(index).cast()
         }
     }
 
-    pub const fn get_mut<'a, T>(&'a mut self, index: usize) -> Option<&'a mut T> {
+    pub const fn get_mut<T>(&mut self, index: usize) -> Option<&mut T> {
         if index >= self.len { return None }
 
         unsafe {
@@ -207,11 +213,11 @@ impl TypeErasedBuffer {
     }
 
     pub fn iter<'a, T>(&'a self) -> Iter<'a, T> {
-        Iter::new(self.raw.cast::<T>(), self.len())
+        unsafe { Iter::new(self.raw.cast::<T>(), self.len()) }
     }
 
     pub fn iter_mut<'a, T>(&'a mut self) -> IterMut<'a, T> {
-        IterMut::new(self.raw.cast::<T>(), self.len())
+        unsafe { IterMut::new(self.raw.cast::<T>(), self.len()) }
     }
 }
 
@@ -253,30 +259,40 @@ impl UnmanagedBuffer {
             item_layout,
         }
     }
+
     #[inline(always)]
+    /// # Safety
+    /// Caller must ensure the validity of the index.
+    /// Caller needs to use the returned raw pointer carefully.
     pub const unsafe fn get_unchecked_raw(&self, index: usize) -> *mut u8 {
         unsafe {
             self.raw.get_raw(index * self.item_layout.size())
         }
     }
 
-    pub const unsafe fn get_unchecked<'a, T>(&'a self, index: usize) -> &'a T {
+    /// # Safety
+    /// Caller must ensure the validity of the index.
+    /// Caller needs to use the returned raw pointer carefully.
+    pub const unsafe fn get_unchecked<T>(&self, index: usize) -> &T {
         unsafe {
             &*self.get_unchecked_raw(index).cast()
         }
     }
 
-    pub const unsafe fn get_unchecked_mut<'a, T>(&'a mut self, index: usize) -> &'a mut T {
+    /// # Safety
+    /// Caller must ensure the validity of the index.
+    /// Caller needs to use the returned raw pointer carefully.
+    pub const unsafe fn get_unchecked_mut<T>(&mut self, index: usize) -> &mut T {
         unsafe {
             &mut *self.get_unchecked_raw(index).cast()
         }
     }
 
     #[inline(always)]
-    /// Safety: you have to ensure buffer is already initialized or the number of elements are within [`capacity`](Self::capacity) - 1
+    /// # Safety
+    /// Caller must ensure buffer is already initialized or the number of elements are within [`capacity`](Self::capacity) - 1
     unsafe fn push_unchecked<T>(&mut self, data: T, offset: usize) -> *mut T {
-        let raw = unsafe { self.raw.push(data, offset) };
-        raw
+        unsafe { self.raw.push(data, offset) }
     }
 
     /// # Safety
@@ -290,7 +306,7 @@ impl UnmanagedBuffer {
     }
 
     pub fn push<T>(&mut self, data: T, offset: usize) {
-        if let Err(_) = self.raw.check(offset) {
+        if self.raw.check(offset).is_err() {
             let new_capacity = self.raw.capacity + 4;
             self.raw.grow(&self.item_layout, new_capacity);
         }
@@ -300,25 +316,14 @@ impl UnmanagedBuffer {
         }
     }
 
-    pub fn push_raw(&mut self, data: *mut u8, offset: usize) {
-        if let Err(_) = self.raw.check(offset) {
-            let new_capacity = self.raw.capacity + 4;
-            self.raw.grow(&self.item_layout, new_capacity);
-        }
-
-        unsafe {
-            self.raw.push_raw(data, offset, &self.item_layout);
-        }
-    }
-
     pub fn extend<T>(&mut self, offset: usize, len: usize, iter: impl IntoIterator<Item = T>) {
         let upper_offset = offset + len;
-        if let Err(_) = self.raw.check(upper_offset) {
+        if self.raw.check(upper_offset).is_err() {
             let new_capacity = self.raw.capacity + len;
             self.raw.grow(&self.item_layout, new_capacity);
         }
 
-        (offset..upper_offset).zip(iter.into_iter()).for_each(|(idx, data)| unsafe {
+        (offset..upper_offset).zip(iter).for_each(|(idx, data)| unsafe {
             self.push_unchecked(data, idx);
         });
     }
@@ -365,11 +370,11 @@ impl UnmanagedBuffer {
     }
 
     pub fn iter<T>(&self, len: usize) -> Iter<'_, T> {
-        Iter::new(self.raw.cast::<T>(), len)
+        unsafe { Iter::new(self.raw.cast::<T>(), len) }
     }
 
     pub fn iter_mut<T>(&mut self, len: usize) -> IterMut<'_, T> {
-        IterMut::new(self.raw.cast::<T>(), len)
+        unsafe { IterMut::new(self.raw.cast::<T>(), len) }
     }
 }
 
@@ -438,9 +443,9 @@ impl RawBuffer {
     #[inline(always)]
     const fn check(&self, offset: usize) -> Result<(), Error> {
         if self.capacity == 0 {
-            return Err(Error::Uninitialized);
+            Err(Error::Uninitialized)
         } else if offset >= self.capacity {
-            return Err(Error::ExceedCurrentCapacity);
+            Err(Error::ExceedCurrentCapacity)
         } else {
             Ok(())
         }
@@ -451,6 +456,9 @@ impl RawBuffer {
     }
 
     #[inline(always)]
+    /// # Safety
+    /// Caller must ensure the validity of the offset.
+    /// Caller needs to be very careful on using the returned raw pointer.
     pub(crate) const unsafe fn get_raw(&self, offset: usize) -> *mut u8 {
         unsafe {
             self.ptr.add(offset).as_ptr()
@@ -458,6 +466,9 @@ impl RawBuffer {
     }
 
     #[inline(always)]
+    /// # Safety
+    /// Caller must ensure the validity of the offset.
+    /// Caller needs to be very careful on using the returned raw pointer.
     pub(crate) const unsafe fn push<T>(&mut self, data: T, offset: usize) -> *mut T {
         if size_of::<T>() == 0 {
             unsafe {
@@ -474,35 +485,10 @@ impl RawBuffer {
         }
     }
 
-    pub(crate) unsafe fn push_raw(
-        &mut self,
-        data: *mut u8,
-        offset: usize,
-        item_layout: &alloc::Layout
-    ) {
-        let size_t = item_layout.size();
-
-        if size_t == 0 {
-            unsafe {
-                let ptr = self.ptr.as_ptr();
-                std::ptr::copy(data.cast_const(), ptr, size_t);
-            }
-        } else {
-            unsafe {
-                let aligned_offset = self.ptr.align_offset(item_layout.align());
-                let offset = aligned_offset + offset;
-                let raw = self.ptr.add(offset * size_t);
-                std::ptr::copy(data.cast_const(), raw.as_ptr(), size_t);
-            }
-        }
-
-        unsafe {
-            alloc::dealloc(data, *item_layout);
-        }
-    }
-
     #[inline(always)]
     /// this method already handle if index is equal to last_index or not -> swapping or popping
+    /// # Safety
+    /// Caller must ensure the validity of the index.
     pub(crate) unsafe fn swap_remove_or_pop(
         &mut self,
         index: usize,
@@ -567,7 +553,9 @@ pub struct Iter<'a, T> {
 }
 
 impl<'a, T> Iter<'a, T> {
-    pub fn new(start: *mut T, len: usize) -> Self {
+    /// # Safety
+    /// Caller must ensure the len is valid
+    pub(crate) unsafe fn new(start: *mut T, len: usize) -> Self {
         let end = if size_of::<T>() == 0 {
             std::ptr::without_provenance_mut(start as usize + len)
         } else {
@@ -628,7 +616,9 @@ pub struct IterMut<'a, T> {
 }
 
 impl<'a, T> IterMut<'a, T> {
-    pub fn new(start: *mut T, len: usize) -> Self {
+    /// # Safety
+    /// Caller must ensure the len is valid
+    pub(crate) unsafe fn new(start: *mut T, len: usize) -> Self {
         let end = if size_of::<T>() == 0 {
             std::ptr::without_provenance_mut(start as usize + len)
         } else {

@@ -108,6 +108,10 @@ impl SubTree {
     pub fn len(&self) -> usize {
         self.nodes.len() + 1
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.nodes.is_empty()
+    }
 }
 
 impl std::fmt::Debug for SubTree {

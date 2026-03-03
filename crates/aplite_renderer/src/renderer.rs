@@ -359,17 +359,14 @@ impl Scene<'_> {
             .with_border_width(*border_width / self.size.width);
 
         match border_paint {
-            PaintRef::Color(rgba) => {
-                element.border = rgba.pack_u32();
-            },
-            PaintRef::Image(_image_ref) => {
-                todo!("not implemented yet")
-            },
+            PaintRef::Color(color) => element.border = color.pack_u32(),
+            PaintRef::Image(_) => todo!("not implemented yet"),
         }
 
         let vertices = match background_paint {
             PaintRef::Color(rgba) => {
                 element.background = rgba.pack_u32();
+
                 Vertices::new(
                     rect,
                     Uv::DEFAULT,
@@ -397,43 +394,10 @@ impl Scene<'_> {
             }
         };
 
-        let indices = Indices::new(offset as _);
-
-        self.mesh
-            .indices
-            .write(
-                self.device,
-                self.queue,
-                offset * Indices::COUNT,
-                indices.as_slice(),
-            );
-
-        self.mesh
-            .vertices
-            .write(
-                self.device,
-                self.queue,
-                offset * Vertices::COUNT,
-                vertices.as_slice(),
-            );
-
-        self.storage
-            .elements
-            .write(
-                self.device,
-                self.queue,
-                offset,
-                &[element],
-            );
-
-        self.storage
-            .transforms
-            .write(
-                self.device,
-                self.queue,
-                offset,
-                &[transform.as_array()],
-            );
+        self.add_indices();
+        self.add_vertices(vertices);
+        self.add_element(element);
+        self.add_transform(transform);
 
         self.mesh.offset += 1;
     }
@@ -464,8 +428,6 @@ impl Scene<'_> {
                 1,
             );
 
-            let indices = Indices::new(offset as _);
-
             let packed_color = color.pack_u32();
 
             let element = Element {
@@ -477,41 +439,10 @@ impl Scene<'_> {
                 border_width: 0.,
             };
 
-            self.mesh
-                .indices
-                .write(
-                    self.device,
-                    self.queue,
-                    offset * Indices::COUNT,
-                    indices.as_slice(),
-                );
-
-            self.mesh
-                .vertices
-                .write(
-                    self.device,
-                    self.queue,
-                    offset * Vertices::COUNT,
-                    vertices.as_slice(),
-                );
-
-            self.storage
-                .elements
-                .write(
-                    self.device,
-                    self.queue,
-                    offset,
-                    &[element],
-                );
-
-            self.storage
-                .transforms
-                .write(
-                    self.device,
-                    self.queue,
-                    offset,
-                    &[transform.as_array()],
-                );
+            self.add_indices();
+            self.add_vertices(vertices);
+            self.add_element(element);
+            self.add_transform(transform);
 
             self.mesh.offset += 1;
         });
@@ -574,6 +505,42 @@ impl Scene<'_> {
             shape: &Shape::Circle,
             corner_radius: &CornerRadius::splat(0),
         });
+    }
+
+    fn add_indices(&mut self) {
+        self.mesh.indices.write(
+            self.device,
+            self.queue,
+            self.mesh.offset * Indices::COUNT,
+            Indices::new(self.mesh.offset as _).as_slice(),
+        );
+    }
+
+    fn add_vertices(&mut self, vertices: Vertices) {
+        self.mesh.vertices.write(
+            self.device,
+            self.queue,
+            self.mesh.offset * Vertices::COUNT,
+            vertices.as_slice(),
+        );
+    }
+
+    fn add_element(&mut self, element: Element) {
+        self.storage.elements.write(
+            self.device,
+            self.queue,
+            self.mesh.offset,
+            &[element],
+        );
+    }
+
+    fn add_transform(&mut self, transform: &Matrix3x2) {
+        self.storage.transforms.write(
+            self.device,
+            self.queue,
+            self.mesh.offset,
+            &[transform.as_array()],
+        );
     }
 
     pub fn skip(&mut self) {

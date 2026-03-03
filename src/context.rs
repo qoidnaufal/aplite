@@ -38,6 +38,21 @@ pub struct CursorCx<'a> {
     layout_nodes: &'a mut Vec<Rect>,
 }
 
+pub struct Elements {
+    transform: Vec<aplite_types::Matrix3x2>,
+    background: Vec<aplite_types::Color>,
+    border_color: Vec<aplite_types::Color>,
+    border_width: Vec<f32>,
+    corner_radius: Vec<aplite_types::CornerRadius>,
+}
+
+pub struct LayoutNodes {
+    rect: Vec<Rect>,
+    width: Vec<aplite_types::Length>,
+    height: Vec<aplite_types::Length>,
+    rules: FxHashMap<PathId, LayoutRules>,
+}
+
 pub(crate) struct Context {
     pub(crate) elements: Vec<Box<dyn Renderable>>,
     pub(crate) layout_nodes: Vec<Rect>,
@@ -116,17 +131,16 @@ impl Context {
     }
 
     pub(crate) fn handle_drag(&mut self) {
-        if self.cursor.is_dragging() {
-            if let Some(captured) = self.cursor.captured.id {
-                if !self.cursor.hover.curr.is_some_and(|id| id == captured) {
-                    self.cursor.captured.callback = None;
-                }
+        if self.cursor.is_dragging()
+            && let Some(captured) = self.cursor.captured.id
+            && !self.cursor.hover.curr.is_some_and(|id| id == captured)
+        {
+            self.cursor.captured.callback = None;
 
-                // let pos = self.cursor.hover.pos - self.cursor.click.offset;
-                // let node = &mut self.layout_nodes[captured.0 as usize];
-                // node.set_pos(pos);
-                // self.toggle_dirty();
-            }
+            // let pos = self.cursor.hover.pos - self.cursor.click.offset;
+            // let node = &mut self.layout_nodes[captured.0 as usize];
+            // node.set_pos(pos);
+            // self.toggle_dirty();
         }
     }
 
@@ -370,8 +384,7 @@ impl<'a> CursorCx<'a> {
         use std::ptr::NonNull;
 
         if self.cursor.is_left_clicking() {
-            let ptr = NonNull::from_ref(callback);
-            self.cursor.captured.callback = Some(ptr);
+            self.cursor.captured.callback = Some(NonNull::from_ref(callback));
         }
     }
 

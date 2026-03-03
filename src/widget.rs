@@ -98,7 +98,6 @@ impl CircleWidget {
     pub fn style(self, style_fn: impl Fn(&mut CircleElement) + 'static) -> Self {
         Self {
             style_fn: Some(Box::new(style_fn)),
-            ..self
         }
     }
 }
@@ -216,21 +215,17 @@ impl Renderable for CircleElement {
 // -- Option<IV>
 impl<T: Widget + 'static> Widget for Option<T> {
     fn build(&self, cx: &mut BuildCx<'_>) -> bool {
-        match self {
-            Some(widget) => widget.build(cx),
-            None => false,
-        }
+        self.as_ref().is_some_and(|widget| widget.build(cx))
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        match self {
-            Some(widget) => widget.layout(cx),
-            None => {},
+        if let Some(widget) = self {
+            widget.layout(cx);
         }
     }
 
     fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
-        self.as_ref().is_some_and(|w| w.detect_hover(cx))
+        self.as_ref().is_some_and(|widget| widget.detect_hover(cx))
     }
 }
 

@@ -67,14 +67,14 @@ impl AnyView {
         }
     }
 
-    pub fn as_ref<'a>(&'a self) -> &'a dyn Widget {
+    pub fn as_widget_ref(&self) -> &dyn Widget {
         unsafe {
             let ptr = self.widget.as_ptr() as *const dyn Widget;
             &*ptr
         }
     }
 
-    pub fn as_mut<'a>(&'a mut self) -> &'a mut dyn Widget {
+    pub fn as_widget_mut(&mut self) -> &mut dyn Widget {
         unsafe {
             let ptr = self.widget.as_ptr() as *mut dyn Widget;
             &mut *ptr
@@ -84,15 +84,15 @@ impl AnyView {
 
 impl Widget for AnyView {
     fn build(&self, cx: &mut BuildCx<'_>) -> bool {
-        self.as_ref().build(cx)
+        self.as_widget_ref().build(cx)
     }
 
     fn layout(&self, cx: &mut LayoutCx<'_>) {
-        self.as_ref().layout(cx);
+        self.as_widget_ref().layout(cx);
     }
 
     fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
-        self.as_ref().detect_hover(cx)
+        self.as_widget_ref().detect_hover(cx)
     }
 }
 
@@ -118,7 +118,7 @@ macro_rules! view_tuple {
     ($($name:ident),*) => {
         impl<$($name: Widget),*> Widget for ($($name,)*) {
             fn build(&self, cx: &mut BuildCx<'_>) -> bool {
-                #[allow(non_snake_case)]
+                #[allow(non_snake_case, clippy::too_many_arguments)]
                 fn any<$($name: Widget),*>(
                     $($name: &$name,)*
                     mut f: impl FnMut(&dyn Widget) -> bool
@@ -147,7 +147,7 @@ macro_rules! view_tuple {
             }
 
             fn layout(&self, cx: &mut LayoutCx<'_>) {
-                #[allow(non_snake_case)]
+                #[allow(non_snake_case, clippy::too_many_arguments)]
                 fn for_each<$($name: Widget),*>(
                     $($name: &$name,)*
                     mut f: impl FnMut(&dyn Widget)
@@ -188,7 +188,7 @@ macro_rules! view_tuple {
             }
 
             fn detect_hover(&self, cx: &mut CursorCx<'_>) -> bool {
-                #[allow(non_snake_case)]
+                #[allow(non_snake_case, clippy::too_many_arguments)]
                 fn any<$($name: Widget),*>(
                     $($name: &$name,)*
                     mut f: impl FnMut(&dyn Widget) -> bool
